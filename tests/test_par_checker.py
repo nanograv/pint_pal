@@ -35,7 +35,7 @@ class ParCheckerTests(unittest.TestCase):
         either J####[+/-]####
         or B####[+/-]##
         """
-        parfile = "par/J1024-0719_NANOGrav_12yv3.gls.par"
+        parfile = "par/J1024-0719_NANOGrav_12yv4.gls.par"
         psr_model = model.get_model(parfile)
         self.assertIsNone(check_name(psr_model))
 
@@ -51,7 +51,7 @@ class ParCheckerTests(unittest.TestCase):
         """
 
         # Check F2 for J1024-0719
-        parfile = "par/J1024-0719_NANOGrav_12yv3.gls.par"
+        parfile = "par/J1024-0719_NANOGrav_12yv4.gls.par"
         psr_model = model.get_model(parfile)
         self.assertIsNone(check_spin(psr_model))
 
