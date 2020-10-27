@@ -1,5 +1,5 @@
 source: B1855+09
-timing-model: par/B1855+09_NANOGrav_12yv3.gls.par
+timing-model: par/B1855+09_NANOGrav_12yv4.gls.par
 toas:
   - B1855+09.430.PUPPI.15y.x.tim
   - B1855+09.L-wide.PUPPI.15y.x.tim
