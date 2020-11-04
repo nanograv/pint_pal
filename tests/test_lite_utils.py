@@ -1,6 +1,7 @@
 import sys
 sys.path.append("../utils/")
 
+import unittest
 import numpy as np
 import astropy.units as u
 import pint.toa as toa
@@ -10,18 +11,23 @@ from pint.models.timing_model import Component
 
 from lite_utils import add_feJumps
 
-def test_add_feJumps():
-    """Check N-1 jumps added if N receivers present"""
-    m = models.get_model("par/J2022+2534.basic.par")
-    t = toa.get_TOAs("tim/J2022+2534_15y_L-S_nb.tim")
+class LiteUtilsTests(unittest.TestCase):
+    """lite_utils.py testing class"""
     
-    # Assert model starts with no jumps
+    def test_add_feJumps(self):
+        """Check N-1 jumps added if N receivers present"""
+        m = models.get_model("par/J2022+2534.basic.par")
+        t = toa.get_TOAs("tim/J2022+2534_15y_L-S_nb.tim")
     
-    receivers = set(t.get_flag_value('fe')[0])
-    add_feJumps(m,list(receivers))
-    print(m)
+        # Assert model starts with no jumps
+        #with pytest.raises(ValueError):
     
-test_add_feJumps()
+        receivers = set(t.get_flag_value('fe')[0])
+        add_feJumps(m,list(receivers))
+        print(m)
+    
+if __name__ == '__main__':
+    unittest.main()
     
     
     
