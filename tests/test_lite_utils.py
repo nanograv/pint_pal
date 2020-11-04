@@ -20,11 +20,14 @@ class LiteUtilsTests(unittest.TestCase):
         t = toa.get_TOAs("tim/J2022+2534_15y_L-S_nb.tim")
     
         # Assert model starts with no jumps
-        #with pytest.raises(ValueError):
+        assert not any('JUMP' in p for p in m.params)
     
         receivers = set(t.get_flag_value('fe')[0])
         add_feJumps(m,list(receivers))
-        print(m)
+        
+        # Assert proper number of jumps have been added (Nrec-1; type?)
+        all_jumps = m.components['PhaseJump'].get_jump_param_objects()
+        assert len(all_jumps) == len(receivers)-1
     
 if __name__ == '__main__':
     unittest.main()
