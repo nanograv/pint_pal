@@ -25,9 +25,10 @@ class LiteUtilsTests(unittest.TestCase):
         receivers = set(t.get_flag_value('fe')[0])
         add_feJumps(m,list(receivers))
         
-        # Assert proper number of jumps have been added (Nrec-1; type?)
+        # Assert proper number of fe jumps have been added (Nrec-1)
         all_jumps = m.components['PhaseJump'].get_jump_param_objects()
-        assert len(all_jumps) == len(receivers)-1
+        jump_rcvrs = [x.key_value[0] for x in all_jumps if x.key == 'fe'] 
+        assert len(jump_rcvrs) == len(receivers)-1
     
 if __name__ == '__main__':
     unittest.main()
