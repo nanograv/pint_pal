@@ -17,7 +17,7 @@ import pint.fitter as fitter
 import pint.utils as pu
 import subprocess
 # import extra util functions brent wrote
-import utils_brent as ub
+import timing_analysis.utils as ub
 import os
 
 # color blind friends colors and markers?

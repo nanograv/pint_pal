@@ -3,7 +3,7 @@ This is the primary script containing the "recipe" that will
 generate a NANOGrav-specific pipeline notebook using the TimingNotebook class.
 """
 
-from timingnotebook import TimingNotebook
+from timing_analysis.timingnotebook import TimingNotebook
 
 
 
