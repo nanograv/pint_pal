@@ -5,11 +5,8 @@ These tests are performed on YAML configuration files
 '''
 
 
-import sys
-sys.path.append("../utils/")
 import unittest
-
-from timingconfiguration import TimingConfiguration
+from timing_analysis.timingconfiguration import TimingConfiguration
 
 
 class TimingConfigurationTests(unittest.TestCase):
