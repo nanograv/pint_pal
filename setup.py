@@ -12,6 +12,7 @@ setup(
     url="",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    packages=find_packages(where="./src/*"),
+    package_dir = {'': 'src'},
+    packages = find_packages('src'),
     python_requires='>=3.6'
 )
