@@ -37,7 +37,6 @@ class TimingConfiguration:
         """ Return the source name """
         return self.config['source']
 
-
     def get_model(self):
         """ Return the PINT model object """
         filename = self.config["timing-model"]
@@ -46,6 +45,9 @@ class TimingConfiguration:
             raise ValueError("%s source entry does not match parameter PSR"%self.filename)
         return m
 
+    def get_fitparams(self):
+        """Return list of fit parameters"""
+        return self.config['fit-params']
 
     def get_TOAs(self):
         """ Return the PINT toa object """

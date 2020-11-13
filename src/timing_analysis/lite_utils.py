@@ -275,14 +275,14 @@ def add_feJumps(mo,rcvrs):
         phase_jump_instance = all_components['PhaseJump']()
         mo.add_component(phase_jump_instance)
 
-        mo.JUMP1.key = 'fe'
+        mo.JUMP1.key = '-fe'
         mo.JUMP1.key_value = [rcvrs[0]]
         mo.JUMP1.value = 0.0
         mo.JUMP1.frozen = False
 
     phasejump = mo.components['PhaseJump']
     all_jumps = phasejump.get_jump_param_objects()
-    jump_rcvrs = [x.key_value[0] for x in all_jumps if x.key == 'fe']
+    jump_rcvrs = [x.key_value[0] for x in all_jumps if x.key == '-fe']
     missing_fe_jumps = list(set(rcvrs) - set(jump_rcvrs))
 
     if len(missing_fe_jumps) > 1:

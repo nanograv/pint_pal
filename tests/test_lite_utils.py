@@ -27,7 +27,7 @@ class LiteUtilsTests(unittest.TestCase):
         
         # Assert proper number of fe jumps have been added (Nrec-1)
         all_jumps = m.components['PhaseJump'].get_jump_param_objects()
-        jump_rcvrs = [x.key_value[0] for x in all_jumps if x.key == 'fe'] 
+        jump_rcvrs = [x.key_value[0] for x in all_jumps if x.key == '-fe'] 
         assert len(jump_rcvrs) == len(receivers)-1
     
 if __name__ == '__main__':
