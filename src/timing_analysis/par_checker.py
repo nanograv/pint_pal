@@ -1,7 +1,7 @@
 """ This is a set of utilities which check par files for completeness """
 
 import re
-import warnings
+from astropy import log
 import copy
 
 
@@ -72,7 +72,8 @@ def check_name(model):
     """
     name = model.PSR.value
     if not re.match("^((J[0-9]{4}[+-][0-9]{4})|(B[0-9]{4}[+-][0-9]{2}))$", name):
-        warnings.warn("PSR parameter is not in the proper format.", UserWarning)
+        msg = "PSR parameter is not in the proper format."
+        log.warning(msg)
     return
 
 
@@ -96,11 +97,13 @@ def check_spin(model):
     """
     name = model.PSR.value
     if name in F2_EXCEPTION_LIST and "F2" not in model.params:
-        warnings.warn("F2 is required in par file for this pulsar.", UserWarning)
+        msg = "F2 is required in par file for this pulsar."
+        log.warning(msg)
     elif name in F2_EXCEPTION_LIST and "F2" in model.params:
         check_if_fit("F2")
     elif "F2" in model.params:
-        warnings.warn("F2 is provided in par file and should be removed.", UserWarning)
+        msg = "F2 is provided in par file and should be removed."
+        log.warning(msg)
     check_if_fit(model, "F0", "F1")
     return
 
@@ -263,7 +266,8 @@ def check_ephem(toa):
         If ephemeris is not set to the latest version.
     """
     if toa.ephem != LATEST_EPHEM:
-        warnings.warn("Wrong ephem (%s); should be %s."%(toa.ephem,LATEST_EPHEM), UserWarning)
+        msg = "Wrong ephem (%s); should be %s." % (toa.ephem,LATEST_EPHEM)
+        log.warning(msg)
     return
 
 def check_bipm(toa):
@@ -279,5 +283,6 @@ def check_bipm(toa):
         If BIPM correction is not set to the latest version.
     """
     if toa.clock_corr_info['bipm_version'] != LATEST_BIPM:
-        raise ValueError("Wrong bipm_version (%s); should be %s."%(toa.clock_corr_info['bipm_version'],LATEST_BIPM))
+        msg = "Wrong bipm_version (%s); should be %s." % (toa.clock_corr_info['bipm_version'],LATEST_BIPM)
+        log.warning(msg)
     return
