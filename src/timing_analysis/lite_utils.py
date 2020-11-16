@@ -314,3 +314,36 @@ def apply_epoch_cut(to,badepoch):
     be = badepoch
     base_in_list = np.array([(be not in n) for n in to.get_flag_value('name')[0]])
     to.select(base_in_list)
+
+def check_toas_model(mo,to,usepickle=False):
+    """Runs basic checks on previously-loaded timing model & TOA objects.
+
+    Checks that ephem and bipm_version have been set to the latest available versions; checks
+    for equatorial astrometric parameters (converts to ecliptic, if necessary); also checks
+    source name, and for appropriate number of jumps. Checks are functions from par_checker.py.
+
+    Parameters
+    ==========
+    to: `pint.toa.TOAs` object
+    mo: `pint.model.TimingModel` object
+    usepickle: boolean, optional
+        produce TOA pickle object
+
+    Returns
+    =======
+    """
+    # Check ephem/bipm
+    pc.check_ephem(to)
+    pc.check_bipm(to)
+
+    # Identify receivers present
+    receivers = set(to.get_flag_value('fe')[0])
+
+    # Convert to/add AstrometryEcliptic component model if necessary.
+    if 'AstrometryEquatorial' in mo.components:
+        model_equatorial_to_ecliptic(mo)
+
+    # Basic checks on timing model
+    pc.check_name(mo)
+    add_feJumps(mo,list(receivers))
+    pc.check_jumps(mo,receivers)
