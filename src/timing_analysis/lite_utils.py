@@ -1,5 +1,6 @@
 import numpy as np
 import astropy.units as u
+from astropy import log
 import matplotlib.pyplot as plt
 from datetime import date
 import timing_analysis.par_checker as pc
@@ -315,7 +316,7 @@ def apply_epoch_cut(to,badepoch):
     base_in_list = np.array([(be not in n) for n in to.get_flag_value('name')[0]])
     to.select(base_in_list)
 
-def check_toas_model(mo,to,usepickle=False):
+def check_toas_model(to,mo,center_epochs=True,summary=True):
     """Runs basic checks on previously-loaded timing model & TOA objects.
 
     Checks that ephem and bipm_version have been set to the latest available versions; checks
@@ -326,11 +327,14 @@ def check_toas_model(mo,to,usepickle=False):
     ==========
     to: `pint.toa.TOAs` object
     mo: `pint.model.TimingModel` object
-    usepickle: boolean, optional
-        produce TOA pickle object
+    center_epochs: boolean, optional
+        if true, center PEPOCH, DMEPOCH, POSEPOCH (default: True)
+    summary: boolean, optional
+        if true, print TOA summary (default: True)
 
     Returns
     =======
+    None
     """
     # Check ephem/bipm
     pc.check_ephem(to)
@@ -341,9 +345,19 @@ def check_toas_model(mo,to,usepickle=False):
 
     # Convert to/add AstrometryEcliptic component model if necessary.
     if 'AstrometryEquatorial' in mo.components:
+        msg = "AstrometryEquatorial in model components; switching to AstrometryEcliptic."
+        log.warning(msg)
         model_equatorial_to_ecliptic(mo)
 
     # Basic checks on timing model
     pc.check_name(mo)
     add_feJumps(mo,list(receivers))
     pc.check_jumps(mo,receivers)
+
+    # Center epochs?
+    if center_epochs:
+        center_epochs(mo,to)
+
+    # Print summary?
+    if summary:
+        to.print_summary()
