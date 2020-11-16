@@ -64,6 +64,9 @@ def plot_residuals_time(toas, res, figsize=(10,4), plotsig = False, fromPINT = T
                         legend = True, axs = None):
     """
     Make a plot of the residuals vs. time
+    
+    Can use like
+    plot_residuals_time(fitter.toas, fitter.resids)
 
 
     Arguments
@@ -90,10 +93,11 @@ def plot_residuals_time(toas, res, figsize=(10,4), plotsig = False, fromPINT = T
     if fromPINT:
         freqs = toas.get_freqs().value
         mjds = toas.get_mjds().value
-        errs = toas.get_errors().value
+        errs = toas.get_errors().to(u.us)
         years = (mjds - 51544.0)/365.25 + 2000.0
         rcvr_bcknds = np.array(toas.get_flag_value('f')[0])
         RCVR_BCKNDS = set(rcvr_bcknds)
+        res = res.time_resids.to(u.us)
     else:
         mjds = mjds
         years = (mjds - 51544.0)/365.25 + 2000.0
@@ -115,10 +119,10 @@ def plot_residuals_time(toas, res, figsize=(10,4), plotsig = False, fromPINT = T
         if plotsig:
             sig = res[inds]/errs[inds]
             ax1.errorbar(years[inds], sig, yerr=len(errs[inds])*[1], fmt=markers[r_b_label], \
-                     color=colorscheme[r_b_label], label=r_b_label, alpha = 0.5)
+                         color=colorscheme[r_b_label], label=r_b_label, alpha = 0.5)
         else:
             ax1.errorbar(years[inds], res[inds], yerr=errs[inds], fmt=markers[r_b_label], \
-                     color=colorscheme[r_b_label], label=r_b_label, alpha = 0.5)
+                         color=colorscheme[r_b_label], label=r_b_label, alpha = 0.5)
     # Set second axis
     ax1.set_xlabel(r'Year')
     ax1.grid(True)
@@ -208,7 +212,7 @@ def plot_dmx_time(toas, fitter, figsize=(10,4), savedmx = False, save = False, l
         DMX_center_Year = (DMX_center_MJD- 51544.0)/365.25 + 2000.0
 
         ax1.errorbar(DMX_center_Year, DMXs*10**3, yerr=DMX_vErrs*10**3, fmt='.', c = 'gray', marker = 's', \
-                         label="Wideband")
+                     label="Wideband")
 
     if NB == True:
         # Make sure that narrowband DMX file exists, if not assume fitter is narrowband TOAs
@@ -434,6 +438,9 @@ def plot_residuals_orb(toas, res, model, figsize=(10,4), plotsig = False, fromPI
                        legend = True, axs = None):
     """
     Make a plot of the residuals vs. orbital phase
+    
+    Can use like 
+    plot_residuals_orb(fitter.toas, fitter.resids, fitter.model)
 
 
     Arguments
@@ -459,10 +466,11 @@ def plot_residuals_orb(toas, res, model, figsize=(10,4), plotsig = False, fromPI
     if fromPINT:
         freqs = toas.get_freqs().value
         mjds = toas.get_mjds().value
-        errs = toas.get_errors().value
+        errs = toas.get_errors().to(u.us)
         years = (mjds - 51544.0)/365.25 + 2000.0
         rcvr_bcknds = np.array(toas.get_flag_value('f')[0])
         RCVR_BCKNDS = set(rcvr_bcknds)
+        res = res.time_resids.to(u.us)
     else:
         mjds = mjds
         years = (mjds - 51544.0)/365.25 + 2000.0
