@@ -15,7 +15,7 @@ import astropy
 import enterprise
 # import enterprise_extensions as e_e # NOTE - enterprise_extensions has no attribute __version__
 import PTMCMCSampler
-from ftester import report_ptest, get_fblist, param_check
+from timing_analysis.ftester import report_ptest, get_fblist, param_check
 
 ALPHA = 0.0027
 
