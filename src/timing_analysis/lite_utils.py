@@ -316,7 +316,7 @@ def apply_epoch_cut(to,badepoch):
     base_in_list = np.array([(be not in n) for n in to.get_flag_value('name')[0]])
     to.select(base_in_list)
 
-def check_toas_model(to,mo,center_epochs=True,summary=True):
+def check_toas_model(to,mo,center=True,summary=True):
     """Runs basic checks on previously-loaded timing model & TOA objects.
 
     Checks that ephem and bipm_version have been set to the latest available versions; checks
@@ -327,7 +327,7 @@ def check_toas_model(to,mo,center_epochs=True,summary=True):
     ==========
     to: `pint.toa.TOAs` object
     mo: `pint.model.TimingModel` object
-    center_epochs: boolean, optional
+    center: boolean, optional
         if true, center PEPOCH, DMEPOCH, POSEPOCH (default: True)
     summary: boolean, optional
         if true, print TOA summary (default: True)
@@ -355,7 +355,7 @@ def check_toas_model(to,mo,center_epochs=True,summary=True):
     pc.check_jumps(mo,receivers)
 
     # Center epochs?
-    if center_epochs:
+    if center:
         center_epochs(mo,to)
 
     # Print summary?
