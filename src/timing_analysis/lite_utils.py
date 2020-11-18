@@ -361,3 +361,25 @@ def check_toas_model(to,mo,center=True,summary=True):
     # Print summary?
     if summary:
         to.print_summary()
+
+def large_residuals(fo,threshold_us):
+    """Quick and dirty routine to find outlier residuals based on some threshold.
+
+    Parameters
+    ==========
+    fo: `pint.fitter` object
+    threshold_us: float
+        not a quantity, but threshold for residuals larger (magnitude) than some delay in microseconds
+
+    Returns
+    =======
+    None
+        prints bad-toa lines that can be copied directly into a yaml file
+    """
+
+    badtoalist = np.where(np.abs(fo.resids_init.time_resids.to(u.us)) > threshold_us*u.us)
+    for i in badtoalist[0]:
+        name = fo.toas.get_flag_value('name')[0][i]
+        chan = fo.toas.get_flag_value('chan')[0][i]
+        subint = fo.toas.get_flag_value('subint')[0][i]
+        print('    - [\'%s\',%i,%i]'%(name,chan,subint))
