@@ -158,7 +158,7 @@ class TimingConfiguration:
             pass
         if 'bad-epoch' in valid_valued:
             for be in self.get_bad_epochs():
-                be_select = np.array([(be not in n) for n in to.get_flag_value('name')[0]])
+                be_select = np.array([(be not in n) for n in toas.get_flag_value('name')[0]])
                 selection *= be_select 
         if 'bad-toa' in valid_valued:
             for bt in self.get_bad_toas():
