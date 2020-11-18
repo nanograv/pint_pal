@@ -108,6 +108,12 @@ class TimingConfiguration:
             return self.config['ignore']['snr-cut']
         return None #return some default value instead?
 
+    def get_bad_epochs(self):
+        """ Return list of bad epochs (basenames: [backend]_[mjd]_[source]) """
+        if 'bad-epoch' in self.config['ignore'].keys():
+            return self.config['ignore']['bad-epoch']
+        return None
+
     def get_bad_toas(self):
         """ Return list of bad TOAs (lists: [filename, channel, subint]) """
         if 'bad-toa' in self.config['ignore'].keys():
@@ -151,7 +157,9 @@ class TimingConfiguration:
         if 'bad-ff' in valid_valued:
             pass
         if 'bad-epoch' in valid_valued:
-            pass
+            for be in self.get_bad_epochs():
+                be_select = np.array([(be not in n) for n in toas.get_flag_value('name')[0]])
+                selection *= be_select 
         if 'bad-toa' in valid_valued:
             for bt in self.get_bad_toas():
                 name,chan,subint = bt

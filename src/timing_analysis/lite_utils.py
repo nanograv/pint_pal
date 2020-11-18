@@ -1,5 +1,6 @@
 import numpy as np
 import astropy.units as u
+from astropy import log
 import matplotlib.pyplot as plt
 from datetime import date
 import timing_analysis.par_checker as pc
@@ -314,3 +315,71 @@ def apply_epoch_cut(to,badepoch):
     be = badepoch
     base_in_list = np.array([(be not in n) for n in to.get_flag_value('name')[0]])
     to.select(base_in_list)
+
+def check_toas_model(to,mo,center=True,summary=True):
+    """Runs basic checks on previously-loaded timing model & TOA objects.
+
+    Checks that ephem and bipm_version have been set to the latest available versions; checks
+    for equatorial astrometric parameters (converts to ecliptic, if necessary); also checks
+    source name, and for appropriate number of jumps. Checks are functions from par_checker.py.
+
+    Parameters
+    ==========
+    to: `pint.toa.TOAs` object
+    mo: `pint.model.TimingModel` object
+    center: boolean, optional
+        if true, center PEPOCH, DMEPOCH, POSEPOCH (default: True)
+    summary: boolean, optional
+        if true, print TOA summary (default: True)
+
+    Returns
+    =======
+    None
+    """
+    # Check ephem/bipm
+    pc.check_ephem(to)
+    pc.check_bipm(to)
+
+    # Identify receivers present
+    receivers = set(to.get_flag_value('fe')[0])
+
+    # Convert to/add AstrometryEcliptic component model if necessary.
+    if 'AstrometryEquatorial' in mo.components:
+        msg = "AstrometryEquatorial in model components; switching to AstrometryEcliptic."
+        log.warning(msg)
+        model_equatorial_to_ecliptic(mo)
+
+    # Basic checks on timing model
+    pc.check_name(mo)
+    add_feJumps(mo,list(receivers))
+    pc.check_jumps(mo,receivers)
+
+    # Center epochs?
+    if center:
+        center_epochs(mo,to)
+
+    # Print summary?
+    if summary:
+        to.print_summary()
+
+def large_residuals(fo,threshold_us):
+    """Quick and dirty routine to find outlier residuals based on some threshold.
+
+    Parameters
+    ==========
+    fo: `pint.fitter` object
+    threshold_us: float
+        not a quantity, but threshold for residuals larger (magnitude) than some delay in microseconds
+
+    Returns
+    =======
+    None
+        prints bad-toa lines that can be copied directly into a yaml file
+    """
+
+    badtoalist = np.where(np.abs(fo.resids_init.time_resids.to(u.us)) > threshold_us*u.us)
+    for i in badtoalist[0]:
+        name = fo.toas.get_flag_value('name')[0][i]
+        chan = fo.toas.get_flag_value('chan')[0][i]
+        subint = fo.toas.get_flag_value('subint')[0][i]
+        print('    - [\'%s\',%i,%i]'%(name,chan,subint))
