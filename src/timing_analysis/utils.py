@@ -19,12 +19,15 @@ from timing_analysis.ftester import report_ptest, get_fblist, param_check
 
 ALPHA = 0.0027
 
-def whiten_resids(fitter):
+def whiten_resids(fitter, restype = 'postfit'):
     """
     Function to whiten residuals. Returns a residual class object. If no reddened residuals, input will be returned.
 
     Arguements:
     fitter: PINT fitter class or dictionary output from ecorr_average() function
+    restype ['string'] : Type of residuals, pre or post fit, to plot from fitter object. Options are:
+        'prefit' - plot the prefit residuals.
+        'postfit' - plot the postfit residuals (default)
     """
     # Check if input is the epoch averaged dictionary, should only be used if epoch averaged NB TOAs
     if type(fitter) is dict:
@@ -40,14 +43,19 @@ def whiten_resids(fitter):
     else:
         # Check if WB or NB
         if "Wideband" in fitter.__class__.__name__:
-            resids = fitter.resids.residual_objs[0]
+            resids = fitter.resids.residual_objs['toa']
         else:
-            resids = fitter.resids
+            if restype == 'postfit':
+                resids = fitter.resids
+            elif restype == 'prefit':
+                resids = fitter.resids_init
+            else:
+                raise ValueError("Unrecognized residual type: %s. Please choose from 'prefit' or 'postfit'."%(restype))
         # Get number of residuals
         num_res = len(resids.time_resids)
         # Check that the key is in the dictionary
-        if "pl_red_noise" in fitter.resids.noise_resids:
-            wres = resids.time_resids - fitter.resids.noise_resids['pl_red_noise'][:num_res]
+        if "pl_red_noise" in resids.noise_resids:
+            wres = resids.time_resids - resids.noise_resids['pl_red_noise'][:num_res]
         else:
             log.warning("No red noise, residuals already white. Returning input residuals...")
             wres = resids.time_resids
