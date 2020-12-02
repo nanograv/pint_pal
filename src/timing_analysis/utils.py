@@ -599,3 +599,14 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
 
         os.system('pdflatex -interaction=batchmode '
                 + texfile + ' 2>&1 > /dev/null')
+
+def write_if_changed(filename, contents):
+    """Write contents to filename, touching the file only if it does not already contain them.
+    
+    contents should be a string and the file will be a text file.
+    """
+    if os.path.exists(filename):
+        if contents == open(filename).read():
+            return
+    with open(filename, "w") as f:
+        f.write(contents)
