@@ -267,18 +267,9 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
     ax1.set_xlabel(r'Year')
     ax1.grid(True)
     ax2 = ax1.twiny()
-    ax2.set_xlim(ax1.get_xlim())
     mjd0  = ((ax1.get_xlim()[0])-2004.0)*365.25+53005.
     mjd1  = ((ax1.get_xlim()[1])-2004.0)*365.25+53005.
-    if (mjd1-mjd0>1200.): mjdstep=500.
-    elif (mjd1-mjd0>600.): mjdstep=200.
-    else: mjdstep=100.
-    mjd0 = int(mjd0/mjdstep)*mjdstep + mjdstep
-    mjd1 = int(mjd1/mjdstep)*mjdstep
-    mjdr = np.arange(mjd0,mjd1+mjdstep,mjdstep)
-    yrr = (mjdr - 51544.0)/365.25 + 2000.0
-    ax2.set_xticks(yrr)
-    ax2.set_xticklabels(["%5d" % m for m in mjdr])
+    ax2.set_xlim(mjd0, mjd1)
     if plotsig:
         if avg and whitened:
             ax1.set_ylabel('Average Residual/Uncertainty \n (Whitened)', multialignment='center')
