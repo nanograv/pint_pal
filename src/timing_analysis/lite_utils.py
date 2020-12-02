@@ -21,7 +21,7 @@ def write_par(fitter,addext=''):
     ==========
     fitter: `pint.fitter` object
     """
-    source = fitter.get_allparams()['PSR']
+    source = fitter.get_allparams()['PSR'].value
     date_str = date.today().strftime('%Y%m%d')
     outfile = '%s_PINT_%s%s.par' % (source,date_str,addext)
 
