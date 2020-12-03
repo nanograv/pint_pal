@@ -63,7 +63,7 @@ There are a lot of things that can go wrong at this point; that's why this isn't
 
 - Can't find one or all of your `.tim` files: make sure you can see them at that location on the same machine your notebook is running on. You probably need to be on the NANOGrav notebook server.
 
-- Few TOAs and they look weird: Wideband TOAs may not work well, and they nothing will work if the `toa-type` doesn't match the kind of TOA you're using.
+- Few TOAs and they look weird: Wideband TOAs may not work well, and nothing will work if the `toa-type` doesn't match the kind of TOA you're using.
 
 - Tons of PINT `INFO` messages: sadly, this is normal.
 
