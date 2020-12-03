@@ -41,9 +41,9 @@ $ git checkout 15yr
 $ git checkout -b psr/J1234+5678/{your_initials}
 ```
 
-3. Copy `config/template.yaml` to `config/J1234+5678.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). For now you may want to select *narrowband* `.tim` files and set the corresponding option in the `.yaml` file; the machinery to do this for wideband TOAs is not as well developed. 
+3. Copy `config/template.yaml` to `config/J1234+5678.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). For now you may want to select *narrowband* `.tim` files (indicated by `.nb.tim` rather than `.wb.tim`) and set the corresponding option in the `.yaml` file; the machinery to do this for wideband TOAs is not as well developed. 
 
-4. You may need to select which parameters to fit - at a minimum they should be ones that are in the `.par` file. For position, prefer `ELONG`/`ELAT` rather than `RAJ`/`DECJ` or `LAMBDA`/`BETA`; likewise the proper motion parameters `PMELONG`/`PMELAT`.
+4. You may need to select which parameters to fit - at a minimum they should be ones that are in the `.par` file. For position, prefer `ELONG`/`ELAT` rather than `RAJ`/`DECJ` or `LAMBDA`/`BETA`; likewise the proper motion parameters `PMELONG`/`PMELAT`. More, NANOGrav policy is that all pulsars should be fit for at least `ELONG`, `ELAT`, `PMELONG`, `PMELAT`, `PX`, `F0`, `F1` in every pulsar.
 
 5. Copy the template notebook to the root directory (where you should probably work):
 ```
@@ -71,7 +71,7 @@ There are a lot of things that can go wrong at this point; that's why this isn't
 
 - Plots are thrown off by lots of points with huge error bars: consider adjusting `snr-cut` to remove the ones with the worst signal-to-noise.
 
-- Plots are thrown off by a few outliers with normal error bars: For a proper analysis we should definitely understand what's wrong with these. For now it may be okay to just excise them. It's not as easy as one might wish to figure out which ones they are yet.
+- Plots are thrown off by a few outliers with normal error bars: For a proper analysis we should definitely understand what's wrong with these. For now it may be okay to just excise them. It's not as easy as one might wish to figure out which ones they are yet, but there is the function `large_residuals()` which will print out some of the largest in a format suitable for excision.
 
 - Post-fit model is bad: You may need to fit for more parameters, or switch timing models. 
 
@@ -82,6 +82,8 @@ There are a lot of things that can go wrong at this point; that's why this isn't
 - Your `.par` file looks terrible but is fine in TEMPO2: it's probably in the TCB timescale, which PINT does not support. Use `tempo2 -gr transform old.par new.par tdb` to convert it.
 
 - You see weird kinks in the time series, or peaks at orbital phase 0.25, or sinusoidal variations with orbital phase that change over time: you may need to add features to your timing model.
+
+There are a number of helpful functions available in `timing_analysis.lite_utils` that are imported at the top of the template notebook; you may want to look inside the `src/timing_analysis/lite_utils.py`, which contains the functions and some documentation. You might also try `import timing_analysis.lite_utils; dir(lite_utils)`.
 
 Submitting a good timing solution
 ---------------------------------
