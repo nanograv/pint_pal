@@ -33,7 +33,7 @@ Timing workflow
 
 This package has a variety of tools to support timing for NANOGrav, but the basic goal here is to produce a config `.yaml` file and a `.par` file that together produce clean timing residuals for a new pulsar. (If the pulsar is new to long-term timing, you may need more tools than this to put together an initial `.par` file.) This section will describe how to do that.
 
-1. Pick a pulsar for which timing hasn't been finalized, but for which `.tim` and initial `.par` files exist. The easiest may just be to look in `results` and `/nanograv/releases/15y/toagen/releases/2020.10.26-921bdfd/` for pulsars not represented in `config`. You might also check https://gitlab.nanograv.org/nano-time/timing_analysis/-/branches to make sure no one is working on it.
+1. Pick a pulsar for which timing hasn't been finalized, but for which `.tim` and initial `.par` files exist. The easiest may just be to look in `results` and the most recetn `/nanograv/releases/15y/toagen/releases/` for pulsars not represented in `config`. You might also check https://gitlab.nanograv.org/nano-time/timing_analysis/-/branches to make sure no one is working on it.
 
 2. Make a branch for your work on the new pulsar, say J1234+5678:
 ```
@@ -41,7 +41,7 @@ $ git checkout 15yr
 $ git checkout -b psr/J1234+5678/{your_initials}
 ```
 
-3. Copy `config/template.yaml` to `config/J1234+5678.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in `/nanograv/releases/15y/toagen/releases/2020.11.05-c82ccb5`). For now you may want to select *narrowband* `.tim` files and set the corresponding option in the `.yaml` file; the machinery to do this for wideband TOAs is not as well developed. 
+3. Copy `config/template.yaml` to `config/J1234+5678.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). For now you may want to select *narrowband* `.tim` files and set the corresponding option in the `.yaml` file; the machinery to do this for wideband TOAs is not as well developed. 
 
 4. You may need to select which parameters to fit - at a minimum they should be ones that are in the `.par` file. For position, prefer `ELONG`/`ELAT` rather than `RAJ`/`DECJ` or `LAMBDA`/`BETA`; likewise the proper motion parameters `PMELONG`/`PMELAT`.
 
