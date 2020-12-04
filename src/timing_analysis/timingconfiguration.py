@@ -6,12 +6,14 @@ Very basic usage:
     from timingconfiguration import TimingConfiguration
     tc = TimingConfiguration(CONFIGFILE)
 """
+import io
 import os
 import pint.toa as toa
 import pint.models as model
 import numpy as np
 import astropy.units as u
 import yaml
+from timing_analysis.utils import write_if_changed
 
 
 class TimingConfiguration:
@@ -49,7 +51,7 @@ class TimingConfiguration:
         """Return list of fit parameters"""
         return self.config['fit-params']
 
-    def get_TOAs(self):
+    def get_TOAs(self, usepickle=True):
         """ Return the PINT toa object """
         toas = self.config["toas"]
         tim_path = self.config["tim-directory"]
@@ -58,19 +60,19 @@ class TimingConfiguration:
         
         # Individual tim file
         if isinstance(toas, str):
-            tim_full_path = os.path.join(tim_path,toas)
-            toas = toa.get_TOAs(tim_full_path, usepickle=False, bipm_version=BIPM, ephem=EPHEM)
-
+            toas = [toas]
+            
         # List of tim files (currently requires writing temporary tim file with INCLUDE to read properly)
-        elif isinstance(toas, list):
-            source = self.get_source()
-            tim_full_paths = [os.path.join(tim_path,t) for t in toas]
-            f = open('TEMP.tim','w')
+        tim_full_paths = [os.path.join(tim_path,t) for t in toas]
+        with io.StringIO() as f:
             for tf in tim_full_paths:
                 f.write('INCLUDE %s\n' % (tf))
-            f.close()
-            toas = toa.get_TOAs('TEMP.tim', usepickle=False, bipm_version=BIPM, ephem=EPHEM)
-            # Remove temporary tim file (TEMP.tim)?
+            source = self.get_source()
+            fn = f'TEMP-{source}.tim'
+            write_if_changed(fn, f.getvalue())
+        toas = toa.get_TOAs(fn, usepickle=usepickle, bipm_version=BIPM, ephem=EPHEM)
+        # Remove temporary tim file (TEMP.tim)?
+            
 
         # Excise TOAs according to config 'ignore' block. 
         # (or should this happen as an explicit method run in case someone wants access to the raw TOAs?)
