@@ -45,7 +45,7 @@ class TimingConfiguration:
             raise ValueError("%s source entry does not match parameter PSR"%self.filename)
         return m
 
-    def get_freeparams(self):
+    def get_free_params(self):
         """Return list of free parameters"""
         return self.config['free-params']
 
