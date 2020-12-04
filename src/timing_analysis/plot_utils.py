@@ -312,6 +312,39 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
             ext += "_pre_post_fit"
         plt.savefig("%s_resid_v_mjd%s.png" % (fitter.model.PSR.value, ext))
         
+    # Define clickable points
+    text = ax2.text(0,0,"")
+    
+    # Define point highlight color
+    if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
+        stamp_color = "#61C853"
+    else:
+        stamp_color = "#FD9927"
+    
+    def onclick(event):
+        # Get X and Y axis data
+        xdata = mjds
+        if plotsig:
+            ydata = (res/errs).decompose().value
+        else:
+            ydata = res.value
+        # Get x and y data from click
+        xclick = event.xdata
+        yclick = event.ydata
+        # Calculate scaled distance, find closest point index
+        d = np.sqrt(((xdata - xclick)/10.0)**2 + (ydata - yclick)**2)
+        ind_close = np.where(np.min(d) == d)[0]
+        # highlight clicked point
+        ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
+        # Print point info
+        text.set_position((xdata[ind_close], ydata[ind_close]))
+        if plotsig:
+            text.set_text("TOA Params:\n MJD: %s \n Res/Err: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+        else:
+            text.set_text("TOA Params:\n MJD: %s \n Res: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+
+    fig.canvas.mpl_connect('button_press_event', onclick)
+        
     return
 
 def plot_dmx_time(toas, fitter, figsize=(10,4), savedmx = False, save = False, legend = True, axs = None, NB = False, \
@@ -577,8 +610,7 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
                         save = False, legend = True, title = True, axs = None, **kwargs):
     """
     Make a plot of the residuals vs. orbital phase.
-    NOTE - CURRENTLY CANNOT PLOT EPOCH AVERAGED RESIDUALS
-
+    
 
     Arguments
     ---------
@@ -732,22 +764,7 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
     RCVR_BCKNDS = set(rcvr_bcknds)
 
     # Now we need to the orbital phases; start with binary model name
-    #orbphase = fitter.model.orbital_phase(mjds, radians = False)
-    #"""
-    binary_model_name = 'Binary'+fitter.model.binary_model_name
-    # Now get the orbital phases
-    if avg == True:
-        orbphase = fitter.model.orbital_phase(mjds, radians = False)
-    else:
-        # Now get the phases in units of orbits
-        delay = fitter.model.delay(fitter.toas)
-        orbit_phase = fitter.model.components[binary_model_name].binary_instance.orbits()
-        # Correct negative orbital phases
-        neg_orb_phs_idx = np.where(orbit_phase<0.0)[0]
-        orbit_phase[neg_orb_phs_idx] = orbit_phase[neg_orb_phs_idx] + np.abs(np.floor(orbit_phase[neg_orb_phs_idx]))
-        # Get just the phases from 0-1
-        orbphase = np.abs(np.modf(orbit_phase)[0])
-    #"""
+    orbphase = fitter.model.orbital_phase(mjds, radians = False)
 
     if axs == None:
         if 'figsize' in kwargs.keys():
@@ -837,7 +854,39 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
         elif restype == "both":
             ext += "_pre_post_fit"
         plt.savefig("%s_resid_v_orbphase%s.png" % (fitter.model.PSR.value, ext))
-        
+    
+    # Define clickable points
+    text = ax1.text(0,0,"")
+    # Define color for highlighting points
+    if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
+        stamp_color = "#61C853"
+    else:
+        stamp_color = "#FD9927"
+    
+    def onclick(event):
+        # Get X and Y axis data
+        xdata = orbphase
+        if plotsig:
+            ydata = (res/errs).decompose().value
+        else:
+            ydata = res.value
+        # Get x and y data from click
+        xclick = event.xdata
+        yclick = event.ydata
+        # Calculate scaled distance, find closest point index
+        d = np.sqrt((xdata - xclick)**2 + ((ydata - yclick)/100.0)**2)
+        ind_close = np.where(np.min(d) == d)[0]
+        # highlight clicked point
+        ax1.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
+        # Print point info
+        text.set_position((xdata[ind_close], ydata[ind_close]))
+        if plotsig:
+            text.set_text("TOA Params:\n Phase: %.5f \n Res/Err: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+        else:
+            text.set_text("TOA Params:\n Phase: %.5f \n Res: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+
+    fig.canvas.mpl_connect('button_press_event', onclick)
+    
     return
 
 
