@@ -47,9 +47,9 @@ class TimingConfiguration:
             raise ValueError("%s source entry does not match parameter PSR"%self.filename)
         return m
 
-    def get_fitparams(self):
-        """Return list of fit parameters"""
-        return self.config['fit-params']
+    def get_free_params(self):
+        """Return list of free parameters"""
+        return self.config['free-params']
 
     def get_TOAs(self, usepickle=True):
         """ Return the PINT toa object """
