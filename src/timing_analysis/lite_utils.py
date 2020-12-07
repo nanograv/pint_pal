@@ -12,7 +12,7 @@ import pint.residuals
 from pint.modelutils import model_equatorial_to_ecliptic
 
 from pint.models.parameter import maskParameter
-from pint.models.timing_model import Component 
+from pint.models.timing_model import Component
 
 def write_par(fitter,addext=''):
     """Writes a timing model object to a par file in the working directory.
@@ -87,7 +87,7 @@ def plot_res(fitter,restype='prefit'):
             )
             restype_str = 'Post'
         else:
-            raise ValueError("Residual type (%s) not recognized. Try prefit/postfit." % (restype)) 
+            raise ValueError("Residual type (%s) not recognized. Try prefit/postfit." % (restype))
 
         plt.title("%s %s-Fit Timing Residuals" % (fitter.model.PSR.value,restype_str))
         plt.xlabel("MJD")
@@ -136,11 +136,11 @@ def apply_snr_cut(toas,snr_cut,summary=False):
     summary: boolean, optional
         print toa summary
     """
-    # Might want a warning here. SNR cut should happen before others for intended effect. 
+    # Might want a warning here. SNR cut should happen before others for intended effect.
     # toas.unselect()
     toas.select((np.array(toas.get_flag_value('snr')) > snr_cut)[0])
-    
-    if summary:    
+
+    if summary:
         toas.print_summary()
 
 def apply_mjd_cut(toas,configDict,summary=False):
@@ -219,6 +219,8 @@ def load_and_check(configDict,usepickle=False):
     pc.check_name(mo)
     add_feJumps(mo,list(receivers))
     pc.check_jumps(mo,receivers)
+    if len(to.get_flag_value('pp_dm')[1]):  # Assumes WB TOAs will need DMJUMPs
+        pc.check_dmjumps(mo,receivers)
 
     return to, mo
 
@@ -230,7 +232,7 @@ def check_fit(fitter):
 
     Parameters
     ==========
-    fitter: `pint.fitter` object 
+    fitter: `pint.fitter` object
     """
     pc.check_spin(fitter.model)
     pc.check_astrometry(fitter.model)
@@ -249,7 +251,7 @@ def select_out_toa(to,badtoa_list):
     chan_match = np.array([(ch == chan) for ch in to.get_flag_value('chan')[0]])
     subint_match = np.array([(si == subint) for si in to.get_flag_value('subint')[0]])
     match = name_match * subint_match * chan_match
-    
+
     if np.sum(match) == 1:
         toa_number = np.where(match==True)[0][0]
         print('Zapping TOA: %s' % (toa_number))
@@ -267,7 +269,7 @@ def add_feJumps(mo,rcvrs):
     rcvrs: list
         receivers present in TOAs
     """
-    # Might want a warning here if no jumps are necessary. 
+    # Might want a warning here if no jumps are necessary.
     if len(rcvrs) <= 1:
         return
 
@@ -303,7 +305,7 @@ def apply_range_cut(to,badrange_list):
     min_crit = (to.get_mjds() > mjd_start*u.d)
     max_crit = (to.get_mjds() < mjd_end*u.d)
     to.select(np.logical_xor(min_crit, max_crit))
-    
+
 def apply_epoch_cut(to,badepoch):
     """According to the bad-epoch entries in your yaml, mask TOAs containing that basename (badepoch).
     Parameters
@@ -321,7 +323,7 @@ def check_toas_model(to,mo,center=True,summary=True):
 
     Checks that ephem and bipm_version have been set to the latest available versions; checks
     for equatorial astrometric parameters (converts to ecliptic, if necessary); also checks
-    source name, and for appropriate number of jumps. Checks are functions from par_checker.py.
+    source name, and for appropriate number of jumps/dmjumps. Checks are functions from par_checker.py.
 
     Parameters
     ==========
@@ -353,6 +355,8 @@ def check_toas_model(to,mo,center=True,summary=True):
     pc.check_name(mo)
     add_feJumps(mo,list(receivers))
     pc.check_jumps(mo,receivers)
+    if len(to.get_flag_value('pp_dm')[1]):  # Assumes WB TOAs will need DMJUMPs
+        pc.check_dmjumps(mo,receivers)
 
     # Center epochs?
     if center:

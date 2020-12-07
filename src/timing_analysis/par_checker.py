@@ -236,7 +236,7 @@ def check_jumps(model, receivers):
     rcvrs = copy.copy(receivers)
 
     for p in model.params:
-        if "JUMP" in p:
+        if p.startswith("JUMP"):
             jumps.append(p)
 
     for jump in jumps:
@@ -251,7 +251,40 @@ def check_jumps(model, receivers):
         raise ValueError("%i receivers require JUMPs"%length)
     elif length == 0:
         raise ValueError("All receivers have JUMPs, one must be removed")
-    return 
+    return
+
+def check_dmjumps(model, receivers):
+    """Check that there are the correct number of dmjumps in the par file.
+
+    Parameters
+    ==========
+    model: PINT model object
+    receivers: list of receiver strings
+
+    Raises
+    ======
+    ValueError
+        If not all receivers are dm-jumped at the end, or
+        no TOAs were recorded with that receiver
+    """
+    dmjumps = []
+    rcvrs = copy.copy(receivers)
+
+    for p in model.params:
+        if p.startswith("DMJUMP"):
+            dmjumps.append(p)
+
+    for dmjump in dmjumps:
+        j = getattr(model, dmjump)
+        value = j.key_value[0]
+        if value not in rcvrs:
+            raise ValueError("Receiver %s not used in TOAs"%value)
+        rcvrs.remove(value)
+
+    length = len(rcvrs)
+    if length:
+        raise ValueError("%i receivers require DMJUMPs"%length)
+    return
 
 def check_ephem(toa):
     """Check that the ephemeris matches the latest version.
