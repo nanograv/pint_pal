@@ -180,7 +180,7 @@ class TimingNotebook:
         Run the PINT generalized-least-squares (GLS) fitter and calculate the residuals.\
         ''')
         self.add_code_cell('''\
-        psr_fitter = fitter.GLSFitter(excised_toas, psr_model)
+        psr_fitter = getattr(fitter,tc.config['fitter'])(excised_toas, psr_model)
         pint_chi2 = psr_fitter.fit_toas(NITS)
         res = psr_fitter.resids.time_resids.to(u.us).value\
         ''')
