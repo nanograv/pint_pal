@@ -7,9 +7,9 @@ Installing on the notebook server
 
 1. Go to notebook.nanograv.org and sign in with your NANOGrav.org Google Account. Your username should follow the convention of FirstName.LastName@nanograv.org. If you have any issues, please submit a ticket at http://support.nanograv.org and a CyberI team member will address it quickly.
 
-2. Once logged in, you can access the terminal by navigating to the 'New' drop-down and selecting 'Terminal'.
+2. Once logged in, you can access the terminal by navigating to the 'New' drop-down and selecting 'Terminal'. **(Note:  you will be user "joyvan" but in your own separate userspace/container)**
 
-3. Clone timing_analysis to your home directory and checkout the working branch; in a terminal:
+3. Clone timing_analysis to your (i.e. "joyvan") home directory and checkout the working branch; in a terminal:
 ```
 > cd ~/work/
 > git clone git@gitlab.nanograv.org:nano-time/timing_analysis.git
