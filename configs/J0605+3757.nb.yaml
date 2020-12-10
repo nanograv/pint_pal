@@ -2,7 +2,7 @@
 source: J0605+3757
 par-directory: results/
 tim-directory: /nanograv/releases/15y/toagen/releases/2020.11.18-b8d329b
-timing-model: J0605+3757.basic.par
+timing-model: {psr}.basic.par
 compare-model: ~
 toas:
 - J0605+3757.Rcvr1_2.GUPPI.15y.x.nb.tim
@@ -17,7 +17,7 @@ bipm: BIPM2019
 
 # Global/subset TOA excision
 ignore:
-  mjd-start: ~ 
+  mjd-start: ~
   mjd-end: ~
   snr-cut: 8
   # Following are designated by ['name','chan','subint']
@@ -28,4 +28,4 @@ ignore:
   # TOAs with that basename (can have multiple)
   bad-epoch: ~
 
-# End 
+# End
