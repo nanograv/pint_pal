@@ -41,8 +41,9 @@ class TimingConfiguration:
 
     def get_model(self):
         """ Return the PINT model object """
+        par_path = self.config["par-directory"]
         filename = self.config["timing-model"]
-        m = model.get_model(filename)
+        m = model.get_model(os.path.join(par_path,filename))
         if m.PSR.value != self.get_source():
             raise ValueError("%s source entry does not match parameter PSR"%self.filename)
         return m
