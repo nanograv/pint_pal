@@ -2,6 +2,8 @@ import yaml
 import glob
 import pint.models as pm
 
+overwrite = True  # overwrite existing yamls?
+
 # The following is the 12.5-yr git repo
 old_timing = "/home/tim/Research/NANOGrav/nanograv_timing_2017/"
 old_util = old_timing+"util/"
@@ -15,6 +17,9 @@ bad_files = [line.split()[0] for line in open(badfile).readlines() if not line.s
 # Where the data lives on the notebook server
 new_timing = "/nanograv/releases/15y/toagen/releases/2020.11.18-b8d329b"
 
+# Assumes current working dir is timing_analysis/configs/
+ta_dir = ".."
+
 # If there are already .yaml files written
 current_configs = glob.glob("[BJ]*.yaml")
 current_psrs = list(set([f.split(".")[0] for f in current_configs]))
@@ -25,7 +30,7 @@ psrs = list(set([f.split(".")[0] for f in current_timfiles]))
 for psr in psrs:
     for toatype in ["nb", "wb"]:
         outname = psr+f".{toatype}.yaml"
-        if psr in current_psrs: outname = outname+".auto"
+        if not overwrite and psr in current_psrs: outname = outname+".auto"
         print(psr, outname)
         uptoatype = toatype.upper()
         fitter = "GLSFitter" if toatype=="nb" else "WidebandTOAFitter"
@@ -39,7 +44,12 @@ for psr in psrs:
                 free_params_str = "[ELONG,ELAT,PMELONG,PMELAT,PX,F0,F1,A1,PB,TASC,EPS1,EPS2,JUMP1]"
             else:
                 free_params_str = "[ELONG,ELAT,PMELONG,PMELAT,PX,F0,F1,A1,PB,TASC,EPS1,EPS2,JUMP1,DMJUMP1,DMJUMP2]"
-            parfile_str = "{psr}.basic.par"
+            parfiles = glob.glob(f"{ta_dir}/results/{psr}*.par")
+            if parfiles:
+                parfile = parfiles[0]
+                parfile_str = parfile.split('/')[-1]
+            else:
+                parfile_str = f"{psr}.basic.par"
         else:
             if toatype=="nb":
                 parfile = [pf for pf in parfiles if pf.endswith("12yv4.gls.par")][0] # will not chose t2 model for J1713
