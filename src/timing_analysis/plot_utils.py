@@ -17,7 +17,7 @@ import pint.fitter as fitter
 import pint.utils as pu
 import subprocess
 # import extra util functions brent wrote
-import timing_analysis.utils as ub
+from timing_analysis.utils import *
 import os
 
 # color blind friends colors and markers?
@@ -151,18 +151,18 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
     if whitened == True and ('res' not in kwargs.keys()):
         if avg == True:
             if restype != 'both':
-                res = ngu.whiten_resids(avg_dict, restype=restype)
+                res = whiten_resids(avg_dict, restype=restype)
             else:
-                res = ngu.whiten_resids(avg_dict_pre, restype='prefit')
-                res_pre = ngu.whiten_resids(avg_dict, restype='postfit')
+                res = whiten_resids(avg_dict_pre, restype='prefit')
+                res_pre = whiten_resids(avg_dict, restype='postfit')
                 res_pre = res_pre.to(u.us)
             res = res.to(u.us)    
         else:
             if restype != 'both':
-                res = ngu.whiten_resids(fitter, restype=restype)
+                res = whiten_resids(fitter, restype=restype)
             else:
-                res = ngu.whiten_resids(fitter, restype='prefit')
-                res_pre = ngu.whiten_resids(fitter, restype='postfit')
+                res = whiten_resids(fitter, restype='prefit')
+                res_pre = whiten_resids(fitter, restype='postfit')
                 res_pre = res_pre.to(u.us)
             res = res.to(u.us)
     
@@ -698,18 +698,18 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
     if whitened == True and ('res' not in kwargs.keys()):
         if avg == True:
             if restype != 'both':
-                res = ngu.whiten_resids(avg_dict, restype=restype)
+                res = whiten_resids(avg_dict, restype=restype)
             else:
-                res = ngu.whiten_resids(avg_dict_pre, restype='prefit')
-                res_pre = ngu.whiten_resids(avg_dict, restype='postfit')
+                res = whiten_resids(avg_dict_pre, restype='prefit')
+                res_pre = whiten_resids(avg_dict, restype='postfit')
                 res_pre = res_pre.to(u.us)
             res = res.to(u.us)    
         else:
             if restype != 'both':
-                res = ngu.whiten_resids(fitter, restype=restype)
+                res = whiten_resids(fitter, restype=restype)
             else:
-                res = ngu.whiten_resids(fitter, restype='prefit')
-                res_pre = ngu.whiten_resids(fitter, restype='postfit')
+                res = whiten_resids(fitter, restype='prefit')
+                res_pre = whiten_resids(fitter, restype='postfit')
                 res_pre = res_pre.to(u.us)
             res = res.to(u.us)
     
