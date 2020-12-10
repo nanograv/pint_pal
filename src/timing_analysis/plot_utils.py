@@ -460,13 +460,13 @@ def plot_wb_dm_time(toas, fitter, figsize=(10,4), save = False, legend = True, a
         ax1 = axs
 
     # Get the DM residuals
-    dm_resids = fitter.resids.residual_objs[1].resids.value
-    dm_error = fitter.resids.residual_objs[1].data_error.value
+    dm_resids = fitter.resids.residual_objs['dm'].resids.value
+    dm_error = fitter.resids.residual_objs['dm'].data_error.value
 
     # If we don't want mean subtraced data we add the mean
     if not mean_sub:
-        DM0 = np.average(fitter.resids.residual_objs[1].dm_data,
-                         weights=(fitter.resids.residual_objs[1].dm_error)**-2)
+        DM0 = np.average(fitter.resids.residual_objs['dm'].dm_data,
+                         weights=(fitter.resids.residual_objs['dm'].dm_error)**-2)
         dm_resids += DM0.value
         ylabel = r"DM [cm$^{-3}$ pc]"
     else:
@@ -985,8 +985,8 @@ def fd_res_v_freq(toas, fitter, figsize=(4,4), plotsig = False, fromPINT = True,
     # Check if fitter is wideband or not
     if "Wideband" in fitter.__class__.__name__:
         NB = False
-        resids = fitter.resids.residual_objs[0]
-        dm_resids = fitter.resids.residual_objs[1]
+        resids = fitter.resids.residual_objs['toa']
+        dm_resids = fitter.resids.residual_objs['dm']
     else:
         NB = True
         resids = fitter.resids
@@ -1087,7 +1087,7 @@ def fd_res_v_freq(toas, fitter, figsize=(4,4), plotsig = False, fromPINT = True,
 
         # Check if fitter is wideband or not
         if "Wideband" in psr_fitter_nofd.__class__.__name__:
-            resids = psr_fitter_nofd.resids.residual_objs[0]
+            resids = psr_fitter_nofd.resids.residual_objs['toa']
             avg = False
         else:
             resids = psr_fitter_nofd.resids
@@ -1719,8 +1719,8 @@ def plots_for_summary_pdf_wb(toas, model, fitter, title = None, legends = False,
     EPHEM = "DE435" # JPL ephemeris used
     BIPM = "BIPM1.5015" # BIPM timescale used
     # Get the residuals
-    res = fitter.resids.residual_objs[0].time_resids.to(u.us).value
-    dm_resids = fitter.resids.residual_objs[1]
+    res = fitter.resids.residual_objs['toa'].time_resids.to(u.us).value
+    dm_resids = fitter.resids.residual_objs['dm']
     if fromPINT:
         # Get the whitned residuals
         wres = ub.whiten_resids(fitter)
