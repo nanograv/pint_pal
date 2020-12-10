@@ -219,7 +219,7 @@ def load_and_check(configDict,usepickle=False):
     pc.check_name(mo)
     add_feJumps(mo,list(receivers))
     pc.check_jumps(mo,receivers)
-    if len(to.get_flag_value('pp_dm')[1]):  # Assumes WB TOAs will need DMJUMPs
+    if configDict['fitter'] is 'WidebandTOAFitter':
         pc.check_dmjumps(mo,receivers)
 
     return to, mo
