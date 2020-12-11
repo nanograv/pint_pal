@@ -92,6 +92,18 @@ class TimingConfiguration:
             return self.config['ephem']
         return None #return some default value instead?
 
+    def get_fitter(self):
+        """ Return the fitter string (do more?) """
+        if "fitter" in self.config.keys():
+            return self.config['fitter']
+        return None
+
+    def get_toa_type(self):
+        """ Return the toa-type string """
+        if "toa-type" in self.config.keys():
+            return self.config['toa-type']
+        return None
+
     def get_mjd_start(self):
         """Return mjd-start quantity (applies units days)"""
         if 'mjd-start' in self.config['ignore'].keys():
