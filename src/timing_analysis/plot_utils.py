@@ -1101,14 +1101,14 @@ def plot_fd_res_v_freq(toas, fitter, figsize=(4,4), plotsig = False, fromPINT = 
             avg_rcvr_bcknds = rcvr_bcknds
             if whitened:
                 # need to whiten and average
-                wres_avg = ub.whiten_resids(avg)
+                wres_avg = whiten_resids(avg)
                 res_nofd = wres_avg.to(u.us).value
             else:
                 # need to average
                 res_nofd = avg['time_resids'].to(u.us).value
         elif whitened:
             # Need to whiten
-            wres_nofd = ub.whiten_resids(psr_fitter_nofd)
+            wres_nofd = whiten_resids(psr_fitter_nofd)
             res_nofd = wres_nofd.to(u.us).value
         else:
             res_nofd = resids.time_resids.to(u.us).value
@@ -1203,7 +1203,7 @@ def summary_plots(toas, model, fitter, res, title = None, legends = False, avg =
     if fromPINT:
         if whitened:
             # Get the whitned residuals
-            wres = ub.whiten_resids(fitter)
+            wres = whiten_resids(fitter)
             wres = wres.to(u.us).value
         if avg:
             # Get the epoch averaged residuals
@@ -1211,7 +1211,7 @@ def summary_plots(toas, model, fitter, res, title = None, legends = False, avg =
             avg_res = avg['time_resids'].to(u.us).value
             avg_errs = avg['errors'].value
             avg_mjds = avg['mjds'].value
-            avg_wres = ub.whiten_resids(avg)
+            avg_wres = whiten_resids(avg)
             avg_wres = avg_wres.to(u.us).value
             # get rcvr backend combos for averaged residuals
             rcvr_bcknds = np.array(toas.get_flag_value('f')[0])
@@ -1423,14 +1423,14 @@ def summary_plots_ft(toas, model, fitter, res, title = None, legends = False,\
     BIPM = "BIPM2017" # BIPM timescale used
     if fromPINT:
         # Get the whitned residuals
-        wres = ub.whiten_resids(fitter)
+        wres = whiten_resids(fitter)
         wres = wres.to(u.us).value
         # Get the epoch averaged residuals
         avg = fitter.resids.ecorr_average(use_noise_model=True)
         avg_res = avg['time_resids'].to(u.us).value
         avg_errs = avg['errors'].value
         avg_mjds = avg['mjds'].value
-        avg_wres = ub.whiten_resids(avg)
+        avg_wres = whiten_resids(avg)
         avg_wres = avg_wres.to(u.us).value
         # get rcvr backend combos for averaged residuals
         rcvr_bcknds = np.array(toas.get_flag_value('f')[0])
@@ -1587,14 +1587,14 @@ def plots_for_summary_pdf_nb(toas, model, fitter, title = None, legends = False,
     res = fitter.resids.time_resids.to(u.us).value
     if fromPINT:
         # Get the whitned residuals
-        wres = ub.whiten_resids(fitter)
+        wres = whiten_resids(fitter)
         wres = wres.to(u.us).value
         # Get the epoch averaged residuals
         avg = fitter.resids.ecorr_average(use_noise_model=True)
         avg_res = avg['time_resids'].to(u.us).value
         avg_errs = avg['errors'].value
         avg_mjds = avg['mjds'].value
-        avg_wres = ub.whiten_resids(avg)
+        avg_wres = whiten_resids(avg)
         avg_wres = avg_wres.to(u.us).value
         # get rcvr backend combos for averaged residuals
         rcvr_bcknds = np.array(toas.get_flag_value('f')[0])
@@ -1725,7 +1725,7 @@ def plots_for_summary_pdf_wb(toas, model, fitter, title = None, legends = False,
     dm_resids = fitter.resids.residual_objs['dm']
     if fromPINT:
         # Get the whitned residuals
-        wres = ub.whiten_resids(fitter)
+        wres = whiten_resids(fitter)
         wres = wres.to(u.us).value
         # get rcvr backend combos for averaged residuals
         rcvr_bcknds = np.array(toas.get_flag_value('f')[0])
