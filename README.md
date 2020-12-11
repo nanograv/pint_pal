@@ -18,6 +18,14 @@ Installing on the notebook server
 ```
 If the last command tells you `15yr` exists already, great.
 
+In order to ensure commits are pushed as your NANOGrav.org GitLab account rather than the "jovyan" user, please run the following commands to configure the `timing_analysis` directory.
+```
+cd ~/work/timing_analysis/
+git config user.name "FirstName LastName"
+git config user.email "FirstName.LastName@nanograv.org"
+```
+Note: You may have to reconfigure this if your container is brought down at any point. This should be remedied in the future.
+
 4. Get the latest copy of PINT; in a terminal:
 ```
 > pip install git+git://github.com/nanograv/pint --user
