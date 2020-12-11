@@ -47,6 +47,12 @@ class TimingConfiguration:
             raise ValueError("%s source entry does not match parameter PSR"%self.filename)
         return m
 
+    def get_compare_model(self):
+        """ Return the timing model file to compare with """
+        if "compare-model" in self.config.keys():
+            return self.config['compare-model']
+        return None
+
     def get_free_params(self):
         """Return list of free parameters"""
         return self.config['free-params']
