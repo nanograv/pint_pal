@@ -7,9 +7,9 @@ Installing on the notebook server
 
 1. Go to notebook.nanograv.org and sign in with your NANOGrav.org Google Account. Your username should follow the convention of FirstName.LastName@nanograv.org. If you have any issues, please submit a ticket at http://support.nanograv.org and a CyberI team member will address it quickly.
 
-2. Once logged in, you can access the terminal by navigating to the 'New' drop-down and selecting 'Terminal'.
+2. Once logged in, you can access the terminal by navigating to the 'New' drop-down and selecting 'Terminal'. (Note: you will be user "jovyan" but in your own separate userspace/container)
 
-3. Clone timing_analysis to your home directory and checkout the working branch; in a terminal:
+3. Clone timing_analysis to your (i.e. "jovyan") home directory and checkout the working branch; in a terminal:
 ```
 > cd ~/work/
 > git clone git@gitlab.nanograv.org:nano-time/timing_analysis.git
@@ -17,6 +17,14 @@ Installing on the notebook server
 > git checkout -b 15yr origin/15yr
 ```
 If the last command tells you `15yr` exists already, great.
+
+In order to ensure commits are pushed as your NANOGrav.org GitLab account rather than the "jovyan" user, please run the following commands to configure the `timing_analysis` directory.
+```
+cd ~/work/timing_analysis/
+git config user.name "FirstName LastName"
+git config user.email "FirstName.LastName@nanograv.org"
+```
+Note: You may have to reconfigure this if your container is brought down at any point. This should be remedied in the future.
 
 4. Get the latest copy of PINT; in a terminal:
 ```
