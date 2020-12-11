@@ -155,8 +155,8 @@ def resid_stats(fitter, epoch_avg = False, whitened = False, dm_stats = False, p
     """
     # Check if fitter is WB or not
     if "Wideband" in fitter.__class__.__name__:
-        resids = fitter.resids.residual_objs[0]
-        dm_resids = fitter.resids.residual_objs[1]
+        resids = fitter.resids.residual_objs['toa']
+        dm_resids = fitter.resids.residual_objs['dm']
         NB = False
         if epoch_avg:
             log.warning("Warning, cannot epoch average wideband residuals, will skip epoch averaging.")
@@ -365,8 +365,8 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     # Check if fitter is wideband or not
     if "Wideband" in fitter.__class__.__name__:
         NB = False
-        resids = fitter.resids.residual_objs[0]
-        dm_resids = fitter.resids.residual_objs[1]
+        resids = fitter.resids.residual_objs['toa']
+        dm_resids = fitter.resids.residual_objs['dm']
         # TO DO: Double check how to konw if has_dmdata should be True
         if 'DMDATA' in fitter.model.params:
             if int(fitter.model.DMDATA) == 1:

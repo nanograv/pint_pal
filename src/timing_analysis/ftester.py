@@ -169,8 +169,8 @@ def run_Ftests(fitter, alpha=ALPHA):
     # Check if fitter is wideband or not
     if "Wideband" in fitter.__class__.__name__:
         NB = False
-        resids = fitter.resids.residual_objs[0]
-        dm_resids = fitter.resids.residual_objs[1]
+        resids = fitter.resids.residual_objs['toa']
+        dm_resids = fitter.resids.residual_objs['dm']
     else:
         NB = True
         resids = fitter.resids
@@ -345,8 +345,8 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
     # Check if fitter is wideband or not
     if "Wideband" in fitter.__class__.__name__:
         NB = False
-        resids = fitter.resids.residual_objs[0]
-        dm_resids = fitter.resids.residual_objs[1]
+        resids = fitter.resids.residual_objs['toa']
+        dm_resids = fitter.resids.residual_objs['dm']
     else:
         NB = True
         resids = fitter.resids
