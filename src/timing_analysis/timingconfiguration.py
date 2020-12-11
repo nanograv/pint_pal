@@ -12,6 +12,7 @@ import pint.toa as toa
 import pint.models as model
 import numpy as np
 import astropy.units as u
+from astropy import log
 import yaml
 from timing_analysis.utils import write_if_changed
 
