@@ -47,6 +47,12 @@ class TimingConfiguration:
             raise ValueError("%s source entry does not match parameter PSR"%self.filename)
         return m
 
+    def get_compare_model(self):
+        """ Return the timing model file to compare with """
+        if "compare-model" in self.config.keys():
+            return self.config['compare-model']
+        return None
+
     def get_free_params(self):
         """Return list of free parameters"""
         return self.config['free-params']
@@ -92,6 +98,18 @@ class TimingConfiguration:
             return self.config['ephem']
         return None #return some default value instead?
 
+    def get_fitter(self):
+        """ Return the fitter string (do more?) """
+        if "fitter" in self.config.keys():
+            return self.config['fitter']
+        return None
+
+    def get_toa_type(self):
+        """ Return the toa-type string """
+        if "toa-type" in self.config.keys():
+            return self.config['toa-type']
+        return None
+
     def get_mjd_start(self):
         """Return mjd-start quantity (applies units days)"""
         if 'mjd-start' in self.config['ignore'].keys():
@@ -129,18 +147,26 @@ class TimingConfiguration:
 
     def apply_ignore(self,toas):
         """ Basic checks and return TOA excision info. """
-        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','prob-outlier','bad-ff','bad-epoch','bad-toa'] 
+        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-epoch','bad-toa'] # prob-outlier, bad-ff
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
 
         # INFO?
         missing_valid = set(OPTIONAL_KEYS)-set(EXISTING_KEYS)
-        # WARNING?
+        msg = "Valid TOA excision keys not present: %s" % (missing_valid)
+        log.info(msg)        
+
         invalid = set(EXISTING_KEYS) - set(OPTIONAL_KEYS)
-        # INFO?
+        msg = "Invalid TOA excision keys present: %s" % (invalid)
+        log.warning(msg)
+        
         valid_null = set(EXISTING_KEYS) - set(VALUED_KEYS) - invalid
-        # INFO?
+        msg = "TOA excision keys included, but NOT in use: %s" % (valid_null)
+        log.info(msg)        
+
         valid_valued = set(VALUED_KEYS) - invalid
+        msg = "Valid TOA excision keys in use: %s" % (valid_valued)
+        log.info(msg)
 
         selection = np.ones(len(toas),dtype=bool)
 
@@ -154,6 +180,12 @@ class TimingConfiguration:
         if 'snr-cut' in valid_valued:
             snr_select = ((np.array(toas.get_flag_value('snr')) > self.get_snr_cut())[0])
             selection *= snr_select
+            if self.get_snr_cut() > 8.0 and self.get_toa_type() == 'NB':
+                msg = "snr-cut should be set to 8; try excising TOAs using other methods."
+                log.warning(msg)
+            if self.get_snr_cut() > 25.0 and self.get_toa_type() == 'WB':
+                msg = "snr-cut should be set to 25; try excising TOAs using other methods."
+                log.warning(msg)
         if 'prob-outlier' in valid_valued:
             pass
         if 'bad-ff' in valid_valued:
