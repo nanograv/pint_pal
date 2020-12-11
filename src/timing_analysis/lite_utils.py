@@ -390,3 +390,32 @@ def large_residuals(fo,threshold_us):
         chan = fo.toas.get_flag_value('chan')[0][i]
         subint = fo.toas.get_flag_value('subint')[0][i]
         print('    - [\'%s\',%i,%i]'%(name,chan,subint))
+
+def compare_models(fo,model_to_compare=None,verbosity='check',threshold_sigma=3.,nodmx=True):
+    """Wrapper function to compare post-fit results to a user-specified comparison model.
+
+    Parameters
+    ==========
+    fo: `pint.fitter` object
+    model_to_compare: string or Nonetype, optional
+        model to compare with the post-fit model 
+    verbosity: string, optional
+        verbosity of output from model.compare 
+        options are "max", "med", "min", "check". Use ?model.compare for more info.
+    threshold_sigma: float, optional
+        sigma cutoff for parameter comparison
+    nodmx: bool, optional
+        when True, omit DMX comparison
+
+    Returns
+    =======
+    str or None
+        returns ascii table when verbosity is not set to "check"; also returns astropy.log statements 
+    """
+
+    if model_to_compare is not None:
+        comparemodel=models.get_model(model_to_compare)
+    else:
+        comparemodel=fo.model_init
+    return comparemodel.compare(fo.model,verbosity=verbosity,nodmx=nodmx,threshold_sigma=threshold_sigma)
+
