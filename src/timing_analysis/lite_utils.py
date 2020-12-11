@@ -14,16 +14,23 @@ from pint.modelutils import model_equatorial_to_ecliptic
 from pint.models.parameter import maskParameter
 from pint.models.timing_model import Component 
 
-def write_par(fitter,addext=''):
+def write_par(fitter,toatype='',addext=''):
     """Writes a timing model object to a par file in the working directory.
 
     Parameters
     ==========
     fitter: `pint.fitter` object
+    toatype: str, optional
+        if set, adds nb/wb.par
+    addext: str, optional
+        if set, adds extension to date
     """
     source = fitter.get_allparams()['PSR'].value
     date_str = date.today().strftime('%Y%m%d')
-    outfile = '%s_PINT_%s%s.par' % (source,date_str,addext)
+    if toatype:
+        outfile = '%s_PINT_%s%s.%s.par' % (source,date_str,addext,toatype.lower())
+    else:
+        outfile = '%s_PINT_%s%s.par' % (source,date_str,addext)
 
     fout=open(outfile,'w')
     fout.write(fitter.model.as_parfile())
