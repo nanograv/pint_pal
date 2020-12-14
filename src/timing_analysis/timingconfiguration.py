@@ -149,7 +149,7 @@ class TimingConfiguration:
 
     def apply_ignore(self,toas):
         """ Basic checks and return TOA excision info. """
-        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-epoch','bad-toa'] # prob-outlier, bad-ff
+        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-epoch'] # prob-outlier, bad-ff
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
 
