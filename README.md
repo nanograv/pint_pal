@@ -41,7 +41,7 @@ Timing workflow
 
 This package has a variety of tools to support timing for NANOGrav, but the basic goal here is to produce a config `.yaml` file and a `.par` file that together produce clean timing residuals for a new pulsar. (If the pulsar is new to long-term timing, you may need more tools than this to put together an initial `.par` file.) This section will describe how to do that.
 
-1. Pick a pulsar for which timing hasn't been finalized, but for which `.tim` and initial `.par` files exist. The easiest may just be to look in `results` and the most recetn `/nanograv/releases/15y/toagen/releases/` for pulsars not represented in `config`. You might also check https://gitlab.nanograv.org/nano-time/timing_analysis/-/branches to make sure no one is working on it.
+1. Pick a pulsar for which timing hasn't been finalized, but for which `.tim` and initial `.par` files exist. The easiest may just be to look in `results` and the most recent `/nanograv/releases/15y/toagen/releases/` for pulsars not represented in `configs`. You might also check https://gitlab.nanograv.org/nano-time/timing_analysis/-/branches to make sure no one is working on it.
 
 2. Make a branch for your work on the new pulsar, say J1234+5678:
 ```
@@ -49,7 +49,7 @@ $ git checkout 15yr
 $ git checkout -b psr/J1234+5678/{your_initials}
 ```
 
-3. Copy `config/template.yaml` to `config/J1234+5678.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). For now you may want to select *narrowband* `.tim` files (indicated by `.nb.tim` rather than `.wb.tim`) and set the corresponding option in the `.yaml` file; the machinery to do this for wideband TOAs is not as well developed. 
+3. Copy `configs/template.yaml` to `configs/J1234+5678.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). For now you may want to select *narrowband* `.tim` files (indicated by `.nb.tim` rather than `.wb.tim`) and set the corresponding option in the `.yaml` file; the machinery to do this for wideband TOAs is not as well developed.
 
 4. You may need to select which parameters to fit - at a minimum they should be ones that are in the `.par` file. For position, prefer `ELONG`/`ELAT` rather than `RAJ`/`DECJ` or `LAMBDA`/`BETA`; likewise the proper motion parameters `PMELONG`/`PMELAT`. More, NANOGrav policy is that all pulsars should be fit for at least `ELONG`, `ELAT`, `PMELONG`, `PMELAT`, `PX`, `F0`, `F1` in every pulsar.
 
@@ -98,16 +98,16 @@ Submitting a good timing solution
 
 When you have a post-fit timing solution that seems good - no wild outliers, no visible structure in terms of time or orbital phase, reduced chi-squared not too far above 1, no warnings from the timing model - you are probably ready to commit the new timing model to the `timing_analysis` repository.
 
-1. Generate an output `.par` file; this can be done by having the notebook run `write_par(fo)` on a successful fitter `fo`. This will create a file `J1234+5678_PINT_YYYYMMDD.par` in your working directory.
+1. Generate an output `.par` file; this can be done by having the notebook run `write_par(fo)` on a successful fitter `fo`. This will create a file `J1234+5678_PINT_YYYYMMDD.wb.par` in your working directory (or if you are doing a narrowband analysis, the created file will be named as `J1234+5678_PINT_YYYYMMDD.nb.par`).
 
-2. Archive the old `.par` file and put the new one in place:
+2. Archive the old `.par` file and put the new one in place (here we use a wideband parfile as the example, and the initial parfile name may vary):
 ```
 $ git mv results/J1234+5678.12.5yr.par results/archive/
-$ cp J1234+5678_PINT_YYYYMMDD.par results/
-$ git add results/J1234+5678_PINT_YYYYMMDD.par
+$ cp J1234+5678_PINT_YYYYMMDD.wb.par results/
+$ git add results/J1234+5678_PINT_YYYYMMDD.wb.par
 ```
 
-3. Update `config/J1234+5678.par` to use this new par file; place the old one as `compare-model`. Rerun the notebook and confirm that all is well and that both pre-fit and post-fit are good fits, and indistinguishable.
+3. Update `configs/J1234+5678.wb.yaml` (or `configs/J1234+5678.nb.yaml`) to use this new par file; place the old one as `compare-model` (note that `compare-model` requires the full `results/archive/` path). Rerun the notebook and confirm that all is well and that both pre-fit and post-fit are good fits, and indistinguishable.
 
 4. Go through the checklist at https://gitlab.nanograv.org/nano-time/timing_analysis/-/wikis/Review-Checklists-For-Merging
 
