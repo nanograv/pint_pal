@@ -358,7 +358,7 @@ def check_toas_model(fitter,center=True,summary=True):
     pc.check_name(mo)
     add_feJumps(mo,list(receivers))
     pc.check_jumps(mo,receivers)
-    if 'WidebandTOAFitter' in fitter.__str__():
+    if 'WidebandTOAFitter' == fitter.__class__.__name__:
         pc.check_dmjumps(mo,receivers)
 
     # Center epochs?
