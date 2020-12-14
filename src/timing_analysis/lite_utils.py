@@ -348,7 +348,7 @@ def check_toas_model(to,mo,center=True,summary=True):
     pc.check_bipm(to)
 
     # Identify receivers present
-    receivers = set(to.get_flag_value('fe')[0])
+    receivers = set([str(f) for f in set(to.get_flag_value('fe')[0])])
 
     # Convert to/add AstrometryEcliptic component model if necessary.
     if 'AstrometryEquatorial' in mo.components:
