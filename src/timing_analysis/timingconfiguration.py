@@ -155,20 +155,24 @@ class TimingConfiguration:
 
         # INFO?
         missing_valid = set(OPTIONAL_KEYS)-set(EXISTING_KEYS)
-        msg = "Valid TOA excision keys not present: %s" % (missing_valid)
-        log.info(msg)        
+        if len(missing_valid):
+            msg = "Valid TOA excision keys not present: %s" % (missing_valid)
+            log.info(msg)
 
         invalid = set(EXISTING_KEYS) - set(OPTIONAL_KEYS)
-        msg = "Invalid TOA excision keys present: %s" % (invalid)
-        log.warning(msg)
-        
+        if len(invalid):
+            msg = "Invalid TOA excision keys present: %s" % (invalid)
+            log.warning(msg)
+
         valid_null = set(EXISTING_KEYS) - set(VALUED_KEYS) - invalid
-        msg = "TOA excision keys included, but NOT in use: %s" % (valid_null)
-        log.info(msg)        
+        if len(valid_null):
+            msg = "TOA excision keys included, but NOT in use: %s" % (valid_null)
+            log.info(msg)
 
         valid_valued = set(VALUED_KEYS) - invalid
-        msg = "Valid TOA excision keys in use: %s" % (valid_valued)
-        log.info(msg)
+        if len(valid_valued):
+            msg = "Valid TOA excision keys in use: %s" % (valid_valued)
+            log.info(msg)
 
         selection = np.ones(len(toas),dtype=bool)
 
@@ -195,7 +199,7 @@ class TimingConfiguration:
         if 'bad-epoch' in valid_valued:
             for be in self.get_bad_epochs():
                 be_select = np.array([(be not in n) for n in toas.get_flag_value('name')[0]])
-                selection *= be_select 
+                selection *= be_select
         if 'bad-toa' in valid_valued:
             for bt in self.get_bad_toas():
                 name,chan,subint = bt
