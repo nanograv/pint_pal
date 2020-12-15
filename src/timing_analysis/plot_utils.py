@@ -655,13 +655,13 @@ def plot_dm_residuals(fitter, restype = 'postfit', save = False, legend = True, 
 
         # Do plotting command
         if restype == 'both':
-            ax1.errorbar(years[inds], dm_resids[inds], yerr=dm_error[inds], fmt=markers[r_b_label], \
-                     color=colorscheme[r_b_label], label=r_b_label, alpha = 0.5)
-            ax1.errorbar(years[inds], dm_resids_init[inds], yerr=dm_error_init[inds], fmt=markers[r_b_label], \
-                     color=colorscheme[r_b_label], label=r_b_label+" Prefit", alpha = 0.5)
+            ax1.errorbar(years[inds], dm_resids[inds], yerr=dm_error[inds], fmt=mkr, \
+                     color=clr, label=r_b_label, alpha = alpha)
+            ax1.errorbar(years[inds], dm_resids_init[inds], yerr=dm_error_init[inds], fmt=mkr_pre, \
+                     color=clr, label=r_b_label+" Prefit", alpha = alpha)
         else:
-            ax1.errorbar(years[inds], dm_resids[inds], yerr=dm_error[inds], fmt=markers[r_b_label], \
-                     color=colorscheme[r_b_label], label=r_b_label, alpha = 0.5)
+            ax1.errorbar(years[inds], dm_resids[inds], yerr=dm_error[inds], fmt=mkr, \
+                     color=clr, label=r_b_label, alpha = alpha)
 
     # Set second axis
     ax1.set_ylabel(ylabel)
@@ -746,7 +746,6 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
     --------------------
     res [list/array] : List or array of residual values to plot. Will override values from fitter object.
     errs [list/array] : List or array of residual error values to plot. Will override values from fitter object.
-    mjds [list/array] : List or array of TOA MJDs to plot. Will override values from toa object.
     rcvr_bcknds[list/array] : List or array of TOA receiver-backend combinations. Will override values from toa object.
     figsize [tuple] : Size of the figure passed to matplotlib [default: (10,4)].
     fmt ['string'] : matplotlib format option for markers [default: ('x')]
@@ -853,16 +852,6 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
             else:
                 errs = fitter.resids.residual_objs['toa'].get_data_error().to(u.us)
                 errs_pre = fitter.toas.get_errors().to(u.us)
-    
-    # Get MJDs
-    if 'mjds' in kwargs.keys():
-        mjds = kwargs['mjds']
-    else:
-        mjds = fitter.toas.get_mjds().value
-        if avg == True:
-            mjds = avg_dict['mjds'].value
-    # Convert to years
-    years = (mjds - 51544.0)/365.25 + 2000.0
     
     # Get receiver backends
     if 'rcvr_bcknds' in kwargs.keys():
@@ -1246,34 +1235,67 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
 
     return
 
-# KEEP IT GOING FROM HERE
-def plot_toas_freq(toas, figsize=(10,4), save = False, legend = True, axs = None):
+def plot_toas_freq(fitter, save = False, legend = True, title = True, axs = None, **kwargs):
     """
     Make a plot of frequency v. toa
 
 
     Arguments
     ---------
-    toas: PINT toas
-    figsize: size of the figure passed to matplotlib [default: (10,4)]
-    save: if True will save plot with the name "freq_v_time.png"
-    legend: boolean, if True will add legend to plot
-    axs: Default is None, if not None, should be defined subplot value and the figure will be used as part of a
-         larger figure.
+    fitter [object] : The PINT fitter object.
+    save [boolean] : If True will save plot with the name "resid_v_mjd.png" Will add averaged/whitened
+         as necessary [default: False].
+    legend [boolean] : If False, will not print legend with plot [default: True].
+    title [boolean] : If False, will not print plot title [default: True].
+    axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
+         larger figure [default: None].
+    
+    Optional Arguements:
+    --------------------
+    freqs [list/array] : List or array of TOA frequencies to plot. Will override values from toa object.
+    mjds [list/array] : List or array of TOA MJDs to plot. Will override values from toa object.
+    rcvr_bcknds[list/array] : List or array of TOA receiver-backend combinations. Will override values from toa object.
+    figsize [tuple] : Size of the figure passed to matplotlib [default: (10,4)].
+    fmt ['string'] : matplotlib format option for markers [default: ('x')]
+    color ['string'] : matplotlib color option for plot [default: color dictionary in plot_utils.py file]
+    alpha [float] : matplotlib alpha options for plot points [default: 0.5]
     """
-
-    freqs = toas.get_freqs().value
-    mjds = toas.get_mjds().value
-    errs = toas.get_errors().value
+    # Check if wideband
+    if "Wideband" in fitter.__class__.__name__:
+        NB = False
+    else:
+        NB = True
+        
+    # frequencies
+    if 'freqs' in kwargs.keys():
+        freqs = kwargs['freqs']
+    else:
+        freqs = fitter.toas.get_freqs().value
+    # Get MJDs
+    if 'mjds' in kwargs.keys():
+        mjds = kwargs['mjds']
+    else:
+        mjds = fitter.toas.get_mjds().value
+    # Convert to years
     years = (mjds - 51544.0)/365.25 + 2000.0
-    rcvr_bcknds = np.array(toas.get_flag_value('f')[0])
+
+    # Get receiver backends
+    if 'rcvr_bcknds' in kwargs.keys():
+        rcvr_bcknds = kwargs['rcvr_bcknds']
+    else:
+        rcvr_bcknds = np.array(fitter.toas.get_flag_value('f')[0])
+    # Get the set of unique receiver-bandend combos
     RCVR_BCKNDS = set(rcvr_bcknds)
 
+    if 'figsize' in kwargs.keys():
+        figsize = kwargs['figsize']
+    else:
+        figsize = (10,4)
     if axs == None:
-        #ipython.magic("matplotlib inline")
         fig = plt.figure(figsize=figsize)
         ax1 = fig.add_subplot(111)
     else:
+        fig = plt.gcf()
         ax1 = axs
     for i, r_b in enumerate(RCVR_BCKNDS):
         inds = np.where(rcvr_bcknds==r_b)[0]
@@ -1281,33 +1303,74 @@ def plot_toas_freq(toas, figsize=(10,4), save = False, legend = True, axs = None
             r_b_label = ""
         else:
             r_b_label = rcvr_bcknds[inds][0]
-        ax1.scatter(years[inds], freqs[inds], marker=markers[r_b_label], color=colorscheme[r_b_label], label=r_b_label)
+        # Get plot preferences
+        if 'fmt' in kwargs.keys():
+            mkr = kwargs['fmt']
+        else:
+            mkr = markers[r_b_label]
+        if 'color' in kwargs.keys():
+            clr = kwargs['color']
+        else:
+            clr = colorscheme[r_b_label]
+        if 'alpha' in kwargs.keys():
+            alpha = kwargs['alpha']
+        else:
+            alpha = 1.0
+        # Actually make the plot
+        ax1.scatter(years[inds], freqs[inds], marker=mkr, color=clr,label=r_b_label, alpha = alpha)
+    
     # Set second axis
     ax1.set_xlabel(r'Year')
     ax1.grid(True)
     ax2 = ax1.twiny()
-    ax2.set_xlim(ax1.get_xlim())
     mjd0  = ((ax1.get_xlim()[0])-2004.0)*365.25+53005.
     mjd1  = ((ax1.get_xlim()[1])-2004.0)*365.25+53005.
-    if (mjd1-mjd0>1200.): mjdstep=500.
-    elif (mjd1-mjd0>600.): mjdstep=200.
-    else: mjdstep=100.
-    mjd0 = int(mjd0/mjdstep)*mjdstep + mjdstep
-    mjd1 = int(mjd1/mjdstep)*mjdstep
-    mjdr = np.arange(mjd0,mjd1+mjdstep,mjdstep)
-    yrr = (mjdr - 51544.0)/365.25 + 2000.0
-    ax2.set_xticks(yrr)
-    ax2.set_xticklabels(["%5d" % m for m in mjdr])
+    ax2.set_xlim(mjd0, mjd1)
     ax1.set_ylabel(r"Frequency (MHz)")
     if legend:
         ax1.legend(loc='upper center', bbox_to_anchor= (0.5, 1.0+1.0/figsize[1]), ncol=len(RCVR_BCKNDS))
+    if title:
+        plt.title("%s toa frequency v. time" % (fitter.model.PSR.value), y=1.0+1.0/figsize[1])
     if axs == None:
         plt.tight_layout()
     if save:
-        plt.savefig("freq_v_time.png")
+        ext = ""
+        if NB:
+            ext += "_NB"
+        else:
+            ext += "_WB"
+        plt.savefig("%s_freq_v_time%s.png" % (fitter.model.PSR.value, ext))
+    
+    # Define clickable points
+    text = ax2.text(0,0,"")
+
+    # Define point highlight color
+    if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
+        stamp_color = "#61C853"
+    else:
+        stamp_color = "#FD9927"
+
+    def onclick(event):
+        # Get X and Y axis data
+        xdata = mjds
+        ydata = freqs
+        # Get x and y data from click
+        xclick = event.xdata
+        yclick = event.ydata
+        # Calculate scaled distance, find closest point index
+        d = np.sqrt(((xdata - xclick)/10.0)**2 + (ydata - yclick)**2)
+        ind_close = np.where(np.min(d) == d)[0]
+        # highlight clicked point
+        ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
+        # Print point info
+        text.set_position((xdata[ind_close], ydata[ind_close]))
+        text.set_text("TOA Params:\n MJD: %s \n Freq: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+
+    fig.canvas.mpl_connect('button_press_event', onclick)
+    
     return
 
-
+# NEED TO REDO THIS FUNCTION
 def plot_fd_res_v_freq(toas, fitter, figsize=(4,4), plotsig = False, fromPINT = True, res = None, errs = None,\
                         mjds = None, rcvr_bcknds = None, freqs = None, avg = False, whitened = False, save = False, \
                         legend = True, axs = None, comp_FD = True):
