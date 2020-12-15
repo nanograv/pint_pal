@@ -12,9 +12,7 @@ import glob
 # Import some software so we have appropriate versions
 import pint
 import astropy
-import enterprise
 # import enterprise_extensions as e_e # NOTE - enterprise_extensions has no attribute __version__
-import PTMCMCSampler
 from timing_analysis.ftester import get_fblist, param_check
 
 ALPHA = 0.0027
@@ -594,11 +592,22 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     fsum.write('PINT: %s\\\\\n' % (pint.__version__))
     fsum.write('astropy: %s\\\\\n' % (astropy.__version__))
     fsum.write('numpy: %s\\\\\n' % (np.__version__))
-    fsum.write('enterprise: %s\\\\\n' % (enterprise.__version__))
-    fsum.write('PTMCMCSampler: %s\\\\\n' % (PTMCMCSampler.__version__))
-    psrchive_v = check_output(["psrchive", "--version"]).decode("utf-8")
-    fsum.write('PSRCHIVE: %s\\\\\n' % (psrchive_v))
-
+    try:
+        import enterprise
+        fsum.write('enterprise: %s\\\\\n' % (enterprise.__version__))
+    except:
+        pass
+    try:
+        import PTMCMCSampler
+        fsum.write('PTMCMCSampler: %s\\\\\n' % (PTMCMCSampler.__version__))
+    except:
+        pass
+    try:
+        psrchive_v = check_output(["psrchive", "--version"]).decode("utf-8")
+        fsum.write('PSRCHIVE: %s\\\\\n' % (psrchive_v))
+    except:
+        pass
+    
     # Write out the plots - Assuming we have already made the summary plot previous to this
     # TODO Fix the plots...
     plot_file_list = np.sort(glob.glob("%s*summary_plot_*" % (fitter.model.PSR.value)))
