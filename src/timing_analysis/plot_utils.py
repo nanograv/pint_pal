@@ -312,43 +312,44 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
         elif restype == "both":
             ext += "_pre_post_fit"
         plt.savefig("%s_resid_v_mjd%s.png" % (fitter.model.PSR.value, ext))
+    
+    if axs == None:
+        # Define clickable points
+        text = ax2.text(0,0,"")
 
-    # Define clickable points
-    text = ax2.text(0,0,"")
-
-    # Define point highlight color
-    if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
-        stamp_color = "#61C853"
-    else:
-        stamp_color = "#FD9927"
-
-    def onclick(event):
-        # Get X and Y axis data
-        xdata = mjds
-        if plotsig:
-            ydata = (res/errs).decompose().value
+        # Define point highlight color
+        if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
+            stamp_color = "#61C853"
         else:
-            ydata = res.value
-        # Get x and y data from click
-        xclick = event.xdata
-        yclick = event.ydata
-        # Calculate scaled distance, find closest point index
-        d = np.sqrt(((xdata - xclick)/10.0)**2 + (ydata - yclick)**2)
-        ind_close = np.where(np.min(d) == d)[0]
-        # highlight clicked point
-        ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
-        # Print point info
-        text.set_position((xdata[ind_close], ydata[ind_close]))
-        if plotsig:
-            text.set_text("TOA Params:\n MJD: %s \n Res/Err: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
-        else:
-            text.set_text("TOA Params:\n MJD: %s \n Res: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+            stamp_color = "#FD9927"
 
-    fig.canvas.mpl_connect('button_press_event', onclick)
+        def onclick(event):
+            # Get X and Y axis data
+            xdata = mjds
+            if plotsig:
+                ydata = (res/errs).decompose().value
+            else:
+                ydata = res.value
+            # Get x and y data from click
+            xclick = event.xdata
+            yclick = event.ydata
+            # Calculate scaled distance, find closest point index
+            d = np.sqrt(((xdata - xclick)/10.0)**2 + (ydata - yclick)**2)
+            ind_close = np.where(np.min(d) == d)[0]
+            # highlight clicked point
+            ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
+            # Print point info
+            text.set_position((xdata[ind_close], ydata[ind_close]))
+            if plotsig:
+                text.set_text("TOA Params:\n MJD: %s \n Res/Err: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+            else:
+                text.set_text("TOA Params:\n MJD: %s \n Res: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+
+        fig.canvas.mpl_connect('button_press_event', onclick)
 
     return
 
-def plot_dmx_time(fitter, figsize=(10,4), savedmx = False, save = False, legend = True,\
+def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
                   axs = None, title = True, compare = False, **kwargs):
     """
     Make a plot of DMX vs. time
@@ -397,7 +398,8 @@ def plot_dmx_time(fitter, figsize=(10,4), savedmx = False, save = False, legend 
         DMX_center_MJD = dmx_dict['dmxeps'].value
         DMX_center_Year = (DMX_center_MJD- 51544.0)/365.25 + 2000.0
         # move file name
-        os.rename("dmxparse.out", dmxname)
+        if savedmx:
+            os.rename("dmxparse.out", dmxname)
     
     # Double check/overwrite errors if necessary
     if 'errs' in kwargs.keys():
@@ -501,30 +503,31 @@ def plot_dmx_time(fitter, figsize=(10,4), savedmx = False, save = False, legend 
             ext += "_WB"
         if compare:
             ext += "_NB_WB_compare"
-        plt.savefig("%s_dmx_v_time%s.png" % (ext))
+        plt.savefig("%s_dmx_v_time%s.png" % (psrname, ext))
     
-    # Define clickable points
-    text = ax1.text(0,0,"")
-    # Define color for highlighting points
-    stamp_color = "#FD9927"
-    
-    def onclick(event):
-        # Get X and Y axis data
-        xdata = DMX_center_Year
-        ydata = DMXs*10**3
-        # Get x and y data from click
-        xclick = event.xdata
-        yclick = event.ydata
-        # Calculate scaled distance, find closest point index
-        d = np.sqrt(((xdata - xclick)/1000.0)**2 + (ydata - yclick)**2)
-        ind_close = np.where(np.min(d) == d)[0]
-        # highlight clicked point
-        ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 's', c = stamp_color)
-        # Print point info
-        text.set_position((xdata[ind_close], ydata[ind_close]))
-        text.set_text("DMX Params:\n MJD: %s \n DMX: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+    if axs == None:
+        # Define clickable points
+        text = ax1.text(0,0,"")
+        # Define color for highlighting points
+        stamp_color = "#FD9927"
 
-    fig.canvas.mpl_connect('button_press_event', onclick)
+        def onclick(event):
+            # Get X and Y axis data
+            xdata = DMX_center_Year
+            ydata = DMXs*10**3
+            # Get x and y data from click
+            xclick = event.xdata
+            yclick = event.ydata
+            # Calculate scaled distance, find closest point index
+            d = np.sqrt(((xdata - xclick)/1000.0)**2 + (ydata - yclick)**2)
+            ind_close = np.where(np.min(d) == d)[0]
+            # highlight clicked point
+            ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 's', c = stamp_color)
+            # Print point info
+            text.set_position((xdata[ind_close], ydata[ind_close]))
+            text.set_text("DMX Params:\n MJD: %s \n DMX: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+
+        fig.canvas.mpl_connect('button_press_event', onclick)
     
     return
 
@@ -687,33 +690,34 @@ def plot_dm_residuals(fitter, restype = 'postfit', save = False, legend = True, 
         elif restype == "both":
             ext += "_prefit_and_postfit"
         plt.savefig("%s_dm_resids_v_time%s.png" % (fitter.model.PSR.name, ext))
-        
-    # Define clickable points
-    text = ax2.text(0,0,"")
-    
-    # Define point highlight color
-    if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
-        stamp_color = "#61C853"
-    else:
-        stamp_color = "#FD9927"
-        
-    def onclick(event):
-        # Get X and Y axis data
-        xdata = mjds
-        ydata = dm_resids
-        # Get x and y data from click
-        xclick = event.xdata
-        yclick = event.ydata
-        # Calculate scaled distance, find closest point index
-        d = np.sqrt(((xdata - xclick)/1000.0)**2 + (ydata - yclick)**2)
-        ind_close = np.where(np.min(d) == d)[0]
-        # highlight clicked point
-        ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
-        # Print point info
-        text.set_position((xdata[ind_close], ydata[ind_close]))
-        text.set_text("DM Params:\n MJD: %s \n Res: %.6f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+       
+    if axs == None:
+        # Define clickable points
+        text = ax2.text(0,0,"")
 
-    fig.canvas.mpl_connect('button_press_event', onclick)
+        # Define point highlight color
+        if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
+            stamp_color = "#61C853"
+        else:
+            stamp_color = "#FD9927"
+
+        def onclick(event):
+            # Get X and Y axis data
+            xdata = mjds
+            ydata = dm_resids
+            # Get x and y data from click
+            xclick = event.xdata
+            yclick = event.ydata
+            # Calculate scaled distance, find closest point index
+            d = np.sqrt(((xdata - xclick)/1000.0)**2 + (ydata - yclick)**2)
+            ind_close = np.where(np.min(d) == d)[0]
+            # highlight clicked point
+            ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
+            # Print point info
+            text.set_position((xdata[ind_close], ydata[ind_close]))
+            text.set_text("DM Params:\n MJD: %s \n Res: %.6f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+
+        fig.canvas.mpl_connect('button_press_event', onclick)
     
     return
 
@@ -809,18 +813,18 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
     if whitened == True and ('res' not in kwargs.keys()):
         if avg == True:
             if restype != 'both':
-                res = ngu.whiten_resids(avg_dict, restype=restype)
+                res = whiten_resids(avg_dict, restype=restype)
             else:
-                res = ngu.whiten_resids(avg_dict_pre, restype='prefit')
-                res_pre = ngu.whiten_resids(avg_dict, restype='postfit')
+                res = whiten_resids(avg_dict_pre, restype='prefit')
+                res_pre = whiten_resids(avg_dict, restype='postfit')
                 res_pre = res_pre.to(u.us)
             res = res.to(u.us)    
         else:
             if restype != 'both':
-                res = ngu.whiten_resids(fitter, restype=restype)
+                res = whiten_resids(fitter, restype=restype)
             else:
-                res = ngu.whiten_resids(fitter, restype='prefit')
-                res_pre = ngu.whiten_resids(fitter, restype='postfit')
+                res = whiten_resids(fitter, restype='prefit')
+                res_pre = whiten_resids(fitter, restype='postfit')
                 res_pre = res_pre.to(u.us)
             res = res.to(u.us)
     
@@ -1088,9 +1092,7 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
                 errs_pre = fitter.toas.get_errors().to(u.us)
 
     # Get MJDs
-    if 'orbphase' in kwargs.keys():
-        orbphase = kwargs['orbphase']
-    else:
+    if 'orbphase' not in kwargs.keys():
         mjds = fitter.toas.get_mjds().value
         if avg == True:
             mjds = avg_dict['mjds'].value
@@ -1109,7 +1111,10 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
     RCVR_BCKNDS = set(rcvr_bcknds)
 
     # Now we need to the orbital phases; start with binary model name
-    orbphase = fitter.model.orbital_phase(mjds, radians = False)
+    if 'orbphase' in kwargs.keys():
+        orbphase = kwargs['orbphase']
+    else:
+        orbphase = fitter.model.orbital_phase(mjds, radians = False)
 
     if 'figsize' in kwargs.keys():
         figsize = kwargs['figsize']
@@ -1201,37 +1206,38 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
             ext += "_pre_post_fit"
         plt.savefig("%s_resid_v_orbphase%s.png" % (fitter.model.PSR.value, ext))
 
-    # Define clickable points
-    text = ax1.text(0,0,"")
-    # Define color for highlighting points
-    if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
-        stamp_color = "#61C853"
-    else:
-        stamp_color = "#FD9927"
-
-    def onclick(event):
-        # Get X and Y axis data
-        xdata = orbphase
-        if plotsig:
-            ydata = (res/errs).decompose().value
+    if axs == None:
+        # Define clickable points
+        text = ax1.text(0,0,"")
+        # Define color for highlighting points
+        if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
+            stamp_color = "#61C853"
         else:
-            ydata = res.value
-        # Get x and y data from click
-        xclick = event.xdata
-        yclick = event.ydata
-        # Calculate scaled distance, find closest point index
-        d = np.sqrt((xdata - xclick)**2 + ((ydata - yclick)/100.0)**2)
-        ind_close = np.where(np.min(d) == d)[0]
-        # highlight clicked point
-        ax1.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
-        # Print point info
-        text.set_position((xdata[ind_close], ydata[ind_close]))
-        if plotsig:
-            text.set_text("TOA Params:\n Phase: %.5f \n Res/Err: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
-        else:
-            text.set_text("TOA Params:\n Phase: %.5f \n Res: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+            stamp_color = "#FD9927"
 
-    fig.canvas.mpl_connect('button_press_event', onclick)
+        def onclick(event):
+            # Get X and Y axis data
+            xdata = orbphase
+            if plotsig:
+                ydata = (res/errs).decompose().value
+            else:
+                ydata = res.value
+            # Get x and y data from click
+            xclick = event.xdata
+            yclick = event.ydata
+            # Calculate scaled distance, find closest point index
+            d = np.sqrt((xdata - xclick)**2 + ((ydata - yclick)/100.0)**2)
+            ind_close = np.where(np.min(d) == d)[0]
+            # highlight clicked point
+            ax1.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
+            # Print point info
+            text.set_position((xdata[ind_close], ydata[ind_close]))
+            if plotsig:
+                text.set_text("TOA Params:\n Phase: %.5f \n Res/Err: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+            else:
+                text.set_text("TOA Params:\n Phase: %.5f \n Res: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+
+        fig.canvas.mpl_connect('button_press_event', onclick)
 
     return
 
@@ -1341,32 +1347,33 @@ def plot_toas_freq(fitter, save = False, legend = True, title = True, axs = None
             ext += "_WB"
         plt.savefig("%s_freq_v_time%s.png" % (fitter.model.PSR.value, ext))
     
-    # Define clickable points
-    text = ax2.text(0,0,"")
+    if axs == None:
+        # Define clickable points
+        text = ax2.text(0,0,"")
 
-    # Define point highlight color
-    if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
-        stamp_color = "#61C853"
-    else:
-        stamp_color = "#FD9927"
+        # Define point highlight color
+        if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
+            stamp_color = "#61C853"
+        else:
+            stamp_color = "#FD9927"
 
-    def onclick(event):
-        # Get X and Y axis data
-        xdata = mjds
-        ydata = freqs
-        # Get x and y data from click
-        xclick = event.xdata
-        yclick = event.ydata
-        # Calculate scaled distance, find closest point index
-        d = np.sqrt(((xdata - xclick)/10.0)**2 + (ydata - yclick)**2)
-        ind_close = np.where(np.min(d) == d)[0]
-        # highlight clicked point
-        ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
-        # Print point info
-        text.set_position((xdata[ind_close], ydata[ind_close]))
-        text.set_text("TOA Params:\n MJD: %s \n Freq: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
+        def onclick(event):
+            # Get X and Y axis data
+            xdata = mjds
+            ydata = freqs
+            # Get x and y data from click
+            xclick = event.xdata
+            yclick = event.ydata
+            # Calculate scaled distance, find closest point index
+            d = np.sqrt(((xdata - xclick)/10.0)**2 + (ydata - yclick)**2)
+            ind_close = np.where(np.min(d) == d)[0]
+            # highlight clicked point
+            ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
+            # Print point info
+            text.set_position((xdata[ind_close], ydata[ind_close]))
+            text.set_text("TOA Params:\n MJD: %s \n Freq: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
 
-    fig.canvas.mpl_connect('button_press_event', onclick)
+        fig.canvas.mpl_connect('button_press_event', onclick)
     
     return
 
@@ -1587,65 +1594,25 @@ def plot_fd_res_v_freq(toas, fitter, figsize=(4,4), plotsig = False, fromPINT = 
 We also offer some options for convenience plotting functions, one that will show all possible summary plots, and
 another that will show just the summary plots that are typically created in finalize_timing.py in that order.
 """
-def summary_plots(toas, model, fitter, res, title = None, legends = False, avg = False, whitened = False, \
-                  save = False, fromPINT = True, wres = None, avg_res = None, avg_errs = None, avg_mjds = None, \
-                  avg_toas = None, avg_rcvr_bcknds = None, avg_wres = None):
+def summary_plots(fitter, title = None, legends = False, save = False, avg = True, whitened = True):
     """
-    Function to make a composite set of summary plots for sets of TOAs
-    NOTE - This is note the same set of plots as will be in the pdf writer
+    Function to make a composite set of summary plots for sets of TOAs.
+    NOTE - This is noe the same set of plots as will be in the pdf writer
 
-    Inputs:
-    toas - PINT toa object
-    model - PINT model object
-    fitter - PINT fitter object
-    res - list of residuals in units of microseconds (with quantity attribute removed, eg just the value)
-    title - Title of plot
-    legends - if True, print legends for all plots, else only add legends to residual v. time plots
-    avg - If True, also plot the averaged residuals. If whitened also True, will also plot whitened averaged resids
-    whitened - If True, also plot the whitened residuals
-    save - If True, will save the summary plot as "summary_plots.png"
-    fromPINT - If True, will compute average and whitened residuals inside function. If False, will expect
-               inputs to be provided as described below
-    wres - list of whitened residuals in units of microseconds (with quantity attribute removed, eg just the value)
-    avg_res - epoch averaged residuals in units of microseconds (with quantity attribute removed, eg just the value)
-    avg_errs - errors on the averaged residuals (also in microseconds)
-    avg_mjds - MJD dates of the epoch averaged residuals
-    avg_toas - PINT TOA class object of the epoch averaged residuals for orbital phase plots
-    avg_rcvr_bcknds - list of receiver-backend combinations corresponding to the epoch averaged residuals
-    avg_wres - list of whitened, epoch averaged residuals in units of microseconds (with quantity attribute removed,
-               eg just the value)
+    Arguments
+    ---------
+    fitter [object] : The PINT fitter object.
+    title [boolean] : If True, will add titles to ALL plots [default: False].
+    legend [boolean] : If True, will add legends to ALL plots [default: False].
+    save [boolean] : If True will save plot with the name "psrname_summary.png" Will add averaged/whitened
+         as necessary [default: False].
+    avg [boolean] : If True and not wideband fitter, will make plots of epoch averaged residuals [default: True].
+    whitened [boolean] : If True will make plots of whitened residuals [default: True].
     """
-    # First determine if the averaged/whitened residuals are given or computed
-    EPHEM = "DE436" # JPL ephemeris used
-    BIPM = "BIPM2017" # BIPM timescale used
-    if fromPINT:
-        if whitened:
-            # Get the whitned residuals
-            wres = whiten_resids(fitter)
-            wres = wres.to(u.us).value
-        if avg:
-            # Get the epoch averaged residuals
-            avg = fitter.resids.ecorr_average(use_noise_model=True)
-            avg_res = avg['time_resids'].to(u.us).value
-            avg_errs = avg['errors'].value
-            avg_mjds = avg['mjds'].value
-            avg_wres = whiten_resids(avg)
-            avg_wres = avg_wres.to(u.us).value
-            # get rcvr backend combos for averaged residuals
-            rcvr_bcknds = np.array(toas.get_flag_value('f')[0])
-            avg_rcvr_bcknds = []
-            for iis in avg['indices']:
-                avg_rcvr_bcknds.append(rcvr_bcknds[iis[0]])
-            avg_rcvr_bcknds = np.array(avg_rcvr_bcknds)
-            # Turn the list into TOA class object for orbital phase plots
-            avg_toas = []
-            for ii in range(len(avg['mjds'].value)):
-                a = toa.TOA((avg['mjds'][ii].value), freq=avg['freqs'][ii])
-                avg_toas.append(a)
-            avg_toas = toa.get_TOAs_list(avg_toas, ephem=EPHEM, bipm_version=BIPM)
-
-    # Define the figure
-    #ipython.magic("matplotlib inline")
+    
+    if "Wideband" in fitter.__class__.__name__:
+        if avg == True:
+            raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
     # Determine how long the figure size needs to be
     figlength = 18
     gs_rows = 6
@@ -1659,7 +1626,7 @@ def summary_plots(toas, model, fitter, res, title = None, legends = False, avg =
         figlength += 18
         gs_rows += 4
     # adjust size if not in a binary
-    if not hasattr(model, 'binary_model_name'):
+    if not hasattr(fitter.model, 'binary_model_name'):
         sub_rows = 1
         sub_len = 3
         if whitened:
@@ -1683,131 +1650,124 @@ def summary_plots(toas, model, fitter, res, title = None, legends = False, avg =
     k = 0
     # First plot is all residuals vs. time.
     ax0 = fig.add_subplot(gs[count, :])
-    plot_residuals_time(fitter, axs = ax0, figsize=(12,3))
+    plot_residuals_time(fitter, title = False, axs = ax0, figsize=(12,3))
     k += 1
 
     # Plot the residuals divided by uncertainty vs. time
     ax1 = fig.add_subplot(gs[count+k, :])
-    plot_residuals_time(fitter, legend = False, plotsig = True, axs = ax1, figsize=(12,3))
+    plot_residuals_time(fitter, title = False, legend = False, plotsig = True, axs = ax1, figsize=(12,3))
     k += 1
 
     # Second plot is residual v. orbital phase
     if hasattr(model, 'binary_model_name'):
         ax2 = fig.add_subplot(gs[count+k, :])
-        plot_residuals_orb(fitter, figsize=(12,3), legend = False, axs = ax2)
+        plot_residuals_orb(fitter, title = False, legend = False, axs = ax2, figsize=(12,3))
         k += 1
 
     # Now add the measurement vs. uncertainty
     ax3_0 = fig.add_subplot(gs[count+k, 0])
     ax3_1 = fig.add_subplot(gs[count+k, 1])
-    plot_measurements_v_res(toas, res, nbin = 50, figsize=(6,3), plotsig=False, legend = False, axs = ax3_0)
-    plot_measurements_v_res(toas, res, nbin = 50, figsize=(6,3), plotsig=True, legend = False, axs = ax3_1)
+    plot_measurements_v_res(fitter, nbin = 50, plotsig=False, title = False, legend = False, axs = ax3_0, \
+                            figsize=(6,3),)
+    plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, axs = ax3_1, \
+                            figsize=(6,3),)
     k += 1
 
     # and the DMX vs. time
     ax4 = fig.add_subplot(gs[count+k, :])
-    plot_dmx_time(fitter, figsize=(12,3), legend = False, title = False, axs = ax4)
+    plot_dmx_time(fitter, legend = False, title = False, axs = ax4, figsize=(12,3),)
     k += 1
 
     # And residual vs. Frequency
     ax5 = fig.add_subplot(gs[count+k, :])
-    plot_toas_freq(toas, figsize=(12,3),legend = False, axs =ax5)
+    plot_toas_freq(fitter, title = False, legend = False, axs =ax5,  figsize=(12,3))
     k += 1
 
     # Now if whitened add the whitened residual plots
     if whitened:
         ax6 = fig.add_subplot(gs[count+k, :])
-        plot_residuals_time(fitter, whitened = True, axs = ax6, figsize=(12,3))
+        plot_residuals_time(fitter, title = False, whitened = True, axs = ax6, figsize=(12,3))
         k += 1
 
         # Plot the residuals divided by uncertainty vs. time
         ax7 = fig.add_subplot(gs[count+k, :])
-        plot_residuals_time(fitter, legend = False, plotsig = True, whitened = True, axs = ax7, figsize=(12,3))
+        plot_residuals_time(fitter, title = False, legend = False, plotsig = True, whitened = True, axs = ax7, figsize=(12,3))
         k += 1
 
         # Second plot is residual v. orbital phase
         if hasattr(model, 'binary_model_name'):
             ax8 = fig.add_subplot(gs[count+k, :])
-            plot_residuals_orb(fitter, figsize=(12,3), legend = False, whitened = True, axs = ax8)
+            plot_residuals_orb(fitter, title = False, legend = False, whitened = True, axs = ax8,  figsize=(12,3))
             k += 1
 
         # Now add the measurement vs. uncertainty
         ax9_0 = fig.add_subplot(gs[count+k, 0])
         ax9_1 = fig.add_subplot(gs[count+k, 1])
-        plot_measurements_v_res(toas, wres, nbin = 50, figsize=(6,3), plotsig=False, legend = False, whitened = True,\
-                           axs = ax9_0)
-        plot_measurements_v_res(toas, wres, nbin = 50, figsize=(6,3), plotsig=True, legend = False, whitened = True,\
-                           axs = ax9_1)
+        plot_measurements_v_res(fitter, nbin = 50, plotsig=False, title = False, legend = False, whitened = True,\
+                           axs = ax9_0, figsize=(6,3),)
+        plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, whitened = True,\
+                           axs = ax9_1, figsize=(6,3),)
         k += 1
 
     # Now plot the average residuals
     if avg:
         ax10 = fig.add_subplot(gs[count+k, :])
-        plot_residuals_time(fitter, errs = avg_errs, mjds = avg_mjds, \
-                   rcvr_bcknds = avg_rcvr_bcknds, avg = True, axs = ax10, figsize=(12,3))
+        plot_residuals_time(fitter, title = False, avg = True, axs = ax10, figsize=(12,3))
         k += 1
 
         # Plot the residuals divided by uncertainty vs. time
         ax11 = fig.add_subplot(gs[count+k, :])
-        plot_residuals_time(fitter, legend = False, plotsig = True, errs = avg_errs, \
-                            mjds = avg_mjds, rcvr_bcknds = avg_rcvr_bcknds, avg = True, axs = ax11, figsize=(12,3))
+        plot_residuals_time(fitter, title = False, legend = False, plotsig = True, avg = True, axs = ax11, figsize=(12,3))
         k += 1
 
         # Second plot is residual v. orbital phase
         if hasattr(model, 'binary_model_name'):
             ax12 = fig.add_subplot(gs[count+k, :])
-            plot_residuals_orb(fitter, figsize=(12,3), legend = False, \
-                               errs = avg_errs, mjds = avg_mjds, \
-                               rcvr_bcknds = avg_rcvr_bcknds, avg = True, axs = ax12)
+            plot_residuals_orb(fitter, title = False, legend = False, avg = True, axs = ax12, figsize=(12,3))
             k += 1
 
         # Now add the measurement vs. uncertainty
         ax13_0 = fig.add_subplot(gs[count+k, 0])
         ax13_1 = fig.add_subplot(gs[count+k, 1])
-        plot_measurements_v_res(toas, avg_res, nbin = 50, figsize=(6,3), fromPINT = False, plotsig=False, errs = avg_errs, \
-                       rcvr_bcknds = avg_rcvr_bcknds, legend = False, avg = True, axs = ax13_0)
-        plot_measurements_v_res(toas, avg_res, nbin = 50, figsize=(6,3), fromPINT = False, plotsig=True, errs = avg_errs, \
-                       rcvr_bcknds = avg_rcvr_bcknds, legend = False, avg = True, axs = ax13_1)
+        plot_measurements_v_res(fitter, nbin = 50, plotsig=False, title = False, legend = False,\
+                                avg = True, axs = ax13_0, figsize=(6,3))
+        plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, \
+                                avg = True, axs = ax13_1, figsize=(6,3))
         k += 1
 
     # Now plot the whitened average residuals
     if avg and whitened:
         ax14 = fig.add_subplot(gs[count+k, :])
-        plot_residuals_time(fitter, errs = avg_errs, mjds = avg_mjds, \
-                   rcvr_bcknds = avg_rcvr_bcknds, avg = True, whitened = True, axs = ax14, figsize=(12,3))
+        plot_residuals_time(fitter, avg = True, whitened = True, axs = ax14, figsize=(12,3))
         k += 1
 
         # Plot the residuals divided by uncertainty vs. time
         ax15 = fig.add_subplot(gs[count+k, :])
-        plot_residuals_time(fitter, legend = False, plotsig = True, errs = avg_errs, \
-                            mjds = avg_mjds, rcvr_bcknds = avg_rcvr_bcknds, avg = True, whitened = True, axs = ax15, figsize=(12,3))
+        plot_residuals_time(fitter, title = False, legend = False, plotsig = True, avg = True, whitened = True,\
+                            axs = ax15, figsize=(12,3))
         k += 1
 
         # Second plot is residual v. orbital phase
         if hasattr(model, 'binary_model_name'):
             ax16 = fig.add_subplot(gs[count+k, :])
-            plot_residuals_orb(fitter, figsize=(12,3), legend = False, \
-                               errs = avg_errs, mjds = avg_mjds, \
-                               rcvr_bcknds = avg_rcvr_bcknds, avg = True, whitened = True, axs = ax16)
+            plot_residuals_orb(fitter, title = False, legend = False, avg = True, whitened = True, axs = ax16, \
+                               figsize=(12,3))
             k += 1
 
         # Now add the measurement vs. uncertainty
         ax17_0 = fig.add_subplot(gs[count+k, 0])
         ax17_1 = fig.add_subplot(gs[count+k, 1])
-        plot_measurements_v_res(toas, avg_wres, nbin = 50, figsize=(6,3), fromPINT = False, plotsig=False, \
-                           errs = avg_errs, \
-                           rcvr_bcknds = avg_rcvr_bcknds, legend = False, avg = True, whitened = True, axs = ax17_0)
-        plot_measurements_v_res(toas, avg_wres, nbin = 50, figsize=(6,3), fromPINT = False, plotsig=True, \
-                           errs = avg_errs, \
-                           rcvr_bcknds = avg_rcvr_bcknds, legend = False, avg = True, whitened = True, axs = ax17_1)
+        plot_measurements_v_res(fitter, nbin = 50, plotsig=False, title = False, legend = False, avg = True, whitened = True, \
+                                axs = ax17_0, figsize=(6,3))
+        plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, avg = True, whitened = True, \
+                                axs = ax17_1, figsize=(6,3))
         k += 1
 
     plt.tight_layout()
     if save:
-        plt.savefig("summary_plots.png")
+        plt.savefig("%s_summary_plots.png" % (fitter.model.PSR.value))
 
     return
-
 
 """We also define a function to output the summary plots exactly as is done in finalize_timing.py (for now)"""
 def summary_plots_ft(toas, model, fitter, res, title = None, legends = False,\
