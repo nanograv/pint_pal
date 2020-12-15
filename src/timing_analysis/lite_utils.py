@@ -226,6 +226,8 @@ def load_and_check(configDict,usepickle=False):
     pc.check_name(mo)
     add_feJumps(mo,list(receivers))
     pc.check_jumps(mo,receivers)
+    if configDict['fitter'] == 'WidebandTOAFitter':
+        pc.check_dmjumps(mo,receivers)
 
     return to, mo
 
@@ -323,17 +325,16 @@ def apply_epoch_cut(to,badepoch):
     base_in_list = np.array([(be not in n) for n in to.get_flag_value('name')[0]])
     to.select(base_in_list)
 
-def check_toas_model(to,mo,center=True,summary=True):
+def check_toas_model(fitter,center=True,summary=True):
     """Runs basic checks on previously-loaded timing model & TOA objects.
 
     Checks that ephem and bipm_version have been set to the latest available versions; checks
     for equatorial astrometric parameters (converts to ecliptic, if necessary); also checks
-    source name, and for appropriate number of jumps. Checks are functions from par_checker.py.
+    source name, and for appropriate number of jumps/dmjumps. Checks are functions from par_checker.py.
 
     Parameters
     ==========
-    to: `pint.toa.TOAs` object
-    mo: `pint.model.TimingModel` object
+    fitter: `pint.fitter` object
     center: boolean, optional
         if true, center PEPOCH, DMEPOCH, POSEPOCH (default: True)
     summary: boolean, optional
@@ -343,6 +344,10 @@ def check_toas_model(to,mo,center=True,summary=True):
     =======
     None
     """
+    # Get TOA and model objects from fitter
+    to = fitter.toas
+    mo = fitter.model
+
     # Check ephem/bipm
     pc.check_ephem(to)
     pc.check_bipm(to)
@@ -360,6 +365,8 @@ def check_toas_model(to,mo,center=True,summary=True):
     pc.check_name(mo)
     add_feJumps(mo,list(receivers))
     pc.check_jumps(mo,receivers)
+    if  fitter.__class__.__name__ = 'WidebandTOAFitter':
+        pc.check_dmjumps(mo,receivers)
 
     # Center epochs?
     if center:
