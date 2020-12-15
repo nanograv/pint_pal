@@ -15,7 +15,7 @@ import astropy
 import enterprise
 # import enterprise_extensions as e_e # NOTE - enterprise_extensions has no attribute __version__
 import PTMCMCSampler
-from timing_analysis.ftester import report_ptest, get_fblist, param_check
+from timing_analysis.ftester import get_fblist, param_check
 
 ALPHA = 0.0027
 
@@ -155,8 +155,8 @@ def resid_stats(fitter, epoch_avg = False, whitened = False, dm_stats = False, p
     """
     # Check if fitter is WB or not
     if "Wideband" in fitter.__class__.__name__:
-        resids = fitter.resids.residual_objs[0]
-        dm_resids = fitter.resids.residual_objs[1]
+        resids = fitter.resids.residual_objs['toa']
+        dm_resids = fitter.resids.residual_objs['dm']
         NB = False
         if epoch_avg:
             log.warning("Warning, cannot epoch average wideband residuals, will skip epoch averaging.")
@@ -185,7 +185,8 @@ def resid_stats(fitter, epoch_avg = False, whitened = False, dm_stats = False, p
     # Compute whitened
     elif whitened:
         wres = whiten_resids(fitter)
-        rs_dict = rms_by_backend(wres.to(u.us), fitter.toas.get_errors(), rcvr_bcknds)
+        #rs_dict = rms_by_backend(wres.to(u.us), fitter.toas.get_errors(), rcvr_bcknds)
+        rs_dict = rms_by_backend(wres.to(u.us), resids.get_data_error(), rcvr_bcknds)
 
     # If not averaged or whitened, compute with functions that already exist
     if not epoch_avg and not whitened:
@@ -223,7 +224,7 @@ def resid_stats(fitter, epoch_avg = False, whitened = False, dm_stats = False, p
     # Check if dm stats are desired
     if dm_stats:
         if not NB:
-            dm_dict = rms_by_backend(dm_resids.resids, dm_resids.dm_error, rcvr_bcknds, dm = True)
+            dm_dict = rms_by_backend(dm_resids.resids, dm_resids.get_data_error(), rcvr_bcknds, dm = True)
             if print_pretty:
                 print()
                 dm_keys = dm_dict.keys()
@@ -248,8 +249,25 @@ def year(mjd):
     return (mjd - 51544.0)/365.25 + 2000.0
 
 
-
-
+def report_ptest(label, rms, chi2, ndof, dmrms = None, Fstatistic=None, alpha=ALPHA):
+    if Fstatistic is None:
+        if dmrms != None:
+            line = "%42s %7.3f %16.6f %9.2f %5d --" % (label, rms, dmrms, chi2, ndof)
+        else:
+            line = "%42s %7.3f %9.2f %5d --" % (label, rms, chi2, ndof)
+    elif Fstatistic:
+        if dmrms != None:
+            line = "%42s %7.3f %16.6f %9.2f %5d %.3g" % (label, rms, dmrms, chi2, ndof, Fstatistic)
+        else:
+            line = "%42s %7.3f %9.2f %5d %.3g" % (label, rms, chi2, ndof, Fstatistic)
+        if Fstatistic < alpha:
+            line += " ***"
+    else:
+        if dmrms != None:
+            line = "%42s %7.3f %16.6f %9.2f %5d xxx" % (label, rms, dmrms, chi2, ndof)
+        else:
+            line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
+    return line
 
 
 def get_Ftest_lines(Ftest_dict, fitter):
@@ -357,7 +375,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     parfile: Name of parfile used to generate residuals.
     rs_dict: Dictionary of residual stats output by the `resid_stats()` function.
     Ftest_dict: Dictionary of F-test results output by the `run_Ftests()` function.
-    rs_dict: Dictionary of DM residual stats output by the `resid_stats()` function for WB timing.
+    dm_dict: Dictionary of DM residual stats output by the `resid_stats()` function for WB timing.
         Input is optional, if `None` (Default value), will not write out the DM residual stats.
     append: defualt is `None`, else should be a string to the path to the texfile to append output to.
 
@@ -365,8 +383,8 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     # Check if fitter is wideband or not
     if "Wideband" in fitter.__class__.__name__:
         NB = False
-        resids = fitter.resids.residual_objs[0]
-        dm_resids = fitter.resids.residual_objs[1]
+        resids = fitter.resids.residual_objs['toa']
+        dm_resids = fitter.resids.residual_objs['dm']
         # TO DO: Double check how to konw if has_dmdata should be True
         if 'DMDATA' in fitter.model.params:
             if int(fitter.model.DMDATA) == 1:
@@ -493,10 +511,10 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     fsum.write('Middle of data span: midspan = %.0f\\\\\n' % (tmidspan))
     dtpepoch = float(fitter.model.PEPOCH.value)-tmidspan
     fsum.write('PEPOCH - midspan = $%.0f$ days = $%.1f$ years\\\\\n'  % ( dtpepoch, dtpepoch/365.24))
-    if param_check('TASC', fitter.model, check_enabled=True):
+    if param_check('TASC', fitter, check_enabled=True):
         dttasc = float(fitter.model.TASC.value)-tmidspan
         fsum.write('TASC - midspan = $%.0f$ days = $%.1f$ years\\\\\n'  % ( dttasc, dttasc/365.24))
-    if param_check('T0', fitter.model, check_enabled=True):
+    if param_check('T0', fitter, check_enabled=True):
         dtt0 = float(fitter.model.T0.value)-tmidspan
         fsum.write('TASC - midspan = $%.0f$ days = $%.1f$ years\\\\\n'  % ( dtt0, dtt0/365.24))
 
