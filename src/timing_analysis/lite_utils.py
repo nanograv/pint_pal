@@ -295,8 +295,10 @@ def add_feJumps(mo,rcvrs):
     jump_rcvrs = [x.key_value[0] for x in all_jumps if x.key == '-fe']
     missing_fe_jumps = list(set(rcvrs) - set(jump_rcvrs))
 
+    log.info(f"Missing FE jumps: {missing_fe_jumps}")
     if len(missing_fe_jumps) > 1:
         for j in missing_fe_jumps[:-1]:
+            log.info(f"Adding JUMP {j}")
             JUMPn = maskParameter('JUMP',key='-fe',key_value=[j],value=0.0,units=u.second)
             phasejump.add_param(JUMPn,setup=True)
 
