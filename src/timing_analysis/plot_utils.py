@@ -1769,6 +1769,7 @@ def summary_plots(fitter, title = None, legends = False, save = False, avg = Tru
 
     return
 
+# NEED TO UPDATE THE SUMMARY PLOTS BELOW AS WELL STILL
 """We also define a function to output the summary plots exactly as is done in finalize_timing.py (for now)"""
 def summary_plots_ft(toas, model, fitter, res, title = None, legends = False,\
                   save = False, fromPINT = True, wres = None, avg_res = None, avg_errs = None, avg_mjds = None, \
