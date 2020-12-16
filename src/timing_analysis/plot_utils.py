@@ -1659,7 +1659,7 @@ def summary_plots(fitter, title = None, legends = False, save = False, avg = Tru
     k += 1
 
     # Second plot is residual v. orbital phase
-    if hasattr(model, 'binary_model_name'):
+    if hasattr(fitter.model, 'binary_model_name'):
         ax2 = fig.add_subplot(gs[count+k, :])
         plot_residuals_orb(fitter, title = False, legend = False, axs = ax2, figsize=(12,3))
         k += 1
@@ -1675,7 +1675,7 @@ def summary_plots(fitter, title = None, legends = False, save = False, avg = Tru
 
     # and the DMX vs. time
     ax4 = fig.add_subplot(gs[count+k, :])
-    plot_dmx_time(fitter, legend = False, title = False, axs = ax4, figsize=(12,3),)
+    plot_dmx_time(fitter, legend = False, title = False, axs = ax4, figsize=(12,3))
     k += 1
 
     # And residual vs. Frequency
@@ -1695,7 +1695,7 @@ def summary_plots(fitter, title = None, legends = False, save = False, avg = Tru
         k += 1
 
         # Second plot is residual v. orbital phase
-        if hasattr(model, 'binary_model_name'):
+        if hasattr(fitter.model, 'binary_model_name'):
             ax8 = fig.add_subplot(gs[count+k, :])
             plot_residuals_orb(fitter, title = False, legend = False, whitened = True, axs = ax8,  figsize=(12,3))
             k += 1
@@ -1721,7 +1721,7 @@ def summary_plots(fitter, title = None, legends = False, save = False, avg = Tru
         k += 1
 
         # Second plot is residual v. orbital phase
-        if hasattr(model, 'binary_model_name'):
+        if hasattr(fitter.model, 'binary_model_name'):
             ax12 = fig.add_subplot(gs[count+k, :])
             plot_residuals_orb(fitter, title = False, legend = False, avg = True, axs = ax12, figsize=(12,3))
             k += 1
@@ -1748,7 +1748,7 @@ def summary_plots(fitter, title = None, legends = False, save = False, avg = Tru
         k += 1
 
         # Second plot is residual v. orbital phase
-        if hasattr(model, 'binary_model_name'):
+        if hasattr(fitter.model, 'binary_model_name'):
             ax16 = fig.add_subplot(gs[count+k, :])
             plot_residuals_orb(fitter, title = False, legend = False, avg = True, whitened = True, axs = ax16, \
                                figsize=(12,3))
@@ -1769,67 +1769,28 @@ def summary_plots(fitter, title = None, legends = False, save = False, avg = Tru
 
     return
 
-# NEED TO UPDATE THE SUMMARY PLOTS BELOW AS WELL STILL
 """We also define a function to output the summary plots exactly as is done in finalize_timing.py (for now)"""
-def summary_plots_ft(toas, model, fitter, res, title = None, legends = False,\
-                  save = False, fromPINT = True, wres = None, avg_res = None, avg_errs = None, avg_mjds = None, \
-                  avg_toas = None, avg_rcvr_bcknds = None, avg_wres = None):
+def summary_plots_ft(fitter, title = None, legends = False, save = False):
     """
     Function to make a composite set of summary plots for sets of TOAs
     NOTE - This is note the same set of plots as will be in the pdf writer
 
-    Inputs:
-    toas - PINT toa object
-    model - PINT model object
-    fitter - PINT fitter object
-    res - list of residuals in units of microseconds (with quantity attribute removed, eg just the value)
-    title - Title of plot
-    legends - if True, print legends for all plots, else only add legends to residual v. time plots
-    save - If True, will save the summary plot as "summary_plots_FT.png"
-    fromPINT - If True, will compute average and whitened residuals inside function. If False, will expect
-               inputs to be provided as described below
-    wres - list of whitened residuals in units of microseconds (with quantity attribute removed, eg just the value)
-    avg_res - epoch averaged residuals in units of microseconds (with quantity attribute removed, eg just the value)
-    avg_errs - errors on the averaged residuals (also in microseconds)
-    avg_mjds - MJD dates of the epoch averaged residuals
-    avg_toas - PINT TOA class object of the epoch averaged residuals for orbital phase plots
-    avg_rcvr_bcknds - list of receiver-backend combinations corresponding to the epoch averaged residuals
-    avg_wres - list of whitened, epoch averaged residuals in units of microseconds (with quantity attribute removed,
-               eg just the value)
+    Arguments
+    ---------
+    fitter [object] : The PINT fitter object.
+    title [boolean] : If True, will add titles to ALL plots [default: False].
+    legend [boolean] : If True, will add legends to ALL plots [default: False].
+    save [boolean] : If True will save plot with the name "psrname_summary.png" Will add averaged/whitened
+         as necessary [default: False].
     """
-    # First determine if the averaged/whitened residuals are given or computed
-    EPHEM = "DE436" # JPL ephemeris used
-    BIPM = "BIPM2017" # BIPM timescale used
-    if fromPINT:
-        # Get the whitned residuals
-        wres = whiten_resids(fitter)
-        wres = wres.to(u.us).value
-        # Get the epoch averaged residuals
-        avg = fitter.resids.ecorr_average(use_noise_model=True)
-        avg_res = avg['time_resids'].to(u.us).value
-        avg_errs = avg['errors'].value
-        avg_mjds = avg['mjds'].value
-        avg_wres = whiten_resids(avg)
-        avg_wres = avg_wres.to(u.us).value
-        # get rcvr backend combos for averaged residuals
-        rcvr_bcknds = np.array(toas.get_flag_value('f')[0])
-        avg_rcvr_bcknds = []
-        for iis in avg['indices']:
-            avg_rcvr_bcknds.append(rcvr_bcknds[iis[0]])
-        avg_rcvr_bcknds = np.array(avg_rcvr_bcknds)
-        # Turn the list into TOA class object for orbital phase plots
-        avg_toas = []
-        for ii in range(len(avg['mjds'].value)):
-            a = toa.TOA((avg['mjds'][ii].value), freq=avg['freqs'][ii])
-            avg_toas.append(a)
-        avg_toas = toa.get_TOAs_list(avg_toas, ephem=EPHEM, bipm_version=BIPM)
-
     # Define the figure
-    #ipython.magic("matplotlib inline")
     # Determine how long the figure size needs to be
     figlength = 18*3
     gs_rows = 13
-    if not hasattr(model, 'binary_model_name'):
+    if not hasattr(fitter.model, 'binary_model_name'):
+        figlength -= 9
+        gs_rows -= 3
+    if "Wideband" in fitter.__class__.__name__:
         figlength -= 9
         gs_rows -= 3
 
@@ -1842,26 +1803,29 @@ def summary_plots_ft(toas, model, fitter, res, title = None, legends = False,\
     k = 0
     # First plot is all residuals vs. time.
     ax0 = fig.add_subplot(gs[count, :])
-    plot_residuals_time(fitter, axs = ax0, figsize=(12,3))
+    plot_residuals_time(fitter, title = False, axs = ax0, figsize=(12,3))
     k += 1
 
     # Then the epoch averaged residuals v. time
-    ax10 = fig.add_subplot(gs[count+k, :])
-    plot_residuals_time(fitter, errs = avg_errs, mjds = avg_mjds, \
-               rcvr_bcknds = avg_rcvr_bcknds, avg = True, axs = ax10, figsize=(12,3))
-    k += 1
+    if not "Wideband" in fitter.__class__.__name__:
+        ax10 = fig.add_subplot(gs[count+k, :])
+        plot_residuals_time(fitter, title = False, legend = False, avg = True, axs = ax10, figsize=(12,3))
+        k += 1
 
     # Epoch averaged vs. orbital phase
-    if hasattr(model, 'binary_model_name'):
-        ax12 = fig.add_subplot(gs[count+k, :])
-        plot_residuals_orb(fitter, figsize=(12,3), legend = False, \
-                           errs = avg_errs, mjds = avg_mjds, \
-                           rcvr_bcknds = avg_rcvr_bcknds, avg = True, axs = ax12)
-        k += 1
+    if hasattr(fitter.model, 'binary_model_name'):
+        if not "Wideband" in fitter.__class__.__name__:
+            ax12 = fig.add_subplot(gs[count+k, :])
+            plot_residuals_orb(fitter, title = False, legend = False, avg = True, axs = ax12, figsize=(12,3))
+            k += 1
+        else:
+            ax12 = fig.add_subplot(gs[count+k, :])
+            plot_residuals_orb(fitter, title = False, legend = False, axs = ax12, figsize=(12,3))
+            k += 1
 
     # And DMX vs. time
     ax4 = fig.add_subplot(gs[count+k, :])
-    plot_dmx_time(fitter, figsize=(12,3), legend = False, title = False, axs = ax4)
+    plot_dmx_time(fitter, legend = False, title = False, axs = ax4, figsize=(12,3))
     k += 1
 
     # Whitened residuals v. time
@@ -1870,71 +1834,91 @@ def summary_plots_ft(toas, model, fitter, res, title = None, legends = False,\
     k += 1
 
     # Whitened epoch averaged residuals v. time
-    ax15 = fig.add_subplot(gs[count+k, :])
-    plot_residuals_time(fitter, legend = False, plotsig = False, \
-                        errs = avg_errs, mjds = avg_mjds, rcvr_bcknds = avg_rcvr_bcknds, avg = True, \
-                        whitened = True, axs = ax15, figsize=(12,3))
-    k += 1
+    if not "Wideband" in fitter.__class__.__name__:
+        ax15 = fig.add_subplot(gs[count+k, :])
+        plot_residuals_time(fitter, title = False, legend = False, plotsig = False, avg = True, \
+                            whitened = True, axs = ax15, figsize=(12,3))
+        k += 1
 
     # Whitened epoch averaged residuals v. orbital phase
-    if hasattr(model, 'binary_model_name'):
-        ax16 = fig.add_subplot(gs[count+k, :])
-        plot_residuals_orb(fitter, figsize=(12,3), legend = False, \
-                           errs = avg_errs, mjds = avg_mjds, \
-                           rcvr_bcknds = avg_rcvr_bcknds, avg = True, whitened = True, axs = ax16)
-        k += 1
+    if hasattr(fitter.model, 'binary_model_name'):
+        if not "Wideband" in fitter.__class__.__name__:
+            ax16 = fig.add_subplot(gs[count+k, :])
+            plot_residuals_orb(fitter, title = False, legend = False, \
+                                 avg = True, whitened = True, axs = ax16, figsize=(12,3))
+            k += 1
+        else:
+            ax16 = fig.add_subplot(gs[count+k, :])
+            plot_residuals_orb(fitter, title = False, legend = False, \
+                                 avg = False, whitened = True, axs = ax16, figsize=(12,3))
+            k += 1
 
     # Now add the measurement vs. uncertainty for both all reaiduals and epoch averaged
     ax3_0 = fig.add_subplot(gs[count+k, 0])
     ax3_1 = fig.add_subplot(gs[count+k, 1])
-    plot_measurements_v_res(toas, wres, nbin = 50, figsize=(6,3), plotsig=False, legend = False, whitened = True,\
-                           axs = ax3_0)
-    plot_measurements_v_res(toas, avg_wres, nbin = 50, figsize=(6,3), fromPINT = False, plotsig=False, \
-                       errs = avg_errs, \
-                       rcvr_bcknds = avg_rcvr_bcknds, legend = False, avg = True, whitened = True, axs = ax3_1)
-    k += 1
+    plot_measurements_v_res(fitter, nbin = 50, title = False, legend = False, plotsig=False, \
+                            whitened = True, axs = ax3_0, figsize=(6,3))
+    if not "Wideband" in fitter.__class__.__name__:
+        plot_measurements_v_res(fitter, nbin = 50, title = False, legend = False, avg = True, \
+                                whitened = True, axs = ax3_1, figsize=(6,3))
+        k += 1
+    else:
+        plot_measurements_v_res(fitter, nbin = 50, title = False, legend = False, avg = False, \
+                                whitened = False, axs = ax3_1, figsize=(6,3))
+        k += 1
 
     # Whitened residual/uncertainty v. time
     ax26 = fig.add_subplot(gs[count+k, :])
-    plot_residuals_time(fitter, plotsig = True, whitened = True, axs = ax26, figsize=(12,3))
+    plot_residuals_time(fitter, plotsig = True, title = False, legend = False, whitened = True,\
+                        axs = ax26, figsize=(12,3))
     k += 1
 
     # Epoch averaged Whitened residual/uncertainty v. time
-    ax25 = fig.add_subplot(gs[count+k, :])
-    plot_residuals_time(fitter, legend = False, plotsig = True, \
-                        errs = avg_errs, mjds = avg_mjds, rcvr_bcknds = avg_rcvr_bcknds, avg = True, \
-                        whitened = True, axs = ax25, figsize=(12,3))
-    k += 1
+    if not "Wideband" in fitter.__class__.__name__:
+        ax25 = fig.add_subplot(gs[count+k, :])
+        plot_residuals_time(fitter, title = False, legend = False, plotsig = True, \
+                            avg = True, whitened = True, axs = ax25, figsize=(12,3))
+        k += 1
 
     # Epoch averaged Whitened residual/uncertainty v. orbital phase
-    if hasattr(model, 'binary_model_name'):
-        ax36 = fig.add_subplot(gs[count+k, :])
-        plot_residuals_orb(fitter, figsize=(12,3), legend = False, \
-                           errs = avg_errs, mjds = avg_mjds, plotsig = True, \
-                           rcvr_bcknds = avg_rcvr_bcknds, avg = True, whitened = True, axs = ax36)
-        k += 1
+    if hasattr(fitter.model, 'binary_model_name'):
+        if not "Wideband" in fitter.__class__.__name__:
+            ax36 = fig.add_subplot(gs[count+k, :])
+            plot_residuals_orb(fitter, title = False, legend = False, plotsig = True, avg = True, \
+                               whitened = True, axs = ax36,  figsize=(12,3))
+            k += 1
+        else:
+            ax36 = fig.add_subplot(gs[count+k, :])
+            plot_residuals_orb(fitter, title = False, legend = False, plotsig = True, avg = False, \
+                               whitened = True, axs = ax36,  figsize=(12,3))
+            k += 1
 
     # Now add the measurement vs. uncertainty for both all reaiduals/uncertainty and epoch averaged/uncertainty
     ax17_0 = fig.add_subplot(gs[count+k, 0])
     ax17_1 = fig.add_subplot(gs[count+k, 1])
-    plot_measurements_v_res(toas, wres, nbin = 50, figsize=(6,3), plotsig=True, legend = False, whitened = True,\
-                           axs = ax17_0)
-    plot_measurements_v_res(toas, avg_wres, nbin = 50, figsize=(6,3), fromPINT = False, plotsig=True, \
-                       errs = avg_errs, \
-                       rcvr_bcknds = avg_rcvr_bcknds, legend = False, avg = True, whitened = True, axs = ax17_1)
-    k += 1
+    plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, whitened = True,\
+                           axs = ax17_0, figsize=(6,3))
+    if not "Wideband" in fitter.__class__.__name__:
+        plot_measurements_v_res(fitter, nbin = 50, title = False, plotsig=True, \
+                            legend = False, avg = True, whitened = True, axs = ax17_1, figsize=(6,3))
+        k += 1
+    else:
+        plot_measurements_v_res(fitter, nbin = 50, title = False, plotsig=True, \
+                            legend = False, avg = False, whitened =False, axs = ax17_1, figsize=(6,3))
+        k += 1
 
     # Now plot the frequencies of the TOAs vs. time
     ax5 = fig.add_subplot(gs[count+k, :])
-    plot_toas_freq(toas, figsize=(12,3),legend = False, axs =ax5)
+    plot_toas_freq(fitter, title = False, legend = False, axs =ax5, figsize=(12,3))
     k += 1
 
     plt.tight_layout()
     if save:
-        plt.savefig("summary_plots_FT.png")
+        plt.savefig("%s_summary_plots_FT.png" % (fitter.model.PSR.value))
 
     return
 
+# JUST THE PLOTS FOR THE PDF WRITERS LEFT
 def plots_for_summary_pdf_nb(toas, model, fitter, title = None, legends = False,\
                   save = False, fromPINT = True, wres = None, avg_res = None, avg_errs = None, avg_mjds = None, \
                   avg_toas = None, avg_rcvr_bcknds = None, avg_wres = None):
