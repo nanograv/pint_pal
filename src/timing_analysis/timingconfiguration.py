@@ -23,18 +23,28 @@ class TimingConfiguration:
     from a configuration file and send that information
     to the timing notebooks.
     """
-    def __init__(self, filename="config.yaml"):
+    def __init__(self, filename="config.yaml", tim_directory=None, par_directory=None):
         """
-        Initialization method
+        Initialization method.
+        
+        Normally config files are written to be run from the root of a 
+        git checkout on the NANOGrav notebook server. If you want to run 
+        them from somewhere else, you may need to override these directories 
+        when you construct the TimingConfiguration object; this will not 
+        change what is recorded in the config file.
 
         Parameters
         ==========
         filename (optional) : path to the configuration file
+        tim_directory (optional) : override the tim directory specified in the config
+        par_directory (optional) : override the par directory specified in the config
         """
         self.filename = filename
         with open(filename) as FILE:
             self.config = yaml.load(FILE, Loader=yaml.FullLoader)
-
+        self.tim_directory = self.config['tim-directory'] if tim_directory is None else tim_directory
+        self.par_directory = self.config['par-directory'] if par_directory is None else par_directory
+        
 
     def get_source(self):
         """ Return the source name """
@@ -42,7 +52,7 @@ class TimingConfiguration:
 
     def get_model(self):
         """ Return the PINT model object """
-        par_path = self.config["par-directory"]
+        par_path = self.par_directory
         filename = self.config["timing-model"]
         m = model.get_model(os.path.join(par_path,filename))
         if m.PSR.value != self.get_source():
@@ -62,7 +72,7 @@ class TimingConfiguration:
     def get_TOAs(self, usepickle=True):
         """ Return the PINT toa object """
         toas = self.config["toas"]
-        tim_path = self.config["tim-directory"]
+        tim_path = self.tim_directory
         BIPM = self.get_bipm()
         EPHEM = self.get_ephem() 
         
