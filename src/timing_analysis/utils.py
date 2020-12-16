@@ -595,18 +595,18 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     try:
         import enterprise
         fsum.write('enterprise: %s\\\\\n' % (enterprise.__version__))
-    except:
-        pass
+    except ImportError as error:
+        log.warning(str(error)+ ", cannot print enterprise version.")
     try:
         import PTMCMCSampler
         fsum.write('PTMCMCSampler: %s\\\\\n' % (PTMCMCSampler.__version__))
-    except:
-        pass
+    except ImportError as error:
+        log.warning(str(error)+ ", cannot print PTMCMCSampler version.")
     try:
         psrchive_v = check_output(["psrchive", "--version"]).decode("utf-8")
         fsum.write('PSRCHIVE: %s\\\\\n' % (psrchive_v))
-    except:
-        pass
+    except ImportError as error:
+        log.warning(str(error)+ ", cannot print PSRCHIVE version.")
     
     # Write out the plots - Assuming we have already made the summary plot previous to this
     # TODO Fix the plots...
