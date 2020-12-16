@@ -532,7 +532,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
     return
 
 # Now we want to make wideband DM vs. time plot, this uses the premade dm_resids from PINT
-def plot_dm_residuals(fitter, restype = 'postfit', save = False, legend = True, title = True,\
+def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False, legend = True, title = True,\
                       axs = None, mean_sub = True, **kwargs):
     """
     Make a plot of Wideband timing DM residuals v. time.
@@ -545,6 +545,8 @@ def plot_dm_residuals(fitter, restype = 'postfit', save = False, legend = True, 
         'prefit' - plot the prefit residuals.
         'postfit' - plot the postfit residuals (default)
         'both' - overplot both the pre and post-fit residuals.
+    plotsig [boolean] : If True plot number of measurements v. residuals/uncertainty, else v. residuals
+        [default: False].
     save [boolean] : If True will save plot with the name "resid_v_mjd.png" Will add averaged/whitened
          as necessary [default: False].
     legend [boolean] : If False, will not print legend with plot [default: True].
@@ -621,9 +623,15 @@ def plot_dm_residuals(fitter, restype = 'postfit', save = False, legend = True, 
         dm_resids += DM0.value
         if restype == 'both':
             dm_resids_init += DM0.value
-        ylabel = r"DM [cm$^{-3}$ pc]"
+        if plotsig:
+            ylabel = r"DM/Uncertainty"
+        else:
+            ylabel = r"DM [cm$^{-3}$ pc]"
     else:
-        ylabel = r"$\Delta$DM [cm$^{-3}$ pc]"
+        if plotsig:
+            ylabel = r"$\Delta$DM/Uncertainty"
+        else:
+            ylabel = r"$\Delta$DM [cm$^{-3}$ pc]"
     
     if axs == None:
         if 'figsize' in kwargs.keys():
@@ -658,13 +666,26 @@ def plot_dm_residuals(fitter, restype = 'postfit', save = False, legend = True, 
 
         # Do plotting command
         if restype == 'both':
-            ax1.errorbar(years[inds], dm_resids[inds], yerr=dm_error[inds], fmt=mkr, \
-                     color=clr, label=r_b_label, alpha = alpha)
-            ax1.errorbar(years[inds], dm_resids_init[inds], yerr=dm_error_init[inds], fmt=mkr_pre, \
-                     color=clr, label=r_b_label+" Prefit", alpha = alpha)
+            if plotsig:
+                dm_sig = dm_resids[inds]/dm_error[inds]
+                dm_sig_pre = dm_resids_init[inds]/dm_error[inds]
+                ax1.errorbar(years[inds], dm_sig, yerr=len(dm_error[inds])*[1], fmt=markers[r_b_label], \
+                         color=colorscheme[r_b_label], label=r_b_label, alpha = 0.5)
+                ax1.errorbar(years[inds], dm_sig_pre, yerr=len(dm_error_init[inds])*[1], fmt=markers[r_b_label], \
+                         color=colorscheme[r_b_label], label=r_b_label+" Prefit", alpha = 0.5)
+            else:
+                ax1.errorbar(years[inds], dm_resids[inds], yerr=dm_error[inds], fmt=markers[r_b_label], \
+                         color=colorscheme[r_b_label], label=r_b_label, alpha = 0.5)
+                ax1.errorbar(years[inds], dm_resids_init[inds], yerr=dm_error_init[inds], fmt=markers[r_b_label], \
+                         color=colorscheme[r_b_label], label=r_b_label+" Prefit", alpha = 0.5)
         else:
-            ax1.errorbar(years[inds], dm_resids[inds], yerr=dm_error[inds], fmt=mkr, \
-                     color=clr, label=r_b_label, alpha = alpha)
+            if plotsig:
+                dm_sig = dm_resids[inds]/dm_error[inds]
+                ax1.errorbar(years[inds], dm_sig, yerr=len(dm_error[inds])*[1], fmt=markers[r_b_label], \
+                         color=colorscheme[r_b_label], label=r_b_label, alpha = 0.5)
+            else:
+                ax1.errorbar(years[inds], dm_resids[inds], yerr=dm_error[inds], fmt=markers[r_b_label], \
+                         color=colorscheme[r_b_label], label=r_b_label, alpha = 0.5)
 
     # Set second axis
     ax1.set_ylabel(ylabel)
@@ -690,7 +711,7 @@ def plot_dm_residuals(fitter, restype = 'postfit', save = False, legend = True, 
         elif restype == "both":
             ext += "_prefit_and_postfit"
         plt.savefig("%s_dm_resids_v_time%s.png" % (fitter.model.PSR.name, ext))
-       
+    
     if axs == None:
         # Define clickable points
         text = ax2.text(0,0,"")
@@ -701,10 +722,15 @@ def plot_dm_residuals(fitter, restype = 'postfit', save = False, legend = True, 
         else:
             stamp_color = "#FD9927"
 
+        print(dm_resids[:2], mjds[:2])
+
         def onclick(event):
             # Get X and Y axis data
             xdata = mjds
-            ydata = dm_resids
+            if plotsig:
+                ydata = dm_resids/dm_error
+            else:
+                ydata = dm_resids
             # Get x and y data from click
             xclick = event.xdata
             yclick = event.ydata
@@ -950,7 +976,155 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
             ext += "_postfit"
         elif restype == "both":
             ext += "_pre_post_fit"
-        plt.savefig("%s_resid_v_mjd%s.png" % (fitter.model.PSR.value, ext))
+        plt.savefig("%s_resid_measurements%s.png" % (fitter.model.PSR.value, ext))
+        
+    return
+
+def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin = 50, \
+                        save = False, legend = True, title = True, axs = None, mean_sub = True, **kwargs):
+    """
+    Make a histogram of number of measurements v. residuals
+
+
+    Arguments
+    ---------
+    fitter [object] : The PINT fitter object.
+    restype ['string'] : Type of residuals, pre or post fit, to plot from fitter object. Options are:
+        'prefit' - plot the prefit residuals.
+        'postfit' - plot the postfit residuals (default)
+        'both' - overplot both the pre and post-fit residuals.
+    plotsig [boolean] : If True plot number of measurements v. residuals/uncertainty, else v. residuals
+        [default: False].
+    nbin [int] : Number of bins to use in the histogram [default: 50]
+    save [boolean] : If True will save plot with the name "resid_v_mjd.png" Will add averaged/whitened
+         as necessary [default: False].
+    legend [boolean] : If False, will not print legend with plot [default: True].
+    title [boolean] : If False, will not print plot title [default: True].
+    axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
+         larger figure [default: None].
+    mean_sub [boolean] : If False, will not mean subtract the DM residuals to be centered on zero [default: True]
+    
+    Optional Arguements:
+    --------------------
+    dmres [list/array] : List or array of residual values to plot. Will override values from fitter object.
+    errs [list/array] : List or array of residual error values to plot. Will override values from fitter object.
+    rcvr_bcknds[list/array] : List or array of TOA receiver-backend combinations. Will override values from toa object.
+    figsize [tuple] : Size of the figure passed to matplotlib [default: (10,4)].
+    fmt ['string'] : matplotlib format option for markers [default: ('x')]
+    color ['string'] : matplotlib color option for plot [default: color dictionary in plot_utils.py file]
+    """
+    # Check if wideband
+    if "Wideband" not in fitter.__class__.__name__:
+            raise ValueError("Narrowband Fitters have have no DM residuals, please use `plot_measurements_v_dmres` instead.")
+    
+    # Get the DM residuals
+    if 'dmres' in kwargs.keys():
+        dm_resids = kwargs['dmres']
+    else:
+        if restype == "postfit":
+            dm_resids = fitter.resids.residual_objs['dm'].resids.value
+        elif restype == 'prefit':
+            dm_resids = fitter.resids_init.residual_objs['dm'].resids.value
+        elif restype == 'both':
+            dm_resids = fitter.resids.residual_objs['dm'].resids.value
+            dm_resids_init = fitter.resids_init.residual_objs['dm'].resids.value
+    
+    # Get the DM residual errors
+    if "errs" in kwargs.keys():
+        dm_error = kwargs['errs']
+    else:
+        if restype == 'postfit':
+            dm_error = fitter.resids.residual_objs['dm'].get_data_error().value
+        elif restype == 'prefit':
+            dm_error = fitter.resids_init.residual_objs['dm'].get_data_error().value
+        elif restype == 'both':
+            dm_error = fitter.resids.residual_objs['dm'].get_data_error().value
+            dm_error_init = fitter.resids_init.residual_objs['dm'].get_data_error().value
+    
+    # Get the receiver-backend combos
+    if 'rcvr_bcknds' in kwargs.keys():
+        rcvr_bcknds = kwargs['rcvr_bcknds']
+    else:
+        rcvr_bcknds = np.array(fitter.toas.get_flag_value('f')[0])
+    # Get the set of unique receiver-bandend combos
+    RCVR_BCKNDS = set(rcvr_bcknds)
+
+    # If we don't want mean subtraced data we add the mean
+    if not mean_sub:
+        if 'dmres' in kwargs.keys():
+            dm_avg = dm_resids
+        else:
+            dm_avg = fitter.resids.residual_objs['dm'].dm_data
+        if "errs" in kwargs.keys():
+            dm_avg_err = dm_error
+        else:
+            dm_avg_err = fitter.resids.residual_objs['dm'].get_data_error().value
+        DM0 = np.average(dm_avg, weights=(dm_avg_err)**-2)
+        dm_resids += DM0.value
+        if restype == 'both':
+            dm_resids_init += DM0.value
+        if plotsig:
+            xlabel = r"DM/Uncertainty"
+        else:
+            xlabel = r"DM [cm$^{-3}$ pc]"
+    else:
+        if plotsig:
+            xlabel = r"$\Delta$DM/Uncertainty"
+        else:
+            xlabel = r"$\Delta$DM [cm$^{-3}$ pc]"
+    
+    if axs == None:
+        if 'figsize' in kwargs.keys():
+            figsize = kwargs['figsize']
+        else:
+            figsize = (10,4)
+        fig = plt.figure(figsize=figsize)
+        ax1 = fig.add_subplot(111)
+    else:
+        ax1 = axs
+    for i, r_b in enumerate(RCVR_BCKNDS):
+        inds = np.where(rcvr_bcknds==r_b)[0]
+        if not inds.tolist():
+            r_b_label = ""
+        else:
+            r_b_label = rcvr_bcknds[inds][0]
+        # Get plot preferences
+        if 'color' in kwargs.keys():
+            clr = kwargs['color']
+        else:
+            clr = colorscheme[r_b_label]
+        
+        if plotsig:
+            sig = dm_resids[inds]/dm_error[inds]
+            ax1.hist(sig, nbin, histtype='step', color=colorscheme[r_b_label], label=r_b_label)
+            if restype == 'both':
+                sig_pre = dm_resids_init[inds]/dm_error_init[inds]
+                ax1.hist(sig_pre, nbin, histtype='step', color=colorscheme[r_b_label], linestyle = '--',\
+                         label=r_b_label+" Prefit")
+        else:
+            ax1.hist(dm_resids[inds], nbin, histtype='step', color=colorscheme[r_b_label], label=r_b_label)
+            if restype == 'both':
+                ax1.hist(dm_resids_init[inds], nbin, histtype='step', color=colorscheme[r_b_label], linestyle = '--',\
+                         label=r_b_label+" Prefit")
+            
+    ax1.grid(True)
+    ax1.set_ylabel("Number of measurements")
+    ax1.set_xlabel(xlabel)
+    if legend:
+        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, 1.0+1.0/figsize[1]), ncol=len(RCVR_BCKNDS))
+    if title:
+        plt.title("%s %s DM residual measurements" % (fitter.model.PSR.value, restype), y=1.0+1.0/figsize[1])
+    if axs == None:
+        plt.tight_layout()
+    if save:
+        ext = ""
+        if restype == 'prefit':
+            ext += "_prefit"
+        elif restype == 'postfit':
+            ext += "_postfit"
+        elif restype == "both":
+            ext += "_pre_post_fit"
+        plt.savefig("%s_DM_resid_measurements%s.png" % (fitter.model.PSR.value, ext))
         
     return
 
@@ -1922,8 +2096,8 @@ def summary_plots_ft(fitter, title = None, legends = False, save = False):
 def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
     """
     Function to make a composite set of summary plots for sets of TOAs to be put into a summary pdf.
-    This is for Narrowband timing only. For Wideband timing, use `plots_for_summary_pdf_nb`.
-    By definition, this function will save all plots as "psrname"_summary_plot_#.png, where # is
+    This is for Narrowband timing only. For Wideband timing, use `plots_for_summary_pdf_wb`.
+    By definition, this function will save all plots as "psrname"_summary_plot_#.nb.png, where # is
     and integer from 1-4. 
 
     Arguments
@@ -1933,7 +2107,7 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
     legend [boolean] : If True, will add legends to ALL plots [default: False].
     """
     if "Wideband" in fitter.__class__.__name__:
-        raise ValueError("Cannot use this function with WidebandTOAFitter, please use `plots_for_summary_pdf_nb` instead.")
+        raise ValueError("Cannot use this function with WidebandTOAFitter, please use `plots_for_summary_pdf_wb` instead.")
     # Need to make four sets of plots
     for ii in range(4):
         if ii != 3:
@@ -1959,7 +2133,7 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
             # plot dmx v. time
             plot_dmx_time(fitter, legend = False, title = False, axs = ax3,  figsize=(8,2.5))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_1.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_1.nb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 1:
             if hasattr(fitter.model, 'binary_model_name'):
@@ -1989,7 +2163,7 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
             plot_measurements_v_res(fitter, nbin = 50, title = False, legend = False, avg = True, whitened = True, \
                                     axs = ax4, figsize=(4,2.5))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_2.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_2.nb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 2:
             if hasattr(fitter.model, 'binary_model_name'):
@@ -2019,46 +2193,31 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
             plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, \
                                     avg = True, whitened = True, axs = ax4, figsize=(4,2.5))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_3.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_3.nb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 3:
             gs = fig.add_gridspec(1,1)
             ax0 = fig.add_subplot(gs[0])
             plot_toas_freq(fitter, title = False, legend = True, axs =ax0, figsize=(8,4))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_4.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_4.nb.png" % (fitter.model.PSR.value))
             plt.close()
 
-def plots_for_summary_pdf_wb(toas, model, fitter, title = None, legends = False,\
-                  save = False, fromPINT = True, wres = None):
+def plots_for_summary_pdf_wb(fitter, title = None, legends = False):
     """
     Function to make a composite set of summary plots for sets of TOAs to be put into a summary pdf.
-    Only for Wideband Timing. We need a slightly different set of summary plots here for this.
+    This is for Wideband timing only. For Narrowband timing, use `plots_for_summary_pdf_nb`.
+    By definition, this function will save all plots as "psrname"_summary_plot_#.wb.png, where # is
+    and integer from 1-4. 
 
-    Inputs:
-    toas - PINT toa object
-    model - PINT model object
-    fitter - PINT fitter object
-    title - Title of plot
-    legends - if True, print legends for all plots, else only add legends to residual v. time plots
-    save - If True, will save the summary plot as "summary_plots_FT.png"
-    fromPINT - If True, will compute average and whitened residuals inside function. If False, will expect
-               inputs to be provided as described below
-    wres - list of whitened residuals in units of microseconds (with quantity attribute removed, eg just the value)
+    Arguments
+    ---------
+    fitter [object] : The PINT fitter object.
+    title [boolean] : If True, will add titles to ALL plots [default: False].
+    legend [boolean] : If True, will add legends to ALL plots [default: False].
     """
-    # First determine if the averaged/whitened residuals are given or computed
-    EPHEM = "DE435" # JPL ephemeris used
-    BIPM = "BIPM1.5015" # BIPM timescale used
-    # Get the residuals
-    res = fitter.resids.residual_objs['toa'].time_resids.to(u.us).value
-    dm_resids = fitter.resids.residual_objs['dm']
-    if fromPINT:
-        # Get the whitned residuals
-        wres = whiten_resids(fitter)
-        wres = wres.to(u.us).value
-        # get rcvr backend combos for averaged residuals
-        rcvr_bcknds = np.array(toas.get_flag_value('f')[0])
-
+    if "Wideband" not in fitter.__class__.__name__:
+        raise ValueError("Cannot use this function with non-WidebandTOAFitter, please use `plots_for_summary_pdf_nb` instead.")
     # Need to make four sets of plots
     for ii in range(4):
         if ii != 3:
@@ -2068,7 +2227,7 @@ def plots_for_summary_pdf_wb(toas, model, fitter, title = None, legends = False,
         if title != None:
             plt.title(title, y = 1.08, size = 14)
         if ii == 0:
-            if hasattr(model, 'binary_model_name'):
+            if hasattr(fitter.model, 'binary_model_name'):
                 gs = fig.add_gridspec(nrows = 4, ncols = 1)
                 ax2 = fig.add_subplot(gs[2,:])
                 ax3 = fig.add_subplot(gs[3,:])
@@ -2077,19 +2236,19 @@ def plots_for_summary_pdf_wb(toas, model, fitter, title = None, legends = False,
                 ax3 = fig.add_subplot(gs[2,:])
             ax0 = fig.add_subplot(gs[0,:])
             ax1 = fig.add_subplot(gs[1,:])
-
-            plot_residuals_time(fitter, axs = ax0, figsize=(8, 2.5))
-            plot_fd_res_v_freq(toas, fitter, figsize=(12,4), plotsig = False, fromPINT = True, \
-              legend = False, axs = ax1, comp_FD = False)
-            if hasattr(model, 'binary_model_name'):
-                plot_residuals_orb(fitter, figsize=(8,2.5), legend = False, \
-                                        axs = ax2)
-            plot_dmx_time(fitter, figsize=(8,2.5), legend = False, title = False, axs = ax3)
+            # Plot time residuals v. time
+            plot_residuals_time(fitter, title = False, axs = ax0, figsize=(8, 2.5))
+            # Plot DM residuals v. time
+            plot_dm_residuals(fitter, save = False, legend = False, title = False, axs = ax1, figsize=(8, 2.5))
+            # Plot time residuals v. orbital phase
+            if hasattr(fitter.model, 'binary_model_name'):
+                plot_residuals_orb(fitter, title = False, legend = False, axs = ax2, figsize=(8,2.5))
+            plot_dmx_time(fitter, legend = False, title = False, axs = ax3, figsize=(8,2.5))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_1.png" % (model.PSR.value))
+            plt.savefig("%s_summary_plot_1.wb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 1:
-            if hasattr(model, 'binary_model_name'):
+            if hasattr(fitter.model, 'binary_model_name'):
                 gs = fig.add_gridspec(4,2)
                 ax2 = fig.add_subplot(gs[2,:])
                 ax3 = fig.add_subplot(gs[3,0])
@@ -2100,26 +2259,27 @@ def plots_for_summary_pdf_wb(toas, model, fitter, title = None, legends = False,
                 ax4 = fig.add_subplot(gs[2,1])
             ax0 = fig.add_subplot(gs[0,:])
             ax1 = fig.add_subplot(gs[1,:])
-
-            plot_residuals_time(fitter, whitened = True, axs = ax0, figsize=(8,2.5))
-            plot_fd_res_v_freq(toas, fitter, figsize=(12,4), plotsig = False, fromPINT = False,
+            # Plot whitened time residuals v. time
+            plot_residuals_time(fitter, title = False, whitened = True, axs = ax0, figsize=(8,2.5))
+            # PUT SOMETHING HERE
+            """plot_fd_res_v_freq(toas, fitter, figsize=(12,4), plotsig = False, fromPINT = False,
                           res = wres, errs = toas.get_errors().value,\
                           mjds = toas.get_mjds().value, rcvr_bcknds = np.array(toas.get_flag_value('f')[0]),\
                           whitened = True, \
-                          legend = False, freqs = toas.get_freqs().value, axs = ax1, comp_FD = False)
-            if hasattr(model, 'binary_model_name'):
-                plot_residuals_orb(fitter, figsize=(8,2.5), legend = False, \
-                            whitened = True, axs = ax2)
-            plot_measurements_v_res(toas, wres, nbin = 50, figsize=(4,2.5), plotsig=False, legend = False, whitened = True,\
-                           axs = ax3)
-            #plot_measurements_v_res(toas, avg_wres, nbin = 50, figsize=(4,2.5), fromPINT = False, plotsig=False, \
-            #           errs = avg_errs, \
-            #           rcvr_bcknds = avg_rcvr_bcknds, legend = False, avg = True, whitened = True, axs = ax4)
+                          legend = False, freqs = toas.get_freqs().value, axs = ax1, comp_FD = False)"""
+            # Plot whitened time residuals v. time
+            if hasattr(fitter.model, 'binary_model_name'):
+                plot_residuals_orb(fitter, title = False, legend = False, whitened = True, axs = ax2, figsize=(8,2.5))
+            # Plot number of whitened residuals histograms
+            plot_measurements_v_res(fitter, nbin = 50, title = False, plotsig=False, legend = False, whitened = True,\
+                           axs = ax3, figsize=(4,2.5))
+            # plot number of DM residuals histograms
+            plot_measurements_v_dmres(fitter, nbin = 50, legend = False, title = False, axs = ax4)
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_2.png" % (model.PSR.value))
+            plt.savefig("%s_summary_plot_2.wb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 2:
-            if hasattr(model, 'binary_model_name'):
+            if hasattr(fitter.model, 'binary_model_name'):
                 gs = fig.add_gridspec(4,2)
                 ax2 = fig.add_subplot(gs[2,:])
                 ax3 = fig.add_subplot(gs[3,0])
@@ -2130,28 +2290,27 @@ def plots_for_summary_pdf_wb(toas, model, fitter, title = None, legends = False,
                 ax4 = fig.add_subplot(gs[2,1])
             ax0 = fig.add_subplot(gs[0,:])
             ax1 = fig.add_subplot(gs[1,:])
-            plot_residuals_time(fitter, plotsig = True, whitened = True, axs = ax0, figsize=(8,2.5))
-            plot_fd_res_v_freq(toas, fitter, figsize=(12,4), plotsig = True, fromPINT = False,
-                          res = wres, errs = toas.get_errors().value,\
-                          mjds = toas.get_mjds().value, rcvr_bcknds = np.array(toas.get_flag_value('f')[0]),\
-                          whitened = True, \
-                          legend = False, freqs = toas.get_freqs().value, axs = ax1, comp_FD = False)
-            if hasattr(model, 'binary_model_name'):
-                plot_residuals_orb(fitter, figsize=(8,2.5), legend = False, \
-                           plotsig = True, whitened = True, axs = ax2)
-
-            plot_measurements_v_res(toas, wres, nbin = 50, figsize=(4,2.5), plotsig=True, legend = False, whitened = True,\
-                           axs = ax3)
-            #plot_measurements_v_res(toas, avg_wres, nbin = 50, figsize=(4,2.5), fromPINT = False, plotsig=True, \
-            #           errs = avg_errs, \
-            #           rcvr_bcknds = avg_rcvr_bcknds, legend = False, avg = True, whitened = True, axs = ax4)
+            # plot whitened time residuals/uncertainty v time
+            plot_residuals_time(fitter, plotsig = True, title = False, whitened = True, axs = ax0, figsize=(8,2.5))
+            # Plot DM residuals/uncertainty v. time
+            plot_dm_residuals(fitter, plotsig = True, save = False, legend = False, title = False, axs = ax1, figsize=(8, 2.5))
+            # Plot whitened time residuals/uncertainty v orbital phase
+            if hasattr(fitter.model, 'binary_model_name'):
+                plot_residuals_orb(fitter, title = False, legend = False, \
+                           plotsig = True, whitened = True, axs = ax2,  figsize=(8,2.5))
+            # plot number of whitened time residuals/uncertainty histograms
+            plot_measurements_v_res(fitter, nbin = 50, title = False, plotsig=True, legend = False, whitened = True,\
+                           axs = ax3,  figsize=(4,2.5))
+            # plot number of DM residuals/uncertainty histograms
+            plot_measurements_v_dmres(fitter, plotsig = True, nbin = 50, legend = False, title = False, \
+                                      axs = ax4)
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_3.png" % (model.PSR.value))
+            plt.savefig("%s_summary_plot_3.wb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 3:
             gs = fig.add_gridspec(1,1)
             ax0 = fig.add_subplot(gs[0])
-            plot_toas_freq(toas, figsize=(8,4),legend = True, axs =ax0)
+            plot_toas_freq(fitter, title = False, legend = True, axs =ax0, figsize=(8,4))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_4.png" % (model.PSR.value))
+            plt.savefig("%s_summary_plot_4.wb.png" % (fitter.model.PSR.value))
             plt.close()
