@@ -52,6 +52,7 @@ class TimingConfiguration:
 
     def get_model(self):
         """ Return the PINT model object """
+        # Deprecated with new self.get_model_and_toas()
         par_path = self.par_directory
         filename = self.config["timing-model"]
         m = model.get_model(os.path.join(par_path,filename))
@@ -71,6 +72,7 @@ class TimingConfiguration:
 
     def get_TOAs(self, usepickle=True):
         """ Return the PINT toa object """
+        # Deprecated with new self.get_model_and_toas()
         toas = self.config["toas"]
         tim_path = self.tim_directory
         BIPM = self.get_bipm()
@@ -97,6 +99,10 @@ class TimingConfiguration:
         self.apply_ignore(toas)
 
         return toas
+
+    def get_model_and_toas(self,usepickle=True):
+        """Return the PINT model and TOA objects"""
+        return None
 
     def get_bipm(self):
         """ Return the bipm string """
