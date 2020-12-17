@@ -100,34 +100,49 @@ class TimingNotebook:
         import sys
         import datetime
 
-        # Import PINT
-        import pint.toa as toa
-        import pint.models as model
-        import pint.fitter as fitter
-        import pint.observatory as observatory
-        import pint.utils as pu
+        # Import PINT fitter
+        import pint.fitter
 
         # Load notebook utilities
-        from timingconfiguration import TimingConfiguration
-        import plot_utils
-        import ftester\
+        from timing_analysis.lite_utils import *
+        from timing_analysis.plot_utils import plot_residuals_time, plot_residuals_orb
+        from timing_analysis.timingconfiguration import TimingConfiguration
+
+        import yaml
+        from astropy import log
+        from astropy.visualization import quantity_support
+        quantity_support()
+        %matplotlib notebook
+
+        #import plot_utils
+        #import ftester\
         ''')
 
 
-    def add_setup_config_cells(self):
+    def add_debug_setup_cell(self):
+        self.add_code_cell('''\
+        # Define the desired verbosity of background functions DEBUG/INFO/WARNING/ERROR
+        log.setLevel("INFO")
+
+        # When ready to write a final par file, set to True
+        WRITE_PAR = False\
+        ''')
+
+
+    def add_setup_config_cells(self, filename="config.yaml"):
         """ Add cells that load the configuration and set up PINT """
         self.add_markdown_cell('''\
-        ### \[setup\] Load configuration file, put par and tim into PINT
+        ### \[setup\] Load configuration file, get TOAs and timing model
 
         These cells will:
 
         + Load and set definitions from a configuration file
         + Load the par/tim files or the PINT pickle files\
         ''')
-        self.add_code_cell('''\
-        tc = TimingConfiguration("config.json")
-        psr_toas = tc.get_TOAs()
-        psr_model = tc.get_model()\
+        self.add_code_cell(f'''\
+        tc = TimingConfiguration("{filename}")
+        to = tc.get_TOAs()
+        mo = tc.get_model()\
         ''')
 
 
@@ -180,9 +195,10 @@ class TimingNotebook:
         Run the PINT generalized-least-squares (GLS) fitter and calculate the residuals.\
         ''')
         self.add_code_cell('''\
-        psr_fitter = getattr(fitter,tc.config['fitter'])(excised_toas, psr_model)
-        pint_chi2 = psr_fitter.fit_toas(NITS)
-        res = psr_fitter.resids.time_resids.to(u.us).value\
+        fo = getattr(pint.fitter, tc.get_fitter())(to, mo)
+        #psr_fitter = getattr(fitter,tc.config['fitter'])(excised_toas, psr_model)
+        #pint_chi2 = psr_fitter.fit_toas(NITS)
+        #res = psr_fitter.resids.time_resids.to(u.us).value\
         ''')
 
 
@@ -194,34 +210,36 @@ class TimingNotebook:
         self.add_markdown_cell('''### \[initial_resids\] Plot initial residuals''')
         self.add_code_cell('''\
         # all residuals vs. time
-        plot_utils.plot_residuals_time(excised_toas, res)\
+        plot_residuals_time(fo, restype='prefit')
+        # if pulsar is in a binary, plot residuals versus orbit as well
+        if hasattr(mo, 'binary_model_name'):
+            plot_residuals_orb(fo, restype='prefit')\
         ''')
-        self.add_code_cell('''\
-        # Get epoch averaged, whitened, and whitened averaged residuals for plotting
-        avg = psr_fitter.resids.ecorr_average(use_noise_model=True)
-        wres = ub.whiten_resids(psr_fitter)
-        wres_avg = ub.whiten_resids(avg)
-        # get rcvr backend combos for averaged residuals
-        rcvr_bcknds = np.array(psr_toas.get_flag_value('f')[0])
-        avg_rcvr_bcknds = []
-        for iis in avg['indices']:
-            avg_rcvr_bcknds.append(rcvr_bcknds[iis[0]])
-        avg_rcvr_bcknds = np.array(avg_rcvr_bcknds)\
-        ''')
-        self.add_code_cell('''\
-        # plot averaged residuals v. time
-        pup.plot_residuals_time(excised_toas, avg['time_resids'].to(u.us).value, fromPINT = False, \\
-                            errs = avg['errors'].value, mjds = avg['mjds'].value, rcvr_bcknds = avg_rcvr_bcknds, \\
-                            avg = True)
 
-        # Plot whitened residuals. v. time
-        pup.plot_residuals_time(excised_toas, wres.to(u.us).value, figsize=(10,4), fromPINT = True, whitened = True)
 
-        # plot whitened, epoch averaged residuals v. time
-        pup.plot_residuals_time(excised_toas, wres_avg.to(u.us).value, fromPINT = False, \\
-                            errs = avg['errors'].value, mjds = avg['mjds'].value, rcvr_bcknds = avg_rcvr_bcknds, \\
-                            avg = True, whitened = True)\
-        ''')
+    def add_fit_testing_cells(self):
+        """
+        These cells help in checking the fits
+        """
+        self.add_code_cell("""\
+        # Check fit parameters, do the fit, plot resids/summary
+        fo.model.free_params = tc.get_free_params()
+        check_fit(fo)
+
+        fo.fit_toas()
+        plot_residuals_time(fo, restype='postfit')
+        # If pulsar is in a binary, uncomment the next line
+        #plot_residuals_orb(fo, restype='postfit')
+        fo.print_summary()
+
+        if WRITE_PAR:
+            write_par(fo, toatype=tc.get_toa_type())\
+        """)
+        self.add_code_cell("""\
+        # Compare post-fit model to compare-model (or pre-fit model, if compare-model is not specified in config file)
+        # Use `?mo.compare` for descriptions of verbosity options
+        compare_models(fo,model_to_compare=tc.get_compare_model(),verbosity='check',nodmx=True,threshold_sigma=3.))\
+        """)
 
 
     def add_noise_modeling_cells(self):
@@ -303,6 +321,3 @@ class TimingNotebook:
         f = codecs.open(filename, encoding='utf-8', mode='w')
         nbf.write(nb0, f, 4)
         f.close()
-
-
-    tn.write_out()

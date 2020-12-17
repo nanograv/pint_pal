@@ -3,7 +3,24 @@ This is the primary script containing the "recipe" that will
 generate a NANOGrav-specific pipeline notebook using the TimingNotebook class.
 """
 
-from timing_analysis.timingnotebook import TimingNotebook
+import argparse
+from timingnotebook import TimingNotebook
+
+
+## Argument parser setup
+parser = argparse.ArgumentParser()
+parser.add_argument("-c", "--config", default="config.yaml", \
+                    type=str, help="YAML config file path/filename")
+parser.add_argument("-f", "--filename", default="process.ipynb", \
+                    type=str, help="Output path/filename")
+parser.add_argument("-w", "--working", action="store_true", \
+                    help="Write out the working notebook template used \
+                    for working through the timing models.")
+
+args = parser.parse_args()
+
+
+### Parse arguments first
 
 
 
@@ -15,7 +32,8 @@ writer. For convenience in discussion, tags are provided in brackets.\
 ''')
 tn.add_import_cells()
 
-tn.add_setup_config_cells()
+tn.add_debug_setup_cell()
+tn.add_setup_config_cells(filename=args.config)
 
 tn.add_markdown_cell('''\
 ---
@@ -30,6 +48,9 @@ tn.add_dmx_binning_cells()
 tn.add_first_fitter_cells()
 tn.add_initial_plot_cells()
 
+if args.working:
+    tn.add_fit_testing_cells()
+
 tn.add_markdown_cell('''\
 ---
 
@@ -37,7 +58,7 @@ tn.add_markdown_cell('''\
 
 ---\
 ''')
-tn.add_noise_modeling_cells()
+#tn.add_noise_modeling_cells()
 
 tn.add_markdown_cell('''\
 ---
@@ -46,9 +67,9 @@ tn.add_markdown_cell('''\
 
 ---\
 ''')
-tn.add_residual_stats_cells()
-tn.add_Ftest_cells()
-tn.add_chisq_cells()
+#tn.add_residual_stats_cells()
+#tn.add_Ftest_cells()
+#tn.add_chisq_cells()
 
 tn.add_markdown_cell('''\
 ---
@@ -57,7 +78,7 @@ tn.add_markdown_cell('''\
 
 ---\
 ''')
-tn.add_summary_plots_cells()
+#tn.add_summary_plots_cells()
 
 tn.add_markdown_cell('''\
 ---
@@ -66,6 +87,6 @@ tn.add_markdown_cell('''\
 
 ---\
 ''')
-tn.add_output_dmx_cells()
+#tn.add_output_dmx_cells()
 
-tn.write_out()
+tn.write_out(filename=args.filename)
