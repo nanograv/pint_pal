@@ -18,6 +18,10 @@ global_log = 'test-run-notebooks.log'
 def test_run_notebook(config_file, log_file):
     log.setLevel("DEBUG")
 
+    # clear log file
+    with open(log_file, 'w') as f:
+        pass
+
     with log.log_to_file(log_file):
         try:
             tc = TimingConfiguration(config_file)
@@ -48,6 +52,11 @@ if __name__ == '__main__':
     base_dir = dirname(dirname(__file__))
     config_files = (glob(join(base_dir, 'configs/B*.nb.yaml'))
                      + glob(join(base_dir, 'configs/J*.nb.yaml')))
+
+    # clear global log
+    with open(global_log, 'w') as f:
+        pass
+
     with Pool(processes=4) as pool:
         results = []
         for config_file in sorted(config_files):
