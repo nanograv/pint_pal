@@ -2249,24 +2249,18 @@ def plots_for_summary_pdf_wb(fitter, title = None, legends = False):
             plt.close()
         elif ii == 1:
             if hasattr(fitter.model, 'binary_model_name'):
-                gs = fig.add_gridspec(4,2)
-                ax2 = fig.add_subplot(gs[2,:])
-                ax3 = fig.add_subplot(gs[3,0])
-                ax4 = fig.add_subplot(gs[3,1])
-            else:
                 gs = fig.add_gridspec(3,2)
+                ax2 = fig.add_subplot(gs[1,:])
                 ax3 = fig.add_subplot(gs[2,0])
                 ax4 = fig.add_subplot(gs[2,1])
+            else:
+                gs = fig.add_gridspec(2,2)
+                ax3 = fig.add_subplot(gs[1,0])
+                ax4 = fig.add_subplot(gs[1,1])
             ax0 = fig.add_subplot(gs[0,:])
-            ax1 = fig.add_subplot(gs[1,:])
+            #ax1 = fig.add_subplot(gs[1,:])
             # Plot whitened time residuals v. time
             plot_residuals_time(fitter, title = False, whitened = True, axs = ax0, figsize=(8,2.5))
-            # PUT SOMETHING HERE
-            """plot_fd_res_v_freq(toas, fitter, figsize=(12,4), plotsig = False, fromPINT = False,
-                          res = wres, errs = toas.get_errors().value,\
-                          mjds = toas.get_mjds().value, rcvr_bcknds = np.array(toas.get_flag_value('f')[0]),\
-                          whitened = True, \
-                          legend = False, freqs = toas.get_freqs().value, axs = ax1, comp_FD = False)"""
             # Plot whitened time residuals v. time
             if hasattr(fitter.model, 'binary_model_name'):
                 plot_residuals_orb(fitter, title = False, legend = False, whitened = True, axs = ax2, figsize=(8,2.5))
