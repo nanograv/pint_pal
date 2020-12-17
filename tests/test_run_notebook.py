@@ -1,9 +1,3 @@
-"""
-Run through the basic set of functions that will be called in the notebook for each pulsar.
-For now, this must be run from the top-level `timing-analysis` directory.
-It will create a global log called test-run-notebooks.log, and a log file for each pulsar.
-"""
-
 from timing_analysis.lite_utils import check_fit
 from timing_analysis.timingconfiguration import TimingConfiguration
 from astropy import log
@@ -16,6 +10,11 @@ import traceback
 global_log = 'test-run-notebooks.log'
 
 def test_run_notebook(config_file, log_file):
+    """
+    Run through the basic set of functions that will be called in the notebook for each pulsar.
+    For now, this must be run from the top-level `timing-analysis` directory.
+    It will create a global log called test-run-notebooks.log, and a log file for each pulsar.
+    """
     log.setLevel("DEBUG")
 
     # clear log file
