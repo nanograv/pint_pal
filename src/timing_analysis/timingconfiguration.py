@@ -51,8 +51,7 @@ class TimingConfiguration:
         return self.config['source']
 
     def get_model(self):
-        """ Return the PINT model object """
-        # Deprecated with new self.get_model_and_toas()
+        """ DEPRECATED (see self.get_model_and_toas()); Return the PINT model object """
         par_path = self.par_directory
         filename = self.config["timing-model"]
         m = model.get_model(os.path.join(par_path,filename))
@@ -71,8 +70,7 @@ class TimingConfiguration:
         return self.config['free-params']
 
     def get_TOAs(self, usepickle=True):
-        """ Return the PINT toa object """
-        # Deprecated with new self.get_model_and_toas()
+        """ DEPRECATED (see self.get_model_and_toas()); Return the PINT toa object """
         toas = self.config["toas"]
         tim_path = self.tim_directory
         BIPM = self.get_bipm()
@@ -102,7 +100,33 @@ class TimingConfiguration:
 
     def get_model_and_toas(self,usepickle=True):
         """Return the PINT model and TOA objects"""
-        return None
+        par_path = os.path.join(self.par_directory,self.config["timing-model"])
+        toas = self.config["toas"]
+        BIPM = self.get_bipm()
+        EPHEM = self.get_ephem()
+
+        # Individual tim file
+        if isinstance(toas, str):
+            toas = [toas]
+
+        # List of tim files (currently requires writing temporary tim file with INCLUDE to read properly)
+        tim_paths = [os.path.join(self.tim_directory,t) for t in toas]
+        with io.StringIO() as f:
+            for tf in tim_paths:
+                f.write('INCLUDE %s\n' % (tf))
+            source = self.get_source()
+            fn = f'TEMP-{source}.tim'
+            write_if_changed(fn, f.getvalue())
+
+        m,t = model.get_model_and_toas(par_path, fn, usepickle=usepickle, bipm_version=BIPM, ephem=EPHEM)
+
+        # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
+        self.apply_ignore(t)
+
+        if m.PSR.value != self.get_source():
+            raise ValueError("%s source entry does not match parameter PSR"%self.filename)
+
+        return m,t
 
     def get_bipm(self):
         """ Return the bipm string """
