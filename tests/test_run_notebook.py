@@ -1,3 +1,9 @@
+"""
+Run through the basic set of functions that will be called in the notebook for each pulsar.
+For now, this must be run from the top-level `timing-analysis` directory.
+It will create a global log called test-run-notebooks.log, and a log file for each pulsar.
+"""
+
 from timing_analysis.lite_utils import check_fit
 from timing_analysis.timingconfiguration import TimingConfiguration
 from astropy import log
@@ -45,8 +51,8 @@ if __name__ == '__main__':
     with Pool(processes=4) as pool:
         results = []
         for config_file in sorted(config_files):
-            psrname = config_file.split('/')[-1].split('.')[0]
-            log_file = f'{psrname}.log'
+            cfg_name = '.'.join(config_file.split('/')[-1].split('.')[:-1])
+            log_file = f'{cfg_name}.log'
             results.append(pool.apply_async(test_run_notebook, (config_file, log_file)))
         for result in results:
             result.get()
