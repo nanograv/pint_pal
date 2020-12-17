@@ -65,9 +65,12 @@ class TimingConfiguration:
             return self.config['compare-model']
         return None
 
-    def get_free_params(self):
+    def get_free_params(self, fitter):
         """Return list of free parameters"""
-        return self.config['free-params']
+        if self.config["fit-dmx"]:
+            return self.config['free-params'] + [p for p in fitter.model.params if p.startswith("DMX_")]
+        else:
+            return self.config['free-params']
 
     def get_TOAs(self, usepickle=True):
         """ Return the PINT toa object """
