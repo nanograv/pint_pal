@@ -7,6 +7,8 @@ from os.path import dirname, join
 from multiprocessing import Pool
 import traceback
 
+global_log = 'test-run-notebooks.log'
+
 def test_run_notebook(config_file, log_file):
     log.setLevel("DEBUG")
 
@@ -23,10 +25,16 @@ def test_run_notebook(config_file, log_file):
 
             fo.fit_toas()
             fo.print_summary()
-        except:
+
+            with open(global_log, 'a') as f:
+                print(f"{config_file}: success!", file=f)
+        except Exception as e:
             with open(log_file, 'a') as f:
                 print(f"Processing config file {config_file} failed with the following error:", file=f)
                 print(traceback.format_exc(), file=f)
+
+            with open(global_log, 'a') as f:
+                print(f"{config_file}: failure - {repr(e)}", file=f)
 
 if __name__ == '__main__':
     from glob import glob
