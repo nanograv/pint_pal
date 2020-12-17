@@ -67,7 +67,7 @@ class TimingConfiguration:
 
     def get_free_params(self, fitter):
         """Return list of free parameters"""
-        if self.config["fit-dmx"]:
+        if self.config["free-dmx"]:
             return self.config['free-params'] + [p for p in fitter.model.params if p.startswith("DMX_")]
         else:
             return self.config['free-params']

@@ -83,7 +83,7 @@ compare-model: ~
 {toas_str}
 # Parameters not included here will be frozen (e.g. DM)
 free-params: {free_params_str}
-fit-dmx: True
+free-dmx: True
 toa-type: {uptoatype}
 fitter: {fitter}
 ephem: DE438
