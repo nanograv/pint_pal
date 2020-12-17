@@ -50,15 +50,6 @@ class TimingConfiguration:
         """ Return the source name """
         return self.config['source']
 
-    def get_model(self):
-        """ DEPRECATED (see self.get_model_and_toas()); Return the PINT model object """
-        par_path = self.par_directory
-        filename = self.config["timing-model"]
-        m = model.get_model(os.path.join(par_path,filename))
-        if m.PSR.value != self.get_source():
-            raise ValueError("%s source entry does not match parameter PSR"%self.filename)
-        return m
-
     def get_compare_model(self):
         """ Return the timing model file to compare with """
         if "compare-model" in self.config.keys():
@@ -71,35 +62,6 @@ class TimingConfiguration:
             return self.config['free-params'] + [p for p in fitter.model.params if p.startswith("DMX_")]
         else:
             return self.config['free-params']
-
-    def get_TOAs(self, usepickle=True):
-        """ DEPRECATED (see self.get_model_and_toas()); Return the PINT toa object """
-        toas = self.config["toas"]
-        tim_path = self.tim_directory
-        BIPM = self.get_bipm()
-        EPHEM = self.get_ephem() 
-        
-        # Individual tim file
-        if isinstance(toas, str):
-            toas = [toas]
-            
-        # List of tim files (currently requires writing temporary tim file with INCLUDE to read properly)
-        tim_full_paths = [os.path.join(tim_path,t) for t in toas]
-        with io.StringIO() as f:
-            for tf in tim_full_paths:
-                f.write('INCLUDE %s\n' % (tf))
-            source = self.get_source()
-            fn = f'TEMP-{source}.tim'
-            write_if_changed(fn, f.getvalue())
-        toas = toa.get_TOAs(fn, usepickle=usepickle, bipm_version=BIPM, ephem=EPHEM)
-        # Remove temporary tim file (TEMP.tim)?
-            
-
-        # Excise TOAs according to config 'ignore' block. 
-        # (or should this happen as an explicit method run in case someone wants access to the raw TOAs?)
-        self.apply_ignore(toas)
-
-        return toas
 
     def get_model_and_toas(self,usepickle=True):
         """Return the PINT model and TOA objects"""
