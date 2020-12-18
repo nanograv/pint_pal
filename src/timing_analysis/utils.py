@@ -394,18 +394,22 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     else:
         NB = True
         resids = fitter.resids
-
+    
     # Start the latex pdf text (from old finalize timing script)
     psr = fitter.model.PSR.value.replace('-','$-$')
     write_header = True
-    if append is not None:
+    if append != None:
         texfile = append
         if os.path.exists(texfile):
             write_header = False
         fsum = open(texfile,'a')
     else:
-        texfile = fitter.model.PSR.value + '.summary.tex'
+        if NB:
+            texfile = fitter.model.PSR.value + '.summary.nb.tex'
+        else:
+            texfile = fitter.model.PSR.value + '.summary.wb.tex'
         fsum = open(texfile,'w')
+    
     if write_header:
         fsum.write(r'\documentclass[11pt]{article}' + '\n')
         fsum.write(r'\usepackage{graphicx}' + '\n')
@@ -610,7 +614,10 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     
     # Write out the plots - Assuming we have already made the summary plot previous to this
     # TODO Fix the plots...
-    plot_file_list = np.sort(glob.glob("%s*summary_plot_*" % (fitter.model.PSR.value)))
+    if NB:
+        plot_file_list = np.sort(glob.glob("%s*summary_plot_*_nb.*" % (fitter.model.PSR.value)))
+    else:
+        plot_file_list = np.sort(glob.glob("%s*summary_plot_*_wb.*" % (fitter.model.PSR.value)))
     for plot_file in plot_file_list:
         fsum.write(r'\begin{figure}[p]' + '\n')
         #fsum.write(r'\begin{center}' + '\n')
