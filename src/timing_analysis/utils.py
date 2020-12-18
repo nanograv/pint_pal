@@ -6,6 +6,8 @@ from astropy import log
 from pint.utils import weighted_mean
 import pint.residuals as Resid
 import os
+import yaml
+from datetime import datetime
 import time
 from subprocess import check_output
 import glob
@@ -635,3 +637,46 @@ def write_if_changed(filename, contents):
             return
     with open(filename, "w") as f:
         f.write(contents)
+
+def append_changelog(tag, note):
+    """Function to print log entry in YAML format (to be manually appended to YAML by user).
+    Your username and the date will be printed automatically.
+    The "tag" describes the type of change, and the "note" is a git commit-like note to describe the change.
+    The log is meant to track only substantial changes for which long-term records should exist.
+    You must pick the correct "tag" from the following:
+      - INIT: creation of the YAML
+      - ADD or REMOVE: adding or removing a parameter
+      - BINARY: change in the binary model or binary parameters
+      - NOISE: changes in noise parameters
+      - CURATE: adding / removing TOAs, or changing S/N threshold 
+    In the future this should check if the keyword exists and add entries automatically.
+    """
+    # Try to get the git username, but if it's not set, you're anonymous
+    try:
+        stream = os.popen('git config --get user.name')
+        username = stream.read().rstrip()
+    except:
+        username = 'Anonymous'
+    # Grab the date and put it in YYYY-MM-DD format
+    now = datetime.now()
+    date = now.strftime('%Y-%m-%d')
+    print('Each YAML file should have a "Changelog" keyword. Please append this log entry to the YAML:')
+    print('  - [\'%s\',\'%s\',\'%s\',\'%s\']\n'%(date,username,tag,note))
+
+def print_changelog(config_file):
+    """Function to print changelog from YAML in human-readable format in the notebook. 
+    Takes that YAML ("config_file") as its only argument.
+    """
+    # Read from YAML
+    stream = open(config_file, 'r')
+    configDict = yaml.safe_load(stream)
+    # If there's a changelog, write out its contents. If not, complain.
+    if 'Changelog' in configDict.keys():
+        print('Changelog as of %s:'%(datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        if configDict['Changelog'] is not None:
+            for cl in configDict['Changelog']:
+                print('  - %s %s %s: %s'%(cl[0],cl[1],cl[2],cl[3]))
+        else:
+            print('  - No changelog entries appear in our records, so they don\'t exist.\n')
+    else:
+        print('YAML config file does not include a Changelog.')
