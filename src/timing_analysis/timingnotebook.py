@@ -92,8 +92,8 @@ class TimingNotebook:
         Imports include:
 
         + Standard Python imports
-        + PINT and PINT modules
-        + Notebook Utilities\
+        + PINT
+        + `timing_analysis` utilities\
         ''')
         self.add_code_cell('''\
         import os

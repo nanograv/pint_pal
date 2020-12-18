@@ -29,11 +29,14 @@ args = parser.parse_args()
 
 
 tn = TimingNotebook()
-tn.add_cell('Outline Processing Notebook\n=====', mode="markdown")
-tn.add_markdown_cell('''\
-The notebook produced here is a test of the capabilities of the notebook
-writer. For convenience in discussion, tags are provided in brackets.\
-''')
+if args.working:
+    tn.add_cell('Preliminary Timing Notebook\n=====', mode="markdown")
+else:
+    tn.add_cell('Processing Notebook\n=====', mode="markdown")
+#tn.add_markdown_cell('''\
+#The notebook produced here is a test of the capabilities of the notebook
+#writer. For convenience in discussion, tags are provided in brackets.\
+#''')
 tn.add_import_cells()
 
 tn.add_debug_setup_cells()
