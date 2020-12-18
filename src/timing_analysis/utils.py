@@ -383,14 +383,6 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
         NB = False
         resids = fitter.resids.residual_objs['toa']
         dm_resids = fitter.resids.residual_objs['dm']
-        # TO DO: Double check how to konw if has_dmdata should be True
-        if 'DMDATA' in fitter.model.params:
-            if int(fitter.model.DMDATA) == 1:
-                has_dmdata = True
-            else:
-                has_dmdata = False
-        else:
-            has_dmdata = False
     else:
         NB = True
         resids = fitter.resids
@@ -457,10 +449,9 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
             m0 = m
     fsum.write('Epochs (defined as observations within %.1f-day spans): %d\\\\\n' % (maxepoch,nepoch))
 
-    # Check if WB in not
+    # Print what fitter was used:
     fsum.write('Wideband data: %s\n' %{False:'No',True:'Yes'}[not NB])
-    if not NB:
-        fsum.write('\\\\DMDATA: %s\n' %{False:'No',True:'Yes'}[has_dmdata])
+    fsum.write('\\\\Fitter: %s\n' %(fitter.__class__.__name__))
 
     # Write out the timing model
     fsum.write(r'\subsection*{Timing model}' + '\n')
