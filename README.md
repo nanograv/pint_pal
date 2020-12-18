@@ -55,12 +55,14 @@ $ git checkout -b psr/J1234+5678/{your_initials}
 
 4. You may need to select which parameters to fit - at a minimum they should be ones that are in the `.par` file. For position, prefer `ELONG`/`ELAT` rather than `RAJ`/`DECJ` or `LAMBDA`/`BETA`; likewise the proper motion parameters `PMELONG`/`PMELAT`. More, NANOGrav policy is that all pulsars should be fit for at least `ELONG`, `ELAT`, `PMELONG`, `PMELAT`, `PX`, `F0`, `F1` in every pulsar.
 
-5. Copy the template notebook to the root directory (where you should probably work):
+5. Check whether there are any ASP or GASP TOAs for your pulsar as follows.  Look for files on the notebook server matching `/nanograv/releases/9y/asp/(psr)/*.tim` or `/nanograv/releases/9y/gasp/(psr)/*.tim` where `(psr)` is the pulsar name without the leading B or J.  If there are such files, then add to the `toas` block of the configuration `.yaml` file, including the full path name to each file (which overrides the `tim-directory` for these files)
+
+6. Copy the template notebook to the root directory (where you should probably work):
 ```
 $ cp nb_templates/newmsp_notebook_v2.0.ipynb J1234+5678.ipynb
 ```
 
-6. Open the notebook, fill in your pulsar name, and try running it. Various things will go wrong.
+7. Open the notebook, fill in your pulsar name, and try running it. Various things will go wrong.
 
 7. Fix all the things. (See below.)
 
