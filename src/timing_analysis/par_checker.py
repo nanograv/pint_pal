@@ -74,6 +74,9 @@ def check_name(model):
     if not re.match("^((J[0-9]{4}[+-][0-9]{4})|(B[0-9]{4}[+-][0-9]{2}))$", name):
         msg = "PSR parameter is not in the proper format."
         log.warning(msg)
+    else:
+        msg = f"PSR parameter is {name}."
+        log.info(msg)
     return
 
 
@@ -293,14 +296,17 @@ def check_ephem(toa):
     ==========
     model: PINT toa object
 
-    Raises
-    ======
-    ValueError
+    Warnings
+    ========
+    UserWarning
         If ephemeris is not set to the latest version.
     """
     if toa.ephem != LATEST_EPHEM:
-        msg = "Wrong ephem (%s); should be %s." % (toa.ephem,LATEST_EPHEM)
+        msg = f"Wrong Solar System ephemeris in use ({toa.ephem}); should be {LATEST_EPHEM}."
         log.warning(msg)
+    else:
+        msg = f"Current Solar System ephemeris in use is {toa.ephem}."
+        log.info(msg)
     return
 
 def check_bipm(toa):
@@ -310,12 +316,39 @@ def check_bipm(toa):
     ==========
     model: PINT toa object
 
-    Raises
-    ======
-    ValueError
+    Warnings
+    ========
+    UserWarning
         If BIPM correction is not set to the latest version.
     """
     if toa.clock_corr_info['bipm_version'] != LATEST_BIPM:
-        msg = "Wrong bipm_version (%s); should be %s." % (toa.clock_corr_info['bipm_version'],LATEST_BIPM)
+        msg = f"Wrong bipm_version ({toa.clock_corr_info['bipm_version']}); should be {LATEST_BIPM}."
         log.warning(msg)
+    else:
+        msg = f"BIPM version in use is {toa.clock_corr_info['bipm_version']}."
+        log.info(msg)
     return
+
+def check_ecliptic(model):
+    """Check that the parfile uses ecliptic coordinates.
+
+    Parameters
+    ==========
+    model: PINT toa object
+
+    Warnings
+    ========
+    UserWarning
+        If not all model components are in ecliptic coordinates.
+    """
+    # Convert to/add AstrometryEcliptic component model if necessary.
+    if 'AstrometryEquatorial' in model.components:
+        msg = "AstrometryEquatorial in model components; switching to AstrometryEcliptic."
+        log.warning(msg)
+        model_equatorial_to_ecliptic(model)
+    elif 'AstrometryEcliptic' in model.components:
+        msg = "AstrometryEcliptic in model components."
+        log.info(msg)
+    else:
+        msg = "Neither AstrometryEcliptic nor AstrometryEquatorial in model components."
+        log.warning(msg)

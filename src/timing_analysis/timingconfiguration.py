@@ -26,11 +26,11 @@ class TimingConfiguration:
     def __init__(self, filename="config.yaml", tim_directory=None, par_directory=None):
         """
         Initialization method.
-        
-        Normally config files are written to be run from the root of a 
-        git checkout on the NANOGrav notebook server. If you want to run 
-        them from somewhere else, you may need to override these directories 
-        when you construct the TimingConfiguration object; this will not 
+
+        Normally config files are written to be run from the root of a
+        git checkout on the NANOGrav notebook server. If you want to run
+        them from somewhere else, you may need to override these directories
+        when you construct the TimingConfiguration object; this will not
         change what is recorded in the config file.
 
         Parameters
@@ -44,7 +44,7 @@ class TimingConfiguration:
             self.config = yaml.load(FILE, Loader=yaml.FullLoader)
         self.tim_directory = self.config['tim-directory'] if tim_directory is None else tim_directory
         self.par_directory = self.config['par-directory'] if par_directory is None else par_directory
-        
+
 
     def get_source(self):
         """ Return the source name """
@@ -83,7 +83,7 @@ class TimingConfiguration:
             fn = f'TEMP-{source}.tim'
             write_if_changed(fn, f.getvalue())
 
-        m,t = model.get_model_and_toas(par_path, fn, usepickle=usepickle, bipm_version=BIPM, ephem=EPHEM)
+        m,t = model.get_model_and_toas(par_path, fn, ephem=EPHEM, include_bipm=None, bipm_version=BIPM, include_gps=None, planets=None, usepickle=usepickle, tdb_method='default')
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
         self.apply_ignore(t)
