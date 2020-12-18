@@ -88,7 +88,7 @@ def center_epochs(model,toas):
 
     return model
 
-def check_fit(fitter):
+def check_fit(fitter,skip_check=None):
     """Check that pertinent parameters are unfrozen.
 
     Note: process of doing this robustly for binary models is not yet automated. Checks are
@@ -97,9 +97,26 @@ def check_fit(fitter):
     Parameters
     ==========
     fitter: `pint.fitter` object
+    skip_check: list of checks to be skipped (examples: 'spin'; 'spin,astrometry') 
+                can be a list object or a string with comma-separated values
     """
-    pc.check_spin(fitter.model)
-    pc.check_astrometry(fitter.model)
+    if skip_check:
+        if type(skip_check)==str:
+            skiplist = skip_check.split(',')
+        else:
+            skiplist = skip_check
+    else:
+        skiplist = []
+
+    if 'spin' in skiplist:
+        log.info("Skipping spin parameter check")
+    else:
+        pc.check_spin(fitter.model)
+
+    if 'astrometry' in skiplist:
+        log.info("Skipping astrometry parameter check")
+    else:
+        pc.check_astrometry(fitter.model)
 
 def add_feJumps(mo,rcvrs):
     """Automatically add appropriate jumps based on receivers present
