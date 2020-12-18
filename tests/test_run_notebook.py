@@ -24,12 +24,11 @@ def test_run_notebook(config_file, log_file):
     with log.log_to_file(log_file):
         try:
             tc = TimingConfiguration(config_file)
-            to = tc.get_TOAs()
-            mo = tc.get_model()
+            mo, to = tc.get_model_and_toas()
 
             fo = getattr(pint.fitter,tc.get_fitter())(to,mo)
 
-            fo.model.free_params = tc.get_free_params()
+            fo.model.free_params = tc.get_free_params(fo)
             check_fit(fo)
 
             fo.fit_toas()
