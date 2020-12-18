@@ -8,11 +8,14 @@ from timingnotebook import TimingNotebook
 
 
 ## Argument parser setup
-parser = argparse.ArgumentParser()
-parser.add_argument("-c", "--config", default="config.yaml", \
-                    type=str, help="YAML config file path/filename")
+parser = argparse.ArgumentParser(description="""\
+                                 NANOGrav Notebook Writer
+                                 Outputs a .ipynb with the appropriate variables set
+                                 """)
+parser.add_argument("config", \
+                    type=str, help="YAML configuration filename")
 parser.add_argument("-f", "--filename", default="process.ipynb", \
-                    type=str, help="Output path/filename")
+                    type=str, help="Output filename")
 parser.add_argument("-w", "--working", action="store_true", \
                     help="Write out the working notebook template used \
                     for working through the timing models.")
