@@ -2212,7 +2212,7 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
             # plot dmx v. time
             plot_dmx_time(fitter, legend = False, title = False, axs = ax3,  figsize=(8,2.5))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_1.nb.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_1_nb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 1:
             if hasattr(fitter.model, 'binary_model_name'):
@@ -2242,7 +2242,7 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
             plot_measurements_v_res(fitter, nbin = 50, title = False, legend = False, avg = True, whitened = True, \
                                     axs = ax4, figsize=(4,2.5))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_2.nb.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_2_nb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 2:
             if hasattr(fitter.model, 'binary_model_name'):
@@ -2272,14 +2272,14 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
             plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, \
                                     avg = True, whitened = True, axs = ax4, figsize=(4,2.5))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_3.nb.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_3_nb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 3:
             gs = fig.add_gridspec(1,1)
             ax0 = fig.add_subplot(gs[0])
             plot_toas_freq(fitter, title = False, legend = True, axs =ax0, figsize=(8,4))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_4.nb.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_4_nb.png" % (fitter.model.PSR.value))
             plt.close()
 
 def plots_for_summary_pdf_wb(fitter, title = None, legends = False):
@@ -2324,7 +2324,7 @@ def plots_for_summary_pdf_wb(fitter, title = None, legends = False):
                 plot_residuals_orb(fitter, title = False, legend = False, axs = ax2, figsize=(8,2.5))
             plot_dmx_time(fitter, legend = False, title = False, axs = ax3, figsize=(8,2.5))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_1.wb.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_1_wb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 1:
             if hasattr(fitter.model, 'binary_model_name'):
@@ -2349,7 +2349,7 @@ def plots_for_summary_pdf_wb(fitter, title = None, legends = False):
             # plot number of DM residuals histograms
             plot_measurements_v_dmres(fitter, nbin = 50, legend = False, title = False, axs = ax4)
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_2.wb.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_2_wb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 2:
             if hasattr(fitter.model, 'binary_model_name'):
@@ -2378,12 +2378,12 @@ def plots_for_summary_pdf_wb(fitter, title = None, legends = False):
             plot_measurements_v_dmres(fitter, plotsig = True, nbin = 50, legend = False, title = False, \
                                       axs = ax4)
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_3.wb.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_3_wb.png" % (fitter.model.PSR.value))
             plt.close()
         elif ii == 3:
             gs = fig.add_gridspec(1,1)
             ax0 = fig.add_subplot(gs[0])
             plot_toas_freq(fitter, title = False, legend = True, axs =ax0, figsize=(8,4))
             plt.tight_layout()
-            plt.savefig("%s_summary_plot_4.wb.png" % (fitter.model.PSR.value))
+            plt.savefig("%s_summary_plot_4_wb.png" % (fitter.model.PSR.value))
             plt.close()
