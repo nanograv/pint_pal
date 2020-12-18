@@ -16,6 +16,10 @@ parser.add_argument("-f", "--filename", default="process.ipynb", \
 parser.add_argument("-w", "--working", action="store_true", \
                     help="Write out the working notebook template used \
                     for working through the timing models.")
+parser.add_argument("-t", "--timdir", default=None, \
+                    type=str, help="Path to directory with tim file")
+parser.add_argument("-p", "--pardir", default=None, \
+                    type=str, help="Path to directory with par file")
 
 args = parser.parse_args()
 
@@ -32,8 +36,9 @@ writer. For convenience in discussion, tags are provided in brackets.\
 ''')
 tn.add_import_cells()
 
-tn.add_debug_setup_cell()
-tn.add_setup_config_cells(filename=args.config)
+tn.add_debug_setup_cells()
+tn.add_setup_config_cells(filename=args.config, tim_directory=args.timdir, \
+                          par_directory=args.pardir)
 
 tn.add_markdown_cell('''\
 ---
@@ -43,7 +48,7 @@ tn.add_markdown_cell('''\
 ---\
 ''')
 
-tn.add_excision_cells()
+#tn.add_excision_cells()
 tn.add_dmx_binning_cells()
 tn.add_first_fitter_cells()
 tn.add_initial_plot_cells()
@@ -51,42 +56,43 @@ tn.add_initial_plot_cells()
 if args.working:
     tn.add_fit_testing_cells()
 
-tn.add_markdown_cell('''\
----
+else:
+    tn.add_markdown_cell('''\
+    ---
 
-# Noise Modeling Stage
+    # Noise Modeling Stage
 
----\
-''')
-#tn.add_noise_modeling_cells()
+    ---\
+    ''')
+    tn.add_noise_modeling_cells()
 
-tn.add_markdown_cell('''\
----
+    tn.add_markdown_cell('''\
+    ---
 
-# Finalize Timing Solutions
+    # Finalize Timing Solutions
 
----\
-''')
-#tn.add_residual_stats_cells()
-#tn.add_Ftest_cells()
-#tn.add_chisq_cells()
+    ---\
+    ''')
+    tn.add_residual_stats_cells()
+    tn.add_Ftest_cells()
+    tn.add_chisq_cells()
 
-tn.add_markdown_cell('''\
----
+    tn.add_markdown_cell('''\
+    ---
 
-# Make Summary Plots
+    # Make Summary Plots
 
----\
-''')
-#tn.add_summary_plots_cells()
+    ---\
+    ''')
+    tn.add_summary_plots_cells()
 
-tn.add_markdown_cell('''\
----
+    tn.add_markdown_cell('''\
+    ---
 
-# Output Files
+    # Output Files
 
----\
-''')
-#tn.add_output_dmx_cells()
+    ---\
+    ''')
+    tn.add_output_dmx_cells()
 
 tn.write_out(filename=args.filename)

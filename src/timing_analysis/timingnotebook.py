@@ -119,7 +119,7 @@ class TimingNotebook:
         ''')
 
 
-    def add_debug_setup_cell(self):
+    def add_debug_setup_cells(self):
         self.add_code_cell('''\
         # Define the desired verbosity of background functions DEBUG/INFO/WARNING/ERROR
         log.setLevel("INFO")
@@ -129,7 +129,8 @@ class TimingNotebook:
         ''')
 
 
-    def add_setup_config_cells(self, filename="config.yaml"):
+    def add_setup_config_cells(self, filename="config.yaml", \
+                               tim_directory=None, par_directory=None):
         """ Add cells that load the configuration and set up PINT """
         self.add_markdown_cell('''\
         ### \[setup\] Load configuration file, get TOAs and timing model
@@ -139,8 +140,17 @@ class TimingNotebook:
         + Load and set definitions from a configuration file
         + Load the par/tim files or the PINT pickle files\
         ''')
+
+        # Allow for None to be passed if these are not strings.
+        if isinstance(filename, str):
+            filename = f'"{filename}"'
+        if isinstance(tim_directory, str):
+            tim_directory = f'"{tim_directory}"'
+        if isinstance(par_directory, str):
+            par_directory = f'"{par_directory}"'
+
         self.add_code_cell(f'''\
-        tc = TimingConfiguration("{filename}")
+        tc = TimingConfiguration(filename={filename}, tim_directory={tim_directory}, par_directory={par_directory})
         to = tc.get_TOAs()
         mo = tc.get_model()\
         ''')
