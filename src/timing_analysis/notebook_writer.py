@@ -1,6 +1,11 @@
 """
 This is the primary script containing the "recipe" that will
 generate a NANOGrav-specific pipeline notebook using the TimingNotebook class.
+
+Very basic usage:
+> python notebook_writer.py config/J1910+1256.yaml
+This will output a notebook named process.ipynb that runs on the J1910+1256.yaml
+configuration file in the config/ directory.
 """
 
 import argparse
@@ -25,10 +30,6 @@ parser.add_argument("-p", "--pardir", default=None, \
                     type=str, help="Path to directory with par file")
 
 args = parser.parse_args()
-
-
-### Parse arguments first
-
 
 
 tn = TimingNotebook()

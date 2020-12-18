@@ -112,10 +112,7 @@ class TimingNotebook:
         from astropy import log
         from astropy.visualization import quantity_support
         quantity_support()
-        %matplotlib notebook
-
-        #import plot_utils
-        #import ftester\
+        %matplotlib notebook\
         ''')
 
 
