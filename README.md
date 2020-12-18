@@ -30,11 +30,13 @@ Note: You may have to reconfigure this if your container is brought down at any 
 ```
 > pip install git+git://github.com/nanograv/pint --user
 ```
+Even if PINT is already installed, run this same command to update to the latest version.
 
 5. To install and make sure paths are set up properly, `cd` into `timing_analysis` and:
 ```
 pip install .
 ```
+If it is already installed, then `cd` into `timing_analysis`, run `git pull` and then `pip install .`
 
 Timing workflow
 ---------------
