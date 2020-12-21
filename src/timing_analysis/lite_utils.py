@@ -305,3 +305,36 @@ def print_changelog(config_file):
             print('  - No changelog entries appear in our records, so they don\'t exist.\n')
     else:
         print('YAML config file doesn\'t include a changelog. Please append \'changelog:\' to it and add entries below that.')
+
+def test_CL(tag, note):
+    """Checks for valid tag and auto-generates entry to be copy/pasted into .yaml changelog block.
+
+    Your NANOGrav email (before the @) and the date will be printed automatically. The "tag"
+    describes the type of change, and the "note" is a short (git-commit-like) description of
+    the change. Entry should be manually appended to .yaml by the user.
+
+    Valid tags:
+      - INIT: creation of the .yaml file
+      - ADD or REMOVE: adding or removing a parameter
+      - BINARY: change in the binary model or binary parameters
+      - NOISE: changes in noise parameters
+      - CURATE: adding / removing TOAs, or changing S/N threshold
+    """
+    VALID_TAGS = ['TEST','INIT','ADD','REMOVE','BINARY','NOISE','CURATE']
+    vtstr = ', '.join(VALID_TAGS)
+    if tag not in VALID_TAGS:
+        msg = f'{tag} is not a valid tag; valid tags are: {vtstr}.'
+        log.error(msg)
+    else:
+        # Read the git user.email from .gitconfig, return exception if not set
+        stream = os.popen('git config --get user.email')
+        username = stream.read().rstrip().split('@')[0]
+
+        if not username:
+            msg = 'Update your git config with... git config --global user.email \"your.email@nanograv.org\"'
+            log.error(msg)
+        else:
+            # Date in YYYY-MM-DD format
+            now = datetime.now()
+            date = now.strftime('%Y-%m-%d')
+            print(f'  - \'{date} {username} {tag}: {note}\'')
