@@ -90,11 +90,12 @@ class TimingConfiguration:
             toa_objects.append(t_i)
 
         # Merge toa_objects (check this works for list of length 1)
-        t = merge_TOAs(toa_objects)
+        t = toa.merge_TOAs(toa_objects)
 
-        # Pickle if desired with filename = ???
+        # Pickle if desired with filename [PSR].merged.tim.pickle.gz
+        pfn = f'{self.get_source()}.merged.tim.pickle.gz'
         if usepickle:
-            t.pickle(filename=self.get_source())
+            t.pickle(filename=pfn)
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
         self.apply_ignore(t)
