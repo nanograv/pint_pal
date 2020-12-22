@@ -353,19 +353,3 @@ def check_ecliptic(model):
         msg = "Neither AstrometryEcliptic nor AstrometryEquatorial in model components."
         log.warning(msg)
     return
-
-def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
-    'EcorrNoise','PLRedNoise']):
-    """Removes noise model components from the input timing model.
-
-    Parameters
-    ==========
-    model: PINT model object
-    noise_components: list of model component names to remove from model
-    """
-    for component in noise_components:
-        if component in model.components:
-            msg = f"Removing {component} from model."
-            log.info(msg)
-            model.remove_component(component)
-    return
