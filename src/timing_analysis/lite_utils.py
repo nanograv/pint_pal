@@ -243,3 +243,18 @@ def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
             log.info(msg)
             model.remove_component(component)
     return
+
+def get_receivers(toas):
+    """Returns a list of receivers present in the tim file(s)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+
+    Returns
+    =======
+    receivers: list of strings
+        unique set of receivers present in input toas
+    """
+    receivers = list(set([str(f) for f in set(toas.get_flag_value('fe')[0])]))
+    return receivers
