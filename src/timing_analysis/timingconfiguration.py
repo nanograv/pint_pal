@@ -106,7 +106,7 @@ class TimingConfiguration:
         return None #return some default value instead?
 
     def print_changelog(self):
-    """Print changelog entries from .yaml in the notebook."""
+        """Print changelog entries from .yaml in the notebook."""
         # If there's a changelog, write out its contents. If not, complain.
         if 'changelog' in self.config.keys():
             timenow = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
