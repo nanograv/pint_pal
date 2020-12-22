@@ -43,13 +43,6 @@ def cleanup():
     # clear global log
     with open(global_log, 'w') as f:
         pass
-    
-    # wait for tests to complete
-    yield
-    
-    # remove temporary files
-    for filename in glob('TEMP-*'):
-        remove(filename)
 
 @pytest.mark.parametrize('config_file', config_files())
 def test_run_notebook(notebook_code, config_file, suppress_errors=False):
