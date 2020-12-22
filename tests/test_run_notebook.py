@@ -1,4 +1,5 @@
 from astropy import log
+from os import remove
 from os.path import dirname, join
 from multiprocessing import Pool
 import traceback
@@ -36,6 +37,19 @@ def notebook_code():
                 code_lines.append(line)
             code_blocks.append('\n'.join(code_lines))
     return code_blocks
+
+@pytest.fixture(autouse=True)
+def cleanup():
+    # clear global log
+    with open(global_log, 'w') as f:
+        pass
+    
+    # wait for tests to complete
+    yield
+    
+    # remove temporary files
+    for filename in glob('TEMP-*'):
+        remove(filename)
 
 @pytest.mark.parametrize('config_file', config_files())
 def test_run_notebook(notebook_code, config_file, suppress_errors=False):
