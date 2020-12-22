@@ -109,13 +109,12 @@ class TimingConfiguration:
         """Print changelog entries from .yaml in the notebook."""
         # If there's a changelog, write out its contents. If not, complain.
         if 'changelog' in self.config.keys():
-            timenow = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f'YAML changelog as of {timenow} GMT:')
+            print('changelog:')
             if self.config['changelog'] is not None:
                 for cl in self.config['changelog']:
                     print(f'  - {cl}')
             else:
-                print('No changelog entries currently exist.')
+                print('...no changelog entries currently exist.')
         else:
             print('YAML file does not include a changelog. Add \'changelog:\' and individual entries there.')
 
