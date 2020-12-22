@@ -219,11 +219,9 @@ def check_binary(model):
     else:
         raise ValueError("Atypical binary model used")
 
-
-
-def check_jumps(model, receivers):
-    """Check that there are the correct number of jumps in the par file.
-
+def check_jumps(model,receivers,fitter_type=None):
+    """Checks for correct type/number of JUMP/DMJUMPs in the par file
+    
     Parameters
     ==========
     model: PINT model object
@@ -233,6 +231,10 @@ def check_jumps(model, receivers):
     ======
     ValueError
         If there is not one un-jumped receiver at the end, or
+        no TOAs were recorded with that receiver
+
+    ValueError
+        If not all receivers are dm-jumped at the end, or
         no TOAs were recorded with that receiver
     """
     jumps = []
@@ -254,39 +256,29 @@ def check_jumps(model, receivers):
         raise ValueError("%i receivers require JUMPs"%length)
     elif length == 0:
         raise ValueError("All receivers have JUMPs, one must be removed")
-    return
 
-def check_dmjumps(model, receivers):
-    """Check that there are the correct number of dmjumps in the par file.
+    # Check DMJUMPS for wideband models
+    if fitter_type == 'WidebandTOAFitter':
+        dmjumps = []
+        rcvrs = copy.copy(receivers)
 
-    Parameters
-    ==========
-    model: PINT model object
-    receivers: list of receiver strings
+        for p in model.params:
+            if p.startswith("DMJUMP"):
+                dmjumps.append(p)
 
-    Raises
-    ======
-    ValueError
-        If not all receivers are dm-jumped at the end, or
-        no TOAs were recorded with that receiver
-    """
-    dmjumps = []
-    rcvrs = copy.copy(receivers)
+        for dmjump in dmjumps:
+            j = getattr(model, dmjump)
+            value = j.key_value[0]
+            if value not in rcvrs:
+                raise ValueError("Receiver %s not used in TOAs"%value)
+            rcvrs.remove(value)
 
-    for p in model.params:
-        if p.startswith("DMJUMP"):
-            dmjumps.append(p)
+        length = len(rcvrs)
+        if length:
+            raise ValueError("%i receivers require DMJUMPs"%length)
+    else:
+        pass
 
-    for dmjump in dmjumps:
-        j = getattr(model, dmjump)
-        value = j.key_value[0]
-        if value not in rcvrs:
-            raise ValueError("Receiver %s not used in TOAs"%value)
-        rcvrs.remove(value)
-
-    length = len(rcvrs)
-    if length:
-        raise ValueError("%i receivers require DMJUMPs"%length)
     return
 
 def check_ephem(toa):
