@@ -67,29 +67,41 @@ class TimingConfiguration:
         """Return the PINT model and TOA objects"""
         par_path = os.path.join(self.par_directory,self.config["timing-model"])
         toas = self.config["toas"]
-        BIPM = self.get_bipm()
-        EPHEM = self.get_ephem()
 
         # Individual tim file
         if isinstance(toas, str):
             toas = [toas]
 
-        # List of tim files (currently requires writing temporary tim file with INCLUDE to read properly)
+        # List of tim files
         tim_paths = [os.path.join(self.tim_directory,t) for t in toas]
-        with io.StringIO() as f:
-            for tf in tim_paths:
-                f.write('INCLUDE %s\n' % (tf))
-            source = self.get_source()
-            fn = f'TEMP-{source}.tim'
-            write_if_changed(fn, f.getvalue())
 
-        m,t = model.get_model_and_toas(par_path, fn, usepickle=usepickle, bipm_version=BIPM, ephem=EPHEM)
+        BIPM = self.get_bipm()
+        EPHEM = self.get_ephem()
+        #with io.StringIO() as f:
+        #    for tf in tim_paths:
+        #        f.write('INCLUDE %s\n' % (tf))
+        #    source = self.get_source()
+        #    fn = f'TEMP-{source}.tim'
+        #    write_if_changed(fn, f.getvalue())
+
+        toa_objects = []
+        for tp in tim_paths:
+            m,t_i = model.get_model_and_toas(par_path, tp, usepickle=False, bipm_version=BIPM, ephem=EPHEM)
+            toa_objects.append(t_i)
+
+        # Merge toa_objects (check this works for list of length 1)
+        t = merge_TOAs(toa_objects)
+
+        # Pickle if desired with filename = ???
+        if usepickle:
+            t.pickle(filename=self.get_source())
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
         self.apply_ignore(t)
 
         if m.PSR.value != self.get_source():
-            raise ValueError("%s source entry does not match parameter PSR"%self.filename)
+            msg = f'{self.filename} source entry does not match par file value ({m.PSR.value}).'
+            log.warning(msg)
 
         return m,t
 
