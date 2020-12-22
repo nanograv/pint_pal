@@ -257,24 +257,6 @@ def compare_models(fo,model_to_compare=None,verbosity='check',threshold_sigma=3.
         comparemodel=fo.model_init
     return comparemodel.compare(fo.model,verbosity=verbosity,nodmx=nodmx,threshold_sigma=threshold_sigma)
 
-def print_changelog(config_file):
-    """Function to print changelog from YAML in human-readable format in the notebook. 
-    Takes that YAML ("config_file") as its only argument.
-    """
-    # Read from YAML
-    stream = open(config_file, 'r')
-    configDict = yaml.safe_load(stream)
-    # If there's a changelog, write out its contents. If not, complain.
-    if 'changelog' in configDict.keys():
-        print('YAML changelog as of %s GMT:'%(datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-        if configDict['changelog'] is not None:
-            for cl in configDict['changelog']:
-                print('  - %s'%(cl))
-        else:
-            print('  - No changelog entries appear in our records, so they don\'t exist.\n')
-    else:
-        print('YAML config file doesn\'t include a changelog. Please append \'changelog:\' to it and add entries below that.')
-
 def new_changelog_entry(tag, note):
     """Checks for valid tag and auto-generates entry to be copy/pasted into .yaml changelog block.
 
