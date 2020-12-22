@@ -38,7 +38,7 @@ def notebook_code():
             code_blocks.append('\n'.join(code_lines))
     return code_blocks
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope='module', autouse=True)
 def cleanup():
     # clear global log
     with open(global_log, 'w') as f:
