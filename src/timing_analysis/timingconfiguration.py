@@ -77,13 +77,6 @@ class TimingConfiguration:
 
         BIPM = self.get_bipm()
         EPHEM = self.get_ephem()
-        #with io.StringIO() as f:
-        #    for tf in tim_paths:
-        #        f.write('INCLUDE %s\n' % (tf))
-        #    source = self.get_source()
-        #    fn = f'TEMP-{source}.tim'
-        #    write_if_changed(fn, f.getvalue())
-
         toa_objects = []
         for tp in tim_paths:
             m,t_i = model.get_model_and_toas(par_path, tp, usepickle=False, bipm_version=BIPM, ephem=EPHEM)
