@@ -87,11 +87,16 @@ def check_spin(model):
 
     check_if_fit(model, "F0", "F1")
 
-    # check for spin parameters other than F0 or F1
-    for p in model.params:
-        if p[0]=='F' and (len(p)==2 and p[1]>='2') or (len(p)>2 and p[1]>='0' and p[1]<='9'):
-            msg = 'Unexpected spin parameter %s should be removed' % (p,)
-            log.warn(msg)
+    # check for spindown parameters other than F0 or F1, i.e., any
+    # such parameter that consists of the letter 'F' followed by
+    # an integer
+    for p in model.components['Spindown'].params:
+        if p.startswith('F') and len(p)>1 and p[1:].isdigit():
+            n = int(p[1:])
+            if n < 0 or n >1:
+                msg = 'Unexpected spin parameter %s should be removed' % (p,)
+                log.warning(msg)
+
     return
 
 
