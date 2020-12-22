@@ -360,7 +360,7 @@ def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
 
     Parameters
     ==========
-    model: PINT toa object
+    model: PINT model object
     noise_components: list of model component names to remove from model
     """
     for component in noise_components:
