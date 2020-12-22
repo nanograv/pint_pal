@@ -132,9 +132,12 @@ def add_feJumps(mo,rcvrs):
     missing_fe_jumps = list(set(rcvrs) - set(jump_rcvrs))
 
     if len(missing_fe_jumps):
-        log.info(f"Frontends not JUMPed: {missing_fe_jumps}")
+        if len(missing_fe_jumps) == 1:
+            log.info(f'Exactly one frontend not JUMPed ({missing_fe_jumps}). Great!')
+        else:
+            log.info(f"Frontends not JUMPed: {missing_fe_jumps}...")
     else:
-        log.info("All frontends are JUMPed.")
+        log.warning("All frontends are JUMPed. One JUMP should be removed from the .par file.")
     if len(missing_fe_jumps) > 1:
         for j in missing_fe_jumps[:-1]:
             log.info(f"Adding frontend JUMP {j}")
