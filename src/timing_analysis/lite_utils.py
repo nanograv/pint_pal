@@ -133,7 +133,7 @@ def add_feJumps(mo,rcvrs):
 
     if len(missing_fe_jumps):
         if len(missing_fe_jumps) == 1:
-            log.info(f'Exactly one frontend not JUMPed ({missing_fe_jumps}). Great!')
+            log.info('Exactly one frontend not JUMPed.')
         else:
             log.info(f"Frontends not JUMPed: {missing_fe_jumps}...")
     else:
