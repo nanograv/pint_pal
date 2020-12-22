@@ -1,13 +1,10 @@
-from timing_analysis.lite_utils import check_fit
-from timing_analysis.timingconfiguration import TimingConfiguration
 from astropy import log
-import pint.fitter
-
 from os.path import dirname, join
 from multiprocessing import Pool
 import traceback
 from glob import glob
 import pytest
+import nbformat
 
 global_log = 'test-run-notebooks.log'
 
@@ -18,8 +15,30 @@ def config_files():
     config_file = sorted(config_files)
     return config_files
 
+@pytest.fixture
+def notebook_code():
+    template_notebook = nbformat.read('nb_templates/draft_process.ipynb', as_version=4)
+    
+    code_blocks = []
+    for cell in template_notebook['cells']:
+        if cell['cell_type'] == 'code':
+            lines = cell['source'].split('\n')
+            code_lines = []
+            for line in lines:
+                # Skip full-line comments and IPython magics
+                if line.startswith('#') or line.startswith('%'):
+                    continue
+                # Skip certain kinds of lines that aren't useful here
+                if ('log.setLevel' in line
+                    or 'quantity_support' in line
+                    or 'plot_residuals' in line):
+                    continue
+                code_lines.append(line)
+            code_blocks.append('\n'.join(code_lines))
+    return code_blocks
+
 @pytest.mark.parametrize('config_file', config_files())
-def test_run_notebook(config_file, suppress_errors=False):
+def test_run_notebook(notebook_code, config_file, suppress_errors=False):
     """
     Run through the basic set of functions that will be called in the notebook for each pulsar.
     For now, this must be run from the top-level `timing-analysis` directory.
@@ -35,16 +54,12 @@ def test_run_notebook(config_file, suppress_errors=False):
 
     with log.log_to_file(log_file):
         try:
-            tc = TimingConfiguration(config_file)
-            mo, to = tc.get_model_and_toas()
-
-            fo = getattr(pint.fitter,tc.get_fitter())(to,mo)
-
-            fo.model.free_params = tc.get_free_params(fo)
-            check_fit(fo)
-
-            fo.fit_toas()
-            fo.print_summary()
+            # Execute notebook contents
+            for code_block in notebook_code:
+                # Fill in the name of the config file
+                code_block = code_block.replace('[filename]', cfg_name)
+                print(code_block)
+                exec(code_block)
 
             with open(global_log, 'a') as f:
                 print(f"{config_file}: success!", file=f)
@@ -64,8 +79,9 @@ if __name__ == '__main__':
         pass
 
     with Pool(processes=4) as pool:
+        code = notebook_code.__wrapped__()
         results = []
         for config_file in config_files():
-            results.append(pool.apply_async(test_run_notebook, (config_file,), {'suppress_errors': True}))
+            results.append(pool.apply_async(test_run_notebook, (code, config_file), {'suppress_errors': True}))
         for result in results:
             result.get()
