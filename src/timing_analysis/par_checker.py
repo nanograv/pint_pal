@@ -221,7 +221,7 @@ def check_binary(model):
 
 def check_jumps(model,receivers,fitter_type=None):
     """Checks for correct type/number of JUMP/DMJUMPs in the par file
-    
+
     Parameters
     ==========
     model: PINT model object
