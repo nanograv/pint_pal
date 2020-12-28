@@ -135,6 +135,8 @@ def add_feJumps(mo,rcvrs):
         return
 
     if not 'PhaseJump' in mo.components.keys():
+        log.info("No frontends JUMPed.")
+        log.info(f"Adding frontend JUMP {rcvrs[0]}")
         all_components = Component.component_types
         phase_jump_instance = all_components['PhaseJump']()
         mo.add_component(phase_jump_instance)
@@ -149,63 +151,55 @@ def add_feJumps(mo,rcvrs):
     jump_rcvrs = [x.key_value[0] for x in all_jumps if x.key == '-fe']
     missing_fe_jumps = list(set(rcvrs) - set(jump_rcvrs))
 
-    log.info(f"Frontends not JUMPed: {missing_fe_jumps}")
+    if len(missing_fe_jumps):
+        if len(missing_fe_jumps) == 1:
+            log.info('Exactly one frontend not JUMPed.')
+        else:
+            log.info(f"Frontends not JUMPed: {missing_fe_jumps}...")
+    else:
+        log.warning("All frontends are JUMPed. One JUMP should be removed from the .par file.")
     if len(missing_fe_jumps) > 1:
         for j in missing_fe_jumps[:-1]:
-            log.info(f"Adding Frontend JUMP {j}")
+            log.info(f"Adding frontend JUMP {j}")
             JUMPn = maskParameter('JUMP',key='-fe',key_value=[j],value=0.0,units=u.second)
             phasejump.add_param(JUMPn,setup=True)
 
-def check_toas_model(fitter,center=True,summary=True):
-    """Runs basic checks on previously-loaded timing model & TOA objects.
-
-    Checks that ephem and bipm_version have been set to the latest available versions; checks
-    for equatorial astrometric parameters (converts to ecliptic, if necessary); also checks
-    source name, and for appropriate number of jumps/dmjumps. Checks are functions from par_checker.py.
+def add_feDMJumps(mo,rcvrs):
+    """Automatically add appropriate dmjumps based on receivers present
 
     Parameters
     ==========
-    fitter: `pint.fitter` object
-    center: boolean, optional
-        if true, center PEPOCH, DMEPOCH, POSEPOCH (default: True)
-    summary: boolean, optional
-        if true, print TOA summary (default: True)
-
-    Returns
-    =======
-    None
+    mo: `pint.model.TimingModel` object
+    rcvrs: list
+        receivers present in TOAs
     """
-    # Get TOA and model objects from fitter
-    to = fitter.toas
-    mo = fitter.model
 
-    # Check ephem/bipm
-    pc.check_ephem(to)
-    pc.check_bipm(to)
+    if not 'DispersionJump' in mo.components.keys():
+        log.info("No frontends DMJUMPed.")
+        log.info(f"Adding frontend DMJUMP {rcvrs[0]}")
+        all_components = Component.component_types
+        dmjump_instance = all_components['DispersionJump']()
+        mo.add_component(dmjump_instance)
 
-    # Identify receivers present
-    receivers = set([str(f) for f in set(to.get_flag_value('fe')[0])])
+        mo.DMJUMP1.key = '-fe'
+        mo.DMJUMP1.key_value = [rcvrs[0]]
+        mo.DMJUMP1.value = 0.0
+        mo.DMJUMP1.frozen = False
 
-    # Convert to/add AstrometryEcliptic component model if necessary.
-    if 'AstrometryEquatorial' in mo.components:
-        msg = "AstrometryEquatorial in model components; switching to AstrometryEcliptic."
-        log.warning(msg)
-        model_equatorial_to_ecliptic(mo)
+    dmjump = mo.components['DispersionJump']
+    all_dmjumps = [getattr(dmjump, param) for param in dmjump.params]
+    dmjump_rcvrs = [x.key_value[0] for x in all_dmjumps if x.key == '-fe']
+    missing_fe_dmjumps = list(set(rcvrs) - set(dmjump_rcvrs))
 
-    # Basic checks on timing model
-    pc.check_name(mo)
-    add_feJumps(mo,list(receivers))
-    pc.check_jumps(mo,receivers)
-    if  fitter.__class__.__name__ == 'WidebandTOAFitter':
-        pc.check_dmjumps(mo,receivers)
-
-    # Center epochs?
-    if center:
-        center_epochs(mo,to)
-
-    # Print summary?
-    if summary:
-        to.print_summary()
+    if len(missing_fe_dmjumps):
+        log.info(f"Frontends not DMJUMPed: {missing_fe_dmjumps}")
+    else:
+        log.info(f"All frontends are DMJUMPed.")
+    if len(missing_fe_dmjumps):
+        for j in missing_fe_dmjumps:
+            log.info(f"Adding frontend DMJUMP {j}")
+            DMJUMPn = maskParameter('DMJUMP',key='-fe',key_value=[j],value=0.0,units=u.pc*u.cm**-3)
+            dmjump.add_param(DMJUMPn,setup=True)
 
 def large_residuals(fo,threshold_us):
     """Quick and dirty routine to find outlier residuals based on some threshold.
@@ -257,6 +251,37 @@ def compare_models(fo,model_to_compare=None,verbosity='check',threshold_sigma=3.
         comparemodel=fo.model_init
     return comparemodel.compare(fo.model,verbosity=verbosity,nodmx=nodmx,threshold_sigma=threshold_sigma)
 
+def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
+    'EcorrNoise','PLRedNoise']):
+    """Removes noise model components from the input timing model.
+
+    Parameters
+    ==========
+    model: PINT model object
+    noise_components: list of model component names to remove from model
+    """
+    for component in noise_components:
+        if component in model.components:
+            msg = f"Removing {component} from model."
+            log.info(msg)
+            model.remove_component(component)
+    return
+
+def get_receivers(toas):
+    """Returns a list of receivers present in the tim file(s)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+
+    Returns
+    =======
+    receivers: list of strings
+        unique set of receivers present in input toas
+    """
+    receivers = list(set([str(f) for f in set(toas.get_flag_value('fe')[0])]))
+    return receivers
+
 def append_changelog(tag, note):
     """Function to print log entry in YAML format (to be manually appended to YAML by user).
     Your username and the date will be printed automatically.
@@ -267,7 +292,7 @@ def append_changelog(tag, note):
       - ADD or REMOVE: adding or removing a parameter
       - BINARY: change in the binary model or binary parameters
       - NOISE: changes in noise parameters
-      - CURATE: adding / removing TOAs, or changing S/N threshold 
+      - CURATE: adding / removing TOAs, or changing S/N threshold
     In the future this should check if the keyword exists and add entries automatically.
     """
     # Try to get the git username, but if it's not set, you're anonymous
@@ -281,7 +306,7 @@ def append_changelog(tag, note):
     except:
         print('Something went very wrong grabbing your git user.name')
         username = 'Anonymous'
-        
+
     # Grab the date and put it in YYYY-MM-DD format
     now = datetime.now()
     date = now.strftime('%Y-%m-%d')
@@ -289,7 +314,7 @@ def append_changelog(tag, note):
     print('  - \'%s %s %s: %s\'\n'%(date,username,tag,note))
 
 def print_changelog(config_file):
-    """Function to print changelog from YAML in human-readable format in the notebook. 
+    """Function to print changelog from YAML in human-readable format in the notebook.
     Takes that YAML ("config_file") as its only argument.
     """
     # Read from YAML
