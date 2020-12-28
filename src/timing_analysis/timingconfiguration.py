@@ -44,7 +44,7 @@ class TimingConfiguration:
             self.config = yaml.load(FILE, Loader=yaml.FullLoader)
         self.tim_directory = self.config['tim-directory'] if tim_directory is None else tim_directory
         self.par_directory = self.config['par-directory'] if par_directory is None else par_directory
-
+        self.skip_check = self.config['skip-check'] if 'skip-check' in self.config.keys() else ''
 
     def get_source(self):
         """ Return the source name """

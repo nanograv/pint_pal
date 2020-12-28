@@ -51,7 +51,7 @@ $ git checkout 15yr
 $ git checkout -b psr/J1234+5678/{your_initials}
 ```
 
-3. Copy `configs/template.nb.yaml` to `configs/J1234+5678.nb.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). For now you may want to select *narrowband* `.tim` files (indicated by `.nb.tim` rather than `.wb.tim`) and ensure `toa-type` is set correctly in the `.yaml` file.
+3. Copy `configs/template.nb.yaml` to `configs/J1234+5678.nb.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). For now you may want to select *narrowband* `.tim` files (indicated by `.nb.tim` rather than `.wb.tim`) and ensure `toa-type` is set correctly in the `.yaml` file. If you are timing a pulsar that's been around for a while, check to see if ASP/GASP `.tim` files are available for your source in the latest release directory and ensure they're listed in the `.yaml` file if so; these were recently added.
 
 4. You may need to select which parameters to fit - at a minimum they should be ones that are in the `.par` file. For position, prefer `ELONG`/`ELAT` rather than `RAJ`/`DECJ` or `LAMBDA`/`BETA`; likewise the proper motion parameters `PMELONG`/`PMELAT`. More, NANOGrav policy is that all pulsars should be fit for at least `ELONG`, `ELAT`, `PMELONG`, `PMELAT`, `PX`, `F0`, `F1` in every pulsar.
 

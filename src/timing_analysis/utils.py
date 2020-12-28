@@ -436,8 +436,12 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
         year(float(start)), year(float(finish))))
 
     if NB:
-        avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
-        mjdlist = np.sort(avg_dict['mjds'].value)
+        try:
+            avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
+            mjdlist = np.sort(avg_dict['mjds'].value)
+        except:
+            log.warning("Cannot get epoch averaged residual MJDs, Epoch calculation will use all MJDs and may not be correct.")
+            mjdlist = np.sort(fitter.toas.get_mjds().value)
     else:
         mjdlist = np.sort(fitter.toas.get_mjds().value)
     maxepoch = 6.5

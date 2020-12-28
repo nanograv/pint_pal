@@ -2,7 +2,10 @@ import numpy as np
 import astropy.units as u
 from astropy import log
 import matplotlib.pyplot as plt
+from datetime import datetime
 from datetime import date
+import yaml
+import os
 import timing_analysis.par_checker as pc
 
 # Read tim/par files
@@ -88,7 +91,7 @@ def center_epochs(model,toas):
 
     return model
 
-def check_fit(fitter):
+def check_fit(fitter,skip_check=None):
     """Check that pertinent parameters are unfrozen.
 
     Note: process of doing this robustly for binary models is not yet automated. Checks are
@@ -97,9 +100,26 @@ def check_fit(fitter):
     Parameters
     ==========
     fitter: `pint.fitter` object
+    skip_check: list of checks to be skipped (examples: 'spin'; 'spin,astrometry') 
+                can be a list object or a string with comma-separated values
     """
-    pc.check_spin(fitter.model)
-    pc.check_astrometry(fitter.model)
+    if skip_check:
+        if type(skip_check)==str:
+            skiplist = skip_check.split(',')
+        else:
+            skiplist = skip_check
+    else:
+        skiplist = []
+
+    if 'spin' in skiplist:
+        log.info("Skipping spin parameter check")
+    else:
+        pc.check_spin(fitter.model)
+
+    if 'astrometry' in skiplist:
+        log.info("Skipping astrometry parameter check")
+    else:
+        pc.check_astrometry(fitter.model)
 
 def add_feJumps(mo,rcvrs):
     """Automatically add appropriate jumps based on receivers present
@@ -261,3 +281,52 @@ def get_receivers(toas):
     """
     receivers = list(set([str(f) for f in set(toas.get_flag_value('fe')[0])]))
     return receivers
+
+def append_changelog(tag, note):
+    """Function to print log entry in YAML format (to be manually appended to YAML by user).
+    Your username and the date will be printed automatically.
+    The "tag" describes the type of change, and the "note" is a git commit-like note to describe the change.
+    The log is meant to track only substantial changes for which long-term records should exist.
+    You must pick the correct "tag" from the following:
+      - INIT: creation of the YAML
+      - ADD or REMOVE: adding or removing a parameter
+      - BINARY: change in the binary model or binary parameters
+      - NOISE: changes in noise parameters
+      - CURATE: adding / removing TOAs, or changing S/N threshold
+    In the future this should check if the keyword exists and add entries automatically.
+    """
+    # Try to get the git username, but if it's not set, you're anonymous
+    try:
+        stream = os.popen('git config --get user.name')
+        username = stream.read().rstrip()
+        if not username:
+            print('I couldn\'t pull your name from your git config file. You can update it using the following:')
+            print('git config --global user.name \"FIRST_NAME LAST_NAME\"\n')
+            username = 'Anonymous'
+    except:
+        print('Something went very wrong grabbing your git user.name')
+        username = 'Anonymous'
+
+    # Grab the date and put it in YYYY-MM-DD format
+    now = datetime.now()
+    date = now.strftime('%Y-%m-%d')
+    print('Each YAML file should have a "changelog" keyword. Please append this ENTIRE, EXACT log entry to the YAML:')
+    print('  - \'%s %s %s: %s\'\n'%(date,username,tag,note))
+
+def print_changelog(config_file):
+    """Function to print changelog from YAML in human-readable format in the notebook.
+    Takes that YAML ("config_file") as its only argument.
+    """
+    # Read from YAML
+    stream = open(config_file, 'r')
+    configDict = yaml.safe_load(stream)
+    # If there's a changelog, write out its contents. If not, complain.
+    if 'changelog' in configDict.keys():
+        print('YAML changelog as of %s GMT:'%(datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        if configDict['changelog'] is not None:
+            for cl in configDict['changelog']:
+                print('  - %s'%(cl))
+        else:
+            print('  - No changelog entries appear in our records, so they don\'t exist.\n')
+    else:
+        print('YAML config file doesn\'t include a changelog. Please append \'changelog:\' to it and add entries below that.')

@@ -4,11 +4,6 @@ import re
 from astropy import log
 import copy
 
-
-# A list of exceptions to confirm the fit for F2.
-# Added here in case some ever come up in the future
-F2_EXCEPTION_LIST = ["J1024-0719"]
-
 # Latest versions of bipm/ephem tracked here; update as necessary.
 LATEST_BIPM = "BIPM2019"
 LATEST_EPHEM = "DE438"
@@ -87,27 +82,24 @@ def check_spin(model):
     ==========
     model: PINT model object
 
-    Warnings
-    ========
-    UserWarning
-        If F2 is provided and not in the exceptions list,
-        issue a warning.
-
     Raises
     ======
     ValueError
         If parameters provided are fixed
     """
-    name = model.PSR.value
-    if name in F2_EXCEPTION_LIST and "F2" not in model.params:
-        msg = "F2 is required in par file for this pulsar."
-        log.warning(msg)
-    elif name in F2_EXCEPTION_LIST and "F2" in model.params:
-        check_if_fit("F2")
-    elif "F2" in model.params:
-        msg = "F2 is provided in par file and should be removed."
-        log.warning(msg)
+
     check_if_fit(model, "F0", "F1")
+
+    # check for spindown parameters other than F0 or F1, i.e., any
+    # such parameter that consists of the letter 'F' followed by
+    # an integer
+    for p in model.components['Spindown'].params:
+        if p.startswith('F') and len(p)>1 and p[1:].isdigit():
+            n = int(p[1:])
+            if n < 0 or n >1:
+                msg = 'Unexpected spin parameter %s should be removed' % (p,)
+                log.warning(msg)
+
     return
 
 
