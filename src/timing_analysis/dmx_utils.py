@@ -13,9 +13,9 @@ class DMXParameter:
         self.idx = 0  # index label [int]
         self.val = 0.0  # DMX value [cm**-3 pc]
         self.err = 0.0  # DMX uncertainty [cm**-3 pc]
-        self.ep = 0.0  # epoch [MJD]
-        self.r1 = 0.0 # left bin edge [MJD]
-        self.r2 = 0.0 # right bin edge [MJD]
+        self.ep = 0.0  # epoch [day]
+        self.r1 = 0.0 # left bin edge [day]
+        self.r2 = 0.0 # right bin edge [day]
         self.f1 = 0.0 # lowest frequency [MHz]
         self.f2 = 0.0 # highest frequency [MHz]
         self.mask = []  # Boolean index array for selecting TOAs
@@ -34,7 +34,7 @@ class DMXParameter:
         """
         Print TEMPO-style DMX parameter.
 
-        range_only=True will print only the bin edges [MJD].
+        range_only=True will print only the bin edges [day].
         fit_flag=False will set the fit flag to 0 instead of 1.
         fortran=True will use 'D' instead of 'e'.
         """
@@ -81,7 +81,7 @@ def get_dmx_ranges(toas, bin_width=1.0, pad=0.0, strict_inclusion=True):
     mjds = mjds[isort]      # order them
 
     # Initialize lists to be returned
-    DMXR1, DMXR2 = [], []  # low and high MJDs (bin edges), respectively
+    low_mjds, high_mjds = [], []  # low and high MJDs (bin edges), respectively
 
     # Now step through the TOAs, starting with the first (earliest)
     remaining_mjds = np.copy(mjds)
@@ -96,27 +96,38 @@ def get_dmx_ranges(toas, bin_width=1.0, pad=0.0, strict_inclusion=True):
         right_bin_edge = remaining_mjds[in_bin].max() + pad # shrink bin
         if strict_inclusion: right_bin_edge += 1e-11  # ~1 us
         if np.any(in_bin):  # this should always be True
-            DMXR1.append(left_bin_edge)
-            DMXR2.append(right_bin_edge)
+            low_mjds.append(left_bin_edge)
+            high_mjds.append(right_bin_edge)
             not_accounted_for = remaining_mjds > right_bin_edge
         else:
             print("No TOAs in proposed DMX bin. Something is wrong.")
         # Update remaining TOA MJDs
         remaining_mjds = remaining_mjds[not_accounted_for]
 
-    # Check that all are in a bin, and only one bin
-    DMX_masks = [(left_bin_edge < mjds) & (mjds < right_bin_edge) for \
-            left_bin_edge,right_bin_edge in zip(DMXR1,DMXR2)]
-    assert sum([sum(DMX_mask) for DMX_mask in DMX_masks]) == len(mjds)
+    ranges = list(zip(low_mjds,high_mjds))
 
-    dmx_ranges = list(zip(DMXR1,DMXR2))
+    # Check that all TOAs are in a bin, and only one bin
+    check_dmx_coverage(toas, ranges)
 
-    return dmx_ranges
+    return ranges
 
 
-def check_coverage(toas, ranges):
+def check_dmx_coverage(toas, dmx_ranges):
     """
+    Ensures all TOAs match only one DMX bin and all bins have at least one TOA.
+
+    NB: range boundaries are exclusive (strict_inclusion).
+
+    toas is a PINT TOA object of toas in the DMX bin.
+    dmx_ranges is a list of (low_mjd, high_mjd) pairs defining the DMX ranges;
+        see the output of get_dmx_ranges().
     """
+
+    mjds = toas.get_mjds().value  # day
+
+    masks = [(left_bin_edge < mjds) & (mjds < right_bin_edge) for \
+            left_bin_edge,right_bin_edge in dmx_ranges]
+    assert sum([sum(mask) for mask in masks]) == len(mjds)
 
 
 def get_dmx_mask(toas, low_mjd, high_mjd, sort=False, strict_inclusion=True):
@@ -257,6 +268,7 @@ def add_dmx_range():
     Will call PINT model method function.
     """
     pass
+
 
 def remove_dmx_range():
     """
