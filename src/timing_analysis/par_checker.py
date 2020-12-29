@@ -69,6 +69,9 @@ def check_name(model):
     if not re.match("^((J[0-9]{4}[+-][0-9]{4})|(B[0-9]{4}[+-][0-9]{2}))$", name):
         msg = "PSR parameter is not in the proper format."
         log.warning(msg)
+    else:
+        msg = f"PSR parameter is {name}."
+        log.info(msg)
     return
 
 
@@ -87,11 +90,16 @@ def check_spin(model):
 
     check_if_fit(model, "F0", "F1")
 
-    # check for spin parameters other than F0 or F1
-    for p in model.params:
-        if p[0]=='F' and (len(p)==2 and p[1]>='2') or (len(p)>2 and p[1]>='0' and p[1]<='9'):
-            msg = 'Unexpected spin parameter %s should be removed' % (p,)
-            log.warn(msg)
+    # check for spindown parameters other than F0 or F1, i.e., any
+    # such parameter that consists of the letter 'F' followed by
+    # an integer
+    for p in model.components['Spindown'].params:
+        if p.startswith('F') and len(p)>1 and p[1:].isdigit():
+            n = int(p[1:])
+            if n < 0 or n >1:
+                msg = 'Unexpected spin parameter %s should be removed' % (p,)
+                log.warning(msg)
+
     return
 
 
@@ -203,10 +211,8 @@ def check_binary(model):
     else:
         raise ValueError("Atypical binary model used")
 
-
-
-def check_jumps(model, receivers):
-    """Check that there are the correct number of jumps in the par file.
+def check_jumps(model,receivers,fitter_type=None):
+    """Checks for correct type/number of JUMP/DMJUMPs in the par file
 
     Parameters
     ==========
@@ -217,6 +223,10 @@ def check_jumps(model, receivers):
     ======
     ValueError
         If there is not one un-jumped receiver at the end, or
+        no TOAs were recorded with that receiver
+
+    ValueError
+        If not all receivers are dm-jumped at the end, or
         no TOAs were recorded with that receiver
     """
     jumps = []
@@ -238,39 +248,29 @@ def check_jumps(model, receivers):
         raise ValueError("%i receivers require JUMPs"%length)
     elif length == 0:
         raise ValueError("All receivers have JUMPs, one must be removed")
-    return
 
-def check_dmjumps(model, receivers):
-    """Check that there are the correct number of dmjumps in the par file.
+    # Check DMJUMPS for wideband models
+    if fitter_type == 'WidebandTOAFitter':
+        dmjumps = []
+        rcvrs = copy.copy(receivers)
 
-    Parameters
-    ==========
-    model: PINT model object
-    receivers: list of receiver strings
+        for p in model.params:
+            if p.startswith("DMJUMP"):
+                dmjumps.append(p)
 
-    Raises
-    ======
-    ValueError
-        If not all receivers are dm-jumped at the end, or
-        no TOAs were recorded with that receiver
-    """
-    dmjumps = []
-    rcvrs = copy.copy(receivers)
+        for dmjump in dmjumps:
+            j = getattr(model, dmjump)
+            value = j.key_value[0]
+            if value not in rcvrs:
+                raise ValueError("Receiver %s not used in TOAs"%value)
+            rcvrs.remove(value)
 
-    for p in model.params:
-        if p.startswith("DMJUMP"):
-            dmjumps.append(p)
+        length = len(rcvrs)
+        if length:
+            raise ValueError("%i receivers require DMJUMPs"%length)
+    else:
+        pass
 
-    for dmjump in dmjumps:
-        j = getattr(model, dmjump)
-        value = j.key_value[0]
-        if value not in rcvrs:
-            raise ValueError("Receiver %s not used in TOAs"%value)
-        rcvrs.remove(value)
-
-    length = len(rcvrs)
-    if length:
-        raise ValueError("%i receivers require DMJUMPs"%length)
     return
 
 def check_ephem(toa):
@@ -280,14 +280,17 @@ def check_ephem(toa):
     ==========
     model: PINT toa object
 
-    Raises
-    ======
-    ValueError
+    Warnings
+    ========
+    UserWarning
         If ephemeris is not set to the latest version.
     """
     if toa.ephem != LATEST_EPHEM:
-        msg = "Wrong ephem (%s); should be %s." % (toa.ephem,LATEST_EPHEM)
+        msg = f"Wrong Solar System ephemeris in use ({toa.ephem}); should be {LATEST_EPHEM}."
         log.warning(msg)
+    else:
+        msg = f"Current Solar System ephemeris in use is {toa.ephem}."
+        log.info(msg)
     return
 
 def check_bipm(toa):
@@ -297,12 +300,40 @@ def check_bipm(toa):
     ==========
     model: PINT toa object
 
-    Raises
-    ======
-    ValueError
+    Warnings
+    ========
+    UserWarning
         If BIPM correction is not set to the latest version.
     """
     if toa.clock_corr_info['bipm_version'] != LATEST_BIPM:
-        msg = "Wrong bipm_version (%s); should be %s." % (toa.clock_corr_info['bipm_version'],LATEST_BIPM)
+        msg = f"Wrong bipm_version ({toa.clock_corr_info['bipm_version']}); should be {LATEST_BIPM}."
+        log.warning(msg)
+    else:
+        msg = f"BIPM version in use is {toa.clock_corr_info['bipm_version']}."
+        log.info(msg)
+    return
+
+def check_ecliptic(model):
+    """Check that the parfile uses ecliptic coordinates.
+
+    Parameters
+    ==========
+    model: PINT toa object
+
+    Warnings
+    ========
+    UserWarning
+        If not all model components are in ecliptic coordinates.
+    """
+    # Convert to/add AstrometryEcliptic component model if necessary.
+    if 'AstrometryEquatorial' in model.components:
+        msg = "AstrometryEquatorial in model components; switching to AstrometryEcliptic."
+        log.warning(msg)
+        model_equatorial_to_ecliptic(model)
+    elif 'AstrometryEcliptic' in model.components:
+        msg = "AstrometryEcliptic in model components."
+        log.info(msg)
+    else:
+        msg = "Neither AstrometryEcliptic nor AstrometryEquatorial in model components."
         log.warning(msg)
     return

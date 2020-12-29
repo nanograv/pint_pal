@@ -2185,6 +2185,8 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
     title [boolean] : If True, will add titles to ALL plots [default: False].
     legend [boolean] : If True, will add legends to ALL plots [default: False].
     """
+    print(fitter.model.get_components_by_category().keys())
+    
     if "Wideband" in fitter.__class__.__name__:
         raise ValueError("Cannot use this function with WidebandTOAFitter, please use `plots_for_summary_pdf_wb` instead.")
     # Need to make four sets of plots
@@ -2205,12 +2207,22 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
             # Plot residuals v. time
             plot_residuals_time(fitter, title = False, axs = ax0, figsize=(8, 2.5))
             # Plot averaged residuals v. time
-            plot_residuals_time(fitter, avg = True, axs = ax1, title = False, legend = False, figsize=(8,2.5))
+            if 'ecorr_noise' in fitter.model.get_components_by_category().keys():
+                plot_residuals_time(fitter, avg = True, axs = ax1, title = False, legend = False, figsize=(8,2.5))
+            else:
+                log.warning("ECORR not in model, cannot generate epoch averaged residuals. Plots will show all residuals.")
+                plot_residuals_time(fitter, avg = False, axs = ax1, title = False, legend = False, figsize=(8,2.5))
             # Plot residuals v orbital phase
             if hasattr(fitter.model, 'binary_model_name'):
-                plot_residuals_orb(fitter, title = False, legend = False, avg = True, axs = ax2, figsize=(8,2.5))
+                if 'ecorr_noise' in fitter.model.get_components_by_category().keys():
+                    plot_residuals_orb(fitter, title = False, legend = False, avg = True, axs = ax2, figsize=(8,2.5))
+                else:
+                    plot_residuals_orb(fitter, title = False, legend = False, avg = False, axs = ax2, figsize=(8,2.5))
             # plot dmx v. time
-            plot_dmx_time(fitter, legend = False, title = False, axs = ax3,  figsize=(8,2.5))
+            if 'dispersion_dmx' in fitter.model.get_components_by_category().keys():
+                plot_dmx_time(fitter, legend = False, title = False, axs = ax3,  figsize=(8,2.5))
+            else:
+                log.warning("No DMX bins in timing model, cannot plot DMX v. Time.")
             plt.tight_layout()
             plt.savefig("%s_summary_plot_1_nb.png" % (fitter.model.PSR.value))
             plt.close()
@@ -2229,17 +2241,29 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
             # plot whitened residuals v time
             plot_residuals_time(fitter, title = False, whitened = True, axs = ax0, figsize=(8,2.5))
             # plot whitened, epoch averaged residuals v time
-            plot_residuals_time(fitter, title = False, legend = False, avg = True, \
-                        whitened = True, axs = ax1, figsize=(8,2.5))
+            if 'ecorr_noise' in fitter.model.get_components_by_category().keys():
+                plot_residuals_time(fitter, title = False, legend = False, avg = True, \
+                            whitened = True, axs = ax1, figsize=(8,2.5))
+            else:
+                plot_residuals_time(fitter, title = False, legend = False, avg = False, \
+                            whitened = True, axs = ax1, figsize=(8,2.5))
             # Plot whitened, epoch averaged residuals v orbital phase
             if hasattr(fitter.model, 'binary_model_name'):
-                plot_residuals_orb(fitter, title = False, legend = False, avg = True, whitened = True, \
-                                   axs = ax2, figsize=(8,2.5),)
+                if 'ecorr_noise' in fitter.model.get_components_by_category().keys():
+                    plot_residuals_orb(fitter, title = False, legend = False, avg = True, whitened = True, \
+                                   axs = ax2, figsize=(8,2.5))
+                else:
+                    plot_residuals_orb(fitter, title = False, legend = False, avg = False, whitened = True, \
+                                   axs = ax2, figsize=(8,2.5))
             # plot number of whitened residuals histogram
             plot_measurements_v_res(fitter, nbin = 50, title = False, legend = False, whitened = True,\
                            axs = ax3, figsize=(4,2.5))
             # plot number of whitened, epoch averaged residuals histogram
-            plot_measurements_v_res(fitter, nbin = 50, title = False, legend = False, avg = True, whitened = True, \
+            if 'ecorr_noise' in fitter.model.get_components_by_category().keys():
+                plot_measurements_v_res(fitter, nbin = 50, title = False, legend = False, avg = True, whitened = True, \
+                                    axs = ax4, figsize=(4,2.5))
+            else:
+                plot_measurements_v_res(fitter, nbin = 50, title = False, legend = False, avg = False, whitened = True, \
                                     axs = ax4, figsize=(4,2.5))
             plt.tight_layout()
             plt.savefig("%s_summary_plot_2_nb.png" % (fitter.model.PSR.value))
@@ -2259,18 +2283,30 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
             # plot whitened residuals/uncertainty v. time
             plot_residuals_time(fitter, plotsig = True, title = False, whitened = True, axs = ax0, figsize=(8,2.5))
             # plot whitened, epoch averaged residuals/uncertainty v. time
-            plot_residuals_time(fitter, title = False, legend = False, plotsig = True, avg = True,\
+            if 'ecorr_noise' in fitter.model.get_components_by_category().keys():
+                plot_residuals_time(fitter, title = False, legend = False, plotsig = True, avg = True,\
+                                whitened = True, axs = ax1, figsize=(8,2.5))
+            else:
+                plot_residuals_time(fitter, title = False, legend = False, plotsig = True, avg = False,\
                                 whitened = True, axs = ax1, figsize=(8,2.5))
             # plot whitened, epoch averaged residuals/uncertainty v. orbital phase
             if hasattr(fitter.model, 'binary_model_name'):
-                plot_residuals_orb(fitter, title = False, legend = False, plotsig = True, \
+                if 'ecorr_noise' in fitter.model.get_components_by_category().keys():
+                    plot_residuals_orb(fitter, title = False, legend = False, plotsig = True, \
                             avg = True, whitened = True, axs = ax2, figsize=(8,2.5))
+                else:
+                    plot_residuals_orb(fitter, title = False, legend = False, plotsig = True, \
+                            avg = False, whitened = True, axs = ax2, figsize=(8,2.5))
             # plot number of whitened residuals/uncertainty histogram
             plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, whitened = True,\
                            axs = ax3, figsize=(4,2.5))
             # plot number of whitened, epoch averaged residuals/uncertainties histogram
-            plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, \
+            if 'ecorr_noise' in fitter.model.get_components_by_category().keys():
+                plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, \
                                     avg = True, whitened = True, axs = ax4, figsize=(4,2.5))
+            else:
+                plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, \
+                                    avg = False, whitened = True, axs = ax4, figsize=(4,2.5))
             plt.tight_layout()
             plt.savefig("%s_summary_plot_3_nb.png" % (fitter.model.PSR.value))
             plt.close()
