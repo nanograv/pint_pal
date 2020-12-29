@@ -251,6 +251,37 @@ def compare_models(fo,model_to_compare=None,verbosity='check',threshold_sigma=3.
         comparemodel=fo.model_init
     return comparemodel.compare(fo.model,verbosity=verbosity,nodmx=nodmx,threshold_sigma=threshold_sigma)
 
+def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
+    'EcorrNoise','PLRedNoise']):
+    """Removes noise model components from the input timing model.
+
+    Parameters
+    ==========
+    model: PINT model object
+    noise_components: list of model component names to remove from model
+    """
+    for component in noise_components:
+        if component in model.components:
+            msg = f"Removing {component} from model."
+            log.info(msg)
+            model.remove_component(component)
+    return
+
+def get_receivers(toas):
+    """Returns a list of receivers present in the tim file(s)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+
+    Returns
+    =======
+    receivers: list of strings
+        unique set of receivers present in input toas
+    """
+    receivers = list(set([str(f) for f in set(toas.get_flag_value('fe')[0])]))
+    return receivers
+
 def new_changelog_entry(tag, note):
     """Checks for valid tag and auto-generates entry to be copy/pasted into .yaml changelog block.
 
