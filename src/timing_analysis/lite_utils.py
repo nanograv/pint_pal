@@ -292,11 +292,12 @@ def new_changelog_entry(tag, note):
     Valid tags:
       - INIT: creation of the .yaml file
       - ADD or REMOVE: adding or removing a parameter
-      - BINARY: change in the binary model or binary parameters
-      - NOISE: changes in noise parameters
-      - CURATE: adding / removing TOAs, or changing S/N threshold
+      - BINARY: change in the binary model (e.g. ELL1 -> DD)
+      - NOISE: changes in noise parameters, unusual values of note
+      - CURATE: notable changes in TOA excision, or adding TOAs
+      - TEST: for testing!
     """
-    VALID_TAGS = ['TEST','INIT','ADD','REMOVE','BINARY','NOISE','CURATE']
+    VALID_TAGS = ['INIT','ADD','REMOVE','BINARY','NOISE','CURATE','TEST']
     vtstr = ', '.join(VALID_TAGS)
     if tag not in VALID_TAGS:
         msg = f'{tag} is not a valid tag; valid tags are: {vtstr}.'
