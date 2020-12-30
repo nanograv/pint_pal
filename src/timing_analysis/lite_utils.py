@@ -282,51 +282,36 @@ def get_receivers(toas):
     receivers = list(set([str(f) for f in set(toas.get_flag_value('fe')[0])]))
     return receivers
 
-def append_changelog(tag, note):
-    """Function to print log entry in YAML format (to be manually appended to YAML by user).
-    Your username and the date will be printed automatically.
-    The "tag" describes the type of change, and the "note" is a git commit-like note to describe the change.
-    The log is meant to track only substantial changes for which long-term records should exist.
-    You must pick the correct "tag" from the following:
-      - INIT: creation of the YAML
+def new_changelog_entry(tag, note):
+    """Checks for valid tag and auto-generates entry to be copy/pasted into .yaml changelog block.
+
+    Your NANOGrav email (before the @) and the date will be printed automatically. The "tag"
+    describes the type of change, and the "note" is a short (git-commit-like) description of
+    the change. Entry should be manually appended to .yaml by the user.
+
+    Valid tags:
+      - INIT: creation of the .yaml file
       - ADD or REMOVE: adding or removing a parameter
-      - BINARY: change in the binary model or binary parameters
-      - NOISE: changes in noise parameters
-      - CURATE: adding / removing TOAs, or changing S/N threshold
-    In the future this should check if the keyword exists and add entries automatically.
+      - BINARY: change in the binary model (e.g. ELL1 -> DD)
+      - NOISE: changes in noise parameters, unusual values of note
+      - CURATE: notable changes in TOA excision, or adding TOAs
+      - TEST: for testing!
     """
-    # Try to get the git username, but if it's not set, you're anonymous
-    try:
-        stream = os.popen('git config --get user.name')
-        username = stream.read().rstrip()
-        if not username:
-            print('I couldn\'t pull your name from your git config file. You can update it using the following:')
-            print('git config --global user.name \"FIRST_NAME LAST_NAME\"\n')
-            username = 'Anonymous'
-    except:
-        print('Something went very wrong grabbing your git user.name')
-        username = 'Anonymous'
-
-    # Grab the date and put it in YYYY-MM-DD format
-    now = datetime.now()
-    date = now.strftime('%Y-%m-%d')
-    print('Each YAML file should have a "changelog" keyword. Please append this ENTIRE, EXACT log entry to the YAML:')
-    print('  - \'%s %s %s: %s\'\n'%(date,username,tag,note))
-
-def print_changelog(config_file):
-    """Function to print changelog from YAML in human-readable format in the notebook.
-    Takes that YAML ("config_file") as its only argument.
-    """
-    # Read from YAML
-    stream = open(config_file, 'r')
-    configDict = yaml.safe_load(stream)
-    # If there's a changelog, write out its contents. If not, complain.
-    if 'changelog' in configDict.keys():
-        print('YAML changelog as of %s GMT:'%(datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-        if configDict['changelog'] is not None:
-            for cl in configDict['changelog']:
-                print('  - %s'%(cl))
-        else:
-            print('  - No changelog entries appear in our records, so they don\'t exist.\n')
+    VALID_TAGS = ['INIT','ADD','REMOVE','BINARY','NOISE','CURATE','TEST']
+    vtstr = ', '.join(VALID_TAGS)
+    if tag not in VALID_TAGS:
+        msg = f'{tag} is not a valid tag; valid tags are: {vtstr}.'
+        log.error(msg)
     else:
-        print('YAML config file doesn\'t include a changelog. Please append \'changelog:\' to it and add entries below that.')
+        # Read the git user.email from .gitconfig, return exception if not set
+        stream = os.popen('git config --get user.email')
+        username = stream.read().rstrip().split('@')[0]
+
+        if not username:
+            msg = 'Update your git config with... git config --global user.email \"your.email@nanograv.org\"'
+            log.error(msg)
+        else:
+            # Date in YYYY-MM-DD format
+            now = datetime.now()
+            date = now.strftime('%Y-%m-%d')
+            print(f'  - \'{date} {username} {tag}: {note}\'')
