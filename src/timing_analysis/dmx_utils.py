@@ -245,6 +245,12 @@ def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
     mjds = mjds[isort]
     dmx_ranges = sorted(dmx_ranges, key=lambda tup: tup[0])
 
+    if not len(dmx_ranges):  # in case an empty list was passed
+        if add_new_ranges:
+            dmx_ranges += get_dmx_ranges(toas, bin_width=bin_width, pad=pad,
+                    strict_inclusion=strict_inclusion)
+        return dmx_ranges
+
     # Get the TOAs that don't have a DMX bin (inone)
     masks, iempty, inone, imult = check_dmx_coverage(toas, dmx_ranges,
             full_return=True, quiet=True)
