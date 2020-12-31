@@ -252,8 +252,8 @@ def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
         return dmx_ranges
 
     # Get the TOAs that don't have a DMX bin (inone)
-    masks, iempty, inone, imult = check_dmx_coverage(toas, dmx_ranges,
-            full_return=True, quiet=True)
+    masks, ibad, iover, iempty, inone, imult = check_dmx_coverage(toas,
+            dmx_ranges, full_return=True, quiet=True)
 
     iremain = []  # for the TOAs that are not accommodated by expansion
 
@@ -298,7 +298,17 @@ def check_dmx_coverage(toas, dmx_ranges, full_return=False, quiet=False):
     """
     Ensures all TOAs match only one DMX bin and all bins have at least one TOA.
 
+    Also checks for overlapping bins and other sanity checks.
+
     NB: range boundaries are exclusive (strict_inclusion).
+
+    Returns--
+        masks: TOA masks for each range.
+        ibad: Indices of bad/improper ranges.
+        iover: Indices of ranges that overlap with one another.
+        iempty: Indices of ranges with no TOAs assigned.
+        inone: Indices of TOAs not assigned to any range.
+        imult: Indices of TOAs assigned to multiple ranges.
 
     toas is a PINT TOA object.
     dmx_ranges is a list of (low_mjd, high_mjd) pairs defining the DMX ranges;
@@ -313,14 +323,37 @@ def check_dmx_coverage(toas, dmx_ranges, full_return=False, quiet=False):
     masks = [(left_bin_edge < mjds) & (mjds < right_bin_edge) for \
             left_bin_edge,right_bin_edge in dmx_ranges]
 
-    iempty, inone, imult = [], [] ,[]
+    ibad, iover, iempty, inone, imult = [], [], [], [], []
+
+    # Check for bad bins
+    for irange,dmx_range in enumerate(dmx_ranges):
+        left_bin_edge, right_bin_edge = dmx_range[0], dmx_range[1]
+        if left_bin_edge == right_bin_edge or left_bin_edge > right_bin_edge:
+            ibad.append(irange)
+            if not quiet: log.info(f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, is improper.")
+    if len(ibad) and not quiet:
+        log.warning(f"{len(ibad)} DMX ranges are improper.")
+
+    # Check for overlapping bins
+    for irange,dmx_range in enumerate(dmx_ranges):
+        left_bin_edge, right_bin_edge = dmx_range[0], dmx_range[1]
+        other_ranges = \
+                np.array(dmx_ranges)[np.where(np.arange(len(dmx_ranges)) \
+                != irange)[0]]
+        for mjd in other_ranges.flatten():
+            if (left_bin_edge < mjd) & (mjd < right_bin_edge):  # finds overlap
+                iover.append(irange)
+                if not quiet: log.info(f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, overlaps with other ranges.")
+                break  # only find first overlap
+    if len(iover) and not quiet:
+        log.warning(f"{len(iover)} DMX ranges are overlapping with one another.")
 
     # Check for empty bins
     ntoa_per_dmx_bin = np.array(masks).astype(int).sum(axis=1)
     if not np.all(ntoa_per_dmx_bin):
         iempty = np.where(ntoa_per_dmx_bin == 0)[0]
-        for imask in iempty:
-            if not quiet: log.info(f"DMX range with pythonic index {imask}, correponding to the DMX range {dmx_ranges[imask]}, overlaps no TOAs.")
+        for irange in iempty:
+            if not quiet: log.info(f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, overlaps no TOAs.")
         if not quiet: log.warning(f"{len(iempty)} DMX ranges have no TOAs.")
 
     # Check each TOA in exactly one bin
@@ -331,12 +364,13 @@ def check_dmx_coverage(toas, dmx_ranges, full_return=False, quiet=False):
             if not quiet: log.info(f"TOA with index {itoa} (MJD {mjds[itoa]}, {toas.get_freqs().value[itoa]} MHz) does not have a DMX range.")
         imult = np.where(ndmx_per_toa > 1)[0]  # multiple bins
         for itoa in imult:
-            imask = list(np.where(np.array(masks).astype(int)[:,itoa] == 1)[0])
-            if not quiet: log.info("TOA with index {itoa} (MJD {mjds[itoa]}, {toas.get_freqs().value[itoa]} MHz) is in {ndmx_per_toa[itoa]} DMX ranges (with pythonic indices {imask}).")
+            irange = list(np.where(np.array(masks).astype(int)[:,itoa] \
+                    == 1)[0])
+            if not quiet: log.info(f"TOA with index {itoa} (MJD {mjds[itoa]}, {toas.get_freqs().value[itoa]} MHz) is in {ndmx_per_toa[itoa]} DMX ranges (with pythonic indices {irange}).")
         if not quiet: log.warning(f"{len(inone)} TOAs have no DMX range and {len(imult)} TOAs are in multiple DMX ranges.")
 
     if full_return:
-        return masks, iempty, inone, imult
+        return masks, ibad, iover, iempty, inone, imult
 
 
 def get_dmx_mask(toas, low_mjd, high_mjd, sort=False, strict_inclusion=True):
