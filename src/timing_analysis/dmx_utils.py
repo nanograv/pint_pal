@@ -76,7 +76,7 @@ def group_dates(toas, group_width=0.1):
     igroup = 0
     group_count = 0
     low_mjd = 0.0
-    for mjd in sorted(mjds):
+    for mjd in sorted(mjds):  # loop over sorted MJDs
         if low_mjd > 0 and (mjd - low_mjd) > group_width:
             group_mjds[igroup] /= group_count
             igroup += 1
@@ -92,7 +92,8 @@ def group_dates(toas, group_width=0.1):
     return group_mjds
 
 
-def get_dmx_ranges(toas, bin_width=1.0, pad=0.0, strict_inclusion=True):
+def get_dmx_ranges(toas, bin_width=1.0, pad=0.0, strict_inclusion=True,
+        check=True):
     """
     Returns a list of low and high MJDs defining DMX ranges, covering all TOAs.
 
@@ -107,18 +108,19 @@ def get_dmx_ranges(toas, bin_width=1.0, pad=0.0, strict_inclusion=True):
         every DMX range.
     strict_inclusion=True if TOAs exactly on a bin edge are not in the bin for
         the implemented DMX model.
+    check=True executes check_dmx_ranges() on the TOAs and the output DMX
+        ranges.
     """
 
-    # Get TOA info
+    # Order the MJDs
     mjds = toas.get_mjds().value
-    isort = mjds.argsort()  # just to be safe
-    toas = toas[isort]      # order them
+    isort = mjds.argsort()
     mjds = mjds[isort]
 
     # Initialize lists to be returned
     low_mjds, high_mjds = [], []  # low and high MJDs (bin edges), respectively
 
-    # Now step through the TOAs, starting with the first (earliest)
+    # Now step through the MJDs, starting with the first (earliest)
     remaining_mjds = np.copy(mjds)
     while(len(remaining_mjds)):
         left_bin_edge = remaining_mjds.min() - pad
@@ -139,16 +141,16 @@ def get_dmx_ranges(toas, bin_width=1.0, pad=0.0, strict_inclusion=True):
         # Update remaining TOA MJDs
         remaining_mjds = remaining_mjds[not_accounted_for]
 
-    dmx_ranges = list(zip(low_mjds,high_mjds))
+    dmx_ranges = list(zip(low_mjds,high_mjds))  # Should already be sorted
 
     # Check that all TOAs are in a bin and only one bin, and no empty ranges
-    check_dmx_coverage(toas, dmx_ranges)
+    if check: check_dmx_ranges(toas, dmx_ranges)
 
     return dmx_ranges
 
 
 def get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0, pad=0.0,
-        strict_inclusion=True):
+        strict_inclusion=True, check=True):
     """
     Return a list of DMX ranges GASP TOAs into DMX ranges
 
@@ -161,6 +163,8 @@ def get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0, pad=0.0,
         every DMX range.
     strict_inclusion=True if TOAs exactly on a bin edge are not in the bin for
         the implemented DMX model.
+    check=True executes check_dmx_ranges() on the TOAs and the output DMX
+        ranges.
     """
 
     # Check that the TOAs contain GASP data
@@ -173,17 +177,12 @@ def get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0, pad=0.0,
     mjds = toas.get_mjds().value
     toas = toas[(mjds < end_gasp_era) & (bes == 'GASP')]
     mjds = mjds[(mjds < end_gasp_era) & (bes == 'GASP')]
-    # Only consider GASP
-    isort = mjds.argsort()  # just to be safe
-    toas = toas[isort]      # order them
-    mjds = mjds[isort]
-    febes = toas.get_flag_value('f')[0]  # frontend_backend flag
-    febes = np.array(febes)[isort]
 
     # Initialize lists to be returned
     low_mjds, high_mjds = [], []  # low and high MJDs (bin edges), respectively
 
     # Pair up high and low frequency GASP observations
+    febes = np.array(toas.get_flag_value('f')[0])  # frontend_backend flag
     low_obs_mjds = group_dates(toas[febes == 'Rcvr_800_GASP'], group_width)
     high_obs_mjds = group_dates(toas[febes == 'Rcvr1_2_GASP'], group_width)
     iclosest_high = [abs(mjd-high_obs_mjds).argmin() for mjd in low_obs_mjds]
@@ -211,16 +210,17 @@ def get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0, pad=0.0,
     if len(inone):  # see if we can expand a range to accommodate
         dmx_ranges = expand_dmx_ranges(toas[inone], dmx_ranges,
                 bin_width=bin_width, pad=pad,
-                strict_inclusion=strict_inclusion, add_new_ranges=False)
+                strict_inclusion=strict_inclusion, add_new_ranges=False,
+                check=False)
 
     # Check that all TOAs are in a bin and only one bin, and no empty ranges
-    check_dmx_coverage(toas, dmx_ranges)
+    if check: check_dmx_ranges(toas, dmx_ranges)
 
     return dmx_ranges
 
 
 def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
-        strict_inclusion=True, add_new_ranges=False):
+        strict_inclusion=True, add_new_ranges=False, check=True):
     """
     Expands DMX ranges to accommodate new TOAs up to a maximum bin width.
 
@@ -236,13 +236,9 @@ def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
         the implemented DMX model.
     add_new_ranges=True will add new DMX ranges if the TOAs cannot be
         accomodated.
+    check=True executes check_dmx_ranges() on the TOAs and the new DMX ranges.
     """
 
-    # Get TOA info
-    mjds = toas.get_mjds().value
-    isort = mjds.argsort()  # just to be safe
-    toas = toas[isort]      # order them
-    mjds = mjds[isort]
     dmx_ranges = sorted(dmx_ranges, key=lambda tup: tup[0])
 
     if not len(dmx_ranges):  # in case an empty list was passed
@@ -252,7 +248,7 @@ def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
         return dmx_ranges
 
     # Get the TOAs that don't have a DMX bin (inone)
-    masks, ibad, iover, iempty, inone, imult = check_dmx_coverage(toas,
+    masks, ibad, iover, iempty, inone, imult = check_dmx_ranges(toas,
             dmx_ranges, full_return=True, quiet=True)
 
     iremain = []  # for the TOAs that are not accommodated by expansion
@@ -261,21 +257,21 @@ def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
 
     for itoa in inone:
         expanded = False
-        mjd = mjds[itoa]
+        mjd = toas.get_mjds().value[itoa]
         inearest = np.argmin(abs(mjd - dmx_ranges.flatten()))
-        idmx = int(inearest / 2)  # index of the dmx range
+        idmx = int(inearest / 2)  # index of the nearest dmx range
         left_bin_edge = dmx_ranges[idmx][0]
         right_bin_edge = dmx_ranges[idmx][1]
         if (left_bin_edge < mjd) & (mjd < right_bin_edge):  # in a bin
             continue  # previous iteration of loop could now cover this TOA
         width = right_bin_edge - left_bin_edge
-        if not (inearest % 2):  # TOA is outside left bin-edge, smaller MJD
+        if not (inearest % 2):  # TOA is outside left bin-edge, has smaller MJD
             delta_mjd = left_bin_edge - mjd  # must be positive
             if width + delta_mjd < bin_width:  # can the range be widened?
                 dmx_ranges[idmx][0] -= delta_mjd + pad
                 if strict_inclusion: dmx_ranges[idmx][0] -= 1e-11  # ~1 us
                 expanded = True
-        else:  # TOA is outside right bin-edge, larger MJD
+        else:  # TOA is outside right bin-edge, has larger MJD
             delta_mjd = mjd - right_bin_edge  # must be positive
             if width + delta_mjd < bin_width:  # can the range be widened?
                 dmx_ranges[idmx][1] += delta_mjd + pad
@@ -291,14 +287,17 @@ def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
                 pad=pad, strict_inclusion=strict_inclusion)
     dmx_ranges = sorted(dmx_ranges, key=lambda tup: tup[0])
 
+    # Check that all TOAs are in a bin and only one bin, and no empty ranges
+    if check: check_dmx_ranges(toas, dmx_ranges)
+
     return dmx_ranges
 
 
-def check_dmx_coverage(toas, dmx_ranges, full_return=False, quiet=False):
+def check_dmx_ranges(toas, dmx_ranges, full_return=False, quiet=False):
     """
     Ensures all TOAs match only one DMX bin and all bins have at least one TOA.
 
-    Also checks for overlapping bins and other sanity checks.
+    Also checks for improperly set and overlapping bins.
 
     NB: range boundaries are exclusive (strict_inclusion).
 
@@ -373,23 +372,18 @@ def check_dmx_coverage(toas, dmx_ranges, full_return=False, quiet=False):
         return masks, ibad, iover, iempty, inone, imult
 
 
-def get_dmx_mask(toas, low_mjd, high_mjd, sort=False, strict_inclusion=True):
+def get_dmx_mask(toas, low_mjd, high_mjd, strict_inclusion=True):
     """
     Return a Boolean index array for selecting TOAs from toas.
 
     toas is a PINT TOA object of TOAs in the DMX bin.
     low_mjd is the left edge of the DMX bin.
     high_mjd is the right edge of the DMX bin.
-    sort=True returns the mask as though the TOAs are already sorted by MJD.
     strict_inclusion=True if TOAs exactly on a bin edge are not in the bin for
         the implemented DMX model.
     """
 
     mjds = toas.get_mjds().value
-    if sort:
-        isort = mjds.argsort()  # indices to sort by
-        toas = toas[isort]      # order them
-        mjds = mjds[isort]
 
     if strict_inclusion:
         mask = (low_mjd < mjds) & (mjds < high_mjd)
@@ -456,7 +450,46 @@ def get_dmx_freqs(toas, allow_wideband=True):
     return low_freq, high_freq
 
 
-def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None, sort=False,
+def check_frequency_ratio(toas, dmx_ranges, frequency_ratio=1.1,
+        strict_inclusion=True, allow_wideband=True, invert=False):
+    """
+    Check that the TOAs in a DMX bin pass a frequency ratio criterion.
+
+    Returns the indices of the TOAs and DMX ranges that pass the test.
+
+    toas is a PINT TOA object.
+    dmx_ranges is a list of (low_mjd, high_mjd) pairs defining the DMX ranges;
+        see the output of get_dmx_ranges().
+    frequency_ratio is the ratio of high-to-low frequencies in the DMX bin;
+        the frequencies used are returned by get_dmx_freqs().
+    strict_inclusion is a Boolean kwarg passed to get_dmx_mask().
+    allow_wideband is a Boolean kwarg passed to get_dmx_freqs(); if True, the
+        bandwidths of the wideband TOAs are considered in the calculation.
+    invert=True will return the indices of the TOAs and DMX ranges that fail to
+        pass the test.
+    """
+
+    toa_mask = np.zeros(len(toas), dtype=bool)
+    dmx_range_mask = np.zeros(len(dmx_ranges), dtype=bool)
+
+    for irange,dmx_range in enumerate(dmx_ranges):
+        low_mjd, high_mjd = dmx_range[0], dmx_range[1]
+        mask = get_dmx_mask(toas, low_mjd, high_mjd,
+                strict_inclusion=strict_inclusion)
+        low_freq, high_freq = get_dmx_freqs(toas[mask],
+            allow_wideband=allow_wideband)
+        if high_freq / low_freq >= frequency_ratio:  # passes
+            toa_mask += mask
+            dmx_range_mask[irange] = True
+
+    if not invert:  #  return those that pass
+        return np.arange(len(toas))[toa_mask], \
+                np.arange(len(dmx_ranges))[dmx_range_mask]
+    else:  # return those that fail
+        return np.arange(len(toas))[np.logical_not(toa_mask)], \
+                np.arange(len(dmx_ranges))[np.logical_not(dmx_range_mask)]
+
+def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None,
         strict_inclusion=True, weighted_average=True, allow_wideband=True,
         start_idx=1, print_dmx=False):
     """
@@ -469,7 +502,7 @@ def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None, sort=False,
         zeros.
     dmx_errs is an array of DMX parameter uncertainties [pc cm**-3]; defaults
         to zeros.
-    sort and strict_inclusion are Boolean kwargs passed to get_dmx_mask().
+    strict_inclusion is a Boolean kwarg passed to get_dmx_mask().
     weighted_average is a Boolean kwarg passed to get_dmx_epoch().
     allow_wideband is a Boolean kwarg passed to get_dmx_freqs().
     start_idx is the index label of the first DMX parameter, which will
@@ -487,7 +520,7 @@ def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None, sort=False,
     for idmx,idx in enumerate(range(start_idx, start_idx+len(dmx_ranges))):
         low_mjd = min(dmx_ranges[idmx])
         high_mjd = max(dmx_ranges[idmx])
-        mask = get_dmx_mask(toas, low_mjd, high_mjd, sort, strict_inclusion)
+        mask = get_dmx_mask(toas, low_mjd, high_mjd, strict_inclusion)
         epoch = get_dmx_epoch(toas[mask], weighted_average)
         low_freq, high_freq = get_dmx_freqs(toas[mask], allow_wideband)
         dmx_parameter = DMXParameter()
