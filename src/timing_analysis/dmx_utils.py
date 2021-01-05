@@ -239,12 +239,12 @@ def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
     check=True executes check_dmx_ranges() on the TOAs and the new DMX ranges.
     """
 
-    dmx_ranges = sorted(dmx_ranges, key=lambda tup: tup[0])
+    dmx_ranges = sorted(dmx_ranges, key=lambda dmx_range: dmx_range[0])
 
     if not len(dmx_ranges):  # in case an empty list was passed
         if add_new_ranges:
             dmx_ranges += get_dmx_ranges(toas, bin_width=bin_width, pad=pad,
-                    strict_inclusion=strict_inclusion)
+                    strict_inclusion=strict_inclusion, check=check)
         return dmx_ranges
 
     # Get the TOAs that don't have a DMX bin (inone)
@@ -259,23 +259,23 @@ def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
         expanded = False
         mjd = toas.get_mjds().value[itoa]
         inearest = np.argmin(abs(mjd - dmx_ranges.flatten()))
-        idmx = int(inearest / 2)  # index of the nearest dmx range
-        left_bin_edge = dmx_ranges[idmx][0]
-        right_bin_edge = dmx_ranges[idmx][1]
+        irange = int(inearest / 2)  # index of the nearest dmx range
+        left_bin_edge = dmx_ranges[irange][0]
+        right_bin_edge = dmx_ranges[irange][1]
         if (left_bin_edge < mjd) & (mjd < right_bin_edge):  # in a bin
             continue  # previous iteration of loop could now cover this TOA
         width = right_bin_edge - left_bin_edge
         if not (inearest % 2):  # TOA is outside left bin-edge, has smaller MJD
             delta_mjd = left_bin_edge - mjd  # must be positive
             if width + delta_mjd < bin_width:  # can the range be widened?
-                dmx_ranges[idmx][0] -= delta_mjd + pad
-                if strict_inclusion: dmx_ranges[idmx][0] -= 1e-11  # ~1 us
+                dmx_ranges[irange][0] -= delta_mjd + pad
+                if strict_inclusion: dmx_ranges[irange][0] -= 1e-11  # ~1 us
                 expanded = True
         else:  # TOA is outside right bin-edge, has larger MJD
             delta_mjd = mjd - right_bin_edge  # must be positive
             if width + delta_mjd < bin_width:  # can the range be widened?
-                dmx_ranges[idmx][1] += delta_mjd + pad
-                if strict_inclusion: dmx_ranges[idmx][1] += 1e-11  # ~1 us
+                dmx_ranges[irange][1] += delta_mjd + pad
+                if strict_inclusion: dmx_ranges[irange][1] += 1e-11  # ~1 us
                 expanded = True
         if not expanded:  # TOA still not included
             iremain.append(itoa)
@@ -284,8 +284,8 @@ def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
 
     if add_new_ranges:
         dmx_ranges += get_dmx_ranges(toas[iremain], bin_width=bin_width,
-                pad=pad, strict_inclusion=strict_inclusion)
-    dmx_ranges = sorted(dmx_ranges, key=lambda tup: tup[0])
+                pad=pad, strict_inclusion=strict_inclusion, check=False)
+    dmx_ranges = sorted(dmx_ranges, key=lambda dmx_range: dmx_range[0])
 
     # Check that all TOAs are in a bin and only one bin, and no empty ranges
     if check: check_dmx_ranges(toas, dmx_ranges)
@@ -451,7 +451,7 @@ def get_dmx_freqs(toas, allow_wideband=True):
 
 
 def check_frequency_ratio(toas, dmx_ranges, frequency_ratio=1.1,
-        strict_inclusion=True, allow_wideband=True, invert=False):
+        strict_inclusion=True, allow_wideband=True, invert=False, quiet=False):
     """
     Check that the TOAs in a DMX bin pass a frequency ratio criterion.
 
@@ -467,10 +467,11 @@ def check_frequency_ratio(toas, dmx_ranges, frequency_ratio=1.1,
         bandwidths of the wideband TOAs are considered in the calculation.
     invert=True will return the indices of the TOAs and DMX ranges that fail to
         pass the test.
+    quiet=True turns off the logged info.
     """
 
-    toa_mask = np.zeros(len(toas), dtype=bool)
-    dmx_range_mask = np.zeros(len(dmx_ranges), dtype=bool)
+    toa_mask = np.zeros(len(toas), dtype=bool)  # selects TOAs and ranges
+    dmx_range_mask = np.zeros(len(dmx_ranges), dtype=bool)  # that pass
 
     for irange,dmx_range in enumerate(dmx_ranges):
         low_mjd, high_mjd = dmx_range[0], dmx_range[1]
@@ -481,6 +482,13 @@ def check_frequency_ratio(toas, dmx_ranges, frequency_ratio=1.1,
         if high_freq / low_freq >= frequency_ratio:  # passes
             toa_mask += mask
             dmx_range_mask[irange] = True
+        else:  # fails
+            if not quiet:
+                log.info(f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that do not pass the frequency ratio test (TOAs with MJDs {toas[mask].get_mjds().value}).")
+
+    nfail = sum(np.logical_not(dmx_range_mask))
+    if not quiet and nfail:
+        log.warning(f"{nfail} DMX ranges do not pass the frequency ratio test.")
 
     if not invert:  #  return those that pass
         return np.arange(len(toas))[toa_mask], \
@@ -488,6 +496,88 @@ def check_frequency_ratio(toas, dmx_ranges, frequency_ratio=1.1,
     else:  # return those that fail
         return np.arange(len(toas))[np.logical_not(toa_mask)], \
                 np.arange(len(dmx_ranges))[np.logical_not(dmx_range_mask)]
+
+
+def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, solar_n0=5.0,
+        bin_width=1.0, allow_wideband=True, strict_inclusion=True, pad=0.0,
+        check=True, return_only=False, quiet=False):
+    """
+    Split DMX ranges based on influence of the solar wind.
+
+    Returns a new list of DMX ranges.
+
+    Uses approximation for SW model until PINT's model is improved/working.
+
+    NB: Adopted from dmx_fixer.py.
+
+    toas is a PINT TOA object.
+    model is a PINT model object, which is currently how one accesses the solar
+        elogation angle of the TOAs.
+    dmx_ranges is a list of (low_mjd, high_mjd) pairs defining the DMX ranges;
+        see the output of get_dmx_ranges().
+    max_delta_t is the time delay [us] above which a DMX range will be split.
+    solar_n0 is the solar wind electron desity [cm**-3] at 1 AU to use in the
+        model.
+    bin_width is the largest permissible DMX bin width [d] for the new ranges.
+    allow_wideband is a Boolean kwarg passed to get_dmx_freqs(); if True, the
+        bandwidths of the wideband TOAs are considered in the calculation.
+    strict_inclusion is a Boolean kwarg passed to get_dmx_mask and
+        get_dmx_ranges().
+    pad is a float kwarg passed to get_dmx_ranges().
+    check=True executes check_dmx_ranges() on the TOAs and the output DMX
+        ranges.
+    return_only=True will return only the indices of problematic ranges and
+        TOAs.
+    quiet=True turns off the logged info.
+    """
+    # constants in the model
+    one_AU = 499.005  # 1 astronomical unit [s]
+    Dconst = 2.41e-4  # "inverse" dispersion constant [MHz**-2 pc cm**-3 s**-1]
+
+    # Get the solar elongation angle [rad]
+    phis = model.sun_angle(toas, heliocenter=True, also_distance=False).value
+
+    toa_mask = np.zeros(len(toas), dtype=bool)  # selects problem TOAs
+    dmx_range_mask = np.zeros(len(dmx_ranges), dtype=bool)  # and ranges
+
+    for irange,dmx_range in enumerate(dmx_ranges):
+        low_mjd, high_mjd = dmx_range[0], dmx_range[1]
+        mask = get_dmx_mask(toas, low_mjd, high_mjd,
+                strict_inclusion=strict_inclusion)
+        low_freq, high_freq = get_dmx_freqs(toas[mask],
+            allow_wideband=allow_wideband)
+        # Convert to time delay, using calc from David's code (fixed)
+        theth = np.pi - phis[mask]  # rad
+        delta_dm = theth * (solar_n0 / 10.) * 2.4098e-2 / \
+                (one_AU * abs(np.sin(theth)))  # pc cm**
+        dm_delays = delta_dm / (Dconst * low_freq**2) * 1e6  # us
+        delta_t = max(dm_delays) - min(dm_delays)
+        if delta_t > max_delta_t:
+            toa_mask += mask
+            dmx_range_mask[irange] = True
+            if not quiet:
+                log.info(f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that are affected by the solar wind (TOAs with MJDs {toas[mask].get_mjds().value}).")
+    nsolar = sum(dmx_range_mask)
+    if not quiet and nsolar:
+        log.warning(f"{nsolar} DMX ranges are affected by the solar wind.")
+
+    if return_only:  # return indices of problem TOAs and ranges
+        return np.arange(len(toas))[toa_mask], \
+                np.arange(len(dmx_ranges))[dmx_range_mask]
+    else:  # return augmented ranges
+        if nsolar:  # if there
+            # Select good ranges
+            dmx_ranges = np.array(dmx_ranges)[np.logical_not(dmx_range_mask)]
+            dmx_ranges = list(map(tuple, dmx_ranges)) # return to tuples
+            dmx_ranges += get_dmx_ranges(toas[toa_mask], bin_width=bin_width,
+                    pad=pad, strict_inclusion=strict_inclusion)  # add new ones
+            dmx_ranges = sorted(dmx_ranges, key=lambda dmx_range: dmx_range[0])
+
+            # Check that all TOAs are in a bin and only one bin, no empty range
+            if check: check_dmx_ranges(toas, dmx_ranges)
+
+        return dmx_ranges
+
 
 def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None,
         strict_inclusion=True, weighted_average=True, allow_wideband=True,
@@ -517,16 +607,16 @@ def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None,
         dmx_vals = np.zeros(len(toas))
         dmx_errs = np.zeros(len(toas))
 
-    for idmx,idx in enumerate(range(start_idx, start_idx+len(dmx_ranges))):
-        low_mjd = min(dmx_ranges[idmx])
-        high_mjd = max(dmx_ranges[idmx])
+    for irange,idx in enumerate(range(start_idx, start_idx+len(dmx_ranges))):
+        low_mjd = min(dmx_ranges[irange])
+        high_mjd = max(dmx_ranges[irange])
         mask = get_dmx_mask(toas, low_mjd, high_mjd, strict_inclusion)
         epoch = get_dmx_epoch(toas[mask], weighted_average)
         low_freq, high_freq = get_dmx_freqs(toas[mask], allow_wideband)
         dmx_parameter = DMXParameter()
         dmx_parameter.idx = idx
-        dmx_parameter.val = dmx_vals[idmx]
-        dmx_parameter.err = dmx_vals[idmx]
+        dmx_parameter.val = dmx_vals[irange]
+        dmx_parameter.err = dmx_vals[irange]
         dmx_parameter.ep = epoch
         dmx_parameter.r1 = low_mjd
         dmx_parameter.r2 = high_mjd
