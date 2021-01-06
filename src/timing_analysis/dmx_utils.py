@@ -531,7 +531,8 @@ def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, solar_n0=5.0,
     quiet=True turns off the logged info.
     """
     # constants in the model
-    one_AU = 499.005  # 1 astronomical unit [s]
+    #one_AU = 499.005  # 1 astronomical unit [s]
+    one_AU = 4.8481e-6  # 1 astronomical unit [pc]
     Dconst = 2.41e-4  # "inverse" dispersion constant [MHz**-2 pc cm**-3 s**-1]
 
     # Get the solar elongation angle [rad]
@@ -547,9 +548,11 @@ def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, solar_n0=5.0,
         low_freq, high_freq = get_dmx_freqs(toas[mask],
             allow_wideband=allow_wideband)
         # Convert to time delay, using calc from David's code (fixed)
-        theth = np.pi - phis[mask]  # rad
-        delta_dm = theth * (solar_n0 / 10.) * 2.4098e-2 / \
-                (one_AU * abs(np.sin(theth)))  # pc cm**
+        theta = np.pi - phis[mask]  # rad
+        #Excess DM from Solar wind (approximate)
+        #delta_dm = theta * (solar_n0 / 10.) * 2.4098e-2 / \
+        #        (one_AU * abs(np.sin(theta)))  # pc cm**-3
+        delta_dm = solar_n0 * one_AU * theta / abs(np.sin(theta))
         dm_delays = delta_dm / (Dconst * low_freq**2) * 1e6  # us
         delta_t = max(dm_delays) - min(dm_delays)
         if delta_t > max_delta_t:
