@@ -1,0 +1,151 @@
+import numpy as np
+
+from enterprise.pulsar import Pulsar
+from enterprise_extensions import models, model_utils, sampler
+import corner
+
+import pint.models as pm
+from pint.models.parameter import maskParameter    
+
+import matplotlib.pyplot as pl
+
+def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True):
+    
+    chain = np.loadtxt(chaindir + 'chain_1.txt')
+    burn = int(burn_frac * chain.shape[0])
+    pars = np.loadtxt(chaindir + 'pars.txt', dtype = np.unicode)
+    
+    psr_name = pars[0].split('_')[0]
+    
+    if save_corner:
+        corner.corner(chain[burn:, :-4], labels = pars)
+
+        pl.savefig("./noise_corner_{}.pdf".format(psr_name))
+        
+        pl.show()
+        
+    ml_idx = np.argmax(chain[burn:, -3])
+
+    wn_vals = chain[burn:, :-4][ml_idx]
+
+    wn_dict = dict(zip(pars, wn_vals))
+    
+    #Print bayes factor for red noise in pulsar
+    rn_bf = model_utils.bayes_fac(chain[burn:, -5])[0]
+    
+    return wn_dict, rn_bf
+
+def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/'):
+    
+    #Ensure n_iter is an integer
+    n_iter = int(n_iter)
+    
+    if n_iter < 1e4:
+        print("Such a small number of iterations is unlikely to yield accurate posteriors. STRONGLY recommend increasing the number of iterations to at least 5e4")
+    
+    #Create enterprise Pulsar object for supplied pulsar timing model (mo) and toas (to)
+    e_psr = Pulsar(mo, to)
+    
+    #Setup a single pulsar PTA using enterprise_extensions
+    pta = models.model_singlepsr_noise(e_psr)
+    
+    #setup sampler using enterprise_extensions
+    samp = sampler.setup_sampler(pta, outdir = outdir, resume = True)
+    
+    #Initial sample
+    x0 = np.hstack([p.sample() for p in pta.params])
+    
+    #Start sampling
+    samp.sample(x0, n_iter, SCAMweight=30, AMweight=15, DEweight=50,)
+
+def convert_to_RNAMP(value):
+    return (86400.*365.24*1e6)/(2.0*np.pi*np.sqrt(3.0)) * 10 ** value
+
+def add_noise_to_model(model, chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True, ignore_red_noise = False):
+    
+    wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner)
+    
+    #Create the maskParameter for EFACS
+    efac_params = []
+    equad_params = []
+    ecorr_params = []
+    rn_params = []
+
+    ii = 0
+    idx = 0
+
+    for key, val in wn_dict.items():
+
+        if ii % 3 == 0:
+            idx += 1
+
+        psr_name = key.split('_')[0]
+
+        if '_efac' in key:
+
+            param_name = key.split('_efac')[0].split(psr_name)[1][1:]
+
+            tp = maskParameter(name = 'EFAC', index = idx, key = '-f', key_value = param_name, 
+                               value = val, units = '')
+            efac_params.append(tp)
+
+        elif '_equad' in key:
+
+            param_name = key.split('_equad')[0].split(psr_name)[1].split('_log10')[0][1:]
+
+            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name, 
+                               value = 10 ** val / 1e-6, units = 'us')
+            equad_params.append(tp)
+
+        elif '_ecorr' in key:
+
+            param_name = key.split('_ecorr')[0].split(psr_name)[1].split('_log10')[0][1:]
+
+            tp = maskParameter(name = 'ECORR', index = idx, key = '-f', key_value = param_name, 
+                               value = 10 ** val / 1e-6, units = 'us')
+            ecorr_params.append(tp)
+
+        ii += 1
+        
+    ef_eq_comp = pm.ScaleToaError()
+    ec_comp = pm.EcorrNoise()
+
+    #Remove the default parameters that come with these components
+    ef_eq_comp.remove_param(param = 'EFAC1')
+    ef_eq_comp.remove_param(param = 'EQUAD1')
+    ef_eq_comp.remove_param(param = 'TNEQ1')
+
+    ec_comp.remove_param('ECORR1')
+    
+    #Add the above ML WN parameters to their respective components
+    for ii in range(len(efac_params)):
+
+        ef_eq_comp.add_param(param = efac_params[ii], setup = True)
+        ef_eq_comp.add_param(param = equad_params[ii], setup = True)
+        ec_comp.add_param(param = ecorr_params[ii], setup = True)
+
+    #Add the ML RN parameters to their component
+    #CONDITIONAL TO ADD RN;
+    #MIGHT NEED TO FIDDLE WITH THIS
+    
+    if (rn_bf >= 1e3 or np.isnan(rn_bf)) and (not ignore_red_noise):
+        
+        print("The SD Bayes factor for red noise in this pulsar is:", rn_bf)
+        print("Including red noise for this pulsar")
+        #Add the ML RN parameters to their component
+        rn_comp = pm.PLRedNoise()
+
+        rn_keys = np.array([key for key,val in wn_dict.items() if '_red_' in key])
+        rn_comp.RNAMP.quantity = convert_to_RNAMP(wn_dict[psr_name + '_red_noise_log10_A'])
+        rn_comp.RNIDX.quantity = -1 * wn_dict[psr_name + '_red_noise_gamma']
+    
+    #Add these components to the input timing model
+    model.add_component(rn_comp, validate = True, force = True)
+    model.add_component(ef_eq_comp, validate = True, force = True)
+    model.add_component(ec_comp, validate = True, force = True)
+    
+    #Setup and validate the timing model to ensure things are correct
+    model.setup()
+    model.validate()
+    
+    return model
