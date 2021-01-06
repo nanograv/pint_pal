@@ -430,8 +430,10 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     fsum.write(r'Summary generated on ' + time.ctime() \
             + ' by ' + check_output('whoami').strip().decode("utf-8")  \
             + r'\\' + '\n')
-    fsum.write(r'Input files: \verb@' + parfile + r'@, ' \
-            + r'\verb@' + fitter.toas.filename + r'@\\' + '\n')
+    Inputline = r'Input files: \verb@' + parfile
+    for tf in fitter.toas.filename:
+        Inputline += r'@, '+ r'\verb@' + tf
+    fsum.write(Inputline + r'@\\' + '\n')
     fsum.write('Span: %.1f years (%.1f -- %.1f)\\\\\n ' % (span/365.24,
         year(float(start)), year(float(finish))))
 
