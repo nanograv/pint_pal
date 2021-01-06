@@ -72,32 +72,33 @@ class TimingConfiguration:
         if isinstance(toas, str):
             toas = [toas]
 
-        # List of tim files
-        tim_paths = [os.path.join(self.tim_directory,t) for t in toas]
-
         BIPM = self.get_bipm()
         EPHEM = self.get_ephem()
-        toa_objects = []
-        for tp in tim_paths:
-            m,t_i = model.get_model_and_toas(par_path, tp, usepickle=False, bipm_version=BIPM, ephem=EPHEM)
-            toa_objects.append(t_i)
+        m = model.get_model(par_path)
+
+        if m.PSR.value != self.get_source():
+            msg = f'{self.filename} source entry does not match par file value ({m.PSR.value}).'
+            log.warning(msg)
 
         # Merge toa_objects (check this works for list of length 1)
-        t = toa.merge_TOAs(toa_objects)
+        t = toa.merge_TOAs([toa.get_TOAs(
+                                os.path.join(self.tim_directory,t), 
+                                usepickle=False, 
+                                bipm_version=BIPM, 
+                                ephem=EPHEM, 
+                                model=m) 
+                            for t in toas])
 
+        # FIXME: what is this pickle for? Should it be saved after applying ignore?
         # Pickle if desired with filename [PSR].merged.tim.pickle.gz
         pfn = f'{self.get_source()}.merged.tim.pickle.gz'
         if usepickle:
             t.pickle(filename=pfn)
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
-        self.apply_ignore(t)
+        t = self.apply_ignore(t)
 
-        if m.PSR.value != self.get_source():
-            msg = f'{self.filename} source entry does not match par file value ({m.PSR.value}).'
-            log.warning(msg)
-
-        return m,t
+        return m, t
 
     def get_bipm(self):
         """ Return the bipm string """
@@ -203,13 +204,13 @@ class TimingConfiguration:
         # All info here about selecting various TOAs.
         if 'mjd-start' in valid_valued:
             start_select = (toas.get_mjds() > self.get_mjd_start())
-            selection *= start_select
+            selection &= start_select
         if 'mjd-end' in valid_valued:
             end_select = (toas.get_mjds() < self.get_mjd_end())
-            selection *= end_select
+            selection &= end_select
         if 'snr-cut' in valid_valued:
             snr_select = ((np.array(toas.get_flag_value('snr')) > self.get_snr_cut())[0])
-            selection *= snr_select
+            selection &= snr_select
             if self.get_snr_cut() > 8.0 and self.get_toa_type() == 'NB':
                 msg = "snr-cut should be set to 8; try excising TOAs using other methods."
                 log.warning(msg)
@@ -231,6 +232,6 @@ class TimingConfiguration:
                 chan_match = np.array([(ch == chan) for ch in toas.get_flag_value('chan')[0]])
                 subint_match = np.array([(si == subint) for si in toas.get_flag_value('subint')[0]])
                 bt_select = np.invert(name_match * subint_match * chan_match)
-                selection *= bt_select
+                selection &= bt_select
 
-        toas.select(selection)
+        return toas[selection]
