@@ -634,16 +634,9 @@ def remove_all_dmx_ranges(model, quiet=False):
     """
     if 'DispersionDMX' in model.components.keys():
         dmx = model.components['DispersionDMX']
-        idxs = []  # get index labels
-        for param in dmx.params:
-            if param.startswith('DMX_'):
-                idx = int(param[param.index('_')+1:])
-                #dmx.remove_DMX_range(idx)  # don't do this here!
-                idxs.append(idx)  # so do this instead
-            else:
-                pass
-        for idx in idxs:  # now remove parameters
-            dmx.remove_DMX_range(idx)
+        idxs = dmx.get_indices()
+        for idx in idxs:
+            dmx.remove_DMX_range(idx)  #remove parameters
         if not quiet:
             msg = f"Removed {len(idxs)} DMX parameters from timing model."
             log.info(msg)
