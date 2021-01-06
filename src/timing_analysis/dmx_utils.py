@@ -137,7 +137,8 @@ def get_dmx_ranges(toas, bin_width=1.0, pad=0.0, strict_inclusion=True,
             high_mjds.append(right_bin_edge)
             not_accounted_for = remaining_mjds > right_bin_edge
         else:
-            log.warning("No TOAs in proposed DMX bin. Something is wrong.")
+            msg = "No TOAs in proposed DMX bin. Something is wrong."
+            log.warning(msg)
         # Update remaining TOA MJDs
         remaining_mjds = remaining_mjds[not_accounted_for]
 
@@ -213,7 +214,7 @@ def get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0, pad=0.0,
                 strict_inclusion=strict_inclusion, add_new_ranges=False,
                 check=False)
 
-    # Check that all TOAs are in a bin and only one bin, and no empty ranges
+    # Check that GASP TOAs are in a bin and only one bin, and no empty ranges
     if check: check_dmx_ranges(toas, dmx_ranges)
 
     return dmx_ranges
@@ -329,9 +330,12 @@ def check_dmx_ranges(toas, dmx_ranges, full_return=False, quiet=False):
         left_bin_edge, right_bin_edge = dmx_range[0], dmx_range[1]
         if left_bin_edge == right_bin_edge or left_bin_edge > right_bin_edge:
             ibad.append(irange)
-            if not quiet: log.info(f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, is improper.")
+            if not quiet:
+                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, is improper."
+                log.info(msg)
     if len(ibad) and not quiet:
-        log.warning(f"{len(ibad)} DMX ranges are improper.")
+        msg = f"{len(ibad)} DMX ranges are improper."
+        log.warning(msg)
 
     # Check for overlapping bins
     for irange,dmx_range in enumerate(dmx_ranges):
@@ -342,31 +346,44 @@ def check_dmx_ranges(toas, dmx_ranges, full_return=False, quiet=False):
         for mjd in other_ranges.flatten():
             if (left_bin_edge < mjd) & (mjd < right_bin_edge):  # finds overlap
                 iover.append(irange)
-                if not quiet: log.info(f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, overlaps with other ranges.")
+                if not quiet:
+                    msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, overlaps with other ranges."
+                    log.info(msg)
                 break  # only find first overlap
     if len(iover) and not quiet:
-        log.warning(f"{len(iover)} DMX ranges are overlapping with one another.")
+        msg = f"{len(iover)} DMX ranges are overlapping with one another."
+        log.warning(msg)
 
     # Check for empty bins
     ntoa_per_dmx_bin = np.array(masks).astype(int).sum(axis=1)
     if not np.all(ntoa_per_dmx_bin):
         iempty = np.where(ntoa_per_dmx_bin == 0)[0]
         for irange in iempty:
-            if not quiet: log.info(f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, overlaps no TOAs.")
-        if not quiet: log.warning(f"{len(iempty)} DMX ranges have no TOAs.")
+            if not quiet:
+                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, overlaps no TOAs."
+                log.info(msg)
+        if not quiet:
+            msg = f"{len(iempty)} DMX ranges have no TOAs."
+            log.warning(msg)
 
     # Check each TOA in exactly one bin
     ndmx_per_toa = np.array(masks).astype(int).sum(axis=0)
     if not np.all(ndmx_per_toa == 1):
         inone = np.where(ndmx_per_toa < 1)[0]  # not one bin
         for itoa in inone:
-            if not quiet: log.info(f"TOA with index {itoa} (MJD {mjds[itoa]}, {toas.get_freqs().value[itoa]} MHz) does not have a DMX range.")
+            if not quiet:
+                msg = f"TOA with index {itoa} (MJD {mjds[itoa]}, {toas.get_freqs().value[itoa]} MHz) does not have a DMX range."
+                log.info(msg)
         imult = np.where(ndmx_per_toa > 1)[0]  # multiple bins
         for itoa in imult:
             irange = list(np.where(np.array(masks).astype(int)[:,itoa] \
                     == 1)[0])
-            if not quiet: log.info(f"TOA with index {itoa} (MJD {mjds[itoa]}, {toas.get_freqs().value[itoa]} MHz) is in {ndmx_per_toa[itoa]} DMX ranges (with pythonic indices {irange}).")
-        if not quiet: log.warning(f"{len(inone)} TOAs have no DMX range and {len(imult)} TOAs are in multiple DMX ranges.")
+            if not quiet:
+                msg = f"TOA with index {itoa} (MJD {mjds[itoa]}, {toas.get_freqs().value[itoa]} MHz) is in {ndmx_per_toa[itoa]} DMX ranges (with pythonic indices {irange})."
+                log.info(msg)
+        if not quiet:
+            msg = f"{len(inone)} TOAs have no DMX range and {len(imult)} TOAs are in multiple DMX ranges."
+            log.warning(msg)
 
     if full_return:
         return masks, ibad, iover, iempty, inone, imult
@@ -473,6 +490,7 @@ def check_frequency_ratio(toas, dmx_ranges, frequency_ratio=1.1,
     toa_mask = np.zeros(len(toas), dtype=bool)  # selects TOAs and ranges
     dmx_range_mask = np.zeros(len(dmx_ranges), dtype=bool)  # that pass
 
+    nfail_toas = 0
     for irange,dmx_range in enumerate(dmx_ranges):
         low_mjd, high_mjd = dmx_range[0], dmx_range[1]
         mask = get_dmx_mask(toas, low_mjd, high_mjd,
@@ -483,12 +501,15 @@ def check_frequency_ratio(toas, dmx_ranges, frequency_ratio=1.1,
             toa_mask += mask
             dmx_range_mask[irange] = True
         else:  # fails
+            nfail_toas += len(toas[mask])
             if not quiet:
-                log.info(f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that do not pass the frequency ratio test (TOAs with MJDs {toas[mask].get_mjds().value}).")
+                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that do not pass the frequency ratio test (TOAs with MJDs {toas[mask].get_mjds().value})."
+                log.info(msg)
 
-    nfail = sum(np.logical_not(dmx_range_mask))
-    if not quiet and nfail:
-        log.warning(f"{nfail} DMX ranges do not pass the frequency ratio test.")
+    nfail_ranges = sum(np.logical_not(dmx_range_mask))
+    if not quiet and nfail_ranges:
+        msg = f"{nfail_ranges} DMX ranges, which include {nfail_toas} TOAs, do not pass the frequency ratio test."
+        log.warning(msg)
 
     if not invert:  #  return those that pass
         return np.arange(len(toas))[toa_mask], \
@@ -498,8 +519,8 @@ def check_frequency_ratio(toas, dmx_ranges, frequency_ratio=1.1,
                 np.arange(len(dmx_ranges))[np.logical_not(dmx_range_mask)]
 
 
-def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, solar_n0=5.0,
-        bin_width=1.0, allow_wideband=True, strict_inclusion=True, pad=0.0,
+def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, bin_width=1.0,
+        solar_n0=5.0, allow_wideband=True, strict_inclusion=True, pad=0.0,
         check=True, return_only=False, quiet=False):
     """
     Split DMX ranges based on influence of the solar wind.
@@ -516,9 +537,9 @@ def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, solar_n0=5.0,
     dmx_ranges is a list of (low_mjd, high_mjd) pairs defining the DMX ranges;
         see the output of get_dmx_ranges().
     max_delta_t is the time delay [us] above which a DMX range will be split.
+    bin_width is the largest permissible DMX bin width [d] for the new ranges.
     solar_n0 is the solar wind electron desity [cm**-3] at 1 AU to use in the
         model.
-    bin_width is the largest permissible DMX bin width [d] for the new ranges.
     allow_wideband is a Boolean kwarg passed to get_dmx_freqs(); if True, the
         bandwidths of the wideband TOAs are considered in the calculation.
     strict_inclusion is a Boolean kwarg passed to get_dmx_mask and
@@ -559,10 +580,12 @@ def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, solar_n0=5.0,
             toa_mask += mask
             dmx_range_mask[irange] = True
             if not quiet:
-                log.info(f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that are affected by the solar wind (TOAs with MJDs {toas[mask].get_mjds().value}).")
+                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that are affected by the solar wind (TOAs with MJDs {toas[mask].get_mjds().value})."
+                log.info(msg)
     nsolar = sum(dmx_range_mask)
     if not quiet and nsolar:
-        log.warning(f"{nsolar} DMX ranges are affected by the solar wind.")
+        msg = f"{nsolar} DMX ranges are affected by the solar wind."
+        log.warning(msg)
 
     if return_only:  # return indices of problem TOAs and ranges
         return np.arange(len(toas))[toa_mask], \
@@ -580,6 +603,112 @@ def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, solar_n0=5.0,
             if check: check_dmx_ranges(toas, dmx_ranges)
 
         return dmx_ranges
+
+
+def add_dmx(model, bin_width=1.0):
+    """
+    Checks for DispersionDMX and ensure the bin width is the only parameter.
+
+    model is a PINT model object.
+    bin_width is the largest permissible DMX bin width [d].
+    """
+
+    if 'DispersionDMX' not in model.components.keys():
+        from pint.models.timing_model import Component
+        all_components = Component.component_types
+        model.add_component(all_components["DispersionDMX"]())
+        dmx = model.components["DispersionDMX"]
+        dmx.remove_DMX_range(1)
+        dmx.DMX.set(bin_width)
+    else:
+        dmx = model.components["DispersionDMX"]
+        dmx.DMX.set(bin_width)
+
+
+def remove_all_dmx_ranges(model, quiet=False):
+    """
+    Uses PINT to remove all DMX parameter ranges from a timing model.
+
+    model is a PINT model object.
+    quiet=True turns off the logged info.
+    """
+    if 'DispersionDMX' in model.components.keys():
+        dmx = model.components['DispersionDMX']
+        idxs = []  # get index labels
+        for param in dmx.params:
+            if param.startswith('DMX_'):
+                idx = int(param[param.index('_')+1:])
+                #dmx.remove_DMX_range(idx)  # don't do this here!
+                idxs.append(idx)  # so do this instead
+            else:
+                pass
+        for idx in idxs:  # now remove parameters
+            dmx.remove_DMX_range(idx)
+        if not quiet:
+            msg = f"Removed {len(idxs)} DMX parameters from timing model."
+            log.info(msg)
+    else:
+        pass
+
+
+def setup_dmx(model, toas, quiet=False):
+    """
+    Sets up and checks a DMX model using a number of defaults.
+
+    model is a PINT model object.
+    toas is a PINT TOA object.
+    quiet=True turns off the logged info.
+    """
+
+    # Set up DMX model
+    if 'gbt' in toas.observatories: bin_width = 6.5  # day
+    else: bin_width = 0.5  # day
+    # First remove all DMX bins from existing model
+    remove_all_dmx_ranges(model)
+    # Get GASP-era ranges, if applicable
+    dmx_ranges = get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0)
+    # Now expand to include all TOAs
+    dmx_ranges = expand_dmx_ranges(toas, dmx_ranges, bin_width=bin_width,
+            add_new_ranges=True)
+
+    # Ensure DM events have fine DMX binning
+    if model.PSR.value == 'J1713+0747':  # will generalize this later
+        toa_mask = np.zeros(len(toas), dtype=bool)
+        dmx_range_mask = np.ones(len(dmx_ranges), dtype=bool)
+        for irange,dmx_range in enumerate(dmx_ranges):
+            low_mjd, high_mjd = dmx_range[0], dmx_range[1]
+            # if it overlaps with the event at all...
+            if ((57508 < low_mjd) and (low_mjd < 57513)) or \
+                    ((57508 < high_mjd) and (high_mjd < 57513)):
+                        dmx_range_mask[irange] = False
+                        toa_mask += get_dmx_mask(toas, low_mjd, high_mjd)
+        # Select the non-event ranges
+        dmx_ranges = np.array(dmx_ranges)[dmx_range_mask]
+        dmx_ranges = list(map(tuple, dmx_ranges))
+        # Add new ranges based on the TOAs during the event
+        dmx_ranges += get_dmx_ranges(toas[toa_mask], bin_width=0.5)
+        # Sort the ranges
+        dmx_ranges = sorted(dmx_ranges, key=lambda dmx_range: dmx_range[0])
+        # Check for sanity
+        check_dmx_ranges(toas, dmx_ranges)
+
+    # Do basic checks of DMX model
+    dmx_ranges = check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1,
+            bin_width=0.5)
+    itoas, iranges = check_frequency_ratio(toas, dmx_ranges,
+            frequency_ratio=1.1)
+    toas, dmx_ranges = toas[itoas], np.array(dmx_ranges)[iranges]
+    dmx_ranges = list(map(tuple, dmx_ranges))
+
+    # Add DMX parameters to model
+    add_dmx(model, bin_width)
+    dmx = model.components['DispersionDMX']
+    for irange,dmx_range in enumerate(dmx_ranges):
+        dmx.add_DMX_range(dmx_range[0], dmx_range[1], index=irange+1, dmx=0.0,
+                frozen=False)
+    if not quiet:
+        msg = f"Added {len(dmx_ranges)} DMX parameters to timing model."
+        log.info(msg)
 
 
 def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None,
@@ -631,17 +760,3 @@ def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None,
                 fortran=False)
 
     return dmx_parameters
-
-
-def add_dmx_range():
-    """
-    Will call PINT model method function.
-    """
-    pass
-
-
-def remove_dmx_range():
-    """
-    Will call PINT model method function.
-    """
-    pass
