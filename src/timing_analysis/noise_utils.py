@@ -35,7 +35,7 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     
     return wn_dict, rn_bf
 
-def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/'):
+def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/', using_wideband = False):
     
     #Ensure n_iter is an integer
     n_iter = int(n_iter)
@@ -47,7 +47,12 @@ def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/'):
     e_psr = Pulsar(mo, to)
     
     #Setup a single pulsar PTA using enterprise_extensions
-    pta = models.model_singlepsr_noise(e_psr)
+    if not using_wideband:
+        pta = models.model_singlepsr_noise(e_psr, white_vary = True, is_wideband = False, use_dmdata = False,
+                                  dmjump_var = False)
+    else:
+        pta = models.model_singlepsr_noise(epsr, is_wideband = True, use_dmdata = True, white_vary = True,
+                                  dmjump_var = True) #Will need to turn dmjump_var = False after e_e change
     
     #setup sampler using enterprise_extensions
     samp = sampler.setup_sampler(pta, outdir = outdir, resume = True)
@@ -61,23 +66,32 @@ def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/'):
 def convert_to_RNAMP(value):
     return (86400.*365.24*1e6)/(2.0*np.pi*np.sqrt(3.0)) * 10 ** value
 
-def add_noise_to_model(model, chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True, ignore_red_noise = False):
+def add_noise_to_model(model, chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True, ignore_red_noise = False, using_wideband = False):
     
     wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner)
     
     #Create the maskParameter for EFACS
     efac_params = []
     equad_params = []
-    ecorr_params = []
     rn_params = []
+    
+    if not using_wideband:
+        ecorr_params = []
+    else:
+        dmefac_params = []
+        dmequad_params = []
 
     ii = 0
     idx = 0
 
     for key, val in wn_dict.items():
 
-        if ii % 3 == 0:
-            idx += 1
+        if not using_wideband:
+            if ii % 3 == 0:
+                idx += 1
+        else:
+            if ii % 5 == 0:
+                idx += 1
 
         psr_name = key.split('_')[0]
 
@@ -97,33 +111,60 @@ def add_noise_to_model(model, chaindir = './noise_run_chains/', burn_frac = 0.25
                                value = 10 ** val / 1e-6, units = 'us')
             equad_params.append(tp)
 
-        elif '_ecorr' in key:
+        elif ('_ecorr' in key) and (not using_wideband):
 
             param_name = key.split('_ecorr')[0].split(psr_name)[1].split('_log10')[0][1:]
 
             tp = maskParameter(name = 'ECORR', index = idx, key = '-f', key_value = param_name, 
                                value = 10 ** val / 1e-6, units = 'us')
             ecorr_params.append(tp)
+            
+        elif ('_dmefac' in key) and (using_wideband):
+            
+            param_name = key.split('_dmefac')[0].split(psr_name)[1][1:]
+
+            tp = maskParameter(name = 'DMEFAC', index = idx, key = '-f', key_value = param_name, 
+                               value = val, units = '')
+            dmefac_params.append(tp)
+            
+        elif ('_dmequad' in key) and (using_wideband):
+            
+            param_name = key.split('_dmequad')[0].split(psr_name)[1].split('_log10')[0][1:]
+
+            tp = maskParameter(name = 'DMEQUAD', index = idx, key = '-f', key_value = param_name, 
+                               value = 10 ** val, units = 'pc/cm3')
+            dmequad_params.append(tp)
 
         ii += 1
         
     ef_eq_comp = pm.ScaleToaError()
-    ec_comp = pm.EcorrNoise()
+    
+    if using_wideband:
+        dm_comp = pm.noise_model.ScaleDmError()
+    else:
+        ec_comp = pm.EcorrNoise()
 
     #Remove the default parameters that come with these components
     ef_eq_comp.remove_param(param = 'EFAC1')
     ef_eq_comp.remove_param(param = 'EQUAD1')
     ef_eq_comp.remove_param(param = 'TNEQ1')
-
-    ec_comp.remove_param('ECORR1')
+    if using_wideband:
+        dm_comp.remove_param(param = 'DMEFAC1')
+        dm_comp.remove_param(param = 'DMEQUAD1')
+    else:
+        ec_comp.remove_param('ECORR1')
     
     #Add the above ML WN parameters to their respective components
     for ii in range(len(efac_params)):
 
         ef_eq_comp.add_param(param = efac_params[ii], setup = True)
         ef_eq_comp.add_param(param = equad_params[ii], setup = True)
-        ec_comp.add_param(param = ecorr_params[ii], setup = True)
-
+        if not using_wideband:
+            ec_comp.add_param(param = ecorr_params[ii], setup = True)
+        else:
+            dm_comp.add_param(param = dmefac_params[ii])
+            dm_comp.add_param(param = dmequad_params[ii], setup = True)
+            
     #Add the ML RN parameters to their component
     #CONDITIONAL TO ADD RN;
     #MIGHT NEED TO FIDDLE WITH THIS
@@ -142,7 +183,10 @@ def add_noise_to_model(model, chaindir = './noise_run_chains/', burn_frac = 0.25
     #Add these components to the input timing model
     model.add_component(rn_comp, validate = True, force = True)
     model.add_component(ef_eq_comp, validate = True, force = True)
-    model.add_component(ec_comp, validate = True, force = True)
+    if not using_wideband:
+        model.add_component(ec_comp, validate = True, force = True)
+    else:
+        model.add_component(dm_comp, validate = True, force = True)
     
     #Setup and validate the timing model to ensure things are correct
     model.setup()
