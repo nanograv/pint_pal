@@ -10,7 +10,20 @@ from pint.models.parameter import maskParameter
 import matplotlib.pyplot as pl
 
 def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True):
+    """
+    Reads enterprise chain file; produces and saves corner plot; returns WN dictionary and RN (SD) BF
     
+    Parameters
+    ==========
+    chaindir: path to enterprise noise run chain; Default: './noise_run_chains/'
+    burn_frac: fraction of chain to use for burn-in; Default: 0.25
+    save_corner: Flag to toggle saving of corner plots; Default: True
+    
+    Returns
+    =======
+    wn_dict: Dictionary of maximum likelihood WN values
+    rn_bf: Savage-Dickey BF for RN for given pulsar
+    """
     chain = np.loadtxt(chaindir + 'chain_1.txt')
     burn = int(burn_frac * chain.shape[0])
     pars = np.loadtxt(chaindir + 'pars.txt', dtype = np.unicode)
@@ -36,7 +49,21 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     return wn_dict, rn_bf
 
 def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/', using_wideband = False):
+    """
+    Setup enterprise PTA and perform MCMC noise analysis
     
+    Parameters
+    ==========
+    mo: PINT (or tempo2) timing model
+    to: PINT (or tempo2) TOAs
+    n_iter: number of MCMC iterations; Default: 1e5; Recommended > 1e4
+    outdir: output directory for MCMC chain (and other) files; Default: './noise_run_chains/'
+    using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
+    
+    Returns
+    =======
+    None
+    """
     #Ensure n_iter is an integer
     n_iter = int(n_iter)
     
@@ -64,10 +91,29 @@ def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/', using
     samp.sample(x0, n_iter, SCAMweight=30, AMweight=15, DEweight=50,)
 
 def convert_to_RNAMP(value):
+    """
+    Utility function to convert enterprise RN amplitude to tempo2/PINT parfile RN amplitude
+    """
     return (86400.*365.24*1e6)/(2.0*np.pi*np.sqrt(3.0)) * 10 ** value
 
 def add_noise_to_model(model, chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True, ignore_red_noise = False, using_wideband = False):
+    """
+    Add WN and RN parameters to timing model.
     
+    Parameters
+    ==========
+    model: PINT (or tempo2) timing model
+    chaindir: path to where results from enterprise MCMC noise analysis live; Default: './noise_run_chains/'
+    burn_frac: fraction of chain to use for burn-in; Default: 0.25
+    save_corner: Flag to toggle saving of corner plots; Default: True
+    ignore_red_noise: Flag to manually force RN exclusion from timing model. When False, code determines whether
+    RN is necessary based on whether the RN BF > 1e3. Default: False
+    using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
+    
+    Returns
+    =======
+    model: New timing model which includes WN and RN parameters
+    """
     wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner)
     
     #Create the maskParameter for EFACS
