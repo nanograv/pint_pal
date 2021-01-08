@@ -1,5 +1,5 @@
 from astropy import log
-from os import remove
+from os import mkdir
 from os.path import dirname, join, split, splitext
 from multiprocessing import Pool
 import traceback
@@ -7,10 +7,10 @@ from glob import glob
 import pytest
 import nbformat
 
-global_log = 'test-run-notebooks.log'
+base_dir = dirname(dirname(__file__))
+global_log = join(base_dir, 'test-run-notebooks.log')
 
 def config_files():
-    base_dir = dirname(dirname(__file__))
     config_files = (glob(join(base_dir, 'configs/B*.nb.yaml'))
                      + glob(join(base_dir, 'configs/J*.nb.yaml')))
     config_files = sorted(config_files)
@@ -39,8 +39,12 @@ def notebook_code():
             code_blocks.append('\n'.join(code_lines))
     return code_blocks
 
-@pytest.fixture(scope='module', autouse=True)
+@pytest.fixture(scope='session', autouse=True)
 def startup():
+    try:
+        mkdir(join(base_dir, 'logs'))
+    except FileExistsError:
+        pass
     # clear global log
     with open(global_log, 'w') as f:
         pass
@@ -48,13 +52,19 @@ def startup():
 @pytest.mark.parametrize('config_file', config_files())
 def test_run_notebook(notebook_code, config_file, suppress_errors=False):
     """
-    Run through the basic set of functions that will be called in the notebook for each pulsar.
-    For now, this must be run from the top-level `timing-analysis` directory.
-    It will create a global log called test-run-notebooks.log, and a log file for each pulsar.
+    Run through the functions called in the notebook for each pulsar (excluding plotting).
+    This will create a global log called test-run-notebooks.log, and a log file for each pulsar.
+    
+    To run for only one pulsar (using J1713+0747 as an example): 
+        `pytest tests/test_run_notebook.py::test_run_notebook[J1713+0747.nb]`
+        or `pytest -k J1713+0747` (selects tests whose name contains "J1713+0747")
+    To run for all pulsars in parallel (requires `pytest-xdist`):
+        `pytest -n <workers> tests/test_run_notebook.py`
+        <workers> is the number of worker processes to launch (e.g. 4 to use 4 CPU threads)
     """
     log.setLevel("INFO")
     cfg_name = splitext(split(config_file)[1])[0]
-    log_file = f'{cfg_name}.log'
+    log_file = join(join(base_dir, 'logs'), f'{cfg_name}.log')
 
     # clear log file
     with open(log_file, 'w') as f:
