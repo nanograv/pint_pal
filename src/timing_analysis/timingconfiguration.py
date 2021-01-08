@@ -26,11 +26,11 @@ class TimingConfiguration:
     def __init__(self, filename="config.yaml", tim_directory=None, par_directory=None):
         """
         Initialization method.
-        
-        Normally config files are written to be run from the root of a 
-        git checkout on the NANOGrav notebook server. If you want to run 
-        them from somewhere else, you may need to override these directories 
-        when you construct the TimingConfiguration object; this will not 
+
+        Normally config files are written to be run from the root of a
+        git checkout on the NANOGrav notebook server. If you want to run
+        them from somewhere else, you may need to override these directories
+        when you construct the TimingConfiguration object; this will not
         change what is recorded in the config file.
 
         Parameters
@@ -67,29 +67,35 @@ class TimingConfiguration:
         """Return the PINT model and TOA objects"""
         par_path = os.path.join(self.par_directory,self.config["timing-model"])
         toas = self.config["toas"]
-        BIPM = self.get_bipm()
-        EPHEM = self.get_ephem()
 
         # Individual tim file
         if isinstance(toas, str):
             toas = [toas]
 
-        # List of tim files (currently requires writing temporary tim file with INCLUDE to read properly)
+        # List of tim files
         tim_paths = [os.path.join(self.tim_directory,t) for t in toas]
-        with io.StringIO() as f:
-            for tf in tim_paths:
-                f.write('INCLUDE %s\n' % (tf))
-            source = self.get_source()
-            fn = f'TEMP-{source}.tim'
-            write_if_changed(fn, f.getvalue())
 
-        m,t = model.get_model_and_toas(par_path, fn, usepickle=usepickle, bipm_version=BIPM, ephem=EPHEM)
+        BIPM = self.get_bipm()
+        EPHEM = self.get_ephem()
+        toa_objects = []
+        for tp in tim_paths:
+            m,t_i = model.get_model_and_toas(par_path, tp, usepickle=False, bipm_version=BIPM, ephem=EPHEM)
+            toa_objects.append(t_i)
+
+        # Merge toa_objects (check this works for list of length 1)
+        t = toa.merge_TOAs(toa_objects)
+
+        # Pickle if desired with filename [PSR].merged.tim.pickle.gz
+        pfn = f'{self.get_source()}.merged.tim.pickle.gz'
+        if usepickle:
+            t.pickle(filename=pfn)
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
         self.apply_ignore(t)
 
         if m.PSR.value != self.get_source():
-            raise ValueError("%s source entry does not match parameter PSR"%self.filename)
+            msg = f'{self.filename} source entry does not match par file value ({m.PSR.value}).'
+            log.warning(msg)
 
         return m,t
 
@@ -104,6 +110,19 @@ class TimingConfiguration:
         if "ephem" in self.config.keys():
             return self.config['ephem']
         return None #return some default value instead?
+
+    def print_changelog(self):
+        """Print changelog entries from .yaml in the notebook."""
+        # If there's a changelog, write out its contents. If not, complain.
+        if 'changelog' in self.config.keys():
+            print('changelog:')
+            if self.config['changelog'] is not None:
+                for cl in self.config['changelog']:
+                    print(f'  - {cl}')
+            else:
+                print('...no changelog entries currently exist.')
+        else:
+            print('YAML file does not include a changelog. Add \'changelog:\' and individual entries there.')
 
     def get_fitter(self):
         """ Return the fitter string (do more?) """

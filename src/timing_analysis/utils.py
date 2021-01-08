@@ -19,13 +19,18 @@ ALPHA = 0.0027
 
 def whiten_resids(fitter, restype = 'postfit'):
     """
-    Function to whiten residuals. Returns a residual class object. If no reddened residuals, input will be returned.
+    Function to whiten residuals. If no reddened residuals, input will be returned.
 
-    Arguements:
-    fitter: PINT fitter class or dictionary output from ecorr_average() function
-    restype ['string'] : Type of residuals, pre or post fit, to plot from fitter object. Options are:
+    Inputs:
+    ---------
+    fitter [object, dictionary]: PINT fitter class or dictionary output from ecorr_average() function.
+    restype ['string']: Type of residuals, pre or post fit, to plot from fitter object. Options are:
         'prefit' - plot the prefit residuals.
         'postfit' - plot the postfit residuals (default)
+        
+    Returns:
+    ---------
+    wres [array]: Array of whitened timing residuals.
     """
     # Check if input is the epoch averaged dictionary, should only be used if epoch averaged NB TOAs
     if type(fitter) is dict:
@@ -66,14 +71,14 @@ def rms_by_backend(resids, errors, rcvr_backends, dm = False):
 
     Inputs:
     ----------
-    resids : list
-        List of residuals
-    errors : list
-        List of residual errors
-    rcvr_backends : list
-        List of backends
-    dm : bool
-        If True, will do computation with DM residuals
+    resids [list]: List of residuals.
+    errors [list]: List of residual errors.
+    rcvr_backends [list]: List of backends.
+    dm [boolean]: If True, will do computation with DM residuals [defaut: False].
+    
+    Returns:
+    ----------
+    rs_dict [dictionary]: Dictionary of rms and wieghted rms residuals for each backend-reciever combination.
     """
     # Define output dictionary
     rs_dict = {}
@@ -126,30 +131,27 @@ def resid_stats(fitter, epoch_avg = False, whitened = False, dm_stats = False, p
 
     Inputs:
     ----------
-    fitter : class
-        PINT fitter class object, post-fit.
-    epoch_avg : bool
-        If True, will output stats for epoch averaged residulas, else will be for non-epoch averaged residuals.
-    whitened : bool
-        If True, will output stats for whitened residulas, else will be for non-whitened residuals.
-    dm_stats : bool
-        If True, will also output the stats for the DM residuals for wideband fitters. Note this will return an
-        additional dictionary, dm_stats.
-    print_pretty : bool
-        If True, will print the W/RMS per receiver-backend combo.
+    fitter [object]: PINT fitter class object, post-fit.
+    epoch_avg [boolean]: If True, will output stats for epoch averaged residulas, else will be for 
+        non-epoch averaged residuals [default: False].
+    whitened [boolean]: If True, will output stats for whitened residulas, else will be for 
+        non-whitened residuals [default: False].
+    dm_stats [boolean]: If True, will also output the stats for the DM residuals for wideband fitters.
+        Note this will return an additional dictionary, dm_stats [default: False].
+    print_pretty [boolean]: If True, will nicely print the W/RMS per receiver-backend combo [default: False].
 
-    Output:
-
-    Nested dictionary :
+    Returns:
+    ----------
+    rs_dict [nested dictionary]:
 
         First set of keys are Receiver-Backend combos, e.g. L-wide_ASP, S-wide_PUPPI. For the W/RMS of all residuals,
         the key is 'All'.
 
         Within each Receiver-Backend combo the flags are:
-            rms : astropy quantity
-                rms of the residuals for the receiver-backend combo in microseconds
-            wrms : astropy quantity
-                weighted rms of the residuals for the receiver-backend combo in microseconds
+            rms [astropy quantity: rms of the residuals for the receiver-backend combo in microseconds.
+            wrms [astropy quantity: weighted rms of the residuals for the receiver-backend combo in microseconds.
+     
+    dm_dict [nested dictionary]: Same as rs_dict but for DM residuals with unit of pc cm^-3.
     """
     # Check if fitter is WB or not
     if "Wideband" in fitter.__class__.__name__:
@@ -244,10 +246,39 @@ def resid_stats(fitter, epoch_avg = False, whitened = False, dm_stats = False, p
 
 # Define helper functions
 def year(mjd):
+    """
+    Calculate the year from an MJD.
+    
+    Inputs:
+    ---------
+    mjd [float]: MJD value.
+    
+    Returns:
+    ---------
+    year [float]: MJD value converted to a year.
+    """
     return (mjd - 51544.0)/365.25 + 2000.0
 
 
 def report_ptest(label, rms, chi2, ndof, dmrms = None, Fstatistic=None, alpha=ALPHA):
+    """
+    Nicely formats the results of F-tests in a human-readable format.
+    
+    Input:
+    --------
+    label [string]: Name of the parameter(s) that were added/removed for the F-test.
+    rms [float]: RMS or Weighted RMS of the timing residuals for the F-tested model.
+    chi2 [float]: Chi^2 value for the F-tested model.
+    ndof [int]: Degrees of freedom for the F-tested model.
+    dmrms [float]: RMS or Weighted RMS of the DM residuals for the F-tested model. For Wideband timing only.
+    Fstatistic [float]: F-statistic output by the F-test for this model.
+    alpha [float]: Value to compare for F-statistic significance. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model.
+        
+    Returns:
+    ---------
+    line [string]: Nicely formatted line to be printed elsewhere.
+    """
     if Fstatistic is None:
         if dmrms != None:
             line = "%42s %7.3f %16.6f %9.2f %5d --" % (label, rms, dmrms, chi2, ndof)
@@ -272,11 +303,14 @@ def get_Ftest_lines(Ftest_dict, fitter):
     """
     Function to get nicely formatted lines from F-test dictionary.
 
-    Input
+    Input:
     ----------
-    Ftest_dict: Dictionary of F-test results output by the `run_Ftests()` function.
-    fitter: The PINT fitter object, which contains
-        the TOAs and the models
+    Ftest_dict [dictionary]: Dictionary of F-test results output by the `run_Ftests()` function.
+    fitter [object]: The PINT fitter object.
+    
+    Returns:
+    ----------
+    ftest_lines [list]: List of nicely formatted F-test results lines to be printed elsewhere.
     """
     ftest_lines = []
     for fk in Ftest_dict.keys():
@@ -368,14 +402,13 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
 
     Input
     ----------
-    fitter: The PINT fitter object, which contains
-        the TOAs and the models
-    parfile: Name of parfile used to generate residuals.
-    rs_dict: Dictionary of residual stats output by the `resid_stats()` function.
-    Ftest_dict: Dictionary of F-test results output by the `run_Ftests()` function.
-    dm_dict: Dictionary of DM residual stats output by the `resid_stats()` function for WB timing.
-        Input is optional, if `None` (Default value), will not write out the DM residual stats.
-    append: defualt is `None`, else should be a string to the path to the texfile to append output to.
+    fitter [object]: The PINT fitter object.
+    parfile [string]: Name of parfile used to generate residuals.
+    rs_dict [dictionary]: Dictionary of residual stats output by the `resid_stats()` function.
+    Ftest_dict [dictionary]: Dictionary of F-test results output by the `run_Ftests()` function.
+    dm_dict [dictionary]: Optional dictionary of DM residual stats output by the `resid_stats()` function for WB timing.
+        Input is optional. if `None` will not write out the DM residual stats [default: None].
+    append [string or Nonetype]: default is `None`, else should be a string to the path to the texfile to append output to.
 
     """
     # Check if fitter is wideband or not
@@ -430,14 +463,20 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     fsum.write(r'Summary generated on ' + time.ctime() \
             + ' by ' + check_output('whoami').strip().decode("utf-8")  \
             + r'\\' + '\n')
-    fsum.write(r'Input files: \verb@' + parfile + r'@, ' \
-            + r'\verb@' + fitter.toas.filename + r'@\\' + '\n')
+    Inputline = r'Input files: \verb@' + parfile
+    for tf in fitter.toas.filename:
+        Inputline += r'@, '+ r'\verb@' + tf
+    fsum.write(Inputline + r'@\\' + '\n')
     fsum.write('Span: %.1f years (%.1f -- %.1f)\\\\\n ' % (span/365.24,
         year(float(start)), year(float(finish))))
 
     if NB:
-        avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
-        mjdlist = np.sort(avg_dict['mjds'].value)
+        try:
+            avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
+            mjdlist = np.sort(avg_dict['mjds'].value)
+        except:
+            log.warning("Cannot get epoch averaged residual MJDs, Epoch calculation will use all MJDs and may not be correct.")
+            mjdlist = np.sort(fitter.toas.get_mjds().value)
     else:
         mjdlist = np.sort(fitter.toas.get_mjds().value)
     maxepoch = 6.5
@@ -628,7 +667,10 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
 def write_if_changed(filename, contents):
     """Write contents to filename, touching the file only if it does not already contain them.
     
-    contents should be a string and the file will be a text file.
+    Inputs:
+    ----------
+    filename [string]: Name of a text file.
+    contents [string]: Sting to write to the file.
     """
     if os.path.exists(filename):
         if contents == open(filename).read():
