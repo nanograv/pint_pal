@@ -19,8 +19,21 @@ import astropy.units as u
 
 ALPHA = 0.0027
 
-# Function to check if the parameter is in the model
 def param_check(name, fitter, check_enabled=True):
+    """
+    Checks if a timing model parameter is in the timing model.
+    
+    Inputs:
+    --------
+    name [string]: Name of the timing model parameter to be checked.
+    fitter [object]: The PINT fitter object.
+    check_enaabled [boolean]: If True, check if the model parameter is fit for as well [default: True].
+    
+    Returns:
+    --------
+    [boolean]: Returns either True or False depending on if the parameters is in the model and/or enabled.
+    
+    """
     if not name in fitter.model.params:
         return False
     # If frozen is False, then it's fit for, if frozen is True, parameter not fit for
@@ -28,19 +41,17 @@ def param_check(name, fitter, check_enabled=True):
         return False
     return True
 
-# Function to get list of fb parameters
 def get_fblist(fitter):
     """
     Returns the list of FB parameters for the ELL1 model.
 
     Input:
     --------
-    fitter: The PINT fitter object, which contains the TOAs and the models
+    fitter [object]: The PINT fitter object.
 
     Returns:
     --------
-    fblist : dictionary
-        dictionary of FB parameters
+    fblist [dictionary]: Dictionary of FB parameters currently in the timing model.
     """
     fblist = {}
     for p in fitter.model.params:
@@ -59,26 +70,21 @@ def get_fblist(fitter):
              " ".join([fblist[i] for i in k]) )
     return fblist
 
-# Function to get binary parameters for F-tests
 def binary_params_ftest(bparams, fitter, remove):
     """
     Returns the list of parameters and components to put in the check for binary models.
 
     Input:
     --------
-    bparams : list
-        List of binary parameters to check for.
-    fitter: The PINT fitter object, which contains the TOAs and the models
-    remove : boolean
-        If True, check to see if parameters need to be removed, if False check to see
+    bparams [list]: List of timing model binary parameters to check for.
+    fitter [object]: The PINT fitter object.
+    remove [boolean]: If True, check to see if parameters need to be removed, if False check to see
         what parameters need to be added.
 
     Returns:
     --------
-    plist : list
-        List of PINT parameters to iterate through for the F-tests.
-    clist : list
-        List of the PINT components to iterate through for the F-tests.
+    plist [list]: List of PINT parameters to iterate through for the F-tests.
+    clist [list]: List of PINT components to iterate through for the F-tests.
     """
     # list of parameters as strings to remove or add in the F-test
     p_test = []
@@ -125,8 +131,21 @@ def binary_params_ftest(bparams, fitter, remove):
     # return the values
     return pint_params, pint_comps
 
-# from finalize timing, pretty printing function/lines
 def report_ptest(label, rms, chi2, ndof, dmrms = None, Fstatistic=None, alpha=ALPHA):
+    """
+    Nicely prints the results of F-tests in a human-readable format.
+    
+    Input:
+    --------
+    label [string]: Name of the parameter(s) that were added/removed for the F-test.
+    rms [float]: RMS or Weighted RMS of the timing residuals for the F-tested model.
+    chi2 [float]: Chi^2 value for the F-tested model.
+    ndof [int]: Degrees of freedom for the F-tested model.
+    dmrms [float]: RMS or Weighted RMS of the DM residuals for the F-tested model. For Wideband timing only.
+    Fstatistic [float]: F-statistic output by the F-test for this model.
+    alpha [float]: Value to compare for F-statistic significance. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model.
+    """
     if Fstatistic is None:
         if dmrms != None:
             line = "%42s %7.3f %16.6f %9.2f %5d --" % (label, rms, dmrms, chi2, ndof)
@@ -146,11 +165,13 @@ def report_ptest(label, rms, chi2, ndof, dmrms = None, Fstatistic=None, alpha=AL
             line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
     print(line)
 
-# Function to reset parameters to 0 +/- 0
 def reset_params(params):
     """
-    This will reset the parameters imported from PINT_parameters to values of zero after they
-    have been fit for. (Not sure why this happens but needs to be here...)
+    Resets parameter values to defaults as assigned in pint_parameters.py. Most are reset to zero.
+    
+    Inputs:
+    --------
+    params [list]: List of pint parameters to reset the values of within the model.
     """
     for p in params:
         if p.name == 'M2':
@@ -165,15 +186,21 @@ def reset_params(params):
 
 def run_Ftests(fitter, alpha=ALPHA):
     """
-    This is the main function to run the various F-tests below.
-    Will print ...?
-    Will return... ?
+    This is the main convenience function to run the various F-tests below. This includes F-tests for F2, PX, 
+    binary parameters, FD parameters, etc. As part of the function, the tests, parameters, RMS of residuals, chi2,
+    degrees of freedom, F-statistic values are all printed in a nice human readable format.
 
-    Parameters
-    ==========
-    fitter: The PINT fitter object, which contains
-        the TOAs and the models
-    alpha (optional): the F-test significance value
+    Input:
+    --------
+    fitter [object]: The PINT fitter object.
+    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
+        
+    Returns:
+    ---------
+    retdict [dictionary]: A nested dictionary of all of the different F-tests done and subsequent reported values for each
+        F-test. These include keys for added ['Add'] or removed ['Remove'] parameters, the initial values ['initial']
+        and within each of those, further nested dictionaries of parameters [e.g. 'PX'], and the reported values.
     """
     # Check if fitter is wideband or not
     if "Wideband" in fitter.__class__.__name__:
@@ -276,19 +303,18 @@ def run_Ftests(fitter, alpha=ALPHA):
 
 def check_F2(fitter, alpha=ALPHA):
     """
-    Check the significance of F2
-    In general, we do not allow F2 to be added but
-    we will still check as in the past
+    Check the significance of F2 with an F-test.
+    In general, we do not allow F2 to be added but we will still check as in the past.
 
-    Parameters
-    ==========
-    fitter: The PINT fitter object, which contains
-        the TOAs and the models
-    alpha (optional): the F-test significance value
+    Input:
+    --------
+    fitter [object]: The PINT fitter object.
+    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
 
-    Returns
-    =======
-    Returns the dictionary output from the F-tests
+    Returns:
+    --------
+    retdict [dictionary]: Returns the dictionary output from the F-tests.
     """
     # Add dictionary for return values
     retdict = {}
@@ -308,19 +334,18 @@ def check_F2(fitter, alpha=ALPHA):
 
 def check_PX(fitter, alpha=ALPHA):
     """
-    Check the significance of PX
-    In general, we fit PX but we still wish to
-    test for this as in the past
+    Check the significance of PX with an F-test.
+    In general, we fit PX but we still wish to test for this as in the past.
 
-    Parameters
-    ==========
-    fitter: The PINT fitter object, which contains
-        the TOAs and the models
-    alpha (optional): the F-test significance value
+    Input:
+    --------
+    fitter [object]: The PINT fitter object.
+    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
 
-    Returns
-    =======
-    Returns the dictionary output from the F-tests
+    Returns:
+    --------
+    retdict [dictionary]: Returns the dictionary output from the F-tests.
     """
     # Add dictionary for return values
     retdict = {}
@@ -338,19 +363,20 @@ def check_PX(fitter, alpha=ALPHA):
     # Return the dictionary
     return retdict
 
-    #if ftest_dict['ft'] < alpha:
-    #    return True
-    #return False
-
 def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
     """
-    Unlike previously, these are being used as a check.
-    As such, we only need to worry about adding components
-    and not removing them.
+    Check adding FD parameters with an F-test.
 
-    Note: this uses eval()
+    Input:
+    --------
+    fitter [object]: The PINT fitter object.
+    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
+    maxcomponent [int]: Maximum number of FD parameters to add to the model [default: 5].
 
-    BJS: Could/Should we use `getattr(p, 'FD%s'%(i))` instead?
+    Returns:
+    --------
+    retdict [dictionary]: Returns the dictionary output from the F-tests.
     """
     # Print how many FD currently enabled
     cur_fd = [param for param in fitter.model.params if "FD" in param]
@@ -426,13 +452,13 @@ def check_binary_DD(fitter, alpha=ALPHA, remove = False):
     """
     Check the binary parameter F-tests for the DD binary model, either removing or adding parameters.
 
-    Parameters
-    ==========
-    fitter: The PINT fitter object, which contains
-        the TOAs and the models
-    alpha (optional): the F-test significance value
-    remove : Boolean, True or False. If True, will do and report F-test values for removing parameters.
-             If False, will look for and report F-test values for adding parameters.
+    Input:
+    --------
+    fitter [object]: The PINT fitter object.
+    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
+    remove [boolean]: If True, will do and report F-test values for removing parameters.
+             If False, will look for and report F-test values for adding parameters [default: False].
              Parameters to check:
                 1. M2, SINI
                 2. PBDOT
@@ -440,9 +466,9 @@ def check_binary_DD(fitter, alpha=ALPHA, remove = False):
                 4. OMDOT
                 5. EDOT
 
-    Returns
-    =======
-    Returns the dictionary output from the F-tests
+    Returns:
+    ---------
+    retdict [dictionary]: Returns the dictionary output from the F-tests.
     """
     # Add dictionary for return values
     retdict = {}
@@ -475,13 +501,13 @@ def check_binary_DDK(fitter, alpha=ALPHA, remove = False):
     """
     Check the binary parameter F-tests for the DDK binary model, either removing or adding parameters.
 
-    Parameters
-    ==========
-    fitter: The PINT fitter object, which contains
-        the TOAs and the models
-    alpha (optional): the F-test significance value
-    remove : Boolean, True or False. If True, will do and report F-test values for removing parameters.
-             If False, will look for and report F-test values for adding parameters.
+    Input:
+    --------
+    fitter [object]: The PINT fitter object.
+    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
+    remove [boolean: If True, will do and report F-test values for removing parameters.
+             If False, will look for and report F-test values for adding parameters [default: False].
              Parameters to check:
                 1. M2, SINI
                 2. PBDOT
@@ -489,9 +515,9 @@ def check_binary_DDK(fitter, alpha=ALPHA, remove = False):
                 4. OMDOT
                 5. EDOT
 
-    Returns
-    =======
-    Returns the dictionary output from the F-tests
+    Returns:
+    ---------
+    retdict [dictionary]: Returns the dictionary output from the F-tests.
     """
     # Add dictionary for return values
     retdict = {}
@@ -525,13 +551,13 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
     """
     Check the binary parameter F-tests for the ELL1 binary model, either removing or adding parameters.
 
-    Parameters
-    ==========
-    fitter: The PINT fitter object, which contains
-        the TOAs and the models
-    alpha (optional): the F-test significance value
-    remove : Boolean, True or False. If True, will do and report F-test values for removing parameters.
-             If False, will look for and report F-test values for adding parameters.
+    Input:
+    --------
+    fitter [object]: The PINT fitter object.
+    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
+    remove [boolean]: If True, will do and report F-test values for removing parameters.
+             If False, will look for and report F-test values for adding parameters [default: False].
              Parameters to check:
                 1. PB
                     a. M2, SINI
@@ -542,12 +568,10 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
                     a. FB2-FB6+ ( These are checked by running `check_FB()` )
                     b. XDOT -> A1DOT
                     c. EPS1DOT, EPS2DOT
-    fbmax : int
-        Number of FB parameters to check in the F-tests, default is 5
 
-    Returns
-    =======
-    Returns the dictionary output from the F-tests
+    Returns:
+    ---------
+    retdict [dictionary]: Returns the dictionary output from the F-tests.
     """
     # Define dictionary for returned value
     retdict = {}
@@ -614,13 +638,13 @@ def check_binary_ELL1H(fitter, alpha=ALPHA, remove = False):
     """
     Check the binary parameter F-tests for the ELL1H binary model, either removing or adding parameters.
 
-    Parameters
-    ==========
-    fitter: The PINT fitter object, which contains
-        the TOAs and the models
-    alpha (optional): the F-test significance value
-    remove : Boolean, True or False. If True, will do and report F-test values for removing parameters.
-             If False, will look for and report F-test values for adding parameters.
+    Input:
+    --------
+    fitter [object]: The PINT fitter object.
+    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
+    remove [boolean]: If True, will do and report F-test values for removing parameters.
+             If False, will look for and report F-test values for adding parameters [default: False].
              Parameters to check:
                 1. PBDOT
                 2. XDOT -> A1DOT
@@ -628,9 +652,9 @@ def check_binary_ELL1H(fitter, alpha=ALPHA, remove = False):
                 4. H3
                     a. H4
 
-    Returns
-    =======
-    Returns the dictionary output from the F-tests
+    Returns:
+    ---------
+    retdict [dictionary]: Returns the dictionary output from the F-tests.
     """
     # Define dictionary for returned value
     retdict = {}
@@ -664,17 +688,16 @@ def check_FB(fitter, alpha=ALPHA, fbmax = 5):
     """
     Check the FB parameter F-tests for the ELL1 binary model doing both removing and addtion.
 
-    Parameters
-    ==========
-    fitter: The PINT fitter object, which contains
-        the TOAs and the models
-    alpha (optional): the F-test significance value
-    fbmax : int
-        Number of FB parameters to check in the F-tests, default is 5
+    Input:
+    --------
+    fitter [object]: The PINT fitter object.
+    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
+    fbmax [int]: Number of FB parameters to check in the F-tests [default: 5].
 
-    Returns
-    =======
-    Returns the dictionary output from the F-tests
+    Returns:
+    ---------
+    retdict [dictionary]: Returns the dictionary output from the F-tests.
     """
     # Define dictionary for returned value
     retdict = {}
