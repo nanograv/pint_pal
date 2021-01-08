@@ -180,23 +180,19 @@ class TimingConfiguration:
         # INFO?
         missing_valid = set(OPTIONAL_KEYS)-set(EXISTING_KEYS)
         if len(missing_valid):
-            msg = "Valid TOA excision keys not present: %s" % (missing_valid)
-            log.info(msg)
+            log.info(f'Valid TOA excision keys not present: {missing_valid}')
 
         invalid = set(EXISTING_KEYS) - set(OPTIONAL_KEYS)
         if len(invalid):
-            msg = "Invalid TOA excision keys present: %s" % (invalid)
-            log.warning(msg)
+            log.warning(f'Invalid TOA excision keys present: {invalid}')
 
         valid_null = set(EXISTING_KEYS) - set(VALUED_KEYS) - invalid
         if len(valid_null):
-            msg = "TOA excision keys included, but NOT in use: %s" % (valid_null)
-            log.info(msg)
+            log.info(f'TOA excision keys included, but NOT in use: {valid_null}')
 
         valid_valued = set(VALUED_KEYS) - invalid
         if len(valid_valued):
-            msg = "Valid TOA excision keys in use: %s" % (valid_valued)
-            log.info(msg)
+            log.info(f'Valid TOA excision keys in use: {valid_valued}')
 
         selection = np.ones(len(toas),dtype=bool)
 
@@ -211,11 +207,9 @@ class TimingConfiguration:
             snr_select = ((np.array(toas.get_flag_value('snr')) > self.get_snr_cut())[0])
             selection *= snr_select
             if self.get_snr_cut() > 8.0 and self.get_toa_type() == 'NB':
-                msg = "snr-cut should be set to 8; try excising TOAs using other methods."
-                log.warning(msg)
+                log.warning('snr-cut should be set to 8; try excising TOAs using other methods.')
             if self.get_snr_cut() > 25.0 and self.get_toa_type() == 'WB':
-                msg = "snr-cut should be set to 25; try excising TOAs using other methods."
-                log.warning(msg)
+                log.warning('snr-cut should be set to 25; try excising TOAs using other methods.')
         if 'prob-outlier' in valid_valued:
             pass
         if 'bad-ff' in valid_valued:
