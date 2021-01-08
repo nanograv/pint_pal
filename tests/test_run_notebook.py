@@ -65,6 +65,7 @@ def test_run_notebook(notebook_code, config_file, suppress_errors=False):
     log.setLevel("INFO")
     cfg_name = splitext(split(config_file)[1])[0]
     log_file = join(join(base_dir, 'logs'), f'{cfg_name}.log')
+    err_file = join(join(base_dir, 'logs'), f'{cfg_name}.traceback')
 
     # clear log file
     with open(log_file, 'w') as f:
@@ -81,7 +82,7 @@ def test_run_notebook(notebook_code, config_file, suppress_errors=False):
             with open(global_log, 'a') as f:
                 print(f"{config_file}: success!", file=f)
         except Exception as e:
-            with open(log_file, 'a') as f:
+            with open(err_file, 'w') as f:
                 print(f"Processing config file {config_file} failed with the following error:", file=f)
                 print(traceback.format_exc(), file=f)
 
