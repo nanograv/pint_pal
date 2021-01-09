@@ -1,5 +1,5 @@
 from astropy import log
-from os import mkdir
+from os import mkdir, chdir
 from os.path import dirname, join, split, splitext
 from multiprocessing import Pool
 import traceback
@@ -32,7 +32,6 @@ def notebook_code():
                     continue
                 # Skip certain kinds of lines that aren't useful here
                 if ('log.setLevel' in line
-                    or 'quantity_support' in line
                     or 'plot_residuals' in line):
                     continue
                 code_lines.append(line)
@@ -50,7 +49,7 @@ def startup():
         pass
 
 @pytest.mark.parametrize('config_file', config_files())
-def test_run_notebook(notebook_code, config_file, suppress_errors=False):
+def test_run_notebook(notebook_code, config_file, tmpdir, suppress_errors=False):
     """
     Run through the functions called in the notebook for each pulsar (excluding plotting).
     This will create a global log called test-run-notebooks.log, and a log file for each pulsar.
@@ -71,12 +70,16 @@ def test_run_notebook(notebook_code, config_file, suppress_errors=False):
     with open(log_file, 'w') as f:
         pass
 
+    chdir(tmpdir)
     with log.log_to_file(log_file):
         try:
             # Execute notebook contents
             for code_block in notebook_code:
                 # Fill in the name of the config file
-                code_block = code_block.replace('[filename]', cfg_name)
+                code_block = code_block.replace(
+                    '"configs/[filename].yaml"',
+                    f'"{config_file}", par_directory="{join(base_dir, "results")}"'
+                )
                 exec(code_block)
 
             with open(global_log, 'a') as f:
