@@ -52,8 +52,8 @@ class TimingConfiguration:
 
     def get_compare_model(self):
         """ Return the timing model file to compare with """
-        if "compare-model" in self.config.keys():
-            return os.path.join(self.config['par-directory'], self.config['compare-model'])
+        if "compare-model" in self.config.keys() and self.config['compare-model'] is not None:
+            return os.path.join(self.par_directory, self.config['compare-model'])
         return None
 
     def get_free_params(self, fitter):
