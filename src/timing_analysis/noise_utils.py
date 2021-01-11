@@ -232,7 +232,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     
     if (rn_bf >= rn_bf_thres or np.isnan(rn_bf)) and (not ignore_red_noise):
         
-        log.info("The SD Bayes factor for red noise in this pulsar is:", rn_bf)
+        log.info("The SD Bayes factor for red noise in this pulsar is: {}".format(rn_bf))
         log.info("Including red noise for this pulsar")
         #Add the ML RN parameters to their component
         rn_comp = pm.PLRedNoise()
