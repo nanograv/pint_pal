@@ -1,4 +1,5 @@
 import numpy as np, os
+from astropy import log
 
 from enterprise.pulsar import Pulsar
 from enterprise_extensions import models, model_utils, sampler
@@ -68,19 +69,19 @@ def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = Fals
     outdir = './noise_run_chains/' + mo.PSR.value + '/'
     
     if os.path.exists(outdir) and (run_noise_analysis) and (not resume):
-        print("INFO: A noise directory for pulsar {} already exists! Re-running noise modeling from scratch".format(mo.PSR.value))
+        log.info("INFO: A noise directory for pulsar {} already exists! Re-running noise modeling from scratch".format(mo.PSR.value))
     elif os.path.exists(outdir) and (run_noise_analysis) and (resume):
-        print("INFO: A noise directory for pulsar {} already exists! Re-running noise modeling starting from previous chain".format(mo.PSR.value))
+        log.info("INFO: A noise directory for pulsar {} already exists! Re-running noise modeling starting from previous chain".format(mo.PSR.value))
         
     if not run_noise_analysis:
-        print("Skipping noise modeling. Change run_noise_analysis = True to run noise modeling.")
+        log.info("Skipping noise modeling. Change run_noise_analysis = True to run noise modeling.")
         return None
 
     #Ensure n_iter is an integer
     n_iter = int(n_iter)
 
     if n_iter < 1e4:
-        print("Such a small number of iterations is unlikely to yield accurate posteriors. STRONGLY recommend increasing the number of iterations to at least 5e4")
+        log.warning("Such a small number of iterations is unlikely to yield accurate posteriors. STRONGLY recommend increasing the number of iterations to at least 5e4")
 
     #Create enterprise Pulsar object for supplied pulsar timing model (mo) and toas (to)
     e_psr = Pulsar(mo, to)
@@ -231,8 +232,8 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     
     if (rn_bf >= rn_bf_thres or np.isnan(rn_bf)) and (not ignore_red_noise):
         
-        print("The SD Bayes factor for red noise in this pulsar is:", rn_bf)
-        print("Including red noise for this pulsar")
+        log.info("The SD Bayes factor for red noise in this pulsar is:", rn_bf)
+        log.info("Including red noise for this pulsar")
         #Add the ML RN parameters to their component
         rn_comp = pm.PLRedNoise()
 
