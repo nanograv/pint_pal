@@ -48,7 +48,7 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     
     return wn_dict, rn_bf
 
-def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/', using_wideband = False):
+def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/', using_wideband = False, resume = False):
     """
     Setup enterprise PTA and perform MCMC noise analysis
     
@@ -82,7 +82,7 @@ def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/', using
                                   dmjump_var = True) #Will need to turn dmjump_var = False after e_e change
     
     #setup sampler using enterprise_extensions
-    samp = sampler.setup_sampler(pta, outdir = outdir, resume = True)
+    samp = sampler.setup_sampler(pta, outdir = outdir, resume = resume)
     
     #Initial sample
     x0 = np.hstack([p.sample() for p in pta.params])
