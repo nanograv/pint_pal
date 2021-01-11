@@ -1,4 +1,4 @@
-import numpy as np
+import numpy as np, os
 
 from enterprise.pulsar import Pulsar
 from enterprise_extensions import models, model_utils, sampler
@@ -24,6 +24,7 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     wn_dict: Dictionary of maximum likelihood WN values
     rn_bf: Savage-Dickey BF for RN for given pulsar
     """
+    
     chain = np.loadtxt(chaindir + 'chain_1.txt')
     burn = int(burn_frac * chain.shape[0])
     pars = np.loadtxt(chaindir + 'pars.txt', dtype = np.unicode)
@@ -48,7 +49,7 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     
     return wn_dict, rn_bf
 
-def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/', using_wideband = False, resume = False):
+def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = False, run_noise_analysis = True):
     """
     Setup enterprise PTA and perform MCMC noise analysis
     
@@ -56,23 +57,34 @@ def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/', using
     ==========
     mo: PINT (or tempo2) timing model
     to: PINT (or tempo2) TOAs
-    n_iter: number of MCMC iterations; Default: 1e5; Recommended > 1e4
-    outdir: output directory for MCMC chain (and other) files; Default: './noise_run_chains/'
+    n_iter: number of MCMC iterations; Default: 1e5; Recommended > 5e4
     using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
+    run_noise_analysis: Flag to toggle execution of noise modeling; Default: True
     
     Returns
     =======
     None
     """
+    outdir = './noise_run_chains/' + mo.PSR.value + '/'
+    
+    if os.path.exists(outdir) and (run_noise_analysis) and (not resume):
+        print("INFO: A noise directory for pulsar {} already exists! Re-running noise modeling from scratch".format(mo.PSR.value))
+    elif os.path.exists(outdir) and (run_noise_analysis) and (resume):
+        print("INFO: A noise directory for pulsar {} already exists! Re-running noise modeling starting from previous chain".format(mo.PSR.value))
+        
+    if not run_noise_analysis:
+        print("Skipping noise modeling. Change run_noise_analysis = True to run noise modeling.")
+        return None
+
     #Ensure n_iter is an integer
     n_iter = int(n_iter)
-    
+
     if n_iter < 1e4:
         print("Such a small number of iterations is unlikely to yield accurate posteriors. STRONGLY recommend increasing the number of iterations to at least 5e4")
-    
+
     #Create enterprise Pulsar object for supplied pulsar timing model (mo) and toas (to)
     e_psr = Pulsar(mo, to)
-    
+
     #Setup a single pulsar PTA using enterprise_extensions
     if not using_wideband:
         pta = models.model_singlepsr_noise(e_psr, white_vary = True, is_wideband = False, use_dmdata = False,
@@ -80,13 +92,13 @@ def model_noise(mo, to, n_iter = int(1e5), outdir = './noise_run_chains/', using
     else:
         pta = models.model_singlepsr_noise(epsr, is_wideband = True, use_dmdata = True, white_vary = True,
                                   dmjump_var = True) #Will need to turn dmjump_var = False after e_e change
-    
+
     #setup sampler using enterprise_extensions
     samp = sampler.setup_sampler(pta, outdir = outdir, resume = resume)
-    
+
     #Initial sample
     x0 = np.hstack([p.sample() for p in pta.params])
-    
+
     #Start sampling
     samp.sample(x0, n_iter, SCAMweight=30, AMweight=15, DEweight=50,)
 
@@ -96,14 +108,13 @@ def convert_to_RNAMP(value):
     """
     return (86400.*365.24*1e6)/(2.0*np.pi*np.sqrt(3.0)) * 10 ** value
 
-def add_noise_to_model(model, chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True, ignore_red_noise = False, using_wideband = False):
+def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_noise = False, using_wideband = False, rn_bf_thres = 1e2):
     """
     Add WN and RN parameters to timing model.
     
     Parameters
     ==========
     model: PINT (or tempo2) timing model
-    chaindir: path to where results from enterprise MCMC noise analysis live; Default: './noise_run_chains/'
     burn_frac: fraction of chain to use for burn-in; Default: 0.25
     save_corner: Flag to toggle saving of corner plots; Default: True
     ignore_red_noise: Flag to manually force RN exclusion from timing model. When False, code determines whether
@@ -114,6 +125,9 @@ def add_noise_to_model(model, chaindir = './noise_run_chains/', burn_frac = 0.25
     =======
     model: New timing model which includes WN and RN parameters
     """
+    
+    chaindir = './noise_run_chains/' + model.PSR.value + '/'
+    
     wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner)
     
     #Create the maskParameter for EFACS
@@ -215,7 +229,7 @@ def add_noise_to_model(model, chaindir = './noise_run_chains/', burn_frac = 0.25
     #CONDITIONAL TO ADD RN;
     #MIGHT NEED TO FIDDLE WITH THIS
     
-    if (rn_bf >= 1e3 or np.isnan(rn_bf)) and (not ignore_red_noise):
+    if (rn_bf >= rn_bf_thres or np.isnan(rn_bf)) and (not ignore_red_noise):
         
         print("The SD Bayes factor for red noise in this pulsar is:", rn_bf)
         print("Including red noise for this pulsar")
