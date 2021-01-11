@@ -80,20 +80,14 @@ class TimingConfiguration:
             msg = f'{self.filename} source entry does not match par file value ({m.PSR.value}).'
             log.warning(msg)
 
+        picklefilename = os.path.basename(self.filename) + ".pickle.gz"
         # Merge toa_objects (check this works for list of length 1)
-        t = toa.merge_TOAs([toa.get_TOAs(
-                                os.path.join(self.tim_directory,t), 
-                                usepickle=False, 
-                                bipm_version=BIPM, 
-                                ephem=EPHEM, 
-                                model=m) 
-                            for t in toas])
-
-        # FIXME: what is this pickle for? Should it be saved after applying ignore?
-        # Pickle if desired with filename [PSR].merged.tim.pickle.gz
-        pfn = f'{self.get_source()}.merged.tim.pickle.gz'
-        if usepickle:
-            t.pickle(filename=pfn)
+        t = toa.get_TOAs([os.path.join(self.tim_directory,t) for t in toas],
+                          usepickle=usepickle, 
+                          bipm_version=BIPM, 
+                          ephem=EPHEM, 
+                          model=m,
+                          picklefilename=picklefilename)
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
         t = self.apply_ignore(t)
