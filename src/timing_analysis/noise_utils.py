@@ -225,9 +225,11 @@ def add_noise_to_model(model, chaindir = './noise_run_chains/', burn_frac = 0.25
         rn_keys = np.array([key for key,val in wn_dict.items() if '_red_' in key])
         rn_comp.RNAMP.quantity = convert_to_RNAMP(wn_dict[psr_name + '_red_noise_log10_A'])
         rn_comp.RNIDX.quantity = -1 * wn_dict[psr_name + '_red_noise_gamma']
+        
+        #Add red noise to the timing model
+        model.add_component(rn_comp, validate = True, force = True)
     
     #Add these components to the input timing model
-    model.add_component(rn_comp, validate = True, force = True)
     model.add_component(ef_eq_comp, validate = True, force = True)
     if not using_wideband:
         model.add_component(ec_comp, validate = True, force = True)
