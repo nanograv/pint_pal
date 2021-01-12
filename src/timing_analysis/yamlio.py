@@ -151,11 +151,13 @@ def curate_comments(yaml_file,overwrite=True,extension='fix'):
     config = read_yaml(yaml_file)
     out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
 
-    config.yaml_add_eol_comment('# parameters not included here will be frozen','free-params')
-    config.yaml_add_eol_comment('# toa excision','ignore')
-    config['ignore'].yaml_add_eol_comment("# designated by [name,chan,subint]",'bad-toas')
-    config['dmx'].yaml_add_eol_comment('finer binning when solar wind delay > threshold (us)','max-sw-delay')
-    config['dmx'].yaml_add_eol_comment('# designated by [mjd_low,mjd_hi,binsize]','custom-dmx')
+    config.yaml_add_eol_comment("parameters not included here will be frozen",'free-params')
+    config.yaml_add_eol_comment("toa excision",'ignore')
+    config['ignore'].yaml_add_eol_comment("designated by [name,chan,subint]",'bad-toa')
+    config['ignore'].yaml_add_eol_comment("designated by [mjd_start,mjd_end]",'bad-range')
+    config['ignore'].yaml_add_eol_comment("designated by basename string",'bad-epoch')
+    config['dmx'].yaml_add_eol_comment("finer binning when solar wind delay > threshold (us)",'max-sw-delay')
+    config['dmx'].yaml_add_eol_comment("designated by [mjd_low,mjd_hi,binsize]",'custom-dmx')
     write_yaml(config, out_yaml)
 
 def read_yaml(yaml_file):
