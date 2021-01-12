@@ -34,8 +34,7 @@ def notebook_code():
                 if line.startswith('#') or line.startswith('%'):
                     continue
                 # Skip certain kinds of lines that aren't useful here
-                if ('log.setLevel' in line
-                    or 'plot_residuals' in line):
+                if ('log.setLevel' in line):
                     continue
                 code_lines.append(line)
             code_blocks.append('\n'.join(code_lines))
