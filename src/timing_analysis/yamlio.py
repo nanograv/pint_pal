@@ -220,7 +220,7 @@ def main():
     args = parser.parse_args()
 
     if args.update:
-        for ff in args.files():
+        for ff in args.files:
             fix_toa_info(ff)
             add_niterations(ff)
             add_dmx_block(ff)
