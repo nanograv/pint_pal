@@ -12,7 +12,9 @@ global_log = join(base_dir, 'test-run-notebooks.log')
 
 def config_files():
     config_files = (glob(join(base_dir, 'configs/B*.nb.yaml'))
-                     + glob(join(base_dir, 'configs/J*.nb.yaml')))
+                     + glob(join(base_dir, 'configs/J*.nb.yaml'))
+                     + glob(join(base_dir, 'configs/B*.wb.yaml'))
+                     + glob(join(base_dir, 'configs/J*.wb.yaml')))
     config_files = sorted(config_files)
     basenames = [splitext(split(filename)[1])[0] for filename in config_files]
     return [pytest.param(filename, id=basename) for filename, basename in zip(config_files, basenames)]

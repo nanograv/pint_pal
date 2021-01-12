@@ -7,7 +7,7 @@ toas:
 - J0605+3757.Rcvr1_2.GUPPI.15y.x.wb.tim
 - J0605+3757.Rcvr_800.GUPPI.15y.x.wb.tim
 
-free-params: [ELONG, ELAT, PMELONG, PMELAT, PX, F0, F1, A1, PB, TASC, EPS1, EPS2,
+free-params: [ELONG, ELAT, PMELONG, PMELAT, PX, F0, F1, A1, PB, T0, E, OM,
   JUMP1, DMJUMP1, DMJUMP2]  # parameters not included here will be frozen
 free-dmx: Yes
 toa-type: WB
