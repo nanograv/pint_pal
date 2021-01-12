@@ -137,7 +137,7 @@ def add_dmx_block(yaml_file,overwrite=True,extension='fix'):
     else:
         log.info(f'{yaml_file} already contains dmx block.')
 
-def curate_comments(yaml_file,overwrite=True,extension='fix'):
+def curate_comments(yaml_file,overwrite=True,extension='fix',refresh=False):
     """Standardizes info comments on specific yaml fields
 
     Parameters
@@ -147,8 +147,12 @@ def curate_comments(yaml_file,overwrite=True,extension='fix'):
         write yaml with same name (true), or add extenion (false)
     extension: str, optional
         extention added to output filename if overwrite=False
+    full_refresh: bool, optional
+        if True, deletes all existing comments before curating
     """
     config = read_yaml(yaml_file)
+    if refresh:
+        pass # I can't figure out how to delete all comments at the moment... 
     out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
 
     config.yaml_add_eol_comment("parameters not included here will be frozen",'free-params')
@@ -219,6 +223,13 @@ def main():
         default=False,
         help="check/update full yaml",
     )
+    parser.add_argument(
+        "--refresh_comments",
+        "-rc",
+        action="store_true",
+        default=False,
+        help="fully delete/restore yaml comments",
+    )
     args = parser.parse_args()
 
     if args.update:
@@ -226,7 +237,10 @@ def main():
             fix_toa_info(ff)
             add_niterations(ff)
             add_dmx_block(ff)
-            curate_comments(ff)
+            refresh = False
+            if args.refresh_comments: 
+                refresh = True
+            curate_comments(ff,refresh=refresh)
 
 if __name__ == "__main__":
     log.info(f'Current release dir: {RELEASE}')
