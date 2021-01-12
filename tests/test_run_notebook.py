@@ -12,7 +12,9 @@ global_log = 'test-run-notebooks.log'
 def config_files():
     base_dir = dirname(dirname(__file__))
     config_files = (glob(join(base_dir, 'configs/B*.nb.yaml'))
-                     + glob(join(base_dir, 'configs/J*.nb.yaml')))
+                     + glob(join(base_dir, 'configs/J*.nb.yaml'))
+                     + glob(join(base_dir, 'configs/B*.wb.yaml'))
+                     + glob(join(base_dir, 'configs/J*.wb.yaml')))
     config_file = sorted(config_files)
     return config_files
 
