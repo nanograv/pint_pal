@@ -142,24 +142,83 @@ def check_binary(model):
         return
 
     name = getattr(model, 'binary_model_name')
+    print("Binary model used: %s" % name)
 
     if name == "ELL1":
+
+        formalismFB = False
+        
         # Check base models, including either PB or FB formulations
         check_if_fit(model, "A1", "TASC", "EPS1", "EPS2")
-        if hasattr(model, "PB") and hasattr(model, "FB0"):
+
+        if (model.PB.value is not None) and (model.FB0.value is None):
+            formalismFB = False
+            check_if_fit(model, "PB")
+        elif (model.PB.value is None) and (model.FB0.value is not None):
+            formalismFB = True
+            check_if_fit(model, "FB0")
+        elif (model.PB.value is None) and (model.FB0.value is None):
+            raise ValueError("Neither PB nor FB0 are set to a value")
+        elif (model.PB.value is not None) and (model.FB0.value is not None):
             raise ValueError("Both PB and FB0 are defined")
+        else:
+            raise ValueError("Either PB or FB0 are required in the ELL1 model.")
+        """
+        if hasattr(model, "PB") and hasattr(model, "FB0"):
+            #print(model.PB.value)
+            #print(type(model.PB.value))
+            #if type(model.PB.value) is 'NoneType':
+            #    print('yes')
+            #if type(model.PB.value) == 'NoneType':
+            #    print('no')
+            #if model.FB0.value is not None:
+            #    print('FB0 is not None')
+            #print(model.FB0.value)
+            #print(type(model.FB0.value))
+            #if (model.PB.value >= 0.0) and (not model.FB0.value):
+            #    continue
+            #elif (model.FB0.value >= 0.0) and (not model.PB.value):
+            #    continue
+            if (model.PB.value is None) and (model.FB0.value is None):
+            #if (not model.PB.value) and (not model.FB0.value):
+                raise ValueError("Neither PB nor FB0 are set to a value")
+            elif (model.PB.value is not None) and (model.FB0.value is not None):   
+            #elif (type(model.PB.value) not 'NoneType') and (type(model.FB0.value) not 'NoneType'):
+            #else:
+                #if model.PB.value is not None
+            #elif float(model.PB.value) >= 0.0 and float(model.FB0.value) >= 0.0:
+                raise ValueError("Both PB and FB0 are defined")
+            #else:
+            #    raise ValueError("There is some problem with PB and/or FB0")
         elif hasattr(model, "PB"):
             formalismFB = False
             check_if_fit(model, "PB")
         elif hasattr(model, "FB0"):
             formalismFB = True
             check_if_fit(model, "FB0")
+        
         else:
             raise ValueError("Either PB or FB0 are required in the ELL1 model.")
-
+        """
+        
         ### Need to include further checks here for higher-order FB terms,
         ### and to make sure they are sequentially fit for
-
+        if formalismFB:
+            # We know FB0 is fit because of the above, so just check FB1 and up
+            # Start with highest-order FB derivative
+            # Should we start higher than FB6?
+            if hasattr(model, "FB6"):
+                check_if_fit(model, "FB6", "FB5", "FB4", "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB5"):
+                check_if_fit(model, "FB5", "FB4", "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB4"):
+                check_if_fit(model, "FB4", "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB3"):
+                check_if_fit(model, "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB2"):
+                check_if_fit(model, "FB2", "FB1")
+            elif hasattr(model, "FB1"):
+                check_if_fit(model, "FB1")
 
         if not formalismFB:
             has_and_check_if_fit(model, "PBDOT")
