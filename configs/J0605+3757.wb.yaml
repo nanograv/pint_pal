@@ -25,12 +25,8 @@ ignore: # toa excision
   mjd-start:
   mjd-end:
   snr-cut: 25
-  # Following are designated by ['name','chan','subint']
   bad-toa:
-  # Designated by [mjd_start,mjd_end] (can have multiple)
   bad-range:
-  # Following are designated by a basename string to take away all
-  # TOAs with that basename (can have multiple)
   bad-epoch:
 
 changelog:
