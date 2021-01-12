@@ -74,20 +74,18 @@ class TimingConfiguration:
 
         BIPM = self.get_bipm()
         EPHEM = self.get_ephem()
-        m = model.get_model(par_path)
+        picklefilename = os.path.basename(self.filename) + ".pickle.gz"
+
+        m, t = model.get_model_and_toas(parfile=par_path, 
+                                        timfile=[os.path.join(self.tim_directory,t) for t in toas],
+                                        usepickle=usepickle, 
+                                        bipm_version=BIPM, 
+                                        ephem=EPHEM, 
+                                        picklefilename=picklefilename)
 
         if m.PSR.value != self.get_source():
             msg = f'{self.filename} source entry does not match par file value ({m.PSR.value}).'
             log.warning(msg)
-
-        picklefilename = os.path.basename(self.filename) + ".pickle.gz"
-        # Merge toa_objects (check this works for list of length 1)
-        t = toa.get_TOAs([os.path.join(self.tim_directory,t) for t in toas],
-                          usepickle=usepickle, 
-                          bipm_version=BIPM, 
-                          ephem=EPHEM, 
-                          model=m,
-                          picklefilename=picklefilename)
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
         t = self.apply_ignore(t)
