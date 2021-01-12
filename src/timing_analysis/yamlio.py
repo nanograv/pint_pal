@@ -151,23 +151,46 @@ def curate_comments(yaml_file,overwrite=True,extension='fix'):
     config = read_yaml(yaml_file)
     out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
 
+    # currently assumes these fields exist, should check explicitly
     config.yaml_add_eol_comment("parameters not included here will be frozen",'free-params')
     config.yaml_add_eol_comment("toa excision",'ignore')
 
-    if config.get('ignore').get('bad-toa'):
-        config['ignore'].yaml_add_eol_comment("designated by [name,chan,subint]",'bad-toa')
+    toplevel_keys = dict(config).keys()
+    ignore_keys = dict(config['ignore']).keys()
+    dmx_keys = dict(config['dmx']).keys()
+
+    if config.get('ignore').get('bad-toa'): 
+        try:
+            config['ignore'].yaml_add_eol_comment("designated by [name,chan,subint]",'bad-toa')
+        except:
+            pass
     else:
-        log.warning('No bad-toa field...add it?')
+        if 'bad-toa' in ignore_keys:
+            log.info('bad-toa field exists, is not set.')
+        else:
+            log.warning('bad-toa field does not exist.')
 
     if config.get('ignore').get('bad-range'):
-        config['ignore'].yaml_add_eol_comment("designated by [mjd_start,mjd_end]",'bad-range')
+        try:
+            config['ignore'].yaml_add_eol_comment("designated by [mjd_start,mjd_end]",'bad-range')
+        except:
+            pass
     else:
-        log.info('No bad-range field...add it?')
+        if 'bad-range' in ignore_keys:
+            log.info('bad-range field exists, is not set.')
+        else:
+            log.warning('bad-range field does not exist.')
 
     if config.get('ignore').get('bad-epoch'):
-        config['ignore'].yaml_add_eol_comment("designated by basename string",'bad-epoch')
+        try:
+            config['ignore'].yaml_add_eol_comment("designated by basename string",'bad-epoch')
+        except:
+            pass
     else:
-        log.info('No bad-epoch field...add it?')
+        if 'bad-epoch' in ignore_keys:
+            log.info('bad-epoch field exists, is not set.')
+        else:
+            log.warning('bad-epoch field does not exist.')
 
     config['dmx'].yaml_add_eol_comment("finer binning when solar wind delay > threshold (us)",'max-sw-delay')
     config['dmx'].yaml_add_eol_comment("designated by [mjd_low,mjd_hi,binsize]",'custom-dmx')
