@@ -18,18 +18,14 @@ bipm: BIPM2019
 dmx:  # control dmx windowing/fixing
   ignore-dmx: false
   fratio: 1.1
-  max-sw-delay: 0.1  # finer binning when solar wind delay > threshold (us)
+  max-sw-delay: 0.1 # finer binning when solar wind delay > threshold (us)
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 ignore: # toa excision
   mjd-start:
   mjd-end:
   snr-cut: 8
-  # Following are designated by ['name','chan','subint']
   bad-toa:
-  # Designated by [mjd_start,mjd_end] (can have multiple)
   bad-range:
-  # Following are designated by a basename string to take away all
-  # TOAs with that basename (can have multiple)
   bad-epoch:
 
 changelog:

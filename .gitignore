@@ -15,6 +15,7 @@ dist/
 *~
 
 # Log files
+logs/
 *.log
 
 # Temporary pickle files and .tim files

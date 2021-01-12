@@ -644,25 +644,26 @@ def remove_all_dmx_ranges(model, quiet=False):
         pass
 
 
-def setup_dmx(model, toas, quiet=False):
+def setup_dmx(model, toas, quiet=True):
     """
     Sets up and checks a DMX model using a number of defaults.
 
     model is a PINT model object.
     toas is a PINT TOA object.
-    quiet=True turns off the logged info.
+    quiet=True turns off some of the logged warnings and info.
     """
 
     # Set up DMX model
     if 'gbt' in toas.observatories: bin_width = 6.5  # day
     else: bin_width = 0.5  # day
     # First remove all DMX bins from existing model
-    remove_all_dmx_ranges(model)
+    remove_all_dmx_ranges(model, quiet=False)
     # Get GASP-era ranges, if applicable
-    dmx_ranges = get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0)
+    dmx_ranges = get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0,
+            pad=0.05, check=False)
     # Now expand to include all TOAs
     dmx_ranges = expand_dmx_ranges(toas, dmx_ranges, bin_width=bin_width,
-            add_new_ranges=True)
+            pad=0.05, add_new_ranges=True, check=False)
 
     # Ensure DM events have fine DMX binning
     if model.PSR.value == 'J1713+0747':  # will generalize this later
@@ -679,19 +680,27 @@ def setup_dmx(model, toas, quiet=False):
         dmx_ranges = np.array(dmx_ranges)[dmx_range_mask]
         dmx_ranges = list(map(tuple, dmx_ranges))
         # Add new ranges based on the TOAs during the event
-        dmx_ranges += get_dmx_ranges(toas[toa_mask], bin_width=0.5)
+        dmx_ranges += get_dmx_ranges(toas[toa_mask], bin_width=0.5,
+                check=False)
         # Sort the ranges
         dmx_ranges = sorted(dmx_ranges, key=lambda dmx_range: dmx_range[0])
-        # Check for sanity
-        check_dmx_ranges(toas, dmx_ranges)
 
     # Do basic checks of DMX model
     dmx_ranges = check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1,
-            bin_width=0.5)
+            bin_width=0.5, pad=0.05, check=False, quiet=quiet)
     itoas, iranges = check_frequency_ratio(toas, dmx_ranges,
-            frequency_ratio=1.1)
+            frequency_ratio=1.1, quiet=quiet)
     toas, dmx_ranges = toas[itoas], np.array(dmx_ranges)[iranges]
     dmx_ranges = list(map(tuple, dmx_ranges))
+
+    # Check for sanity
+    masks, ibad, iover, iempty, inone, imult = \
+            check_dmx_ranges(toas, dmx_ranges, full_return=True, quiet=False)
+    if len(ibad) + len(iover) + len(iempty) + len(inone) + len(imult) == 0:
+        msg = "DMX model setup OK."
+        log.info(msg)
+    else:
+        pass  # check_dmx_ranges will print lots of warnings if quiet=False
 
     # Add DMX parameters to model
     add_dmx(model, bin_width)
@@ -699,9 +708,11 @@ def setup_dmx(model, toas, quiet=False):
     for irange,dmx_range in enumerate(dmx_ranges):
         dmx.add_DMX_range(dmx_range[0], dmx_range[1], index=irange+1, dmx=0.0,
                 frozen=False)
-    if not quiet:
+    if True:#not quiet:
         msg = f"Added {len(dmx_ranges)} DMX parameters to timing model."
         log.info(msg)
+
+    return toas
 
 
 def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None,
