@@ -19,7 +19,7 @@ bipm: BIPM2019
 dmx:  # control dmx windowing/fixing
   ignore-dmx: false
   fratio: 1.1
-  max-sw-delay: 0.1  # finer binning when solar wind delay > threshold (us)
+  max-sw-delay: 0.1 # finer binning when solar wind delay > threshold (us)
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 ignore: # toa excision
   mjd-start:
