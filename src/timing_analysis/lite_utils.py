@@ -201,7 +201,7 @@ def add_feDMJumps(mo,rcvrs):
             DMJUMPn = maskParameter('DMJUMP',key='-fe',key_value=[j],value=0.0,units=u.pc*u.cm**-3)
             dmjump.add_param(DMJUMPn,setup=True)
 
-def large_residuals(fo,threshold_us):
+def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
     """Quick and dirty routine to find outlier residuals based on some threshold.
 
     Parameters
@@ -209,6 +209,10 @@ def large_residuals(fo,threshold_us):
     fo: `pint.fitter` object
     threshold_us: float
         not a quantity, but threshold for residuals larger (magnitude) than some delay in microseconds
+    n_sigma: float or None
+        If not None, only discard TOAs that are at least this many sigma as well as large
+    max_sigma: float or None
+        If not None, also discard all TOAs with claimed uncertainties larger than this many microseconds
 
     Returns
     =======
@@ -216,12 +220,21 @@ def large_residuals(fo,threshold_us):
         prints bad-toa lines that can be copied directly into a yaml file
     """
 
-    badtoalist = np.where(np.abs(fo.resids_init.time_resids.to(u.us)) > threshold_us*u.us)
+    c = np.abs(fo.resids_init.time_resids.to_value(u.us)) > threshold_us
+    if n_sigma is not None:
+        c &= np.abs((fo.resids_init.time_resids/fo.toas.get_errors()).to_value(1)) > n_sigma
+    if max_sigma is not None:
+        c |= fo.toas.get_errors().to_value(u.us) > max_sigma
+    badtoalist = np.where(c)
+    # FIXME: will go wrong if some TOAs lack -chan or -subint
+    names = fo.toas.get_flag_value('name')[0]
+    chans = fo.toas.get_flag_value('chan')[0]
+    subints = fo.toas.get_flag_value('subint')[0]
     for i in badtoalist[0]:
-        name = fo.toas.get_flag_value('name')[0][i]
-        chan = fo.toas.get_flag_value('chan')[0][i]
-        subint = fo.toas.get_flag_value('subint')[0][i]
-        print('    - [\'%s\',%i,%i]'%(name,chan,subint))
+        name = names[i]
+        chan = chans[i]
+        subint = subints[i]
+        print(f"    - ['{name}',{chan},{subint}]")
 
 def compare_models(fo,model_to_compare=None,verbosity='check',threshold_sigma=3.,nodmx=True):
     """Wrapper function to compare post-fit results to a user-specified comparison model.
