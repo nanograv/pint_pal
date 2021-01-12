@@ -91,7 +91,7 @@ def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = Fals
         pta = models.model_singlepsr_noise(e_psr, white_vary = True, is_wideband = False, use_dmdata = False,
                                   dmjump_var = False)
     else:
-        pta = models.model_singlepsr_noise(epsr, is_wideband = True, use_dmdata = True, white_vary = True,
+        pta = models.model_singlepsr_noise(e_psr, is_wideband = True, use_dmdata = True, white_vary = True,
                                   dmjump_var = True) #Will need to turn dmjump_var = False after e_e change
 
     #setup sampler using enterprise_extensions
