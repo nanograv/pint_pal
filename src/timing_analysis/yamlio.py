@@ -4,6 +4,7 @@ if desired; ruyamel.yaml preserves order of existing fields and comments.
 """
 
 from ruamel.yaml import YAML
+import argparse
 import glob
 from astropy import log
 import numpy as np
@@ -203,16 +204,28 @@ def main():
         description="Automated YAML checker/updater",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument('files', type=str, nargs='+',
-                    help='YAML files to check/update')
+    parser.add_argument(
+        "files",
+        type=str,
+        nargs="+",
+        help="YAML files to check/update"
+    )
+    parser.add_argument(
+        "--update",
+        "-u",
+        action="store_true",
+        default=False,
+        help="check/update full yaml",
+    )
     args = parser.parse_args()
-    print(args)
+
+    if args.update:
+        for ff in args.files():
+            fix_toa_info(ff)
+            add_niterations(ff)
+            add_dmx_block(ff)
+            curate_comments(ff)
 
 if __name__ == "__main__":
     log.info(f'Current release dir: {RELEASE}')
-    #for ff in np.sort(glob.glob('*.yaml')):
-    #    fix_toa_info(ff)
-    #    add_niterations(ff)
-    #    add_dmx_block(ff)
-    #    curate_comments(ff)
     main()
