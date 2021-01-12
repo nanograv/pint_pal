@@ -660,10 +660,10 @@ def setup_dmx(model, toas, quiet=True):
     remove_all_dmx_ranges(model, quiet=False)
     # Get GASP-era ranges, if applicable
     dmx_ranges = get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0,
-            check=False)
+            pad=0.05, check=False)
     # Now expand to include all TOAs
     dmx_ranges = expand_dmx_ranges(toas, dmx_ranges, bin_width=bin_width,
-            add_new_ranges=True, check=False)
+            pad=0.05, add_new_ranges=True, check=False)
 
     # Ensure DM events have fine DMX binning
     if model.PSR.value == 'J1713+0747':  # will generalize this later
@@ -687,7 +687,7 @@ def setup_dmx(model, toas, quiet=True):
 
     # Do basic checks of DMX model
     dmx_ranges = check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1,
-            bin_width=0.5, check=False, quiet=quiet)
+            bin_width=0.5, pad=0.05, check=False, quiet=quiet)
     itoas, iranges = check_frequency_ratio(toas, dmx_ranges,
             frequency_ratio=1.1, quiet=quiet)
     toas, dmx_ranges = toas[itoas], np.array(dmx_ranges)[iranges]
