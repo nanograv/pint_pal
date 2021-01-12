@@ -127,6 +127,12 @@ An error message appears with the command you should have run instead; run that.
 
 Noise modeling
 ---------------
+
+Make sure to run the following commands _before_ attempting noise modeling (you might have to restart your kernel if it's already running):
+> pip install git+https://github.com/nanograv/enterprise.git --upgrade --user
+> pip install git+https://github.com/nanograv/enterprise_extensions.git --upgrade --user
+
+
 Noise modeling in the notebook is implemented through the use of the `run_noise_analysis` flag. This flag is set to __False__ by default. __Do not__ perform noise modeling until everything else for the pulsar is finalized, since noise modeling can take a long time to finish, especially for the A-rated and some of the B-rated pulsars. Your workflow should thus look like:
 
 1. Generate a good timing solution for your pulsar _without_ noise modeling.
@@ -134,6 +140,7 @@ Noise modeling in the notebook is implemented through the use of the `run_noise_
 3. Re-run the notebook _with_ `run_noise_analysis = True`, i.e. _with_ noise modeling.
 4. Commit and push the new noise modeled parfile in the same way as above.
 
+These steps might not work for the new pulsars (C-type) which don't have noise parameters. In these cases, feel free to run the noise analysis since it is quicker than that for A- and B-type pulsars.
 
 Congratulations, you have timed a pulsar for NANOGrav!
 
