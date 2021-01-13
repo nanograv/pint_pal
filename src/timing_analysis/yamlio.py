@@ -262,6 +262,13 @@ def main():
         default=False,
         help="overwrite input yaml file(s)",
     )
+    parser.add_argument(
+        "--roundtrip",
+        "-rt",
+        action="store_true",
+        default=False,
+        help="read/write input yaml file(s)",
+    )
     args = parser.parse_args()
 
     if args.check:
@@ -270,7 +277,12 @@ def main():
             add_niterations(ff,overwrite=args.overwrite)
             add_dmx_block(ff,overwrite=args.overwrite)
             curate_comments(ff,overwrite=args.overwrite)
+    elif args.roundtrip:
+        for ff in args.files:
+            config = read_yaml(ff)
+            outfile = get_outfile(ff,overwrite=args.overwrite,extension='rt')
+            write_yaml(config,outfile)
 
 if __name__ == "__main__":
-    log.info(f'Current release dir: {RELEASE}')
+    #log.info(f'Current release dir: {RELEASE}')
     main()
