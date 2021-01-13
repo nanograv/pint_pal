@@ -183,7 +183,7 @@ def curate_comments(yaml_file,overwrite=True,extension='fix'):
 
     if config.get('ignore').get('bad-epoch'):
         try:
-            config['ignore'].yaml_add_eol_comment("designated by basename string",'bad-epoch')
+            config['ignore'].yaml_add_eol_comment("designated by basename string {backend}_{mjd}_{source}",'bad-epoch')
         except:
             pass
     else:
