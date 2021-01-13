@@ -16,6 +16,9 @@ from astropy import log
 import yaml
 from timing_analysis.utils import write_if_changed
 
+# Default values for configuration, if absent
+FREQUENCY_RATIO = 1.1
+MAX_SOLARWIND_DELAY = 0.1 # microseconds
 
 class TimingConfiguration:
     """
@@ -176,13 +179,13 @@ class TimingConfiguration:
         """ Return desired frequency ratio """
         if 'fratio' in self.config['dmx'].keys():
             return self.config['dmx']['fratio']
-        return None
+        return FREQUENCY_RATIO 
 
     def get_sw_delay(self):
         """ Return desired max(solar wind delay) threshold """
         if 'max-sw-delay' in self.config['dmx'].keys():
             return self.config['dmx']['max-sw-delay']
-        return None
+        return MAX_SOLARWIND_DELAY
 
     def get_custom_dmx(self):
         """ Return MJD/binning params for handling DM events, etc. """
