@@ -644,12 +644,15 @@ def remove_all_dmx_ranges(model, quiet=False):
         pass
 
 
-def setup_dmx(model, toas, quiet=True):
+def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1):
     """
     Sets up and checks a DMX model using a number of defaults.
 
     model is a PINT model object.
     toas is a PINT TOA object.
+    frequency_ratio is the ratio of high-to-low frequencies in the DMX bin;
+        the frequencies used are returned by get_dmx_freqs().
+    max_delta_t is the time delay [us] above which a DMX range will be split. 
     quiet=True turns off some of the logged warnings and info.
     """
 
@@ -686,10 +689,10 @@ def setup_dmx(model, toas, quiet=True):
         dmx_ranges = sorted(dmx_ranges, key=lambda dmx_range: dmx_range[0])
 
     # Do basic checks of DMX model
-    dmx_ranges = check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1,
+    dmx_ranges = check_solar_wind(toas, dmx_ranges, model, max_delta_t=max_delta_t,
             bin_width=0.5, pad=0.05, check=False, quiet=quiet)
     itoas, iranges = check_frequency_ratio(toas, dmx_ranges,
-            frequency_ratio=1.1, quiet=quiet)
+            frequency_ratio=frequency_ratio, quiet=quiet)
     toas, dmx_ranges = toas[itoas], np.array(dmx_ranges)[iranges]
     dmx_ranges = list(map(tuple, dmx_ranges))
 
