@@ -137,7 +137,7 @@ def add_dmx_block(yaml_file,overwrite=True,extension='fix'):
     else:
         log.info(f'{yaml_file} already contains dmx block.')
 
-def curate_comments(yaml_file,overwrite=True,extension='fix',refresh=False):
+def curate_comments(yaml_file,overwrite=True,extension='fix'):
     """Standardizes info comments on specific yaml fields
 
     Parameters
@@ -147,20 +147,51 @@ def curate_comments(yaml_file,overwrite=True,extension='fix',refresh=False):
         write yaml with same name (true), or add extenion (false)
     extension: str, optional
         extention added to output filename if overwrite=False
-    full_refresh: bool, optional
-        if True, deletes all existing comments before curating
     """
     config = read_yaml(yaml_file)
-    if refresh:
-        pass # I can't figure out how to delete all comments at the moment... 
     out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
 
+    # currently assumes these fields exist, should check explicitly
     config.yaml_add_eol_comment("parameters not included here will be frozen",'free-params')
     config.yaml_add_eol_comment("toa excision",'ignore')
-    # need conditionals for existence, otherwise error
-    #config['ignore'].yaml_add_eol_comment("designated by [name,chan,subint]",'bad-toa')
-    #config['ignore'].yaml_add_eol_comment("designated by [mjd_start,mjd_end]",'bad-range')
-    #config['ignore'].yaml_add_eol_comment("designated by basename string",'bad-epoch')
+
+    toplevel_keys = dict(config).keys()
+    ignore_keys = dict(config['ignore']).keys()
+    dmx_keys = dict(config['dmx']).keys()
+
+    if config.get('ignore').get('bad-toa'): 
+        try:
+            config['ignore'].yaml_add_eol_comment("designated by [name,chan,subint]",'bad-toa')
+        except:
+            pass
+    else:
+        if 'bad-toa' in ignore_keys:
+            log.info('bad-toa field exists, is not set.')
+        else:
+            log.warning('bad-toa field does not exist.')
+
+    if config.get('ignore').get('bad-range'):
+        try:
+            config['ignore'].yaml_add_eol_comment("designated by [mjd_start,mjd_end]",'bad-range')
+        except:
+            pass
+    else:
+        if 'bad-range' in ignore_keys:
+            log.info('bad-range field exists, is not set.')
+        else:
+            log.warning('bad-range field does not exist.')
+
+    if config.get('ignore').get('bad-epoch'):
+        try:
+            config['ignore'].yaml_add_eol_comment("designated by basename string {backend}_{mjd}_{source}",'bad-epoch')
+        except:
+            pass
+    else:
+        if 'bad-epoch' in ignore_keys:
+            log.info('bad-epoch field exists, is not set.')
+        else:
+            log.warning('bad-epoch field does not exist.')
+
     config['dmx'].yaml_add_eol_comment("finer binning when solar wind delay > threshold (us)",'max-sw-delay')
     config['dmx'].yaml_add_eol_comment("designated by [mjd_low,mjd_hi,binsize]",'custom-dmx')
     write_yaml(config, out_yaml)
@@ -218,31 +249,40 @@ def main():
         help="YAML files to check/update"
     )
     parser.add_argument(
-        "--update",
-        "-u",
+        "--check",
+        "-c",
         action="store_true",
         default=False,
-        help="check/update full yaml",
+        help="check input yaml",
     )
     parser.add_argument(
-        "--refresh_comments",
-        "-rc",
+        "--overwrite",
+        "-o",
         action="store_true",
         default=False,
-        help="fully delete/restore yaml comments",
+        help="overwrite input yaml file(s)",
+    )
+    parser.add_argument(
+        "--roundtrip",
+        "-rt",
+        action="store_true",
+        default=False,
+        help="read/write input yaml file(s)",
     )
     args = parser.parse_args()
 
-    if args.update:
+    if args.check:
         for ff in args.files:
-            fix_toa_info(ff)
-            add_niterations(ff)
-            add_dmx_block(ff)
-            refresh = False
-            if args.refresh_comments: 
-                refresh = True
-            curate_comments(ff,refresh=refresh)
+            fix_toa_info(ff,overwrite=args.overwrite)
+            add_niterations(ff,overwrite=args.overwrite)
+            add_dmx_block(ff,overwrite=args.overwrite)
+            curate_comments(ff,overwrite=args.overwrite)
+    elif args.roundtrip:
+        for ff in args.files:
+            config = read_yaml(ff)
+            outfile = get_outfile(ff,overwrite=args.overwrite,extension='rt')
+            write_yaml(config,outfile)
 
 if __name__ == "__main__":
-    log.info(f'Current release dir: {RELEASE}')
+    #log.info(f'Current release dir: {RELEASE}')
     main()
