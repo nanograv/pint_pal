@@ -246,7 +246,7 @@ def run_Ftests(fitter, alpha=ALPHA):
     print("Testing additional parameters:")
     retdict['Add'] = {}
     if hasattr(fitter.model, "binary_model_name"):
-        if fitter.model.binary_model_name == 'DD':
+        if fitter.model.binary_model_name == 'DD' or fitter.model.binary_model_name == 'BT':
             binarydict = check_binary_DD(fitter, alpha=ALPHA, remove = False)
         elif fitter.model.binary_model_name == 'DDK':
             binarydict = check_binary_DDK(fitter, alpha=ALPHA, remove = False)
