@@ -66,8 +66,12 @@ def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = Fals
     =======
     None
     """
-    outdir = './noise_run_chains/' + mo.PSR.value + '/'
     
+    if not using_wideband:
+        outdir = './noise_run_chains/' + mo.PSR.value + '/'
+    else:
+        outdir = './noise_run_chains/' + mo.PSR.value + '_wb/'
+        
     if os.path.exists(outdir) and (run_noise_analysis) and (not resume):
         log.info("INFO: A noise directory for pulsar {} already exists! Re-running noise modeling from scratch".format(mo.PSR.value))
     elif os.path.exists(outdir) and (run_noise_analysis) and (resume):
@@ -127,7 +131,10 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     model: New timing model which includes WN and RN parameters
     """
     
-    chaindir = './noise_run_chains/' + model.PSR.value + '/'
+    if not using_wideband:
+        chaindir = './noise_run_chains/' + mo.PSR.value + '/'
+    else:
+        chaindir = './noise_run_chains/' + mo.PSR.value + '_wb/'
     
     wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner)
     
