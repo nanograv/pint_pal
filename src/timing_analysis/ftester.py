@@ -115,7 +115,7 @@ def binary_params_ftest(bparams, fitter, remove):
             pass
         else:
             # Check for H3/H4 -> This may not be quite right, may need to change later
-            if pr == 'H4' and 'H3' in p_test:
+            if pr == 'H3':
                 pass
             else:
                 pint_params.append([getattr(pparams, pr)])
@@ -125,9 +125,9 @@ def binary_params_ftest(bparams, fitter, remove):
         pint_params.append([pparams.EPS1DOT, pparams.EPS2DOT])
         pint_comps.append([pparams.EPS1DOT_Component+b_ext, pparams.EPS2DOT_Component+b_ext])
     # Check H3 and H4 specifically
-    if 'H3' in p_test and 'H4' in p_test:
-        pint_params.append([pparams.H3, pparams.H4])
-        pint_comps.append([pparams.H3_Component+b_ext, pparams.H4_Component+b_ext])
+    #if 'H3' in p_test and 'H4' in p_test:
+    #    pint_params.append([pparams.H3, pparams.H4])
+    #   pint_comps.append([pparams.H3_Component+b_ext, pparams.H4_Component+b_ext])
     # return the values
     return pint_params, pint_comps
 
@@ -269,7 +269,7 @@ def run_Ftests(fitter, alpha=ALPHA):
         retdict['Remove']['PX'] = PXdict['PX']
     # Check removing binary parameters
     if hasattr(fitter.model, "binary_model_name"):
-        if fitter.model.binary_model_name == 'DD':
+        if fitter.model.binary_model_name == 'DD' or fitter.model.binary_model_name == 'BT':
             binarydict = check_binary_DD(fitter, alpha=ALPHA, remove = True)
         elif fitter.model.binary_model_name == 'DDK':
             binarydict = check_binary_DDK(fitter, alpha=ALPHA, remove = True)
