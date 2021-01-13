@@ -166,6 +166,30 @@ class TimingConfiguration:
             return self.config['ignore']['prob-outlier']
         return None #return some default value instead?
 
+    def get_ignore_dmx(self):
+        """ Return ignore-dmx toggle """
+        if 'ignore-dmx' in self.config['dmx'].keys():
+            return self.config['dmx']['ignore-dmx']
+        return None
+
+    def get_fratio(self):
+        """ Return desired frequency ratio """
+        if 'fratio' in self.config['dmx'].keys():
+            return self.config['dmx']['fratio']
+        return None
+
+    def get_sw_delay(self):
+        """ Return desired max(solar wind delay) threshold """
+        if 'max-sw-delay' in self.config['dmx'].keys():
+            return self.config['dmx']['max-sw-delay']
+        return None
+
+    def get_custom_dmx(self):
+        """ Return MJD/binning params for handling DM events, etc. """
+        if 'custom-dmx' in self.config['dmx'].keys():
+            return self.config['dmx']['custom-dmx']
+        return None
+
     def apply_ignore(self,toas):
         """ Basic checks and return TOA excision info. """
         OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-epoch'] # prob-outlier, bad-ff
