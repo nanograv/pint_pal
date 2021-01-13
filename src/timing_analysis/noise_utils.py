@@ -68,7 +68,7 @@ def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = Fals
     """
     
     if not using_wideband:
-        outdir = './noise_run_chains/' + mo.PSR.value + '/'
+        outdir = './noise_run_chains/' + mo.PSR.value + '_nb/'
     else:
         outdir = './noise_run_chains/' + mo.PSR.value + '_wb/'
         
@@ -132,7 +132,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     """
     
     if not using_wideband:
-        chaindir = './noise_run_chains/' + mo.PSR.value + '/'
+        chaindir = './noise_run_chains/' + mo.PSR.value + '_nb/'
     else:
         chaindir = './noise_run_chains/' + mo.PSR.value + '_wb/'
     
