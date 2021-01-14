@@ -153,7 +153,7 @@ def get_dmx_ranges(toas, bin_width=1.0, pad=0.0, strict_inclusion=True,
 def get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0, pad=0.0,
         strict_inclusion=True, check=True):
     """
-    Return a list of DMX ranges GASP TOAs into DMX ranges
+    Return a list of DMX ranges that group GASP TOAs into bins.
 
     NB: Adopted from dmx_fixer.py.
 
@@ -224,6 +224,8 @@ def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
         strict_inclusion=True, add_new_ranges=False, check=True):
     """
     Expands DMX ranges to accommodate new TOAs up to a maximum bin width.
+
+    Returns a list of DMX ranges.
 
     NB: returned DMX ranges are sorted according to MJD.
 
@@ -302,7 +304,7 @@ def check_dmx_ranges(toas, dmx_ranges, full_return=False, quiet=False):
 
     NB: range boundaries are exclusive (strict_inclusion).
 
-    Returns--
+    Returns (if full_return)--
         masks: TOA masks for each range.
         ibad: Indices of bad/improper ranges.
         iover: Indices of ranges that overlap with one another.
@@ -391,7 +393,7 @@ def check_dmx_ranges(toas, dmx_ranges, full_return=False, quiet=False):
 
 def get_dmx_mask(toas, low_mjd, high_mjd, strict_inclusion=True):
     """
-    Return a Boolean index array for selecting TOAs from toas.
+    Return a Boolean index array for selecting TOAs from toas in a DMX range.
 
     toas is a PINT TOA object of TOAs in the DMX bin.
     low_mjd is the left edge of the DMX bin.
@@ -525,7 +527,7 @@ def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, bin_width=1.0,
     """
     Split DMX ranges based on influence of the solar wind.
 
-    Returns a new list of DMX ranges.
+    Returns a list of DMX ranges.
 
     Uses approximation for SW model until PINT's model is improved/working.
 
@@ -607,7 +609,7 @@ def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, bin_width=1.0,
 
 def add_dmx(model, bin_width=1.0):
     """
-    Checks for DispersionDMX and ensure the bin width is the only parameter.
+    Checks for DispersionDMX and ensures the bin width is the only parameter.
 
     model is a PINT model object.
     bin_width is the largest permissible DMX bin width [d].
@@ -648,11 +650,13 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1):
     """
     Sets up and checks a DMX model using a number of defaults.
 
+    Returns new PINT TOA object containing TOAs passing frequency ratio test.
+
     model is a PINT model object.
     toas is a PINT TOA object.
     frequency_ratio is the ratio of high-to-low frequencies in the DMX bin;
         the frequencies used are returned by get_dmx_freqs().
-    max_delta_t is the time delay [us] above which a DMX range will be split. 
+    max_delta_t is the time delay [us] above which a DMX range will be split.
     quiet=True turns off some of the logged warnings and info.
     """
 
@@ -723,6 +727,8 @@ def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None,
         start_idx=1, print_dmx=False):
     """
     Uses convenience functions to assemble a TEMPO-style DMX parameters.
+
+    Returns list of DMXParameter objects.
 
     toas is a PINT TOA object.
     dmx_ranges is a list of (low_mjd, high_mjd) pairs defining the DMX ranges;
