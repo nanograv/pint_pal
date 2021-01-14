@@ -158,6 +158,12 @@ class TimingConfiguration:
             return self.config['ignore']['bad-epoch']
         return None
 
+    def get_bad_ranges(self):
+        """ Return list of bad epoch ranges by MJD ([MJD1,MJD2])"""
+        if 'bad-range' in self.config['ignore'].keys():
+            return self.config['ignore']['bad-range']
+        return None
+
     def get_bad_toas(self):
         """ Return list of bad TOAs (lists: [filename, channel, subint]) """
         if 'bad-toa' in self.config['ignore'].keys():
@@ -240,6 +246,12 @@ class TimingConfiguration:
             for be in self.get_bad_epochs():
                 be_select = np.array([(be not in n) for n in toas.get_flag_value('name')[0]])
                 selection *= be_select
+        if 'bad-range' in valid_valued:
+            for br in self.get_bad_ranges():
+                min_crit = (toas.get_mjds() > br[0]*u.d)
+                max_crit = (toas.get_mjds() < br[1]*u.d)
+                br_select = np.logical_xor(min_crit, max_crit)
+                selection *= br_select
         if 'bad-toa' in valid_valued:
             for bt in self.get_bad_toas():
                 name,chan,subint = bt
