@@ -202,7 +202,8 @@ def add_feDMJumps(mo,rcvrs):
             dmjump.add_param(DMJUMPn,setup=True)
 
 def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
-    """Quick and dirty routine to find outlier residuals based on some threshold.
+    """Quick and dirty routine to find outlier residuals based on some threshold. 
+    Automatically deals with Wideband vs. Narrowband fitters.
 
     Parameters
     ==========
@@ -220,11 +221,20 @@ def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
         prints bad-toa lines that can be copied directly into a yaml file
     """
 
-    c = np.abs(fo.resids_init.time_resids.to_value(u.us)) > threshold_us
+    # check if using wideband TOAs, as this changes how to access the residuals
+    
+    if "Wideband" in str(type(fo)):
+        init_time_resids = fo.resids_init.toa.time_resids
+    else:
+        init_time_resids = fo.resids_init.time_resids
+    
+    toa_errors = fo.toas.get_errors()
+    
+    c = np.abs(init_time_resids.to_value(u.us)) > threshold_us
     if n_sigma is not None:
-        c &= np.abs((fo.resids_init.time_resids/fo.toas.get_errors()).to_value(1)) > n_sigma
+        c &= np.abs((init_time_resids/toa_errors).to_value(1)) > n_sigma
     if max_sigma is not None:
-        c |= fo.toas.get_errors().to_value(u.us) > max_sigma
+        c |= toa_errors.to_value(u.us) > max_sigma
     badtoalist = np.where(c)
     # FIXME: will go wrong if some TOAs lack -chan or -subint
     names = fo.toas.get_flag_value('name')[0]

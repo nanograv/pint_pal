@@ -246,7 +246,11 @@ class TimingConfiguration:
                 name_match = np.array([(n == name) for n in toas.get_flag_value('name')[0]])
                 chan_match = np.array([(ch == chan) for ch in toas.get_flag_value('chan')[0]])
                 subint_match = np.array([(si == subint) for si in toas.get_flag_value('subint')[0]])
-                bt_select = np.invert(name_match * subint_match * chan_match)
+                if self.get_toa_type() == 'NB':
+                    bt_select = np.invert(name_match * subint_match * chan_match)
+                else:
+                    # don't match based on -chan flags, since WB TOAs don't have them
+                    bt_select = np.invert(name_match * subint_match)
                 selection &= bt_select
 
         return toas[selection]
