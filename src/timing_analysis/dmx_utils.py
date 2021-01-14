@@ -627,14 +627,14 @@ def add_dmx(model, bin_width=1.0):
         dmx.DMX.set(bin_width)
 
 
-def model_dmx_ranges(model):
+def model_dmx_params(model):
     """
-    Get DMX ranges from a PINT model object.
+    Get DMX ranges, values, and uncertainties from a PINT model object.
 
     model is a PINT model object.
     """
 
-    dmx_ranges = []
+    dmx_ranges, dmx_vals, dmx_errs = [], [], []
 
     if 'DispersionDMX' in model.components.keys():
         dmx = model.components['DispersionDMX']
@@ -642,11 +642,15 @@ def model_dmx_ranges(model):
         for idx in idxs:
             low_mjd = getattr(model, f"DMXR1_{idx:04d}").value
             high_mjd = getattr(model, f"DMXR2_{idx:04d}").value
+            dmx_val = getattr(model, f"DMX_{idx:04d}").value
+            dmx_err = getattr(model, f"DMX_{idx:04d}").uncertainty.value
             dmx_ranges.append((low_mjd, high_mjd))
-        # Sort the ranges
-        dmx_ranges = sorted(dmx_ranges, key=lambda dmx_range: dmx_range[0])
+            dmx_vals.append(dmx_val)
+            dmx_errs.append(dmx_err)
+        dmx_vals = np.array(dmx_vals)
+        dmx_errs = np.array(dmx_errs)
 
-    return dmx_ranges
+    return dmx_ranges, dmx_vals, dmx_errs
 
 
 def remove_all_dmx_ranges(model, quiet=False):
@@ -683,11 +687,25 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1):
     quiet=True turns off some of the logged warnings and info.
     """
 
+    # Get existing DMX ranges and values from model; adjust the mean DM
+    old_dmx_ranges, old_dmx_vals, old_dmx_errs = model_dmx_params(model)
+    if len(old_dmx_ranges):
+        mean_old_dmx_val, sum_of_weights = np.average(old_dmx_vals,
+                weights=old_dmx_errs**-2, returned=True)
+        mean_old_dmx_val_err = sum_of_weights**-0.5
+        if abs(mean_old_dmx_val / mean_old_dmx_val_err) > 1.0:
+            adjust_old_dmx = True
+            old_DM = model.DM.value
+            DM = model.DM.value + mean_old_dmx_val
+            model.DM.set(DM)
+            msg = f"Updated mean DM parameter from {old_DM:.7f} to {DM:.7f}."
+            log.info(msg)
+        else:
+            adjust_old_dmx = False
+
     # Set up DMX model
     if 'gbt' in toas.observatories: bin_width = 6.5  # day
     else: bin_width = 0.5  # day
-    # Get existing DMX ranges and values from model
-    old_dmx_ranges = model_dmx_ranges(model)
     # Calculate GASP-era ranges, if applicable
     dmx_ranges = get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0,
             pad=0.05, check=False)
@@ -695,8 +713,8 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1):
     dmx_ranges = expand_dmx_ranges(toas, dmx_ranges, bin_width=bin_width,
             pad=0.05, add_new_ranges=True, check=False)
 
-    # Ensure DM events have fine DMX binning
-    if model.PSR.value == 'J1713+0747':  # will generalize this later
+    # Ensure DM events have fine DMX binning --> need to generalize later
+    if model.PSR.value == 'J1713+0747':
         toa_mask = np.zeros(len(toas), dtype=bool)
         dmx_range_mask = np.ones(len(dmx_ranges), dtype=bool)
         for irange,dmx_range in enumerate(dmx_ranges):
@@ -737,12 +755,27 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1):
         pass  # check_dmx_ranges will print lots of warnings if quiet=False
 
     if len(dmx_ranges) == len(old_dmx_ranges):
+        old_dmx_ranges = sorted(old_dmx_ranges,  #  sort the old ranges
+                key=lambda dmx_range: dmx_range[0])
         if np.isclose(np.array(dmx_ranges).flatten(), \
                 np.array(old_dmx_ranges).flatten(), \
                 rtol=1e-10, atol=1e-5).all():
             msg = f"Proposed DMX ranges are the same as input; keeping input DMX model."
             log.info(msg)
-
+            if adjust_old_dmx:
+                dmx = model.components['DispersionDMX']
+                idxs = dmx.get_indices()
+                for idx in idxs:
+                    low_mjd = getattr(model, f"DMXR1_{idx:04d}").value
+                    high_mjd = getattr(model, f"DMXR2_{idx:04d}").value
+                    dmx_val = getattr(model, f"DMX_{idx:04d}").value
+                    dmx_val -= mean_old_dmx_val
+                    frozen = getattr(model, f"DMX_{idx:04d}").frozen
+                    dmx.remove_DMX_range(idx)
+                    dmx.add_DMX_range(low_mjd, high_mjd, idx, dmx_val,
+                            frozen=frozen)
+                    msg = f"Subtracted {mean_old_dmx_val:.7f} from existing DMX values."
+                log.info(msg)
             return toas
     else:
         # Remove all DMX bins from model
