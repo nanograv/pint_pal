@@ -627,6 +627,28 @@ def add_dmx(model, bin_width=1.0):
         dmx.DMX.set(bin_width)
 
 
+def model_dmx_ranges(model):
+    """
+    Get DMX ranges from a PINT model object.
+
+    model is a PINT model object.
+    """
+
+    dmx_ranges = []
+
+    if 'DispersionDMX' in model.components.keys():
+        dmx = model.components['DispersionDMX']
+        idxs = dmx.get_indices()
+        for idx in idxs:
+            low_mjd = getattr(model, f"DMXR1_{idx:04d}").value
+            high_mjd = getattr(model, f"DMXR2_{idx:04d}").value
+            dmx_ranges.append((low_mjd, high_mjd))
+        # Sort the ranges
+        dmx_ranges = sorted(dmx_ranges, key=lambda dmx_range: dmx_range[0])
+
+    return dmx_ranges
+
+
 def remove_all_dmx_ranges(model, quiet=False):
     """
     Uses PINT to remove all DMX parameter ranges from a timing model.
@@ -634,6 +656,7 @@ def remove_all_dmx_ranges(model, quiet=False):
     model is a PINT model object.
     quiet=True turns off the logged info.
     """
+
     if 'DispersionDMX' in model.components.keys():
         dmx = model.components['DispersionDMX']
         idxs = dmx.get_indices()
@@ -663,9 +686,9 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1):
     # Set up DMX model
     if 'gbt' in toas.observatories: bin_width = 6.5  # day
     else: bin_width = 0.5  # day
-    # First remove all DMX bins from existing model
-    remove_all_dmx_ranges(model, quiet=False)
-    # Get GASP-era ranges, if applicable
+    # Get existing DMX ranges and values from model
+    old_dmx_ranges = model_dmx_ranges(model)
+    # Calculate GASP-era ranges, if applicable
     dmx_ranges = get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0,
             pad=0.05, check=False)
     # Now expand to include all TOAs
@@ -693,33 +716,48 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1):
         dmx_ranges = sorted(dmx_ranges, key=lambda dmx_range: dmx_range[0])
 
     # Do basic checks of DMX model
-    dmx_ranges = check_solar_wind(toas, dmx_ranges, model, max_delta_t=max_delta_t,
-            bin_width=0.5, pad=0.05, check=False, quiet=quiet)
+    dmx_ranges = check_solar_wind(toas, dmx_ranges, model,
+            max_delta_t=max_delta_t, bin_width=0.5, pad=0.05, check=False,
+            quiet=quiet)
     itoas, iranges = check_frequency_ratio(toas, dmx_ranges,
             frequency_ratio=frequency_ratio, quiet=quiet)
     toas, dmx_ranges = toas[itoas], np.array(dmx_ranges)[iranges]
     dmx_ranges = list(map(tuple, dmx_ranges))
 
+    # Sort the ranges
+    dmx_ranges = sorted(dmx_ranges, key=lambda dmx_range: dmx_range[0])
+
     # Check for sanity
     masks, ibad, iover, iempty, inone, imult = \
             check_dmx_ranges(toas, dmx_ranges, full_return=True, quiet=False)
     if len(ibad) + len(iover) + len(iempty) + len(inone) + len(imult) == 0:
-        msg = "DMX model setup OK."
+        msg = "Proposed DMX model OK."
         log.info(msg)
     else:
         pass  # check_dmx_ranges will print lots of warnings if quiet=False
 
-    # Add DMX parameters to model
-    add_dmx(model, bin_width)
-    dmx = model.components['DispersionDMX']
-    for irange,dmx_range in enumerate(dmx_ranges):
-        dmx.add_DMX_range(dmx_range[0], dmx_range[1], index=irange+1, dmx=0.0,
-                frozen=False)
-    if True:#not quiet:
+    if len(dmx_ranges) == len(old_dmx_ranges):
+        if np.isclose(np.array(dmx_ranges).flatten(), \
+                np.array(old_dmx_ranges).flatten(), \
+                rtol=1e-10, atol=1e-5).all():
+            msg = f"Proposed DMX ranges are the same as input; keeping input DMX model."
+            log.info(msg)
+
+            return toas
+    else:
+        # Remove all DMX bins from model
+        remove_all_dmx_ranges(model, quiet=False)
+
+        # Add DMX parameters to model
+        add_dmx(model, bin_width)
+        dmx = model.components['DispersionDMX']
+        for irange,dmx_range in enumerate(dmx_ranges):
+            dmx.add_DMX_range(dmx_range[0], dmx_range[1], index=irange+1,
+                    dmx=0.0, frozen=False)
         msg = f"Added {len(dmx_ranges)} DMX parameters to timing model."
         log.info(msg)
 
-    return toas
+        return toas
 
 
 def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None,
