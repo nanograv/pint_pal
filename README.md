@@ -48,8 +48,8 @@ This package has a variety of tools to support timing for NANOGrav, but the basi
 
 2. Make a branch for your work on the new pulsar, say J1234+5678:
 ```
-$ git checkout 15yr
-$ git checkout -b psr/J1234+5678/{your_initials}
+> git checkout 15yr
+> git checkout -b psr/J1234+5678/{your_initials}
 ```
 
 3. Copy `configs/template.nb.yaml` to `configs/J1234+5678.nb.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). For now you may want to select *narrowband* `.tim` files (indicated by `.nb.tim` rather than `.wb.tim`) and ensure `toa-type` is set correctly in the `.yaml` file. If you are timing a pulsar that's been around for a while, check to see if ASP/GASP `.tim` files are available for your source in the latest release directory and ensure they're listed in the `.yaml` file if so; these were recently added.
@@ -58,7 +58,7 @@ $ git checkout -b psr/J1234+5678/{your_initials}
 
 5. Copy the template notebook to the root directory (where you should probably work):
 ```
-$ cp nb_templates/newmsp_notebook_v2.0.ipynb J1234+5678.ipynb
+> cp nb_templates/newmsp_notebook_v2.0.ipynb J1234+5678.ipynb
 ```
 
 6. Open the notebook, fill in your pulsar name, and try running it. Various things will go wrong.
@@ -105,9 +105,9 @@ When you have a post-fit timing solution that seems good - no wild outliers, no 
 
 2. Archive the old `.par` file and put the new one in place (note: the initial `.par` file naming convention may vary):
 ```
-$ git mv results/J1234+5678.12.5yr.par results/archive/
-$ cp J1234+5678_PINT_YYYYMMDD.nb.par results/
-$ git add results/J1234+5678_PINT_YYYYMMDD.nb.par
+> git mv results/J1234+5678.12.5yr.par results/archive/
+> cp J1234+5678_PINT_YYYYMMDD.nb.par results/
+> git add results/J1234+5678_PINT_YYYYMMDD.nb.par
 ```
 
 3. Update `configs/J1234+5678.nb.yaml` (or `configs/J1234+5678.nb.yaml`) to use this new par file; place the old one as `compare-model` (note that `compare-model` requires the full `results/archive/` path). Rerun the notebook and confirm that all is well and that both pre-fit and post-fit are good fits, and indistinguishable.
@@ -116,8 +116,8 @@ $ git add results/J1234+5678_PINT_YYYYMMDD.nb.par
 
 5. Submit it to the gitlab:
 ```
-$ git commit
-$ git push
+> git commit
+> git push
 ```
 An error message appears with the command you should have run instead; run that. (It'll be something involving `--set-upstream origin` but it's easier to just let git suggest it.)
 
@@ -129,9 +129,10 @@ Noise modeling
 ---------------
 
 Make sure to run the following commands _before_ attempting noise modeling (you might have to restart your kernel if it's already running):
+```
 > pip install git+https://github.com/nanograv/enterprise.git --upgrade --user
 > pip install git+https://github.com/nanograv/enterprise_extensions.git --upgrade --user
-
+```
 
 Noise modeling in the notebook is implemented through the use of the `run_noise_analysis` flag. This flag is set to __False__ by default. __Do not__ perform noise modeling until everything else for the pulsar is finalized, since noise modeling can take a long time to finish, especially for the A-rated and some of the B-rated pulsars. Your workflow should thus look like:
 
