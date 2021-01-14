@@ -1,6 +1,6 @@
 source: J0605+3757
 par-directory: results/
-tim-directory: /nanograv/releases/15y/toagen/releases/2021.01.06-d05fdbc/
+tim-directory: /nanograv/timing/releases/15y/toagen/releases/2021.01.06-d05fdbc/
 timing-model: J0605+3757.14yrbw.par
 compare-model:
 toas:
