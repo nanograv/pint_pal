@@ -1,5 +1,8 @@
 import numpy as np
 from astropy import log
+from pint.utils import dmxparse
+
+# TODO: use dmxparse in model_dmx_ranges, setup_dmx, etc.
 
 class DMXParameter:
     """
