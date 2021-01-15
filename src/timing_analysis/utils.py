@@ -639,7 +639,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     try:
         psrchive_v = check_output(["psrchive", "--version"]).decode("utf-8")
         fsum.write('PSRCHIVE: %s\\\\\n' % (psrchive_v))
-    except ImportError as error:
+    except (ImportError, FileNotFoundError) as error:
         log.warning(str(error)+ ", cannot print PSRCHIVE version.")
     
     # Write out the plots - Assuming we have already made the summary plot previous to this
