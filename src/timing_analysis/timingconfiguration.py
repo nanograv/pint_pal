@@ -94,6 +94,10 @@ class TimingConfiguration:
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
         t = self.apply_ignore(t)
+        
+        # To facilitate TOA excision, frontend/backend info
+        febe_pairs = set(t.get_flag_value('f')[0])
+        log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
 
         return m, t
 
