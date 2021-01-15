@@ -58,7 +58,7 @@ This package has a variety of tools to support timing for NANOGrav, but the basi
 
 5. Copy the template notebook to the root directory (where you should probably work):
 ```
-> cp nb_templates/newmsp_notebook_v2.0.ipynb J1234+5678.ipynb
+> cp nb_templates/draft_process.ipynb J1234+5678.ipynb
 ```
 
 6. Open the notebook, fill in your pulsar name, and try running it. Various things will go wrong.
@@ -124,6 +124,8 @@ An error message appears with the command you should have run instead; run that.
 6. Create a merge request for your branch - this asks one of the maintainers to look at your work and if it's okay make it part of the official repository. I recommend including at least the reduced chi-squared and a post-fit residuals plot, or you could just attach a PDF of the timing notebook. 
 
 7. Respond to any comments or questions or requests for adjustment the maintainers raise; when they are happy they will merge it.
+
+8. Document your (significant) changes in the yaml! Each yaml file has a "changelog" section at the bottom. It's expecting entries in this format:  - ['YYYY-MM-DD user.name KEYWORD: (explain yourself here)']. There is a function in lite_utils called new_changelog_entry that can help you format these entries. The template nb also has a cell explaining change logging.   
 
 Noise modeling
 ---------------
