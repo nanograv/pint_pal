@@ -398,7 +398,7 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
     else:
         NB = True
     #    resids = fitter.resids
-    resids = fitter.resids
+    resids = psr_fitter_nofd.resids
 
     psr_fitter_nofd.fit_toas(1) # May want more than 2 iterations
     if NB:
@@ -413,8 +413,8 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
     if NB:
         retdict['NoFD'] = {'ft':None, 'resid_rms_test':base_rms_nofd, 'resid_wrms_test':base_wrms_nofd, 'chi2_test':base_chi2_nofd, 'dof_test':base_ndof_nofd}
     else:
-        dm_resid_rms_test_nofd = fitter.resids.residual_objs['dm'].resids.std()
-        dm_resid_wrms_test_nofd = fitter.resids.residual_objs['dm'].rms_weighted()
+        dm_resid_rms_test_nofd = psr_fitter_nofd.resids.residual_objs['dm'].resids.std()
+        dm_resid_wrms_test_nofd = psr_fitter_nofd.resids.residual_objs['dm'].rms_weighted()
         # Add initial values to F-test dictionary
         retdict['initial'] = {'ft':None, 'resid_rms_test':base_rms_nofd, 'resid_wrms_test':base_wrms_nofd, 'chi2_test':base_chi2_nofd, 'dof_test':base_ndof_nofd, "dm_resid_rms_test": dm_resid_rms_test_nofd, "dm_resid_wrms_test": dm_resid_wrms_test_nofd}
     # and report the value
