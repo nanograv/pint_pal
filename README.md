@@ -121,7 +121,9 @@ When you have a post-fit timing solution that seems good - no wild outliers, no 
 ```
 An error message appears with the command you should have run instead; run that. (It'll be something involving `--set-upstream origin` but it's easier to just let git suggest it.)
 
-6. Create a merge request for your branch - this asks one of the maintainers to look at your work and if it's okay make it part of the official repository. There are two ways to do this -- you can copy and paste a link that appears in the terminal output when you push your changes, or use the "new merge request" button [here](https://gitlab.nanograv.org/nano-time/timing_analysis/merge_requests). If you don't see the button, you may need to be added as a developer (check with Joe Swiggum or Joe Glaser). You can include additional information in your MR with the description and comments. Attaching the summary PDF is recommended.
+6. Create a merge request for your branch - this asks one of the maintainers to look at your work and if it's okay make it part of the official repository. There are two ways to do this -- you can copy and paste a link that appears in the terminal output when you push your changes, or use the "new merge request" button [here](https://gitlab.nanograv.org/nano-time/timing_analysis/merge_requests); see screenshot below. If you don't see the button, you may need to be added as a developer (check with Joe Swiggum or Joe Glaser). You can include additional information in your MR with the description and comments. Attaching the summary PDF is recommended.
+
+![screenshot](new-merge-request.png)
 
 7. Respond to any comments or questions or requests for adjustment the maintainers raise; when they are happy they will merge it.
 
