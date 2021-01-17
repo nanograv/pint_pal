@@ -290,9 +290,19 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
         else:
             ax1.set_ylabel('Residual ($\mu$s)')
     if legend:
-        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, 1.0+1.0/figsize[1]), ncol=len(RCVR_BCKNDS))
+        if len(RCVR_BCKNDS) > 5:
+            ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
+            y_offset = 1.15
+        else:
+            ncol = len(RCVR_BCKNDS)
+            y_offset = 1.0
+        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, y_offset+1.0/figsize[1]), ncol=ncol)
     if title:
-        plt.title("%s %s timing residuals" % (fitter.model.PSR.value, restype), y=1.0+1.0/figsize[1])
+        if len(RCVR_BCKNDS) > 5:
+            y_offset = 1.1
+        else:
+            y_offset = 1.0
+        plt.title("%s %s timing residuals" % (fitter.model.PSR.value, restype), y=y_offset+1.0/figsize[1])
     if axs == None:
         plt.tight_layout()
     if save:
@@ -697,9 +707,19 @@ def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False
     ax2.set_xlim(mjd0, mjd1)
 
     if legend:
-        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, 1.0+1.0/figsize[1]), ncol=len(RCVR_BCKNDS))
+        if len(RCVR_BCKNDS) > 5:
+            ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
+            y_offset = 1.15
+        else:
+            ncol = len(RCVR_BCKNDS)
+            y_offset = 1.0
+        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, y_offset+1.0/figsize[1]), ncol=ncol)
     if title:
-        plt.title("%s %s DM residuals" % (fitter.model.PSR.value, restype), y=1.0+1.0/figsize[1])
+        if len(RCVR_BCKNDS) > 5:
+            y_offset = 1.1
+        else:
+            y_offset = 1.0
+        plt.title("%s %s DM residuals" % (fitter.model.PSR.value, restype), y=y_offset+1.0/figsize[1])
     if axs == None:
         plt.tight_layout()
     if save:
@@ -955,9 +975,19 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
             ax1.set_xlabel('Residual ($\mu$s)')
     ax1.set_xlim(-1.1*xmax,1.1*xmax)
     if legend:
-        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, 1.0+1.0/figsize[1]), ncol=len(RCVR_BCKNDS))
+        if len(RCVR_BCKNDS) > 5:
+            ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
+            y_offset = 1.15
+        else:
+            ncol = len(RCVR_BCKNDS)
+            y_offset = 1.0
+        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, y_offset+1.0/figsize[1]), ncol=ncol)
     if title:
-        plt.title("%s %s residual measurements" % (fitter.model.PSR.value, restype), y=1.0+1.0/figsize[1])
+        if len(RCVR_BCKNDS) > 5:
+            y_offset = 1.1
+        else:
+            y_offset = 1.0
+        plt.title("%s %s residual measurements" % (fitter.model.PSR.value, restype), y=y_offset+1.0/figsize[1])
     if axs == None:
         plt.tight_layout()
     if save:
@@ -1111,9 +1141,19 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
     ax1.set_ylabel("Number of measurements")
     ax1.set_xlabel(xlabel)
     if legend:
-        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, 1.0+1.0/figsize[1]), ncol=len(RCVR_BCKNDS))
+        if len(RCVR_BCKNDS) > 5:
+            ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
+            y_offset = 1.15
+        else:
+            ncol = len(RCVR_BCKNDS)
+            y_offset = 1.0
+        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, y_offset+1.0/figsize[1]), ncol=ncol)
     if title:
-        plt.title("%s %s DM residual measurements" % (fitter.model.PSR.value, restype), y=1.0+1.0/figsize[1])
+        if len(RCVR_BCKNDS) > 5:
+            y_offset = 1.1
+        else:
+            y_offset = 1.0
+        plt.title("%s %s DM residual measurements" % (fitter.model.PSR.value, restype), y=y_offset+1.0/figsize[1])
     if axs == None:
         plt.tight_layout()
     if save:
@@ -1357,9 +1397,19 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
         else:
             ax1.set_ylabel('Residual ($\mu$s)')
     if legend:
-        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, 1.0+1.0/figsize[1]), ncol=len(RCVR_BCKNDS))
+        if len(RCVR_BCKNDS) > 5:
+            ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
+            y_offset = 1.15
+        else:
+            ncol = len(RCVR_BCKNDS)
+            y_offset = 1.0
+        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, y_offset+1.0/figsize[1]), ncol=ncol)
     if title:
-        plt.title("%s %s timing residuals" % (fitter.model.PSR.value, restype), y=1.0+1.0/figsize[1])
+        if len(RCVR_BCKNDS) > 5:
+            y_offset = 1.1
+        else:
+            y_offset = 1.0
+        plt.title("%s %s timing residuals" % (fitter.model.PSR.value, restype), y=y_offset+1.0/figsize[1])
     if axs == None:
         plt.tight_layout()
     if save:
@@ -1508,9 +1558,19 @@ def plot_toas_freq(fitter, save = False, legend = True, title = True, axs = None
     ax2.set_xlim(mjd0, mjd1)
     ax1.set_ylabel(r"Frequency (MHz)")
     if legend:
-        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, 1.0+1.0/figsize[1]), ncol=len(RCVR_BCKNDS))
+        if len(RCVR_BCKNDS) > 5:
+            ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
+            y_offset = 1.15
+        else:
+            ncol = len(RCVR_BCKNDS)
+            y_offset = 1.0
+        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, y_offset+1.0/figsize[1]), ncol=ncol)
     if title:
-        plt.title("%s toa frequency v. time" % (fitter.model.PSR.value), y=1.0+1.0/figsize[1])
+        if len(RCVR_BCKNDS) > 5:
+            y_offset = 1.1
+        else:
+            y_offset = 1.0
+        plt.title("%s toa frequency v. time" % (fitter.model.PSR.value), y=y_offset+1.0/figsize[1])
     if axs == None:
         plt.tight_layout()
     if save:
