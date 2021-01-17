@@ -777,20 +777,20 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1):
                     msg = f"Subtracted {mean_old_dmx_val:.7f} from existing DMX values."
                 log.info(msg)
             return toas
-    else:
-        # Remove all DMX bins from model
-        remove_all_dmx_ranges(model, quiet=False)
 
-        # Add DMX parameters to model
-        add_dmx(model, bin_width)
-        dmx = model.components['DispersionDMX']
-        for irange,dmx_range in enumerate(dmx_ranges):
-            dmx.add_DMX_range(dmx_range[0], dmx_range[1], index=irange+1,
-                    dmx=0.0, frozen=False)
-        msg = f"Added {len(dmx_ranges)} DMX parameters to timing model."
-        log.info(msg)
+    # Remove all DMX bins from model
+    remove_all_dmx_ranges(model, quiet=False)
 
-        return toas
+    # Add DMX parameters to model
+    add_dmx(model, bin_width)
+    dmx = model.components['DispersionDMX']
+    for irange,dmx_range in enumerate(dmx_ranges):
+        dmx.add_DMX_range(dmx_range[0], dmx_range[1], index=irange+1,
+                dmx=0.0, frozen=False)
+    msg = f"Added {len(dmx_ranges)} DMX parameters to timing model."
+    log.info(msg)
+
+    return toas
 
 
 def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None,
