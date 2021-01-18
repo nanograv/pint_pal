@@ -424,7 +424,7 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
         report_ptest("no FD", base_wrms_nofd.value, base_chi2_nofd, base_ndof_nofd)
     else:
         report_ptest("no FD", base_wrms_nofd.value, base_chi2_nofd, base_ndof_nofd, dmrms = dm_resid_wrms_test_nofd.value)
-    # Now add the FD component to the timing model if it's not there
+    # Now add the FD component back into the timing model
     all_components = model.timing_model.Component.component_types
     fd_class = all_components["FD"]
     fd = fd_class()
