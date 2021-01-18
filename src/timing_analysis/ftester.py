@@ -393,6 +393,8 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
             getattr(psr_fitter_nofd.model, "{:}".format(fdparam)).uncertainty_value = 0.0
             getattr(psr_fitter_nofd.model, "{:}".format(fdparam)).frozen = True
             #psr_fitter_nofd.fit_toas(1)
+        if not cur_fd:
+            warnings.warn("No FD parameters in the initial timing model...")
     except:
         warnings.warn("No FD parameters in the initial timing model...")
 
@@ -430,12 +432,12 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
         report_ptest("no FD", base_wrms_nofd.value, base_chi2_nofd, base_ndof_nofd)
     else:
         report_ptest("no FD", base_wrms_nofd.value, base_chi2_nofd, base_ndof_nofd, dmrms = dm_resid_wrms_test_nofd.value)
-    # DON'T NEED THIS IF JUST SETTING FD PARAMETERS TO ZERO
-    # Now re-add the FD component to the timing model
-    #all_components = model.timing_model.Component.component_types
-    #fd_class = all_components["FD"]
-    #fd = fd_class()
-    #psr_fitter_nofd.model.add_component(fd, validate=False)
+    # Now add the FD component to the timing model if it's not there
+    if 'FD' not in psr_fitter_nofd.model.components.keys():
+        all_components = model.timing_model.Component.component_types
+        fd_class = all_components["FD"]
+        fd = fd_class()
+        psr_fitter_nofd.model.add_component(fd, validate=False)
 
     param_list = []
     component_list = []
