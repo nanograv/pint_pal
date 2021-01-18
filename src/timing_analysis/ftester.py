@@ -392,7 +392,7 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
             getattr(psr_fitter_nofd.model, "{:}".format(fdparam)).value = 0.0
             getattr(psr_fitter_nofd.model, "{:}".format(fdparam)).uncertainty_value = 0.0
             getattr(psr_fitter_nofd.model, "{:}".format(fdparam)).frozen = True
-            psr_fitter_nofd.fit_toas(1)
+            #psr_fitter_nofd.fit_toas(1)
     except:
         warnings.warn("No FD parameters in the initial timing model...")
 
