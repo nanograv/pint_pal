@@ -387,7 +387,7 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
     psr_fitter_nofd = copy.deepcopy(fitter)
     try:
         psr_fitter_nofd.model.remove_component('FD')
-    except:
+    except AttributeError:
         warnings.warn("No FD parameters in the initial timing model...")
 
     # Check if fitter is wideband or not
