@@ -54,7 +54,7 @@ def whiten_resids(fitter, restype = 'postfit'):
                 noise_resids = fitter.resids_init.noise_resids
         else:
             if restype == 'postfit':
-                rtime_esids = fitter.resids.time_resids
+                time_resids = fitter.resids.time_resids
                 noise_resids = fitter.resids.noise_resids
             elif restype == 'prefit':
                 time_resids = fitter.resids_init.time_resids
