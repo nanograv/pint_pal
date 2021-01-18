@@ -387,7 +387,7 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
     psr_fitter_nofd = copy.deepcopy(fitter)
     try:
         psr_fitter_nofd.model.remove_component('FD')
-    except:
+    except AttributeError:
         warnings.warn("No FD parameters in the initial timing model...")
 
     # Check if fitter is wideband or not
@@ -398,9 +398,11 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
     else:
         NB = True
     #    resids = fitter.resids
-    resids = psr_fitter_nofd.resids
-
+    
     psr_fitter_nofd.fit_toas(1) # May want more than 2 iterations
+    
+    resids = psr_fitter_nofd.resids
+    
     if NB:
         base_rms_nofd = resids.time_resids.std().to(u.us)
         base_wrms_nofd = resids.rms_weighted() # assumes the input fitter has been fit already
@@ -422,7 +424,7 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
         report_ptest("no FD", base_wrms_nofd.value, base_chi2_nofd, base_ndof_nofd)
     else:
         report_ptest("no FD", base_wrms_nofd.value, base_chi2_nofd, base_ndof_nofd, dmrms = dm_resid_wrms_test_nofd.value)
-    # Now re-add the FD component to the timing model
+    # Now add the FD component back into the timing model
     all_components = model.timing_model.Component.component_types
     fd_class = all_components["FD"]
     fd = fd_class()
