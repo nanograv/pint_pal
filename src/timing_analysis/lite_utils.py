@@ -17,7 +17,7 @@ from pint.modelutils import model_equatorial_to_ecliptic
 from pint.models.parameter import maskParameter
 from pint.models.timing_model import Component
 
-def write_par(fitter,toatype='',addext=''):
+def write_par(fitter,toatype='',addext='',outfile=None):
     """Writes a timing model object to a par file in the working directory.
 
     Parameters
@@ -27,18 +27,43 @@ def write_par(fitter,toatype='',addext=''):
         if set, adds nb/wb.par
     addext: str, optional
         if set, adds extension to date
+    outfile: str, optional
+        if set, overrides default naming convention
     """
-    source = fitter.get_allparams()['PSR'].value
-    date_str = date.today().strftime('%Y%m%d')
-    if toatype:
-        outfile = '%s_PINT_%s%s.%s.par' % (source,date_str,addext,toatype.lower())
-    else:
-        outfile = '%s_PINT_%s%s.par' % (source,date_str,addext)
+    if outfile is None:
+        source = fitter.get_allparams()['PSR'].value
+        date_str = date.today().strftime('%Y%m%d')
+        if toatype:
+            outfile = '%s_PINT_%s%s.%s.par' % (source,date_str,addext,toatype.lower())
+        else:
+            outfile = '%s_PINT_%s%s.par' % (source,date_str,addext)
 
     fout=open(outfile,'w')
     fout.write(fitter.model.as_parfile())
     fout.close()
 
+def write_tim(fitter,toatype='',addext='',outfile=None):
+    """Writes TOAs to a tim file in the working directory.
+
+    Parameters
+    ==========
+    fitter: `pint.fitter` object
+    toatype: str, optional
+        if set, adds nb/wb.par
+    addext: str, optional
+        if set, adds extension to date
+    outfile: str, optional
+        if set, overrides default naming convention
+    """
+    if outfile is None:
+        source = fitter.get_allparams()['PSR'].value
+        date_str = date.today().strftime('%Y%m%d')
+        if toatype:
+            outfile = '%s_PINT_%s%s.%s.tim' % (source,date_str,addext,toatype.lower())
+        else:
+            outfile = '%s_PINT_%s%s.tim' % (source,date_str,addext)
+
+    fitter.toas.write_TOA_file(outfile)
 
 def write_include_tim(source,tim_file_list):
     """Writes file listing tim files to load as one PINT toa object (using INCLUDE).
@@ -202,7 +227,7 @@ def add_feDMJumps(mo,rcvrs):
             dmjump.add_param(DMJUMPn,setup=True)
 
 def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
-    """Quick and dirty routine to find outlier residuals based on some threshold. 
+    """Quick and dirty routine to find outlier residuals based on some threshold.
     Automatically deals with Wideband vs. Narrowband fitters.
 
     Parameters
@@ -222,14 +247,14 @@ def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
     """
 
     # check if using wideband TOAs, as this changes how to access the residuals
-    
+
     if "Wideband" in str(type(fo)):
         init_time_resids = fo.resids_init.toa.time_resids
     else:
         init_time_resids = fo.resids_init.time_resids
-    
+
     toa_errors = fo.toas.get_errors()
-    
+
     c = np.abs(init_time_resids.to_value(u.us)) > threshold_us
     if n_sigma is not None:
         c &= np.abs((init_time_resids/toa_errors).to_value(1)) > n_sigma
@@ -240,11 +265,16 @@ def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
     names = fo.toas.get_flag_value('name')[0]
     chans = fo.toas.get_flag_value('chan')[0]
     subints = fo.toas.get_flag_value('subint')[0]
+    mask = np.ones(fo.toas.ntoas, dtype=bool)
     for i in badtoalist[0]:
         name = names[i]
         chan = chans[i]
         subint = subints[i]
+        mask &= np.array(names) != name
         print(f"    - ['{name}',{chan},{subint}]")
+    msg = f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(np.logical_not(mask))} removed) based on large_residual() criteria.'
+    log.info(msg)
+    return fo.toas[mask]
 
 def compare_models(fo,model_to_compare=None,verbosity='check',threshold_sigma=3.,nodmx=True):
     """Wrapper function to compare post-fit results to a user-specified comparison model.
