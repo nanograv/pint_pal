@@ -365,8 +365,8 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
     title [boolean] : If False, will not print plot title [default: True].
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
-         
-    Optional Arguements:
+
+    Optional Arguments:
     --------------------
     dmx [list/array] : List or array of DMX values to plot. Will override values from fitter object.
     errs [list/array] : List or array of DMX error values to plot. Will override values from fitter object.
@@ -378,7 +378,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
     """
     # Get pulsar name
     psrname = fitter.model.PSR.value
-    
+
     # Check if wideband
     if "Wideband" in fitter.__class__.__name__:
         NB = False
@@ -386,7 +386,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
     else:
         NB = True
         dmxname = "%s_dmxparse.nb.out" % (psrname)
-    
+
     # Get plotting dmx and error values for WB
     if 'dmx' in kwargs.keys():
         DMXs = kwargs['dmx']
@@ -400,7 +400,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
         # move file name
         if savedmx:
             os.rename("dmxparse.out", dmxname)
-    
+
     # Double check/overwrite errors if necessary
     if 'errs' in kwargs.keys():
         DMX_vErrs = kwargs['errs']
@@ -408,7 +408,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
     if 'mjds' in kwargs.keys():
         DMX_center_MJD = kwargs['mjds']
         DMX_center_Year = (DMX_center_MJD- 51544.0)/365.25 + 2000.0
-    
+
     # If we want to compare WB to NB, we need to look for the right output file
     if compare == True:
         # Look for other dmx file
@@ -420,7 +420,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
                 # Get the values from the DMX parse file
                 dmx_epochs, nb_dmx, nb_dmx_var, nb_dmx_r1, nb_dmx_r2 = np.loadtxt("%s_dmxparse.wb.out"%(psrname),\
                                                     unpack=True, usecols=(0,1,2,3,4))
-        else: 
+        else:
             #log.log(1, "Searching for file: %s_dmxparse.nb.out" % (psrname))
             if not os.path.isfile("%s_dmxparse.nb.out"%(psrname)):
                 raise RuntimeError("Cannot find Narrowband DMX parse output file.")
@@ -475,7 +475,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
                          label="Wideband")
             ax1.errorbar(dmx_mid_yr, nb_dmx*10**3, yerr = nb_dmx_var*10**3, fmt = '.', color = clr_nb, marker = mkr_nb, \
                      label='Narrowband')
-    
+
     # Set second axis
     ax1.set_xlabel(r'Year')
     ax1.grid(True)
@@ -504,7 +504,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
         if compare:
             ext += "_NB_WB_compare"
         plt.savefig("%s_dmx_v_time%s.png" % (psrname, ext))
-    
+
     if axs == None:
         # Define clickable points
         text = ax1.text(0,0,"")
@@ -528,7 +528,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
             text.set_text("DMX Params:\n MJD: %s \n DMX: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
 
         fig.canvas.mpl_connect('button_press_event', onclick)
-    
+
     return
 
 # Now we want to make wideband DM vs. time plot, this uses the premade dm_resids from PINT
@@ -554,8 +554,8 @@ def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
     mean_sub [boolean] : If False, will not mean subtract the DM residuals to be centered on zero [default: True]
-         
-    Optional Arguements:
+
+    Optional Arguments:
     --------------------
     dmres [list/array] : List or array of DM residual values to plot. Will override values from fitter object.
     errs [list/array] : List or array of DM residual error values to plot. Will override values from fitter object.
@@ -569,7 +569,7 @@ def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False
     # Check if wideband
     if "Wideband" not in fitter.__class__.__name__:
         raise RuntimeError("Error: Narrowband TOAs have no DM residuals, use `plot_dmx_time() instead.")
-    
+
     # Get the DM residuals
     if 'dmres' in kwargs.keys():
         dm_resids = kwargs['dmres']
@@ -581,7 +581,7 @@ def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False
         elif restype == 'both':
             dm_resids = fitter.resids.residual_objs['dm'].resids.value
             dm_resids_init = fitter.resids_init.residual_objs['dm'].resids.value
-    
+
     # Get the DM residual errors
     if "errs" in kwargs.keys():
         dm_error = kwargs['errs']
@@ -772,7 +772,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
     
-    Optional Arguements:
+    Optional Arguments:
     --------------------
     res [list/array] : List or array of residual values to plot. Will override values from fitter object.
     errs [list/array] : List or array of residual error values to plot. Will override values from fitter object.
@@ -1004,7 +1004,7 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
          larger figure [default: None].
     mean_sub [boolean] : If False, will not mean subtract the DM residuals to be centered on zero [default: True]
     
-    Optional Arguements:
+    Optional Arguments:
     --------------------
     dmres [list/array] : List or array of residual values to plot. Will override values from fitter object.
     errs [list/array] : List or array of residual error values to plot. Will override values from fitter object.
@@ -1429,8 +1429,8 @@ def plot_toas_freq(fitter, save = False, legend = True, title = True, axs = None
     title [boolean] : If False, will not print plot title [default: True].
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
-    
-    Optional Arguements:
+
+    Optional Arguments:
     --------------------
     freqs [list/array] : List or array of TOA frequencies to plot. Will override values from toa object.
     mjds [list/array] : List or array of TOA MJDs to plot. Will override values from toa object.
@@ -1445,7 +1445,7 @@ def plot_toas_freq(fitter, save = False, legend = True, title = True, axs = None
         NB = False
     else:
         NB = True
-        
+
     # frequencies
     if 'freqs' in kwargs.keys():
         freqs = kwargs['freqs']
