@@ -673,7 +673,8 @@ def remove_all_dmx_ranges(model, quiet=False):
         pass
 
 
-def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1):
+def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
+        freeze_DM=True):
     """
     Sets up and checks a DMX model using a number of defaults.
 
@@ -685,7 +686,11 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1):
         the frequencies used are returned by get_dmx_freqs().
     max_delta_t is the time delay [us] above which a DMX range will be split.
     quiet=True turns off some of the logged warnings and info.
+    freeze_DM=True ensures the mean DM parameter is not fit.
     """
+
+    # Freeze DM
+    model.DM.frozen = freeze_DM
 
     # Get existing DMX ranges and values from model; adjust the mean DM
     old_dmx_ranges, old_dmx_vals, old_dmx_errs = model_dmx_params(model)
@@ -739,6 +744,8 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1):
             quiet=quiet)
     itoas, iranges = check_frequency_ratio(toas, dmx_ranges,
             frequency_ratio=frequency_ratio, quiet=quiet)
+    msg = f"Selecting {len(itoas)} TOAs out of {toas.ntoas} ({toas.ntoas - len(itoas)} removed) based on the frequency ratio check."
+    log.info(msg)
     toas, dmx_ranges = toas[itoas], np.array(dmx_ranges)[iranges]
     dmx_ranges = list(map(tuple, dmx_ranges))
 
