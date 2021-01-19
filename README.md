@@ -28,13 +28,13 @@ Note: You may have to reconfigure this if your container is brought down at any 
 
 4. Get the latest copy of PINT; in a terminal:
 ```
-> pip install git+git://github.com/nanograv/pint --user
+> pip install git+git://github.com/nanograv/pint --user --upgrade
 ```
 Even if PINT is already installed, run this same command to update to the latest version.
 
 5. To install and make sure paths are set up properly, `cd` into `timing_analysis` and:
 ```
-pip install .
+pip install -e .
 ```
 If it is already installed, then `cd` into `timing_analysis`, run `git pull` and then `pip install .`
 
@@ -58,7 +58,7 @@ This package has a variety of tools to support timing for NANOGrav, but the basi
 
 5. Copy the template notebook to the root directory (where you should probably work):
 ```
-> cp nb_templates/newmsp_notebook_v2.0.ipynb J1234+5678.ipynb
+> cp nb_templates/draft_process.ipynb J1234+5678.ipynb
 ```
 
 6. Open the notebook, fill in your pulsar name, and try running it. Various things will go wrong.
@@ -70,7 +70,7 @@ Timing the pulsar
 
 There are a lot of things that can go wrong at this point; that's why this isn't an automated process, and why you have a notebook. Here are a few things that might come up, and some suggestions:
 
-- Can't find your `.par` file: you probably need to use `results/J1234+5678.12.5yr.par`, that is, include the directory.
+- Can't find your `.par` file: you probably need to use `J1234+5678.12.5yr.par`, that is, don't include the directory.
 
 - Can't find one or all of your `.tim` files: make sure you can see them at that location on the same machine your notebook is running on. You probably need to be on the NANOGrav notebook server.
 
@@ -110,7 +110,7 @@ When you have a post-fit timing solution that seems good - no wild outliers, no 
 > git add results/J1234+5678_PINT_YYYYMMDD.nb.par
 ```
 
-3. Update `configs/J1234+5678.nb.yaml` (or `configs/J1234+5678.nb.yaml`) to use this new par file; place the old one as `compare-model` (note that `compare-model` requires the full `results/archive/` path). Rerun the notebook and confirm that all is well and that both pre-fit and post-fit are good fits, and indistinguishable.
+3. Update `configs/J1234+5678.nb.yaml` (or `configs/J1234+5678.nb.yaml`) to use this new par file; place the old one as `compare-model`. Rerun the notebook and confirm that all is well and that both pre-fit and post-fit are good fits, and indistinguishable.
 
 4. Go through the checklist at https://gitlab.nanograv.org/nano-time/timing_analysis/-/wikis/Review-Checklists-For-Merging
 
@@ -121,9 +121,15 @@ When you have a post-fit timing solution that seems good - no wild outliers, no 
 ```
 An error message appears with the command you should have run instead; run that. (It'll be something involving `--set-upstream origin` but it's easier to just let git suggest it.)
 
-6. Create a merge request for your branch - this asks one of the maintainers to look at your work and if it's okay make it part of the official repository. I recommend including at least the reduced chi-squared and a post-fit residuals plot, or you could just attach a PDF of the timing notebook. 
+6. Create a merge request for your branch - this asks one of the maintainers to look at your work and if it's okay make it part of the official repository. There are two ways to do this -- you can copy and paste a link that appears in the terminal output when you push your changes, or use the "new merge request" button [here](https://gitlab.nanograv.org/nano-time/timing_analysis/merge_requests) (see the screenshot below). If you don't see the button, you may need to be added as a developer (check with Joe Swiggum or Joe Glaser). You can include additional information in your MR with the description and comments. Attaching the summary PDF is recommended.
+
+![screenshot](new-merge-request.png)
 
 7. Respond to any comments or questions or requests for adjustment the maintainers raise; when they are happy they will merge it.
+
+8. Document your (significant) changes in the yaml! Each yaml file has a "changelog" section at the bottom. It's expecting entries in this format:  - ['YYYY-MM-DD user.name KEYWORD: (explain yourself here)']. There is a function in lite_utils called new_changelog_entry that can help you format these entries. The template nb also has a cell explaining change logging.   
+
+It's probably also worth checking the [high-level decisions](https://gitlab.nanograv.org/nano-time/timing_analysis/-/wikis/High-level-decisions-for-v0).
 
 Noise modeling
 ---------------

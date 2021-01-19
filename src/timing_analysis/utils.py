@@ -46,22 +46,29 @@ def whiten_resids(fitter, restype = 'postfit'):
     else:
         # Check if WB or NB
         if "Wideband" in fitter.__class__.__name__:
-            resids = fitter.resids.residual_objs['toa']
+            if restype == 'postfit':
+                time_resids = fitter.resids.residual_objs['toa'].time_resids
+                noise_resids = fitter.resids.noise_resids
+            else:
+                time_resids = fitter.resids_init.residual_objs['toa'].time_resids
+                noise_resids = fitter.resids_init.noise_resids
         else:
             if restype == 'postfit':
-                resids = fitter.resids
+                time_resids = fitter.resids.time_resids
+                noise_resids = fitter.resids.noise_resids
             elif restype == 'prefit':
-                resids = fitter.resids_init
+                time_resids = fitter.resids_init.time_resids
+                noise_resids = fitter.resids_init.noise_resids
             else:
                 raise ValueError("Unrecognized residual type: %s. Please choose from 'prefit' or 'postfit'."%(restype))
-        # Get number of residuals
-        num_res = len(resids.time_resids)
+            # Get number of residuals
+        num_res = len(time_resids)
         # Check that the key is in the dictionary
-        if "pl_red_noise" in resids.noise_resids:
-            wres = resids.time_resids - resids.noise_resids['pl_red_noise'][:num_res]
+        if "pl_red_noise" in noise_resids:
+            wres = time_resids - noise_resids['pl_red_noise'][:num_res]
         else:
             log.warning("No red noise, residuals already white. Returning input residuals...")
-            wres = resids.time_resids
+            wres = time_resids
     return wres
 
 def rms_by_backend(resids, errors, rcvr_backends, dm = False):

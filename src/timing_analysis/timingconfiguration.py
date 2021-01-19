@@ -10,6 +10,7 @@ import io
 import os
 import pint.toa as toa
 import pint.models as model
+import pint.fitter
 import numpy as np
 import astropy.units as u
 from astropy import log
@@ -94,6 +95,10 @@ class TimingConfiguration:
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
         t = self.apply_ignore(t)
+        
+        # To facilitate TOA excision, frontend/backend info
+        febe_pairs = set(t.get_flag_value('f')[0])
+        log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
 
         return m, t
 
@@ -127,6 +132,19 @@ class TimingConfiguration:
         if "fitter" in self.config.keys():
             return self.config['fitter']
         return None
+
+    def construct_fitter(self, to, mo):
+        """ Return the fitter, tracking pulse numbers if available """
+        fitter_name = self.config['fitter']
+        fitter_class = getattr(pint.fitter, fitter_name)
+        if 'pulse_number' in to.table.columns:
+            if fitter_name.startswith("Wideband"):
+                return fitter_class(to, mo, additional_args=dict(toa=dict(track_mode="use_pulse_numbers")))
+            else:
+                return fitter_class(to, mo, track_mode="use_pulse_numbers")
+        else:
+            return fitter_class(to, mo) 
+
 
     def get_toa_type(self):
         """ Return the toa-type string """
