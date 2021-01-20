@@ -430,11 +430,9 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
     fd = fd_class()
     psr_fitter_nofd.model.add_component(fd, validate=False)
 
-    param_list = []
-    component_list = []
     for i in range(1, maxcomponent+1):
-        param_list.append(getattr(pparams, 'FD%s'%(i)))
-        component_list.append(getattr(pparams, "FD%i_Component"%(i)))
+        param_list = [getattr(pparams, 'FD%s'%(i))]
+        component_list = [getattr(pparams, "FD%i_Component"%(i))]
         # Run F-test
         ftest_dict = psr_fitter_nofd.ftest(param_list, component_list, remove=False, full_output=True)
         # Add to dictionary to return
@@ -446,6 +444,18 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
             report_ptest('FD1 through FD%s'%i, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
         # This edits the values in the file for some reason, want to reset them to zeros
         reset_params(param_list)
+        # Add the FD parameter to the timing model permanently
+        if param_list[0].name == 'FD1':
+            # If FD1, this already exists once the FD component class is added, so we just unfreeze it
+            getattr(psr_fitter_nofd.model, "{:}".format(param_list[0].name)).frozen = False
+        else:
+            # Else the parameter must be added permanently
+            psr_fitter_nofd.model.components[component_list[0]].add_param(param_list[0], setup=True)
+            #print(psr_fitter_nofd.model.components['FD'])
+        # validate and setup model
+        psr_fitter_nofd.model.validate()
+        psr_fitter_nofd.model.setup()
+        psr_fitter_nofd.fit_toas(1)
     # Return the dictionary
     return retdict
 
