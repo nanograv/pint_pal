@@ -35,7 +35,14 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     if save_corner:
         corner.corner(chain[burn:, :-4], labels = pars)
 
-        pl.savefig("./noise_corner_{}.pdf".format(psr_name))
+        if '_wb' in chaindir:
+            figname = f"./{psr_name}_noise_corner.wb.pdf"
+        elif '_nb' in chaindir:
+            figname = f"./{psr_name}_noise_corner.nb.pdf"
+        else:
+            figname = f"./{psr_name}_noise_corner.pdf"
+
+        pl.savefig(figname)
 
         pl.show()
 
@@ -96,7 +103,14 @@ def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = Fals
                                   dmjump_var = False)
     else:
         pta = models.model_singlepsr_noise(e_psr, is_wideband = True, use_dmdata = True, white_vary = True,
-                                  dmjump_var = True) #Will need to turn dmjump_var = False after e_e change
+                                  dmjump_var = False)
+        dmjump_params = {}
+        for param in mo.params:
+            if param.startswith('DMJUMP'):
+                dmjump_param = getattr(model,param)
+                dmjump_param_name = f"{pta.pulsars[0]}_{dmjump_param.key_value[0]}_dmjump"
+                dmjump_params[dmjump_param_name] = dmjump_param.value
+        pta.set_default_params(dmjump_params)
 
     #setup sampler using enterprise_extensions
     samp = sampler.setup_sampler(pta, outdir = outdir, resume = resume)
