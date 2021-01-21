@@ -17,7 +17,7 @@ from pint.modelutils import model_equatorial_to_ecliptic
 from pint.models.parameter import maskParameter
 from pint.models.timing_model import Component
 
-def write_par(fitter,toatype='',addext=''):
+def write_par(fitter,toatype='',addext='',outfile=None):
     """Writes a timing model object to a par file in the working directory.
 
     Parameters
@@ -27,18 +27,42 @@ def write_par(fitter,toatype='',addext=''):
         if set, adds nb/wb.par
     addext: str, optional
         if set, adds extension to date
+    outfile: str, optional
+        if set, overrides default naming convention
     """
-    source = fitter.get_allparams()['PSR'].value
-    date_str = date.today().strftime('%Y%m%d')
-    if toatype:
-        outfile = '%s_PINT_%s%s.%s.par' % (source,date_str,addext,toatype.lower())
-    else:
-        outfile = '%s_PINT_%s%s.par' % (source,date_str,addext)
+    if outfile is None:
+        source = fitter.get_allparams()['PSR'].value
+        date_str = date.today().strftime('%Y%m%d')
+        if toatype:
+            outfile = f'{source}_PINT_{date_str}{addext}.{toatype.lower()}.par'
+        else:
+            outfile = f'{source}_PINT_{date_str}{addext}.par'
 
-    fout=open(outfile,'w')
-    fout.write(fitter.model.as_parfile())
-    fout.close()
+    with open(outfile, 'w') as fout:
+        fout.write(fitter.model.as_parfile())
 
+def write_tim(fitter,toatype='',addext='',outfile=None):
+    """Writes TOAs to a tim file in the working directory.
+
+    Parameters
+    ==========
+    fitter: `pint.fitter` object
+    toatype: str, optional
+        if set, adds nb/wb.par
+    addext: str, optional
+        if set, adds extension to date
+    outfile: str, optional
+        if set, overrides default naming convention
+    """
+    if outfile is None:
+        source = fitter.get_allparams()['PSR'].value
+        date_str = date.today().strftime('%Y%m%d')
+        if toatype:
+            outfile = f'{source}_PINT_{date_str}{addext}.{toatype.lower()}.tim'
+        else:
+            outfile = f'{source}_PINT_{date_str}{addext}.tim'
+
+    fitter.toas.write_TOA_file(outfile, format='tempo2')
 
 def write_include_tim(source,tim_file_list):
     """Writes file listing tim files to load as one PINT toa object (using INCLUDE).
@@ -100,7 +124,7 @@ def check_fit(fitter,skip_check=None):
     Parameters
     ==========
     fitter: `pint.fitter` object
-    skip_check: list of checks to be skipped (examples: 'spin'; 'spin,astrometry') 
+    skip_check: list of checks to be skipped (examples: 'spin'; 'spin,astrometry')
                 can be a list object or a string with comma-separated values
     """
     if skip_check:
@@ -202,7 +226,7 @@ def add_feDMJumps(mo,rcvrs):
             dmjump.add_param(DMJUMPn,setup=True)
 
 def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
-    """Quick and dirty routine to find outlier residuals based on some threshold. 
+    """Quick and dirty routine to find outlier residuals based on some threshold.
     Automatically deals with Wideband vs. Narrowband fitters.
 
     Parameters
@@ -222,14 +246,14 @@ def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
     """
 
     # check if using wideband TOAs, as this changes how to access the residuals
-    
+
     if "Wideband" in str(type(fo)):
         init_time_resids = fo.resids_init.toa.time_resids
     else:
         init_time_resids = fo.resids_init.time_resids
-    
+
     toa_errors = fo.toas.get_errors()
-    
+
     c = np.abs(init_time_resids.to_value(u.us)) > threshold_us
     if n_sigma is not None:
         c &= np.abs((init_time_resids/toa_errors).to_value(1)) > n_sigma
@@ -245,6 +269,10 @@ def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
         chan = chans[i]
         subint = subints[i]
         print(f"    - ['{name}',{chan},{subint}]")
+    mask = np.logical_not(c)
+    msg = f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(np.logical_not(mask))} removed) based on large_residual() criteria.'
+    log.info(msg)
+    return fo.toas[mask]
 
 def compare_models(fo,model_to_compare=None,verbosity='check',threshold_sigma=3.,nodmx=True):
     """Wrapper function to compare post-fit results to a user-specified comparison model.

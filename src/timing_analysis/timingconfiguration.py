@@ -152,6 +152,12 @@ class TimingConfiguration:
             return self.config['toa-type']
         return None
 
+    def get_niter(self):
+        """ Return an integer of the number of iterations to fit """
+        if "n-iterations" in self.config.keys():
+            return int(self.config['n-iterations'])
+        return 1
+
     def get_mjd_start(self):
         """Return mjd-start quantity (applies units days)"""
         if 'mjd-start' in self.config['ignore'].keys():
@@ -203,7 +209,7 @@ class TimingConfiguration:
         """ Return desired frequency ratio """
         if 'fratio' in self.config['dmx'].keys():
             return self.config['dmx']['fratio']
-        return FREQUENCY_RATIO 
+        return FREQUENCY_RATIO
 
     def get_sw_delay(self):
         """ Return desired max(solar wind delay) threshold """
@@ -282,5 +288,8 @@ class TimingConfiguration:
                     # don't match based on -chan flags, since WB TOAs don't have them
                     bt_select = np.invert(name_match * subint_match)
                 selection &= bt_select
+
+        msg = f"Selecting {sum(selection)} TOAs out of {toas.ntoas} ({sum(np.logical_not(selection))} removed) based on the 'ignore' configuration block."
+        log.info(msg)
 
         return toas[selection]

@@ -6,54 +6,54 @@ from enterprise_extensions import models, model_utils, sampler
 import corner
 
 import pint.models as pm
-from pint.models.parameter import maskParameter    
+from pint.models.parameter import maskParameter
 
 import matplotlib.pyplot as pl
 
 def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True):
     """
     Reads enterprise chain file; produces and saves corner plot; returns WN dictionary and RN (SD) BF
-    
+
     Parameters
     ==========
     chaindir: path to enterprise noise run chain; Default: './noise_run_chains/'
     burn_frac: fraction of chain to use for burn-in; Default: 0.25
     save_corner: Flag to toggle saving of corner plots; Default: True
-    
+
     Returns
     =======
     wn_dict: Dictionary of maximum likelihood WN values
     rn_bf: Savage-Dickey BF for RN for given pulsar
     """
-    
+
     chain = np.loadtxt(chaindir + 'chain_1.txt')
     burn = int(burn_frac * chain.shape[0])
     pars = np.loadtxt(chaindir + 'pars.txt', dtype = np.unicode)
-    
+
     psr_name = pars[0].split('_')[0]
-    
+
     if save_corner:
         corner.corner(chain[burn:, :-4], labels = pars)
 
         pl.savefig("./noise_corner_{}.pdf".format(psr_name))
-        
+
         pl.show()
-        
+
     ml_idx = np.argmax(chain[burn:, -3])
 
     wn_vals = chain[burn:, :-4][ml_idx]
 
     wn_dict = dict(zip(pars, wn_vals))
-    
+
     #Print bayes factor for red noise in pulsar
     rn_bf = model_utils.bayes_fac(chain[burn:, -5])[0]
-    
+
     return wn_dict, rn_bf
 
 def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = False, run_noise_analysis = True):
     """
     Setup enterprise PTA and perform MCMC noise analysis
-    
+
     Parameters
     ==========
     mo: PINT (or tempo2) timing model
@@ -61,22 +61,22 @@ def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = Fals
     n_iter: number of MCMC iterations; Default: 1e5; Recommended > 5e4
     using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
     run_noise_analysis: Flag to toggle execution of noise modeling; Default: True
-    
+
     Returns
     =======
     None
     """
-    
+
     if not using_wideband:
         outdir = './noise_run_chains/' + mo.PSR.value + '_nb/'
     else:
         outdir = './noise_run_chains/' + mo.PSR.value + '_wb/'
-        
+
     if os.path.exists(outdir) and (run_noise_analysis) and (not resume):
         log.info("INFO: A noise directory for pulsar {} already exists! Re-running noise modeling from scratch".format(mo.PSR.value))
     elif os.path.exists(outdir) and (run_noise_analysis) and (resume):
         log.info("INFO: A noise directory for pulsar {} already exists! Re-running noise modeling starting from previous chain".format(mo.PSR.value))
-        
+
     if not run_noise_analysis:
         log.info("Skipping noise modeling. Change run_noise_analysis = True to run noise modeling.")
         return None
@@ -116,7 +116,7 @@ def convert_to_RNAMP(value):
 def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_noise = False, using_wideband = False, rn_bf_thres = 1e2):
     """
     Add WN and RN parameters to timing model.
-    
+
     Parameters
     ==========
     model: PINT (or tempo2) timing model
@@ -125,24 +125,24 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     ignore_red_noise: Flag to manually force RN exclusion from timing model. When False, code determines whether
     RN is necessary based on whether the RN BF > 1e3. Default: False
     using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
-    
+
     Returns
     =======
     model: New timing model which includes WN and RN parameters
     """
-    
+
     if not using_wideband:
         chaindir = './noise_run_chains/' + model.PSR.value + '_nb/'
     else:
         chaindir = './noise_run_chains/' + model.PSR.value + '_wb/'
-    
+
     wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner)
-    
+
     #Create the maskParameter for EFACS
     efac_params = []
     equad_params = []
     rn_params = []
-    
+
     if not using_wideband:
         ecorr_params = []
     else:
@@ -167,7 +167,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
 
             param_name = key.split('_efac')[0].split(psr_name)[1][1:]
 
-            tp = maskParameter(name = 'EFAC', index = idx, key = '-f', key_value = param_name, 
+            tp = maskParameter(name = 'EFAC', index = idx, key = '-f', key_value = param_name,
                                value = val, units = '')
             efac_params.append(tp)
 
@@ -175,7 +175,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
 
             param_name = key.split('_equad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name, 
+            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name,
                                value = 10 ** val / 1e-6, units = 'us')
             equad_params.append(tp)
 
@@ -183,30 +183,30 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
 
             param_name = key.split('_ecorr')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'ECORR', index = idx, key = '-f', key_value = param_name, 
+            tp = maskParameter(name = 'ECORR', index = idx, key = '-f', key_value = param_name,
                                value = 10 ** val / 1e-6, units = 'us')
             ecorr_params.append(tp)
-            
+
         elif ('_dmefac' in key) and (using_wideband):
-            
+
             param_name = key.split('_dmefac')[0].split(psr_name)[1][1:]
 
-            tp = maskParameter(name = 'DMEFAC', index = idx, key = '-f', key_value = param_name, 
+            tp = maskParameter(name = 'DMEFAC', index = idx, key = '-f', key_value = param_name,
                                value = val, units = '')
             dmefac_params.append(tp)
-            
+
         elif ('_dmequad' in key) and (using_wideband):
-            
+
             param_name = key.split('_dmequad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'DMEQUAD', index = idx, key = '-f', key_value = param_name, 
+            tp = maskParameter(name = 'DMEQUAD', index = idx, key = '-f', key_value = param_name,
                                value = 10 ** val, units = 'pc/cm3')
             dmequad_params.append(tp)
 
         ii += 1
-        
+
     ef_eq_comp = pm.ScaleToaError()
-    
+
     if using_wideband:
         dm_comp = pm.noise_model.ScaleDmError()
     else:
@@ -221,7 +221,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
         dm_comp.remove_param(param = 'DMEQUAD1')
     else:
         ec_comp.remove_param('ECORR1')
-    
+
     #Add the above ML WN parameters to their respective components
     for ii in range(len(efac_params)):
 
@@ -232,14 +232,15 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
         else:
             dm_comp.add_param(param = dmefac_params[ii])
             dm_comp.add_param(param = dmequad_params[ii], setup = True)
-            
+
     #Add the ML RN parameters to their component
     #CONDITIONAL TO ADD RN;
     #MIGHT NEED TO FIDDLE WITH THIS
-    
+
+    msg = f"The SD Bayes factor for red noise in this pulsar is: {rn_bf}"
+    log.info(msg)
     if (rn_bf >= rn_bf_thres or np.isnan(rn_bf)) and (not ignore_red_noise):
-        
-        log.info("The SD Bayes factor for red noise in this pulsar is: {}".format(rn_bf))
+
         log.info("Including red noise for this pulsar")
         #Add the ML RN parameters to their component
         rn_comp = pm.PLRedNoise()
@@ -247,19 +248,21 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
         rn_keys = np.array([key for key,val in wn_dict.items() if '_red_' in key])
         rn_comp.RNAMP.quantity = convert_to_RNAMP(wn_dict[psr_name + '_red_noise_log10_A'])
         rn_comp.RNIDX.quantity = -1 * wn_dict[psr_name + '_red_noise_gamma']
-        
+
         #Add red noise to the timing model
         model.add_component(rn_comp, validate = True, force = True)
-    
+    else:
+        log.info("Not including red noise for this pulsar")
+
     #Add these components to the input timing model
     model.add_component(ef_eq_comp, validate = True, force = True)
     if not using_wideband:
         model.add_component(ec_comp, validate = True, force = True)
     else:
         model.add_component(dm_comp, validate = True, force = True)
-    
+
     #Setup and validate the timing model to ensure things are correct
     model.setup()
     model.validate()
-    
+
     return model
