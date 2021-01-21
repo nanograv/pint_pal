@@ -107,7 +107,7 @@ def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = Fals
         dmjump_params = {}
         for param in mo.params:
             if param.startswith('DMJUMP'):
-                dmjump_param = getattr(model,param)
+                dmjump_param = getattr(mo,param)
                 dmjump_param_name = f"{pta.pulsars[0]}_{dmjump_param.key_value[0]}_dmjump"
                 dmjump_params[dmjump_param_name] = dmjump_param.value
         pta.set_default_params(dmjump_params)
