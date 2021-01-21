@@ -184,7 +184,7 @@ def reset_params(params):
             p.value = 0.0
             p.uncertainty = 0.0
 
-def run_Ftests(fitter, alpha=ALPHA):
+def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
     """
     This is the main convenience function to run the various F-tests below. This includes F-tests for F2, PX, 
     binary parameters, FD parameters, etc. As part of the function, the tests, parameters, RMS of residuals, chi2,
@@ -195,6 +195,10 @@ def run_Ftests(fitter, alpha=ALPHA):
     fitter [object]: The PINT fitter object.
     alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
         the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
+    FDnparams [int]: Maximum number of FD parameters to test [default: 5].
+    NITS [int]: Number of fit iterations to run during FD parameter F-tests when adding FD parameters to the
+        timing model after each F-test is run. Should only need to be increased if FD parameter F-tests do
+        not appear to be converged [default: 1].
         
     Returns:
     ---------
@@ -295,7 +299,7 @@ def run_Ftests(fitter, alpha=ALPHA):
             if FBdict:
                 retdict['FB'] = FBdict
     # Now run various functions individually (FD only right now):
-    FDdict = check_FD(fitter, alpha=ALPHA, maxcomponent=5)
+    FDdict = check_FD(fitter, alpha=ALPHA, maxcomponent=FDnparams, NITS = NITS)
     retdict['FD'] = FDdict
 
     return retdict
@@ -363,7 +367,7 @@ def check_PX(fitter, alpha=ALPHA):
     # Return the dictionary
     return retdict
 
-def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
+def check_FD(fitter, alpha=ALPHA, maxcomponent=5, NITS = 1):
     """
     Check adding FD parameters with an F-test.
 
@@ -373,6 +377,9 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
     alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
         the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
     maxcomponent [int]: Maximum number of FD parameters to add to the model [default: 5].
+    NITS [int]: Number of fit iterations to run when adding FD parameters to the timing model after 
+        each F-test is run. Should only need to be increased if FD parameter F-tests do not appear 
+        to be converged [default: 1].
 
     Returns:
     --------
@@ -452,10 +459,11 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5):
             # Else the parameter must be added permanently
             psr_fitter_nofd.model.components[component_list[0]].add_param(param_list[0], setup=True)
             #print(psr_fitter_nofd.model.components['FD'])
-        # validate and setup model
-        psr_fitter_nofd.model.validate()
-        psr_fitter_nofd.model.setup()
-        psr_fitter_nofd.fit_toas(1)
+        if i < maxcomponent:
+            # validate and setup model
+            psr_fitter_nofd.model.validate()
+            psr_fitter_nofd.model.setup()
+            psr_fitter_nofd.fit_toas(NITS)
     # Return the dictionary
     return retdict
 
