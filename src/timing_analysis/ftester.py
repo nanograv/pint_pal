@@ -125,9 +125,9 @@ def binary_params_ftest(bparams, fitter, remove):
         pint_params.append([pparams.EPS1DOT, pparams.EPS2DOT])
         pint_comps.append([pparams.EPS1DOT_Component+b_ext, pparams.EPS2DOT_Component+b_ext])
     # Check H3 and H4 specifically
-    #if 'H3' in p_test and 'H4' in p_test:
-    #    pint_params.append([pparams.H3, pparams.H4])
-    #   pint_comps.append([pparams.H3_Component+b_ext, pparams.H4_Component+b_ext])
+    if 'H3' in p_test and 'H4' in p_test:
+        pint_params.append([pparams.H3, pparams.H4])
+        pint_comps.append([pparams.H3_Component+b_ext, pparams.H4_Component+b_ext])
     # return the values
     return pint_params, pint_comps
 
@@ -323,13 +323,17 @@ def check_F2(fitter, alpha=ALPHA):
     # Add dictionary for return values
     retdict = {}
     # Run the F2 F-test
-    ftest_dict = fitter.ftest(pparams.F2, pparams.F2_Component, remove=False, full_output=True)
-    # Add to dictionary
-    retdict['F2'] = ftest_dict
-    if "dm_resid_wrms_test" in ftest_dict.keys():
-        report_ptest('F2', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-    else:
-        report_ptest('F2', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+    try:
+        ftest_dict = fitter.ftest(pparams.F2, pparams.F2_Component, remove=False, full_output=True)
+        # Add to dictionary
+        retdict['F2'] = ftest_dict
+        if "dm_resid_wrms_test" in ftest_dict.keys():
+            report_ptest('F2', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
+        else:
+            report_ptest('F2', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+    # If there's an error running the F-test in the fit for some reason, we catch it
+    except ValueError:
+        print("Error when running F-test for: F2")
     # This edits the values in the file for some reason, want to reset them to zeros
     reset_params([pparams.F2])
     # Return the dictionary
@@ -354,14 +358,18 @@ def check_PX(fitter, alpha=ALPHA):
     # Add dictionary for return values
     retdict = {}
     # Run the parallax F-test
-    ftest_dict = fitter.ftest(pparams.PX, pparams.PX_Component, remove=True, full_output=True)
-    # Add to dictionary
-    retdict['PX'] = ftest_dict
-    # Print results
-    if "dm_resid_wrms_test" in ftest_dict.keys():
-        report_ptest('PX', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-    else:
-        report_ptest('PX', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+    try:
+        ftest_dict = fitter.ftest(pparams.PX, pparams.PX_Component, remove=True, full_output=True)
+        # Add to dictionary
+        retdict['PX'] = ftest_dict
+        # Print results
+        if "dm_resid_wrms_test" in ftest_dict.keys():
+            report_ptest('PX', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
+        else:
+            report_ptest('PX', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+    # If there's an error running the F-test in the fit for some reason, we catch it
+    except ValueError:
+        print("Error when running F-test for: Px")
     # This edits the values in the file for some reason, want to reset them to zeros
     reset_params([pparams.PX])
     # Return the dictionary
@@ -441,14 +449,18 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5, NITS = 1):
         param_list = [getattr(pparams, 'FD%s'%(i))]
         component_list = [getattr(pparams, "FD%i_Component"%(i))]
         # Run F-test
-        ftest_dict = psr_fitter_nofd.ftest(param_list, component_list, remove=False, full_output=True)
-        # Add to dictionary to return
-        retdict['FD%s'%i] = ftest_dict
-        # Print results
-        if "dm_resid_wrms_test" in ftest_dict.keys():
-            report_ptest('FD1 through FD%s'%i, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-        else:
-            report_ptest('FD1 through FD%s'%i, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+        try:
+            ftest_dict = psr_fitter_nofd.ftest(param_list, component_list, remove=False, full_output=True)
+            # Add to dictionary to return
+            retdict['FD%s'%i] = ftest_dict
+            # Print results
+            if "dm_resid_wrms_test" in ftest_dict.keys():
+                report_ptest('FD1 through FD%s'%i, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
+            else:
+                report_ptest('FD1 through FD%s'%i, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+        # If there's an error running the F-test in the fit for some reason, we catch it
+        except ValueError:
+            print("Error when running F-test for: FD1 through FD%s"%i)
         # This edits the values in the file for some reason, want to reset them to zeros
         reset_params(param_list)
         # Add the FD parameter to the timing model permanently
@@ -499,19 +511,22 @@ def check_binary_DD(fitter, alpha=ALPHA, remove = False):
     pint_params, pint_comps = binary_params_ftest(DDparams, fitter, remove)
     # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
     for ii in range(len(pint_params)):
-        ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-        # Get dictionary label
-        if len(pint_params[ii]) > 1:
-            d_label = "M2, SINI"
-        else:
-            d_label = pint_params[ii][0].name
-        # Add the dictionary
-        retdict[d_label] = ftest_dict
-        # Print the results
-        if "dm_resid_wrms_test" in ftest_dict.keys():
-            report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-        else:
-            report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+        try:
+            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
+            # Get dictionary label
+            if len(pint_params[ii]) > 1:
+                d_label = "M2, SINI"
+            else:
+                d_label = pint_params[ii][0].name
+            # Add the dictionary
+            retdict[d_label] = ftest_dict
+            # Print the results
+            if "dm_resid_wrms_test" in ftest_dict.keys():
+                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
+            else:
+                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+        except ValueError:
+            print("Error when running F-test for:", [p.name for p in pint_params[ii]])
         # Reset the parameters
         reset_params(pint_params[ii])
     # Return the dictionary
@@ -548,19 +563,22 @@ def check_binary_DDK(fitter, alpha=ALPHA, remove = False):
     pint_params, pint_comps = binary_params_ftest(DDKparams, fitter, remove)
     # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
     for ii in range(len(pint_params)):
-        ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-        # Get dictionary label
-        if len(pint_params[ii]) > 1:
-            d_label = "M2, SINI"
-        else:
-            d_label = pint_params[ii][0].name
-        # Add the dictionary
-        retdict[d_label] = ftest_dict
-        # Print the results
-        if "dm_resid_wrms_test" in ftest_dict.keys():
-            report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-        else:
-            report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+        try:
+            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
+            # Get dictionary label
+            if len(pint_params[ii]) > 1:
+                d_label = "M2, SINI"
+            else:
+                d_label = pint_params[ii][0].name
+            # Add the dictionary
+            retdict[d_label] = ftest_dict
+            # Print the results
+            if "dm_resid_wrms_test" in ftest_dict.keys():
+                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
+            else:
+                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+        except ValueError:
+            print("Error when running F-test for:", [p.name for p in pint_params[ii]])
         # Reset the parameters
         reset_params(pint_params[ii])
     # Return the dictionary
@@ -609,21 +627,24 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
         pint_params, pint_comps = binary_params_ftest(ELL1params, fitter, remove)
         # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
         for ii in range(len(pint_params)):
-            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-            # Get dictionary label
-            if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'M2' or pint_params[ii][0].name == 'SINI'):
-                d_label = "M2, SINI"
-            elif len(pint_params[ii])>1 and (pint_params[ii][0].name == 'EPS1DOT' or pint_params[ii][0].name == 'EPS2DOT'):
-                d_label = "EPS1DOT, EPS2DOT"
-            else:
-                d_label = pint_params[ii][0].name
-            # Add the dictionary
-            retdict[d_label] = ftest_dict
-            # Print the results
-            if "dm_resid_wrms_test" in ftest_dict.keys():
-                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-            else:
-                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+            try:
+                ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
+                # Get dictionary label
+                if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'M2' or pint_params[ii][0].name == 'SINI'):
+                    d_label = "M2, SINI"
+                elif len(pint_params[ii])>1 and (pint_params[ii][0].name == 'EPS1DOT' or pint_params[ii][0].name == 'EPS2DOT'):
+                    d_label = "EPS1DOT, EPS2DOT"
+                else:
+                    d_label = pint_params[ii][0].name
+                # Add the dictionary
+                retdict[d_label] = ftest_dict
+                # Print the results
+                if "dm_resid_wrms_test" in ftest_dict.keys():
+                    report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
+                else:
+                    report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+            except ValueError:
+                print("Error when running F-test for:", [p.name for p in pint_params[ii]])
             # Reset the parameters
             reset_params(pint_params[ii])
         # Return the dictionary
@@ -634,21 +655,24 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
         pint_params, pint_comps = binary_params_ftest(ELL1params, fitter, remove)
         # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
         for ii in range(len(pint_params)):
-            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-            # Get dictionary label
-            if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'M2' or pint_params[ii][0].name == 'SINI'):
-                d_label = "M2, SINI"
-            elif len(pint_params[ii])>1 and (pint_params[ii][0].name == 'EPS1DOT' or pint_params[ii][0].name == 'EPS2DOT'):
-                d_label = "EPS1DOT, EPS2DOT"
-            else:
-                d_label = pint_params[ii][0].name
-            # Add the dictionary
-            retdict[d_label] = ftest_dict
-            # Print the results
-            if "dm_resid_wrms_test" in ftest_dict.keys():
-                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-            else:
-                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+            try:
+                ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
+                # Get dictionary label
+                if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'M2' or pint_params[ii][0].name == 'SINI'):
+                    d_label = "M2, SINI"
+                elif len(pint_params[ii])>1 and (pint_params[ii][0].name == 'EPS1DOT' or pint_params[ii][0].name == 'EPS2DOT'):
+                    d_label = "EPS1DOT, EPS2DOT"
+                else:
+                    d_label = pint_params[ii][0].name
+                # Add the dictionary
+                retdict[d_label] = ftest_dict
+                # Print the results
+                if "dm_resid_wrms_test" in ftest_dict.keys():
+                    report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
+                else:
+                    report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+            except ValueError:
+                print("Error when running F-test for:", [p.name for p in pint_params[ii]])
             # Reset the parameters
             reset_params(pint_params[ii])
         # Return the dictionary
@@ -684,21 +708,24 @@ def check_binary_ELL1H(fitter, alpha=ALPHA, remove = False):
     pint_params, pint_comps = binary_params_ftest(ELL1Hparams, fitter, remove)
     # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
     for ii in range(len(pint_params)):
-        ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-        # Get dictionary label
-        if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'H3' or pint_params[ii][0].name == 'H4'):
-            d_label = "H3, H4"
-        elif len(pint_params[ii])>1 and (pint_params[ii][0].name == 'EPS1DOT' or pint_params[ii][0].name == 'EPS2DOT'):
-            d_label = "EPS1DOT, EPS2DOT"
-        else:
-            d_label = pint_params[ii][0].name
-        # Add the dictionary
-        retdict[d_label] = ftest_dict
-        # Print the results
-        if "dm_resid_wrms_test" in ftest_dict.keys():
-            report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-        else:
-            report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+        try:
+            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
+            # Get dictionary label
+            if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'H3' or pint_params[ii][0].name == 'H4'):
+                d_label = "H3, H4"
+            elif len(pint_params[ii])>1 and (pint_params[ii][0].name == 'EPS1DOT' or pint_params[ii][0].name == 'EPS2DOT'):
+                d_label = "EPS1DOT, EPS2DOT"
+            else:
+                d_label = pint_params[ii][0].name
+            # Add the dictionary
+            retdict[d_label] = ftest_dict
+            # Print the results
+            if "dm_resid_wrms_test" in ftest_dict.keys():
+                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
+            else:
+                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+        except ValueError:
+            print("Error when running F-test for:", [p.name for p in pint_params[ii]])
         # Reset the parameters
         reset_params(pint_params[ii])
     # Return the dictionary
@@ -735,14 +762,17 @@ def check_FB(fitter, alpha=ALPHA, fbmax = 5):
             param_list = [(getattr(pparams, fp)) for fp in p]
             component_list = [(getattr(pparams, "%s_Component"%(fp))+"ELL1") for fp in p]
             # Run F-test
-            ftest_dict = fitter.ftest(param_list, component_list, remove=True, full_output=True)
-            # Add to dictionary to return
-            retdict['FB%s+'%i] = ftest_dict
-            # Print results
-            if "dm_resid_wrms_test" in ftest_dict.keys():
-                report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-            else:
-                report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+            try:
+                ftest_dict = fitter.ftest(param_list, component_list, remove=True, full_output=True)
+                # Add to dictionary to return
+                retdict['FB%s+'%i] = ftest_dict
+                # Print results
+                if "dm_resid_wrms_test" in ftest_dict.keys():
+                    report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
+                else:
+                    report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+            except ValueError:
+                print("Error when running F-test for: ".join(p))
             # This edits the values in the file for some reason, want to reset them to zeros
             reset_params(param_list)
     # Now try adding FB parameters
@@ -752,14 +782,17 @@ def check_FB(fitter, alpha=ALPHA, fbmax = 5):
             param_list = [(getattr(pparams, fp)) for fp in p]
             component_list = [(getattr(pparams, "%s_Component"%(fp))+"ELL1") for fp in p]
             # Run F-test
-            ftest_dict = fitter.ftest(param_list, component_list, remove=False, full_output=True)
-            # Add to dictionary to return
-            retdict['FB%s'%i] = ftest_dict
-            # Print results
-            if "dm_resid_wrms_test" in ftest_dict.keys():
-                report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-            else:
-                report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+            try:
+                ftest_dict = fitter.ftest(param_list, component_list, remove=False, full_output=True)
+                # Add to dictionary to return
+                retdict['FB%s'%i] = ftest_dict
+                # Print results
+                if "dm_resid_wrms_test" in ftest_dict.keys():
+                    report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
+                else:
+                    report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)
+            except ValueError:
+                print("Error when running F-test for: ".join(p))
             # This edits the values in the file for some reason, want to reset them to zeros
             reset_params(param_list)
         # Now return the dictionary
