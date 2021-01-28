@@ -439,7 +439,7 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5, NITS = 1):
         dm_resid_rms_test_nofd = psr_fitter_nofd.resids.residual_objs['dm'].resids.std()
         dm_resid_wrms_test_nofd = psr_fitter_nofd.resids.residual_objs['dm'].rms_weighted()
         # Add initial values to F-test dictionary
-        retdict['initial'] = {'ft':None, 'resid_rms_test':base_rms_nofd, 'resid_wrms_test':base_wrms_nofd, 'chi2_test':base_chi2_nofd, 'dof_test':base_ndof_nofd, "dm_resid_rms_test": dm_resid_rms_test_nofd, "dm_resid_wrms_test": dm_resid_wrms_test_nofd}
+        retdict['NoFD'] = {'ft':None, 'resid_rms_test':base_rms_nofd, 'resid_wrms_test':base_wrms_nofd, 'chi2_test':base_chi2_nofd, 'dof_test':base_ndof_nofd, "dm_resid_rms_test": dm_resid_rms_test_nofd, "dm_resid_wrms_test": dm_resid_wrms_test_nofd}
     # and report the value
     report_ptest("no FD", retdict['NoFD'])
     # Now add the FD component back into the timing model

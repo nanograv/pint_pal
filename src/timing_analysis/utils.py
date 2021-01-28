@@ -531,7 +531,10 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
         fsum.write(r'\end{verbatim}' + '\n')
 
     # Get lines to write for F-tests
-    hdrline = "%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")
+    if NB:
+        hdrline = "%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")
+    else:
+        hdrline = "%42s %7s %9s %9s %5s %s" % ("", "RMS(us)", "DM RMS(pc cm^-3)", "Chi2", "NDOF", "Ftest")
     ftest_lines = get_Ftest_lines(Ftest_dict, fitter)
     # Write F-test results
     fsum.write(r'\subsection*{Parameter tests}' + '\n')
