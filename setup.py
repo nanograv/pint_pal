@@ -14,6 +14,6 @@ setup(
     long_description_content_type="text/markdown",
     package_dir = {'': 'src'},
     packages = find_packages('src'),
-    install_requires=['ruamel.yaml', 'corner', 'nbformat', 'textwrap', 'yaml', 'glob'],
+    install_requires=['ruamel.yaml', 'corner', 'nbformat', 'yaml', 'glob'],
     python_requires='>=3.6'
 )
