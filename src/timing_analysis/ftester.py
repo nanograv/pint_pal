@@ -132,40 +132,6 @@ def binary_params_ftest(bparams, fitter, remove):
     # return the values
     return pint_params, pint_comps
 
-def report_ptest_old(label, rms, chi2, ndof, dmrms = None, Fstatistic=None, alpha=ALPHA):
-    """
-    Nicely prints the results of F-tests in a human-readable format.
-    
-    Input:
-    --------
-    label [string]: Name of the parameter(s) that were added/removed for the F-test.
-    rms [float]: RMS or Weighted RMS of the timing residuals for the F-tested model.
-    chi2 [float]: Chi^2 value for the F-tested model.
-    ndof [int]: Degrees of freedom for the F-tested model.
-    dmrms [float]: RMS or Weighted RMS of the DM residuals for the F-tested model. For Wideband timing only.
-    Fstatistic [float]: F-statistic output by the F-test for this model.
-    alpha [float]: Value to compare for F-statistic significance. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model.
-    """
-    if Fstatistic is None:
-        if dmrms != None:
-            line = "%42s %7.3f %16.6f %9.2f %5d --" % (label, rms, dmrms, chi2, ndof)
-        else:
-            line = "%42s %7.3f %9.2f %5d --" % (label, rms, chi2, ndof)
-    elif Fstatistic:
-        if dmrms != None:
-            line = "%42s %7.3f %16.6f %9.2f %5d %.3g" % (label, rms, dmrms, chi2, ndof, Fstatistic)
-        else:
-            line = "%42s %7.3f %9.2f %5d %.3g" % (label, rms, chi2, ndof, Fstatistic)
-        if Fstatistic < alpha:
-            line += " ***"
-    else:
-        if dmrms != None:
-            line = "%42s %7.3f %16.6f %9.2f %5d xxx" % (label, rms, dmrms, chi2, ndof)
-        else:
-            line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
-    print(line)
-
 def report_ptest(label, ftest_dict = None, alpha=ALPHA):
     """
     Nicely prints the results of F-tests in a human-readable format.
@@ -288,10 +254,6 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
         # Add initial values to F-test dictionary
         retdict['initial'] = {'ft':None, 'resid_rms_test':base_rms, 'resid_wrms_test':base_wrms, 'chi2_test':base_chi2, 'dof_test':base_ndof, "dm_resid_rms_test": dm_resid_rms_test, "dm_resid_wrms_test": dm_resid_wrms_test}
     # Now report the values
-    """if NB:
-        report_ptest("initial", base_wrms.value, base_chi2, base_ndof)
-    else:
-        report_ptest("initial", base_wrms.value, base_chi2, base_ndof, dmrms = dm_resid_wrms_test.value)"""
     report_ptest("initial", retdict['initial'])
     # Check adding binary parameters
     print("Testing additional parameters:")
@@ -372,10 +334,6 @@ def check_F2(fitter, alpha=ALPHA):
     # Run the F2 F-test
     try:
         ftest_dict = fitter.ftest(pparams.F2, pparams.F2_Component, remove=False, full_output=True)
-        """if "dm_resid_wrms_test" in ftest_dict.keys():
-            report_ptest('F2', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-        else:
-            report_ptest('F2', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)"""
     # If there's an error running the F-test in the fit for some reason, we catch it
     except ValueError:
         warnings.warn("Error when running F-test for: F2")
@@ -410,11 +368,6 @@ def check_PX(fitter, alpha=ALPHA):
     # Run the parallax F-test
     try:
         ftest_dict = fitter.ftest(pparams.PX, pparams.PX_Component, remove=True, full_output=True)
-        # Print results
-        """if "dm_resid_wrms_test" in ftest_dict.keys():
-            report_ptest('PX', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-        else:
-            report_ptest('PX', ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)"""
     # If there's an error running the F-test in the fit for some reason, we catch it
     except ValueError:
         warnings.warn("Error when running F-test for: PX")
@@ -488,10 +441,6 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5, NITS = 1):
         # Add initial values to F-test dictionary
         retdict['initial'] = {'ft':None, 'resid_rms_test':base_rms_nofd, 'resid_wrms_test':base_wrms_nofd, 'chi2_test':base_chi2_nofd, 'dof_test':base_ndof_nofd, "dm_resid_rms_test": dm_resid_rms_test_nofd, "dm_resid_wrms_test": dm_resid_wrms_test_nofd}
     # and report the value
-    """if NB:
-        report_ptest("no FD", base_wrms_nofd.value, base_chi2_nofd, base_ndof_nofd)
-    else:
-        report_ptest("no FD", base_wrms_nofd.value, base_chi2_nofd, base_ndof_nofd, dmrms = dm_resid_wrms_test_nofd.value)"""
     report_ptest("no FD", retdict['NoFD'])
     # Now add the FD component back into the timing model
     all_components = model.timing_model.Component.component_types
@@ -505,11 +454,6 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5, NITS = 1):
         # Run F-test
         try:
             ftest_dict = psr_fitter_nofd.ftest(param_list, component_list, remove=False, full_output=True)
-            # Print results
-            """if "dm_resid_wrms_test" in ftest_dict.keys():
-                report_ptest('FD1 through FD%s'%i, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-            else:
-                report_ptest('FD1 through FD%s'%i, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)"""
         # If there's an error running the F-test in the fit for some reason, we catch it
         except ValueError:
             report = "Error when running F-test for: FD1 through FD%s"%i
@@ -571,11 +515,6 @@ def check_binary_DD(fitter, alpha=ALPHA, remove = False):
     for ii in range(len(pint_params)):
         try:
             ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-            # Print the results
-            """if "dm_resid_wrms_test" in ftest_dict.keys():
-                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-            else:
-                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)"""
         except ValueError:
             report = "Error when running F-test for: %s" % ([p.name for p in pint_params[ii]])
             warnings.warn(report)
@@ -627,11 +566,6 @@ def check_binary_DDK(fitter, alpha=ALPHA, remove = False):
     for ii in range(len(pint_params)):
         try:
             ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-            # Print the results
-            """if "dm_resid_wrms_test" in ftest_dict.keys():
-                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-            else:
-                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)"""
         except ValueError:
             report = "Error when running F-test for: %s" % ([p.name for p in pint_params[ii]])
             warnings.warn(report)
@@ -695,11 +629,6 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
         for ii in range(len(pint_params)):
             try:
                 ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-                # Print the results
-                """if "dm_resid_wrms_test" in ftest_dict.keys():
-                    report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-                else:
-                    report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)"""
             except ValueError:
                 report = "Error when running F-test for: %s" % ([p.name for p in pint_params[ii]])
                 warnings.warn(report)
@@ -727,11 +656,6 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
         for ii in range(len(pint_params)):
             try:
                 ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-                # Print the results
-                """if "dm_resid_wrms_test" in ftest_dict.keys():
-                    report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-                else:
-                    report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)"""
             except ValueError:
                 report = "Error when running F-test for: %s" % ([p.name for p in pint_params[ii]])
                 warnings.warn(report)
@@ -784,11 +708,6 @@ def check_binary_ELL1H(fitter, alpha=ALPHA, remove = False):
     for ii in range(len(pint_params)):
         try:
             ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-            # Print the results
-            """if "dm_resid_wrms_test" in ftest_dict.keys():
-                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-            else:
-                report_ptest(d_label, ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)"""
         except ValueError:
             report = "Error when running F-test for: %s" % ([p.name for p in pint_params[ii]])
             warnings.warn(report)
@@ -842,11 +761,6 @@ def check_FB(fitter, alpha=ALPHA, fbmax = 5):
             # Run F-test
             try:
                 ftest_dict = fitter.ftest(param_list, component_list, remove=True, full_output=True)
-                # Print results
-                """if "dm_resid_wrms_test" in ftest_dict.keys():
-                    report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-                else:
-                    report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)"""
             except ValueError:
                 report = "Error when running F-test for: ".join(p)
                 warnings.warn(report)
@@ -866,11 +780,6 @@ def check_FB(fitter, alpha=ALPHA, fbmax = 5):
             # Run F-test
             try:
                 ftest_dict = fitter.ftest(param_list, component_list, remove=False, full_output=True)
-                # Print results
-                """if "dm_resid_wrms_test" in ftest_dict.keys():
-                    report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA, dmrms = ftest_dict['dm_resid_wrms_test'].value)
-                else:
-                    report_ptest(" ".join(p), ftest_dict['resid_wrms_test'].value, ftest_dict['chi2_test'], ftest_dict['dof_test'], Fstatistic=ftest_dict['ft'], alpha=ALPHA)"""
             except ValueError:
                 report = "Error when running F-test for: ".join(p)
                 warnings.warn(report)
