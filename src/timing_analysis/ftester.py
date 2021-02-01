@@ -456,8 +456,7 @@ def check_FD(fitter, alpha=ALPHA, maxcomponent=5, NITS = 1):
             ftest_dict = psr_fitter_nofd.ftest(param_list, component_list, remove=False, full_output=True)
         # If there's an error running the F-test in the fit for some reason, we catch it
         except ValueError:
-            report = "Error when running F-test for: FD1 through FD%s"%i
-            warnings.warn(report)
+            warnings.warn(f"Error when running F-test for: FD1 through FD{i}")
             ftest_dict = None
         # Add to dictionary to return
         retdict['FD%s'%i] = ftest_dict
@@ -516,8 +515,7 @@ def check_binary_DD(fitter, alpha=ALPHA, remove = False):
         try:
             ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
         except ValueError:
-            report = "Error when running F-test for: %s" % ([p.name for p in pint_params[ii]])
-            warnings.warn(report)
+            warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
             ftest_dict = None
         # Get dictionary label
         if len(pint_params[ii]) > 1:
@@ -567,8 +565,7 @@ def check_binary_DDK(fitter, alpha=ALPHA, remove = False):
         try:
             ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
         except ValueError:
-            report = "Error when running F-test for: %s" % ([p.name for p in pint_params[ii]])
-            warnings.warn(report)
+            warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
             ftest_dict = None
         # Get dictionary label
         if len(pint_params[ii]) > 1:
@@ -630,8 +627,7 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
             try:
                 ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
             except ValueError:
-                report = "Error when running F-test for: %s" % ([p.name for p in pint_params[ii]])
-                warnings.warn(report)
+                warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
                 ftest_dict = None
             # Get dictionary label
             if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'M2' or pint_params[ii][0].name == 'SINI'):
@@ -657,8 +653,7 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
             try:
                 ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
             except ValueError:
-                report = "Error when running F-test for: %s" % ([p.name for p in pint_params[ii]])
-                warnings.warn(report)
+                warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
                 ftest_dict = None
             # Get dictionary label
             if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'M2' or pint_params[ii][0].name == 'SINI'):
@@ -709,8 +704,7 @@ def check_binary_ELL1H(fitter, alpha=ALPHA, remove = False):
         try:
             ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
         except ValueError:
-            report = "Error when running F-test for: %s" % ([p.name for p in pint_params[ii]])
-            warnings.warn(report)
+            warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
             ftest_dict = None
         # Get dictionary label
         if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'H3' or pint_params[ii][0].name == 'H4'):
@@ -762,8 +756,7 @@ def check_FB(fitter, alpha=ALPHA, fbmax = 5):
             try:
                 ftest_dict = fitter.ftest(param_list, component_list, remove=True, full_output=True)
             except ValueError:
-                report = "Error when running F-test for: ".join(p)
-                warnings.warn(report)
+                warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
                 ftest_dict = None
             # Add to dictionary to return
             retdict['FB%s+'%i] = ftest_dict
@@ -781,8 +774,7 @@ def check_FB(fitter, alpha=ALPHA, fbmax = 5):
             try:
                 ftest_dict = fitter.ftest(param_list, component_list, remove=False, full_output=True)
             except ValueError:
-                report = "Error when running F-test for: ".join(p)
-                warnings.warn(report)
+                warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
                 ftest_dict = None
             # Add to dictionary to return
             retdict['FB%s'%i] = ftest_dict
