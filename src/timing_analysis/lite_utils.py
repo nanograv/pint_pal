@@ -34,9 +34,9 @@ def write_par(fitter,toatype='',addext='',outfile=None):
         source = fitter.get_allparams()['PSR'].value
         date_str = date.today().strftime('%Y%m%d')
         if toatype:
-            outfile = f'{source}_PINT_{date_str}{addext}.{toatype.lower()}.par'
+            outfile = f'{source}_PINT_{date_str}{addext}_ttp.{toatype.lower()}.par'
         else:
-            outfile = f'{source}_PINT_{date_str}{addext}.par'
+            outfile = f'{source}_PINT_{date_str}{addext}_ttp.par'
 
     with open(outfile, 'w') as fout:
         fout.write(fitter.model.as_parfile())
@@ -58,9 +58,9 @@ def write_tim(fitter,toatype='',addext='',outfile=None):
         source = fitter.get_allparams()['PSR'].value
         date_str = date.today().strftime('%Y%m%d')
         if toatype:
-            outfile = f'{source}_PINT_{date_str}{addext}.{toatype.lower()}.tim'
+            outfile = f'{source}_PINT_{date_str}{addext}_ttp.{toatype.lower()}.tim'
         else:
-            outfile = f'{source}_PINT_{date_str}{addext}.tim'
+            outfile = f'{source}_PINT_{date_str}{addext}_ttp.tim'
 
     fitter.toas.write_TOA_file(outfile, format='tempo2')
 
@@ -225,7 +225,7 @@ def add_feDMJumps(mo,rcvrs):
             DMJUMPn = maskParameter('DMJUMP',key='-fe',key_value=[j],value=0.0,units=u.pc*u.cm**-3)
             dmjump.add_param(DMJUMPn,setup=True)
 
-def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
+def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None,prefit=False):
     """Quick and dirty routine to find outlier residuals based on some threshold.
     Automatically deals with Wideband vs. Narrowband fitters.
 
@@ -238,6 +238,8 @@ def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
         If not None, only discard TOAs that are at least this many sigma as well as large
     max_sigma: float or None
         If not None, also discard all TOAs with claimed uncertainties larger than this many microseconds
+    prefit: bool
+        If True, will examine the prefit residuals
 
     Returns
     =======
@@ -248,15 +250,21 @@ def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
     # check if using wideband TOAs, as this changes how to access the residuals
 
     if "Wideband" in str(type(fo)):
-        init_time_resids = fo.resids_init.toa.time_resids
+        if prefit:
+            time_resids = fo.resids_init.toa.time_resids
+        else:
+            time_resids = fo.resids.toa.time_resids
     else:
-        init_time_resids = fo.resids_init.time_resids
+        if prefit:
+            time_resids = fo.resids_init.time_resids
+        else:
+            time_resids = fo.resids.time_resids
 
     toa_errors = fo.toas.get_errors()
 
-    c = np.abs(init_time_resids.to_value(u.us)) > threshold_us
+    c = np.abs(time_resids.to_value(u.us)) > threshold_us
     if n_sigma is not None:
-        c &= np.abs((init_time_resids/toa_errors).to_value(1)) > n_sigma
+        c &= np.abs((time_resids/toa_errors).to_value(1)) > n_sigma
     if max_sigma is not None:
         c |= toa_errors.to_value(u.us) > max_sigma
     badtoalist = np.where(c)
@@ -271,6 +279,66 @@ def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
         print(f"    - ['{name}',{chan},{subint}]")
     mask = np.logical_not(c)
     msg = f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(np.logical_not(mask))} removed) based on large_residual() criteria.'
+    log.info(msg)
+    return fo.toas[mask]
+
+def large_dm_residuals(fo,threshold,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP=True):
+    """Quick and dirty routine to find outlier DM residuals based on some threshold.
+
+    Parameters
+    ==========
+    fo: `pint.fitter` object
+    threshold: float
+        not a quantity, but threshold for residuals larger (magnitude) than some delay in pc cm**-3
+    n_sigma: float or None
+        If not None, only discard DMs (TOAs) that are at least this many sigma as well as large
+    max_sigma: float or None
+        If not None, also discard all DMs (TOAs) with claimed uncertainties larger than this many pc cm**-3
+    prefit: bool
+        If True, will examine the prefit residuals
+    ignore_ASP: bool
+        If True, it will not flag/excise any TOAs from ASP or GASP data
+
+    Returns
+    =======
+    None
+        prints bad-toa lines that can be copied directly into a yaml file
+    """
+
+    # check if using wideband TOAs, as this changes how to access the residuals
+
+    if "Wideband" in str(type(fo)):
+        if prefit:
+            dm_resids = fo.resids_init.dm.resids.value
+        else:
+            dm_resids = fo.resids.dm.resids.value
+    else:
+        msg = "Input fitter object to large_dm_residuals is not an instance of WidebandTOAFitter."
+        log.info(msg)
+        return
+
+    dm_errors = fo.toas.get_dm_errors().value
+    bes = fo.toas.get_flag_value('be')[0]
+
+    c = np.abs(dm_resids) > threshold
+    if n_sigma is not None:
+        c &= np.abs(dm_resids/dm_errors) > n_sigma
+    if max_sigma is not None:
+        c |= dm_errors > max_sigma
+    if ignore_ASP:
+        c &= np.logical_not([be.endswith('ASP') for be in bes])
+    baddmlist = np.where(c)
+    # FIXME: will go wrong if some TOAs lack -chan or -subint
+    names = fo.toas.get_flag_value('name')[0]
+    chans = fo.toas.get_flag_value('chan')[0]
+    subints = fo.toas.get_flag_value('subint')[0]
+    for i in baddmlist[0]:
+        name = names[i]
+        chan = chans[i]
+        subint = subints[i]
+        print(f"    - ['{name}',{chan},{subint}]")
+    mask = np.logical_not(c)
+    msg = f'Selecting {sum(mask)} DMs (TOAs) of {fo.toas.ntoas} ({sum(np.logical_not(mask))} removed) based on large_dm_residual() criteria.'
     log.info(msg)
     return fo.toas[mask]
 
