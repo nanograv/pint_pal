@@ -34,9 +34,9 @@ def write_par(fitter,toatype='',addext='',outfile=None):
         source = fitter.get_allparams()['PSR'].value
         date_str = date.today().strftime('%Y%m%d')
         if toatype:
-            outfile = f'{source}_PINT_{date_str}{addext}_ttp.{toatype.lower()}.par'
+            outfile = f'{source}_PINT_{date_str}{addext}.{toatype.lower()}.par'
         else:
-            outfile = f'{source}_PINT_{date_str}{addext}_ttp.par'
+            outfile = f'{source}_PINT_{date_str}{addext}.par'
 
     with open(outfile, 'w') as fout:
         fout.write(fitter.model.as_parfile())
@@ -58,9 +58,9 @@ def write_tim(fitter,toatype='',addext='',outfile=None):
         source = fitter.get_allparams()['PSR'].value
         date_str = date.today().strftime('%Y%m%d')
         if toatype:
-            outfile = f'{source}_PINT_{date_str}{addext}_ttp.{toatype.lower()}.tim'
+            outfile = f'{source}_PINT_{date_str}{addext}.{toatype.lower()}.tim'
         else:
-            outfile = f'{source}_PINT_{date_str}{addext}_ttp.tim'
+            outfile = f'{source}_PINT_{date_str}{addext}.tim'
 
     fitter.toas.write_TOA_file(outfile, format='tempo2')
 
