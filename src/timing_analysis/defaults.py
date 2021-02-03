@@ -6,7 +6,7 @@ LATEST_EPHEM = "DE438"      # latest solar system ephemeris to use
 
 # Toggle various corrections
 PLANET_SHAPIRO = True       # correct for Shapiro delay from planets
-CORRECT_TROPOSPHERE = True  # cprrect for tropospheric delays
+CORRECT_TROPOSPHERE = True  # correct for tropospheric delays
 
 # DMX model defaults
 FREQUENCY_RATIO = 1.1       # set the high/low frequency ratio for DMX bins
