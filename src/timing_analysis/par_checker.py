@@ -392,3 +392,21 @@ def check_planet_shapiro(model):
     msg = f"PLANET_SHAPIRO is set to {sss}."
     log.info(msg)
     return
+
+def check_settings(model, toas, check_these=['name', 'ephem', 'bipm',
+    'ecliptic', 'troposphere', 'planet_shapiro']):
+    """Umbrella function to run numerous check_ functions."""
+    requires_model = ['name', 'ecliptc', 'troposphere', 'planet_shapiro']
+    requires_toas = ['ephem', 'bipm']
+    requires_both = []
+    for thing in check_these:
+        if thing in requires_model:
+            exec(f"check_{thing}(model)")
+        elif thing in requires_toas:
+            exec(f"check_{thing}(toas)")
+        elif thing in requires_both:
+            exec(f"check_{thing}(model,toas)")
+        else:
+            msg = f"check_{thing} not executed."
+            log.warning(msg)
+    return
