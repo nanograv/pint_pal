@@ -27,7 +27,7 @@ def whiten_resids(fitter, restype = 'postfit'):
     restype ['string']: Type of residuals, pre or post fit, to plot from fitter object. Options are:
         'prefit' - plot the prefit residuals.
         'postfit' - plot the postfit residuals (default)
-        
+
     Returns:
     ---------
     wres [array]: Array of whitened timing residuals.

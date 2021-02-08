@@ -16,10 +16,7 @@ import astropy.units as u
 from astropy import log
 import yaml
 from timing_analysis.utils import write_if_changed
-
-# Default values for configuration, if absent
-FREQUENCY_RATIO = 1.1
-MAX_SOLARWIND_DELAY = 0.1 # microseconds
+from timing_analysis.defaults import *
 
 class TimingConfiguration:
     """
@@ -87,15 +84,16 @@ class TimingConfiguration:
         picklefilename = os.path.basename(self.filename) + ".pickle.gz"
         # Merge toa_objects (check this works for list of length 1)
         t = toa.get_TOAs([os.path.join(self.tim_directory,t) for t in toas],
-                          usepickle=usepickle, 
-                          bipm_version=BIPM, 
-                          ephem=EPHEM, 
+                          usepickle=usepickle,
+                          bipm_version=BIPM,
+                          ephem=EPHEM,
+                          planets=PLANET_SHAPIRO,
                           model=m,
                           picklefilename=picklefilename)
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
         t = self.apply_ignore(t)
-        
+
         # To facilitate TOA excision, frontend/backend info
         febe_pairs = set(t.get_flag_value('f')[0])
         log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
@@ -143,7 +141,7 @@ class TimingConfiguration:
             else:
                 return fitter_class(to, mo, track_mode="use_pulse_numbers")
         else:
-            return fitter_class(to, mo) 
+            return fitter_class(to, mo)
 
 
     def get_toa_type(self):
