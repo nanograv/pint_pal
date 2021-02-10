@@ -10,12 +10,13 @@ import io
 import os
 import pint.toa as toa
 import pint.models as model
+import pint.fitter
 import numpy as np
 import astropy.units as u
 from astropy import log
 import yaml
 from timing_analysis.utils import write_if_changed
-
+from timing_analysis.defaults import *
 
 class TimingConfiguration:
     """
@@ -26,11 +27,11 @@ class TimingConfiguration:
     def __init__(self, filename="config.yaml", tim_directory=None, par_directory=None):
         """
         Initialization method.
-        
-        Normally config files are written to be run from the root of a 
-        git checkout on the NANOGrav notebook server. If you want to run 
-        them from somewhere else, you may need to override these directories 
-        when you construct the TimingConfiguration object; this will not 
+
+        Normally config files are written to be run from the root of a
+        git checkout on the NANOGrav notebook server. If you want to run
+        them from somewhere else, you may need to override these directories
+        when you construct the TimingConfiguration object; this will not
         change what is recorded in the config file.
 
         Parameters
@@ -44,59 +45,60 @@ class TimingConfiguration:
             self.config = yaml.load(FILE, Loader=yaml.FullLoader)
         self.tim_directory = self.config['tim-directory'] if tim_directory is None else tim_directory
         self.par_directory = self.config['par-directory'] if par_directory is None else par_directory
-        
+        self.skip_check = self.config['skip-check'] if 'skip-check' in self.config.keys() else ''
 
     def get_source(self):
         """ Return the source name """
         return self.config['source']
 
-    def get_model(self):
-        """ Return the PINT model object """
-        par_path = self.par_directory
-        filename = self.config["timing-model"]
-        m = model.get_model(os.path.join(par_path,filename))
-        if m.PSR.value != self.get_source():
-            raise ValueError("%s source entry does not match parameter PSR"%self.filename)
-        return m
-
     def get_compare_model(self):
         """ Return the timing model file to compare with """
-        if "compare-model" in self.config.keys():
-            return self.config['compare-model']
+        if "compare-model" in self.config.keys() and self.config['compare-model'] is not None:
+            return os.path.join(self.par_directory, self.config['compare-model'])
         return None
 
-    def get_free_params(self):
+    def get_free_params(self, fitter):
         """Return list of free parameters"""
-        return self.config['free-params']
+        if self.config["free-dmx"]:
+            return self.config['free-params'] + [p for p in fitter.model.params if p.startswith("DMX_")]
+        else:
+            return self.config['free-params']
 
-    def get_TOAs(self, usepickle=True):
-        """ Return the PINT toa object """
+    def get_model_and_toas(self,usepickle=True):
+        """Return the PINT model and TOA objects"""
+        par_path = os.path.join(self.par_directory,self.config["timing-model"])
         toas = self.config["toas"]
-        tim_path = self.tim_directory
-        BIPM = self.get_bipm()
-        EPHEM = self.get_ephem() 
-        
+
         # Individual tim file
         if isinstance(toas, str):
             toas = [toas]
-            
-        # List of tim files (currently requires writing temporary tim file with INCLUDE to read properly)
-        tim_full_paths = [os.path.join(tim_path,t) for t in toas]
-        with io.StringIO() as f:
-            for tf in tim_full_paths:
-                f.write('INCLUDE %s\n' % (tf))
-            source = self.get_source()
-            fn = f'TEMP-{source}.tim'
-            write_if_changed(fn, f.getvalue())
-        toas = toa.get_TOAs(fn, usepickle=usepickle, bipm_version=BIPM, ephem=EPHEM)
-        # Remove temporary tim file (TEMP.tim)?
-            
 
-        # Excise TOAs according to config 'ignore' block. 
-        # (or should this happen as an explicit method run in case someone wants access to the raw TOAs?)
-        self.apply_ignore(toas)
+        BIPM = self.get_bipm()
+        EPHEM = self.get_ephem()
+        m = model.get_model(par_path)
 
-        return toas
+        if m.PSR.value != self.get_source():
+            msg = f'{self.filename} source entry does not match par file value ({m.PSR.value}).'
+            log.warning(msg)
+
+        picklefilename = os.path.basename(self.filename) + ".pickle.gz"
+        # Merge toa_objects (check this works for list of length 1)
+        t = toa.get_TOAs([os.path.join(self.tim_directory,t) for t in toas],
+                          usepickle=usepickle,
+                          bipm_version=BIPM,
+                          ephem=EPHEM,
+                          planets=PLANET_SHAPIRO,
+                          model=m,
+                          picklefilename=picklefilename)
+
+        # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
+        t = self.apply_ignore(t)
+
+        # To facilitate TOA excision, frontend/backend info
+        febe_pairs = set(t.get_flag_value('f')[0])
+        log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
+
+        return m, t
 
     def get_bipm(self):
         """ Return the bipm string """
@@ -110,17 +112,49 @@ class TimingConfiguration:
             return self.config['ephem']
         return None #return some default value instead?
 
+    def print_changelog(self):
+        """Print changelog entries from .yaml in the notebook."""
+        # If there's a changelog, write out its contents. If not, complain.
+        if 'changelog' in self.config.keys():
+            print('changelog:')
+            if self.config['changelog'] is not None:
+                for cl in self.config['changelog']:
+                    print(f'  - {cl}')
+            else:
+                print('...no changelog entries currently exist.')
+        else:
+            print('YAML file does not include a changelog. Add \'changelog:\' and individual entries there.')
+
     def get_fitter(self):
         """ Return the fitter string (do more?) """
         if "fitter" in self.config.keys():
             return self.config['fitter']
         return None
 
+    def construct_fitter(self, to, mo):
+        """ Return the fitter, tracking pulse numbers if available """
+        fitter_name = self.config['fitter']
+        fitter_class = getattr(pint.fitter, fitter_name)
+        if 'pulse_number' in to.table.columns:
+            if fitter_name.startswith("Wideband"):
+                return fitter_class(to, mo, additional_args=dict(toa=dict(track_mode="use_pulse_numbers")))
+            else:
+                return fitter_class(to, mo, track_mode="use_pulse_numbers")
+        else:
+            return fitter_class(to, mo)
+
+
     def get_toa_type(self):
         """ Return the toa-type string """
         if "toa-type" in self.config.keys():
             return self.config['toa-type']
         return None
+
+    def get_niter(self):
+        """ Return an integer of the number of iterations to fit """
+        if "n-iterations" in self.config.keys():
+            return int(self.config['n-iterations'])
+        return 1
 
     def get_mjd_start(self):
         """Return mjd-start quantity (applies units days)"""
@@ -146,6 +180,12 @@ class TimingConfiguration:
             return self.config['ignore']['bad-epoch']
         return None
 
+    def get_bad_ranges(self):
+        """ Return list of bad epoch ranges by MJD ([MJD1,MJD2])"""
+        if 'bad-range' in self.config['ignore'].keys():
+            return self.config['ignore']['bad-range']
+        return None
+
     def get_bad_toas(self):
         """ Return list of bad TOAs (lists: [filename, channel, subint]) """
         if 'bad-toa' in self.config['ignore'].keys():
@@ -157,6 +197,30 @@ class TimingConfiguration:
             return self.config['ignore']['prob-outlier']
         return None #return some default value instead?
 
+    def get_ignore_dmx(self):
+        """ Return ignore-dmx toggle """
+        if 'ignore-dmx' in self.config['dmx'].keys():
+            return self.config['dmx']['ignore-dmx']
+        return None
+
+    def get_fratio(self):
+        """ Return desired frequency ratio """
+        if 'fratio' in self.config['dmx'].keys():
+            return self.config['dmx']['fratio']
+        return FREQUENCY_RATIO
+
+    def get_sw_delay(self):
+        """ Return desired max(solar wind delay) threshold """
+        if 'max-sw-delay' in self.config['dmx'].keys():
+            return self.config['dmx']['max-sw-delay']
+        return MAX_SOLARWIND_DELAY
+
+    def get_custom_dmx(self):
+        """ Return MJD/binning params for handling DM events, etc. """
+        if 'custom-dmx' in self.config['dmx'].keys():
+            return self.config['dmx']['custom-dmx']
+        return None
+
     def apply_ignore(self,toas):
         """ Basic checks and return TOA excision info. """
         OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-epoch'] # prob-outlier, bad-ff
@@ -166,42 +230,36 @@ class TimingConfiguration:
         # INFO?
         missing_valid = set(OPTIONAL_KEYS)-set(EXISTING_KEYS)
         if len(missing_valid):
-            msg = "Valid TOA excision keys not present: %s" % (missing_valid)
-            log.info(msg)
+            log.info(f'Valid TOA excision keys not present: {missing_valid}')
 
         invalid = set(EXISTING_KEYS) - set(OPTIONAL_KEYS)
         if len(invalid):
-            msg = "Invalid TOA excision keys present: %s" % (invalid)
-            log.warning(msg)
+            log.warning(f'Invalid TOA excision keys present: {invalid}')
 
         valid_null = set(EXISTING_KEYS) - set(VALUED_KEYS) - invalid
         if len(valid_null):
-            msg = "TOA excision keys included, but NOT in use: %s" % (valid_null)
-            log.info(msg)
+            log.info(f'TOA excision keys included, but NOT in use: {valid_null}')
 
         valid_valued = set(VALUED_KEYS) - invalid
         if len(valid_valued):
-            msg = "Valid TOA excision keys in use: %s" % (valid_valued)
-            log.info(msg)
+            log.info(f'Valid TOA excision keys in use: {valid_valued}')
 
         selection = np.ones(len(toas),dtype=bool)
 
         # All info here about selecting various TOAs.
         if 'mjd-start' in valid_valued:
             start_select = (toas.get_mjds() > self.get_mjd_start())
-            selection *= start_select
+            selection &= start_select
         if 'mjd-end' in valid_valued:
             end_select = (toas.get_mjds() < self.get_mjd_end())
-            selection *= end_select
+            selection &= end_select
         if 'snr-cut' in valid_valued:
             snr_select = ((np.array(toas.get_flag_value('snr')) > self.get_snr_cut())[0])
-            selection *= snr_select
+            selection &= snr_select
             if self.get_snr_cut() > 8.0 and self.get_toa_type() == 'NB':
-                msg = "snr-cut should be set to 8; try excising TOAs using other methods."
-                log.warning(msg)
+                log.warning('snr-cut should be set to 8; try excising TOAs using other methods.')
             if self.get_snr_cut() > 25.0 and self.get_toa_type() == 'WB':
-                msg = "snr-cut should be set to 25; try excising TOAs using other methods."
-                log.warning(msg)
+                log.warning('snr-cut should be set to 25; try excising TOAs using other methods.')
         if 'prob-outlier' in valid_valued:
             pass
         if 'bad-ff' in valid_valued:
@@ -210,13 +268,26 @@ class TimingConfiguration:
             for be in self.get_bad_epochs():
                 be_select = np.array([(be not in n) for n in toas.get_flag_value('name')[0]])
                 selection *= be_select
+        if 'bad-range' in valid_valued:
+            for br in self.get_bad_ranges():
+                min_crit = (toas.get_mjds() > br[0]*u.d)
+                max_crit = (toas.get_mjds() < br[1]*u.d)
+                br_select = np.logical_xor(min_crit, max_crit)
+                selection *= br_select
         if 'bad-toa' in valid_valued:
             for bt in self.get_bad_toas():
                 name,chan,subint = bt
                 name_match = np.array([(n == name) for n in toas.get_flag_value('name')[0]])
                 chan_match = np.array([(ch == chan) for ch in toas.get_flag_value('chan')[0]])
                 subint_match = np.array([(si == subint) for si in toas.get_flag_value('subint')[0]])
-                bt_select = np.invert(name_match * subint_match * chan_match)
-                selection *= bt_select
+                if self.get_toa_type() == 'NB':
+                    bt_select = np.invert(name_match * subint_match * chan_match)
+                else:
+                    # don't match based on -chan flags, since WB TOAs don't have them
+                    bt_select = np.invert(name_match * subint_match)
+                selection &= bt_select
 
-        toas.select(selection)
+        msg = f"Selecting {sum(selection)} TOAs out of {toas.ntoas} ({sum(np.logical_not(selection))} removed) based on the 'ignore' configuration block."
+        log.info(msg)
+
+        return toas[selection]

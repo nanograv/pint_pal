@@ -13,3 +13,11 @@ dist/
 
 # editor save files
 *~
+
+# Log files
+logs/
+*.log
+
+# Temporary pickle files and .tim files
+*.tim
+*.tim.pickle.gz

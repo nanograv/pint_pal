@@ -14,5 +14,6 @@ setup(
     long_description_content_type="text/markdown",
     package_dir = {'': 'src'},
     packages = find_packages('src'),
+    install_requires=['ruamel.yaml'],
     python_requires='>=3.6'
 )

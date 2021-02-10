@@ -1,17 +1,9 @@
 """ This is a set of utilities which check par files for completeness """
 
 import re
-from astropy import log
 import copy
-
-
-# A list of exceptions to confirm the fit for F2.
-# Added here in case some ever come up in the future
-F2_EXCEPTION_LIST = ["J1024-0719"]
-
-# Latest versions of bipm/ephem tracked here; update as necessary.
-LATEST_BIPM = "BIPM2019"
-LATEST_EPHEM = "DE438"
+from astropy import log
+from timing_analysis.defaults import *
 
 def check_if_fit(model, *param):
     """
@@ -74,6 +66,9 @@ def check_name(model):
     if not re.match("^((J[0-9]{4}[+-][0-9]{4})|(B[0-9]{4}[+-][0-9]{2}))$", name):
         msg = "PSR parameter is not in the proper format."
         log.warning(msg)
+    else:
+        msg = f"PSR parameter is {name}."
+        log.info(msg)
     return
 
 
@@ -84,27 +79,24 @@ def check_spin(model):
     ==========
     model: PINT model object
 
-    Warnings
-    ========
-    UserWarning
-        If F2 is provided and not in the exceptions list,
-        issue a warning.
-
     Raises
     ======
     ValueError
         If parameters provided are fixed
     """
-    name = model.PSR.value
-    if name in F2_EXCEPTION_LIST and "F2" not in model.params:
-        msg = "F2 is required in par file for this pulsar."
-        log.warning(msg)
-    elif name in F2_EXCEPTION_LIST and "F2" in model.params:
-        check_if_fit("F2")
-    elif "F2" in model.params:
-        msg = "F2 is provided in par file and should be removed."
-        log.warning(msg)
+
     check_if_fit(model, "F0", "F1")
+
+    # check for spindown parameters other than F0 or F1, i.e., any
+    # such parameter that consists of the letter 'F' followed by
+    # an integer
+    for p in model.components['Spindown'].params:
+        if p.startswith('F') and len(p)>1 and p[1:].isdigit():
+            n = int(p[1:])
+            if n < 0 or n >1:
+                msg = 'Unexpected spin parameter %s should be removed' % (p,)
+                log.warning(msg)
+
     return
 
 
@@ -216,10 +208,8 @@ def check_binary(model):
     else:
         raise ValueError("Atypical binary model used")
 
-
-
-def check_jumps(model, receivers):
-    """Check that there are the correct number of jumps in the par file.
+def check_jumps(model,receivers,fitter_type=None):
+    """Checks for correct type/number of JUMP/DMJUMPs in the par file
 
     Parameters
     ==========
@@ -230,6 +220,10 @@ def check_jumps(model, receivers):
     ======
     ValueError
         If there is not one un-jumped receiver at the end, or
+        no TOAs were recorded with that receiver
+
+    ValueError
+        If not all receivers are dm-jumped at the end, or
         no TOAs were recorded with that receiver
     """
     jumps = []
@@ -251,39 +245,29 @@ def check_jumps(model, receivers):
         raise ValueError("%i receivers require JUMPs"%length)
     elif length == 0:
         raise ValueError("All receivers have JUMPs, one must be removed")
-    return
 
-def check_dmjumps(model, receivers):
-    """Check that there are the correct number of dmjumps in the par file.
+    # Check DMJUMPS for wideband models
+    if fitter_type == 'WidebandTOAFitter':
+        dmjumps = []
+        rcvrs = copy.copy(receivers)
 
-    Parameters
-    ==========
-    model: PINT model object
-    receivers: list of receiver strings
+        for p in model.params:
+            if p.startswith("DMJUMP"):
+                dmjumps.append(p)
 
-    Raises
-    ======
-    ValueError
-        If not all receivers are dm-jumped at the end, or
-        no TOAs were recorded with that receiver
-    """
-    dmjumps = []
-    rcvrs = copy.copy(receivers)
+        for dmjump in dmjumps:
+            j = getattr(model, dmjump)
+            value = j.key_value[0]
+            if value not in rcvrs:
+                raise ValueError("Receiver %s not used in TOAs"%value)
+            rcvrs.remove(value)
 
-    for p in model.params:
-        if p.startswith("DMJUMP"):
-            dmjumps.append(p)
+        length = len(rcvrs)
+        if length:
+            raise ValueError("%i receivers require DMJUMPs"%length)
+    else:
+        pass
 
-    for dmjump in dmjumps:
-        j = getattr(model, dmjump)
-        value = j.key_value[0]
-        if value not in rcvrs:
-            raise ValueError("Receiver %s not used in TOAs"%value)
-        rcvrs.remove(value)
-
-    length = len(rcvrs)
-    if length:
-        raise ValueError("%i receivers require DMJUMPs"%length)
     return
 
 def check_ephem(toa):
@@ -293,14 +277,17 @@ def check_ephem(toa):
     ==========
     model: PINT toa object
 
-    Raises
-    ======
-    ValueError
+    Warnings
+    ========
+    UserWarning
         If ephemeris is not set to the latest version.
     """
     if toa.ephem != LATEST_EPHEM:
-        msg = "Wrong ephem (%s); should be %s." % (toa.ephem,LATEST_EPHEM)
+        msg = f"Wrong Solar System ephemeris in use ({toa.ephem}); should be {LATEST_EPHEM}."
         log.warning(msg)
+    else:
+        msg = f"Current Solar System ephemeris in use is {toa.ephem}."
+        log.info(msg)
     return
 
 def check_bipm(toa):
@@ -310,12 +297,116 @@ def check_bipm(toa):
     ==========
     model: PINT toa object
 
-    Raises
-    ======
-    ValueError
+    Warnings
+    ========
+    UserWarning
         If BIPM correction is not set to the latest version.
     """
     if toa.clock_corr_info['bipm_version'] != LATEST_BIPM:
-        msg = "Wrong bipm_version (%s); should be %s." % (toa.clock_corr_info['bipm_version'],LATEST_BIPM)
+        msg = f"Wrong bipm_version ({toa.clock_corr_info['bipm_version']}); should be {LATEST_BIPM}."
         log.warning(msg)
+    else:
+        msg = f"BIPM version in use is {toa.clock_corr_info['bipm_version']}."
+        log.info(msg)
+    return
+
+def check_ecliptic(model):
+    """Check that the parfile uses ecliptic coordinates.
+
+    Parameters
+    ==========
+    model: PINT toa object
+
+    Warnings
+    ========
+    UserWarning
+        If not all model components are in ecliptic coordinates.
+    """
+    # Convert to/add AstrometryEcliptic component model if necessary.
+    if 'AstrometryEquatorial' in model.components:
+        msg = "AstrometryEquatorial in model components; switching to AstrometryEcliptic."
+        log.warning(msg)
+        model_equatorial_to_ecliptic(model)
+    elif 'AstrometryEcliptic' in model.components:
+        msg = "AstrometryEcliptic in model components."
+        log.info(msg)
+    else:
+        msg = "Neither AstrometryEcliptic nor AstrometryEquatorial in model components."
+        log.warning(msg)
+    return
+
+def check_troposphere(model):
+    """Check that the model will (or will not) correct for the troposphere.
+
+    Parameters
+    =========
+    model: PINT toa object
+
+    Warnings
+    ========
+    UserWarning
+        If CORRECT_TROPOSPHERE is not set to the default boolean and/or if the component is not in the model.
+    """
+    if 'TroposphereDelay' not in model.components.keys():
+        from pint.models.timing_model import Component
+        troposphere_delay = Component.component_types["TroposphereDelay"]
+        model.add_component(troposphere_delay())
+        msg = "Added TroposphereDelay to model components."
+        log.warning(msg)
+    tropo = model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.value
+    if tropo != CORRECT_TROPOSPHERE:
+        model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.set( \
+                CORRECT_TROPOSPHERE)
+        msg = "Switching CORRECT_TROPOSPHERE setting."
+        log.warning(msg)
+    tropo = model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.value
+    msg = f"CORRECT_TROPOSPHERE is set to {tropo}."
+    log.info(msg)
+    return
+
+def check_planet_shapiro(model):
+    """Check that the model will (or will not) correct for the planets' Shapiro delays.
+
+    Parameters
+    =========
+    model: PINT toa object
+
+    Warnings
+    ========
+    UserWarning
+        If PLANET_SHAPIRO is not set to the default boolean and/or if the component is not in the model.
+    """
+    if 'SolarSystemShapiro' not in model.components.keys():
+        from pint.models.timing_model import Component
+        sss_delay = Component.component_types["SolarSystemShapiro"]
+        model.add_component(sss_delay())
+        msg = "Added SolarSystemShapiro to model components."
+        log.warning(msg)
+    sss = model.components['SolarSystemShapiro'].PLANET_SHAPIRO.value
+    if sss != PLANET_SHAPIRO:
+        model.components['SolarSystemShapiro'].PLANET_SHAPIRO.set( \
+                PLANET_SHAPIRO)
+        msg = "Switching PLANET_SHAPIRO setting."
+        log.warning(msg)
+    sss = model.components['SolarSystemShapiro'].PLANET_SHAPIRO.value
+    msg = f"PLANET_SHAPIRO is set to {sss}."
+    log.info(msg)
+    return
+
+def check_settings(model, toas, check_these=['name', 'ephem', 'bipm',
+    'ecliptic', 'troposphere', 'planet_shapiro']):
+    """Umbrella function to run numerous check_ functions."""
+    requires_model = {'name', 'ecliptic', 'troposphere', 'planet_shapiro'}
+    requires_toas = {'ephem', 'bipm'}
+    requires_both = {}
+    for thing in check_these:
+        if thing in requires_model:
+            globals()[f"check_{thing}"](model)
+        elif thing in requires_toas:
+            globals()[f"check_{thing}"](toas)
+        elif thing in requires_both:
+            globals()[f"check_{thing}"](model,toas)
+        else:
+            msg = f"check_{thing} not executed."
+            log.warning(msg)
     return
