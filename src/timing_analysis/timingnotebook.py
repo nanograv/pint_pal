@@ -128,7 +128,7 @@ class TimingNotebook:
     def add_setup(self):
         """ Add setup helper info, import and log.setLevel cells """
         self.add_markdown_cell('''\
-        # \[setup\] Set-up, imports
+        # \[set-up\], imports
 
         Reminder (if working on the notebook server): grab current copies of relevant software before doing anything! Make sure your copy of `timing_analysis` is up to date and you're working on a development branch, e.g. `psr/J1234+5678/jks`. Then:
         ```
@@ -204,13 +204,21 @@ class TimingNotebook:
                      tim_directory=None, par_directory=None):
         """ Add cells that load yaml/par/tim and do pre-noise fits """
         self.add_markdown_cell('''\
-        # \[prenoise\] Develop/update timing solution
+        # develop/update \[prenoise\] timing solution
 
         Load configuration (`.yaml`) file, get TOAs and timing model; if you're running from the root of the git distribution, simply edit the `.yaml` file name, otherwise include relevant paths to the `.yaml` file, and `.par`/`.tim` directories as kwargs (see commented example).\
         ''')
-        self.add_code_cell('''\
-        tc = TimingConfiguration("configs/[filename].yaml")
-        # tc = TimingConfiguration("[path/to/config/filename].yaml", par_directory="[path/to/results]", tim_directory="[/path/to/wherever/the/tim/files/are]")
+
+        # Allow for None to be passed if these are not strings.
+        if isinstance(filename, str):
+            filename = f'"{filename}"'
+        if isinstance(tim_directory, str):
+            tim_directory = f'"{tim_directory}"'
+        if isinstance(par_directory, str):
+            par_directory = f'"{par_directory}"'
+
+        self.add_code_cell(f'''\
+        tc = TimingConfiguration({filename}, tim_directory={tim_directory}, par_directory={par_directory})
 
         using_wideband = tc.get_fitter() == 'WidebandTOAFitter'
         mo,to = tc.get_model_and_toas()\
