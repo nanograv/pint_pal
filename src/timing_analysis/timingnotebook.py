@@ -125,6 +125,54 @@ class TimingNotebook:
         WRITE_PAR = False\
         ''')
 
+    def add_setup(self):
+        """ Add setup helper info, import and log.setLevel cells """
+        self.add_markdown_cell('''\
+        # \[setup\] Set-up, imports
+
+        Reminder (if working on the notebook server): grab current copies of relevant software before doing anything! Make sure your copy of `timing_analysis` is up to date and you're working on a development branch, e.g. `psr/J1234+5678/jks`. Then:
+        ```
+        > cd ~/work/timing_analysis/
+        > pip install git+git://github.com/nanograv/pint --upgrade --user
+        > pip install git+https://github.com/nanograv/enterprise.git --upgrade --user
+        > pip install git+https://github.com/nanograv/enterprise_extensions.git --upgrade --user
+        > pip install .
+        ```
+        Also, if you haven't done so in a while:
+        ```
+        > git config user.name "FirstName LastName"
+        > git config user.email "first.last@nanograv.org"
+        ```
+
+        Imports include:
+
+        + Standard Python imports
+        + PINT
+        + enterprise
+        + `timing_analysis` utilities\
+        ''')
+        self.add_code_cell('''\
+        from timing_analysis.lite_utils import *
+        from timing_analysis.par_checker import *
+        from timing_analysis.plot_utils import *
+        from timing_analysis.utils import *
+        from timing_analysis.dmx_utils import *
+        import timing_analysis.noise_utils as nu
+        from timing_analysis.ftester import run_Ftests
+        from timing_analysis.timingconfiguration import TimingConfiguration
+        import yaml
+        from astropy import log
+        import pint.fitter
+        from pint.utils import dmxparse
+        import os
+        from astropy.visualization import quantity_support
+        quantity_support()
+
+        %matplotlib notebook\
+        ''')
+        self.add_code_cell('''\
+        log.setLevel("INFO") # Set desired verbosity of log statements (DEBUG/INFO/WARNING/ERROR)\
+        ''')
 
     def add_setup_config_cells(self, filename="config.yaml", \
                                tim_directory=None, par_directory=None):
@@ -152,6 +200,71 @@ class TimingNotebook:
         mo = tc.get_model()\
         ''')
 
+    def add_prenoise(self,filename="config.yaml",
+                     tim_directory=None, par_directory=None):
+        """ Add cells that load yaml/par/tim and do pre-noise fits """
+        self.add_markdown_cell('''\
+        # \[prenoise\] Develop/update timing solution
+
+        Load configuration (`.yaml`) file, get TOAs and timing model; if you're running from the root of the git distribution, simply edit the `.yaml` file name, otherwise include relevant paths to the `.yaml` file, and `.par`/`.tim` directories as kwargs (see commented example).\
+        ''')
+        self.add_code_cell('''\
+        tc = TimingConfiguration("configs/[filename].yaml")
+        # tc = TimingConfiguration("[path/to/config/filename].yaml", par_directory="[path/to/results]", tim_directory="[/path/to/wherever/the/tim/files/are]")
+
+        using_wideband = tc.get_fitter() == 'WidebandTOAFitter'
+        mo,to = tc.get_model_and_toas()\
+        ''')
+        self.add_markdown_cell('''\
+        Run basic checks for pulsar name, solar system ephemeris, clock correction, tropospheric delays, planet Shapiro delays. Also check for the appropriate number of receiver JUMPs and DMJUMPs and fix them automatically if necessary.\
+        ''')
+        self.add_code_cell('''\
+        check_settings(mo,to)
+
+        receivers = get_receivers(to)
+        add_feJumps(mo,receivers)
+        if using_wideband:
+            add_feDMJumps(mo,receivers)
+        check_jumps(mo,receivers,fitter_type=tc.get_fitter())\
+        ''')
+        self.add_markdown_cell('''\
+        Compute pulse numbers; this ensures that parameter changes made in the model will not break phase connection.\
+        ''')
+        self.add_code_cell('''\
+        to.compute_pulse_numbers(mo)\
+        ''')
+        self.add_markdown_cell('''\
+        Ensure DMX windows are calculated properly for the current set of TOAs, set non-binary epochs to the center of the data span and print a summary of TOAs included.\
+        ''')
+        self.add_code_cell('''\
+        to = setup_dmx(mo,to,frequency_ratio=tc.get_fratio(),max_delta_t=tc.get_sw_delay())
+        center_epochs(mo,to)
+        to.print_summary()\
+        ''')
+        self.add_markdown_cell('''\
+        Define the fitter object and inspect prefit residuals vs. MJD (also vs. orbital phase for binary MSPs).\
+        ''')
+        self.add_code_cell('''\
+        fo = tc.construct_fitter(to,mo)
+        plot_residuals_time(fo, restype='prefit')
+        if mo.is_binary:
+            plot_residuals_orb(fo, restype='prefit')\
+        ''')
+        self.add_markdown_cell('''\
+        Check that free parameters follow convention, do the fit, plot post-fit residuals, write a pre-noise par file and print a summary of fit results.\
+        ''')
+        self.add_code_cell('''\
+        fo.model.free_params = tc.get_free_params(fo)
+        check_fit(fo,skip_check=tc.skip_check)
+
+        fo.fit_toas()
+        plot_residuals_time(fo, restype='postfit')
+        if mo.is_binary:
+            plot_residuals_orb(fo, restype='postfit')
+
+        write_par(fo,toatype=tc.get_toa_type(),addext='_prenoise')
+        fo.print_summary()\
+        ''')
 
     def add_excision_cells(self):
         """ Add cells that perform the various TOA excision stages """
@@ -249,16 +362,64 @@ class TimingNotebook:
         """)
 
 
-    def add_noise_modeling_cells(self):
-        """
-        Add a number of cells that will perform noise modeling
-        via enterprise
-        """
-        self.add_markdown_cell('''### \[enterprise_prep\] Prepare `enterprise`''')
-        self.add_code_cell('')
-        self.add_markdown_cell('''### \[enterprise_run\] Run `enterprise`''')
-        self.add_code_cell('')
+    def add_noise(self):
+        """ Add a number of cells that will perform noise modeling via enterprise """
+        self.add_markdown_cell('''\
+        # \[noise\] Noise analysis, re-fit
 
+        Noise analysis runs are required for the 15-yr v0.9 data set, using the latest available timing model and set of TOAs. For 12.5-yr pulsars, noise runs are currently too computationally expensive to be run on the notebook server. For those pulsars, we will likely conduct runs with acceptable pre-noise solutions and independent HPC resources, then resulting chains will be made available. The exact procedure to do this is still TBD.
+
+        If skipping noise analysis here, set run_noise_analysis = False. Only set this to True for new MSPs once you have an acceptable pre-noise solution and reasonable TOA excision. Or if appropriate results are already available, set use_existing_noise_dir = True to apply these noise parameters to the timing model without re-running model_noise.\
+        ''')
+        self.add_code_cell('''\
+        run_noise_analysis = False
+        use_existing_noise_dir = False
+
+        if run_noise_analysis:
+            remove_noise(mo)\
+        ''')
+        self.add_markdown_cell('''\
+        If `run_noise_analysis = True`, perform noise modeling using enterprise and enterprise_extensions; this cell will likely take at least an hour to run, if not several times that. Status can be monitored once modeling is 1% complete. New noise parameters will be added to the timing model if there are existing results or `model_noise` is run. Redefine the fitter object (`fo`), now with noise parameters, and re-fit.\
+        ''')
+        self.add_code_cell('''\
+        nu.model_noise(mo, to, using_wideband = using_wideband, run_noise_analysis = run_noise_analysis)
+
+        if run_noise_analysis or use_existing_noise_dir:
+            mo = nu.add_noise_to_model(mo, using_wideband = using_wideband)
+
+            fo = tc.construct_fitter(to,mo)
+            fo.model.free_params = tc.get_free_params(fo)
+
+            fo.fit_toas()
+            plot_residuals_time(fo, restype='postfit')
+            if mo.is_binary:
+                plot_residuals_orb(fo, restype='postfit')
+            fo.print_summary()\
+        ''')
+        self.add_markdown_cell('''\
+        Write resulting `.par` and `.tim` files; also run PINT implementation of dmxparse and save the values in a text file with `save = True` (requires DMX bins in model to run properly).\
+        ''')
+        self.add_code_cell('''\
+        write_results = False
+        if write_results:
+            outpar = None  # None leads to default string value
+            write_par(fo,toatype=tc.get_toa_type(),outfile=outpar)
+            outtim = None  # None leads to default string value
+            write_tim(fo,toatype=tc.get_toa_type(),outfile=outtim)
+
+            dmx_dict = dmxparse(fo, save=True)\
+        ''')
+        
+    def add_compare(self):
+        """ Add cells to compare timing models """
+        self.add_markdown_cell('''\
+        # \[compare\] Compare to previous timing model
+
+        Compare post-fit model to `compare-model` (or pre-fit model, if `compare-model` is not specified in the `.yaml` file). Use `?mo.compare` for more information about verbosity options.\
+        ''')
+        self.add_code_cell('''\
+        compare_models(fo,model_to_compare=tc.get_compare_model(),verbosity='check',nodmx=True,threshold_sigma=3.)\
+        ''')
 
     def add_residual_stats_cells(self):
         """
@@ -295,6 +456,57 @@ class TimingNotebook:
             display(Markdown("Reduced $\chi^2$ is %0.5f / %d = %0.5f"%(pint_chi2, psr_toas.ntoas, chi2r)))\
         ''')
 
+
+    def add_significance(self):
+        """ Add cells that calculate resid stats, do F-tests """
+        self.add_markdown_cell('''\
+        # \[significance\] Check parameter significance, generate summary info
+
+        Get information on the weighted (W)RMS residuals per backend. Set `epoch_avg = True` to get the (W)RMS of the epoch-averaged residuals (does not work for wideband analysis; the timing model must have `ECORR` in order for epoch averaging to work). Set `whitened = True` to get the (W)RMS of the whitened residuals. Set both to `True` to get the (W)RMS of the whitened, epoch-averaged residuals.
+
+        For wideband analysis, set `dm_stats = True` to also return the (W)RMS of the DM residuals.\
+        ''')
+        self.add_code_cell('''\
+        if not using_wideband:
+            rs_dict = resid_stats(fo, epoch_avg = True, whitened = True, print_pretty = True)
+        else:
+            rs_dict, dm_dict = resid_stats(fo, whitened = True, dm_stats = True, print_pretty = True)\
+        ''')
+        self.add_markdown_cell('''\
+        Run F-tests to check significance of existing/new parameters; `alpha` is the F-statistic required for a parameter to be marked as significant. This cell may take 5-10 minutes to run.\
+        ''')
+        self.add_code_cell('''\
+        Ftest_dict = run_Ftests(fo, alpha = 0.0027)
+        ''')
+
+    def add_summary(self):
+        """ Add cells that will generate summary pdfs """
+        self.add_markdown_cell('''\
+        # \[summary\] Generate summary pdf
+        
+        Generate summary plots required for pdf summaries. Note: this cell will output white space for the plots, but will save them and incorporate them into the pdf summaries appropriately.\
+        ''')
+        self.add_code_cell('''\
+        if not using_wideband:
+            plots_for_summary_pdf_nb(fo)
+        else:
+            plots_for_summary_pdf_wb(fo)\
+        ''')
+        self.add_code_cell('''\
+        PARFILE = os.path.join(tc.par_directory,tc.config["timing-model"])
+        if not using_wideband:
+            pdf_writer(fo, PARFILE, rs_dict, Ftest_dict, append=None)
+        else:
+            pdf_writer(fo, PARFILE, rs_dict, Ftest_dict, dm_dict = dm_dict)\
+        ''')
+
+    def add_changelog(self):
+        """ Add cell explaining how to generate changelog entries """
+        self.add_markdown_cell('''\
+        # \[changelog\] Changelog entries
+
+        New changelog entries in the `.yaml` file should follow a specific format and are only added for specified reasons (excising TOAs, adding/removing params, changing binary models, etc.). For more detailed instructions, run `new_changelog_entry?` in a new cell. This function can be used to format your entry, which should be added to the bottom of the appropriate `.yaml` file. Note: make sure your git `user.email` is properly configured, since this field is used to add your name to the entry.\
+        ''')
 
     def add_summary_plots_cells(self):
         """

@@ -33,6 +33,17 @@ args = parser.parse_args()
 
 
 tn = TimingNotebook()
+
+
+tn.add_setup()
+tn.add_prenoise(filename=args.config,tim_directory=args.timdir,par_directory=args.pardir)
+tn.add_noise()
+tn.add_compare()
+tn.add_significance()
+tn.add_summary()
+tn.add_changelog()
+
+""" Updating...
 if args.working:
     tn.add_cell('Preliminary Timing Notebook\n=====', mode="markdown")
 else:
@@ -101,5 +112,6 @@ else:
     ---\
     ''')
     tn.add_output_dmx_cells()
+"""
 
 tn.write_out(filename=args.filename)
