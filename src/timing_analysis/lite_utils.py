@@ -311,10 +311,10 @@ def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
     model: PINT model object
     noise_components: list of model component names to remove from model
     """
+    log.info('Removing pre-existing noise parameters...')
     for component in noise_components:
         if component in model.components:
-            msg = f"Removing {component} from model."
-            log.info(msg)
+            log.info(f"Removing {component} from model.")
             model.remove_component(component)
     return
 

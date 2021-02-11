@@ -149,6 +149,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     else:
         chaindir = './noise_run_chains/' + model.PSR.value + '_wb/'
 
+    log.info('Adding new noise parameters to model.')
     wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner)
 
     #Create the maskParameter for EFACS
