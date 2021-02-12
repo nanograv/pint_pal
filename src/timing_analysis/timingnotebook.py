@@ -248,18 +248,15 @@ class TimingNotebook:
         # Allow these to be toggled in writing the notebook, via argparse
         self.add_code_cell(f'''\
         run_noise_analysis = {run_noise}
-        use_existing_noise_dir = {use_existing}
-
-        if run_noise_analysis:
-            remove_noise(mo)\
+        use_existing_noise_dir = {use_existing}\
         ''')
         self.add_markdown_cell_skip('''\
         If `run_noise_analysis = True`, perform noise modeling using enterprise and enterprise_extensions; this cell will likely take at least an hour to run, if not several times that. Status can be monitored once modeling is 1% complete. New noise parameters will be added to the timing model if there are existing results or `model_noise` is run. Redefine the fitter object (`fo`), now with noise parameters, and re-fit.\
         ''',autorun)
         self.add_code_cell_skip('''\
-        nu.model_noise(mo, to, using_wideband = using_wideband, run_noise_analysis = run_noise_analysis)
-
         if run_noise_analysis or use_existing_noise_dir:
+            remove_noise(mo)
+            nu.model_noise(mo, to, using_wideband = using_wideband, run_noise_analysis = run_noise_analysis)
             mo = nu.add_noise_to_model(mo, using_wideband = using_wideband)
 
             fo = tc.construct_fitter(to,mo)
