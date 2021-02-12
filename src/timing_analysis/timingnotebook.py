@@ -373,7 +373,7 @@ class TimingNotebook:
     def add_noise(self):
         """ Add a number of cells that will perform noise modeling via enterprise """
         self.add_markdown_cell('''\
-        # \[noise\] Noise analysis, re-fit
+        # \[noise\] analysis, re-fit
 
         Noise analysis runs are required for the 15-yr v0.9 data set, using the latest available timing model and set of TOAs. For 12.5-yr pulsars, noise runs are currently too computationally expensive to be run on the notebook server. For those pulsars, we will likely conduct runs with acceptable pre-noise solutions and independent HPC resources, then resulting chains will be made available. The exact procedure to do this is still TBD.
 
@@ -421,7 +421,7 @@ class TimingNotebook:
     def add_compare(self):
         """ Add cells to compare timing models """
         self.add_markdown_cell('''\
-        # \[compare\] Compare to previous timing model
+        # \[compare\] to previous timing model
 
         Compare post-fit model to `compare-model` (or pre-fit model, if `compare-model` is not specified in the `.yaml` file). Use `?mo.compare` for more information about verbosity options.\
         ''')
@@ -468,7 +468,7 @@ class TimingNotebook:
     def add_significance(self):
         """ Add cells that calculate resid stats, do F-tests """
         self.add_markdown_cell('''\
-        # \[significance\] Check parameter significance, generate summary info
+        # check parameter \[significance\], generate summary info
 
         Get information on the weighted (W)RMS residuals per backend. Set `epoch_avg = True` to get the (W)RMS of the epoch-averaged residuals (does not work for wideband analysis; the timing model must have `ECORR` in order for epoch averaging to work). Set `whitened = True` to get the (W)RMS of the whitened residuals. Set both to `True` to get the (W)RMS of the whitened, epoch-averaged residuals.
 
@@ -490,7 +490,7 @@ class TimingNotebook:
     def add_summary(self):
         """ Add cells that will generate summary pdfs """
         self.add_markdown_cell('''\
-        # \[summary\] Generate summary pdf
+        # generate \[summary\] pdf
         
         Generate summary plots required for pdf summaries. Note: this cell will output white space for the plots, but will save them and incorporate them into the pdf summaries appropriately.\
         ''')
@@ -511,7 +511,7 @@ class TimingNotebook:
     def add_changelog(self):
         """ Add cell explaining how to generate changelog entries """
         self.add_markdown_cell('''\
-        # \[changelog\] Changelog entries
+        # \[changelog\] entries
 
         New changelog entries in the `.yaml` file should follow a specific format and are only added for specified reasons (excising TOAs, adding/removing params, changing binary models, etc.). For more detailed instructions, run `new_changelog_entry?` in a new cell. This function can be used to format your entry, which should be added to the bottom of the appropriate `.yaml` file. Note: make sure your git `user.email` is properly configured, since this field is used to add your name to the entry.\
         ''')
