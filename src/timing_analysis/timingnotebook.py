@@ -201,7 +201,8 @@ class TimingNotebook:
         ''')
 
     def add_prenoise(self,filename="config.yaml",
-                     tim_directory=None, par_directory=None):
+                     tim_directory=None, par_directory=None,
+                     autorun=False):
         """ Add cells that load yaml/par/tim and do pre-noise fits """
         self.add_markdown_cell('''\
         # develop/update \[prenoise\] timing solution
@@ -241,38 +242,49 @@ class TimingNotebook:
         self.add_code_cell('''\
         to.compute_pulse_numbers(mo)\
         ''')
-        self.add_markdown_cell('''\
-        Ensure DMX windows are calculated properly for the current set of TOAs, set non-binary epochs to the center of the data span and print a summary of TOAs included.\
-        ''')
-        self.add_code_cell('''\
-        to = setup_dmx(mo,to,frequency_ratio=tc.get_fratio(),max_delta_t=tc.get_sw_delay())
-        center_epochs(mo,to)
-        to.print_summary()\
-        ''')
-        self.add_markdown_cell('''\
-        Define the fitter object and inspect prefit residuals vs. MJD (also vs. orbital phase for binary MSPs).\
-        ''')
-        self.add_code_cell('''\
-        fo = tc.construct_fitter(to,mo)
-        plot_residuals_time(fo, restype='prefit')
-        if mo.is_binary:
-            plot_residuals_orb(fo, restype='prefit')\
-        ''')
-        self.add_markdown_cell('''\
-        Check that free parameters follow convention, do the fit, plot post-fit residuals, write a pre-noise par file and print a summary of fit results.\
-        ''')
-        self.add_code_cell('''\
-        fo.model.free_params = tc.get_free_params(fo)
-        check_fit(fo,skip_check=tc.skip_check)
 
-        fo.fit_toas()
-        plot_residuals_time(fo, restype='postfit')
-        if mo.is_binary:
-            plot_residuals_orb(fo, restype='postfit')
+        if not autorun:
+            self.add_markdown_cell('''\
+            Ensure DMX windows are calculated properly for the current set of TOAs, set non-binary epochs to the center of the data span and print a summary of TOAs included.\
+            ''')
+            self.add_code_cell('''\
+            to = setup_dmx(mo,to,frequency_ratio=tc.get_fratio(),max_delta_t=tc.get_sw_delay())
+            center_epochs(mo,to)
+            to.print_summary()\
+            ''')
+            self.add_markdown_cell('''\
+            Define the fitter object and inspect prefit residuals vs. MJD (also vs. orbital phase for binary MSPs).\
+            ''')
+            self.add_code_cell('''\
+            fo = tc.construct_fitter(to,mo)
+            plot_residuals_time(fo, restype='prefit')
+            if mo.is_binary:
+                plot_residuals_orb(fo, restype='prefit')\
+            ''')
+            self.add_markdown_cell('''\
+            Check that free parameters follow convention, do the fit, plot post-fit residuals, write a pre-noise par file and print a summary of fit results.\
+            ''')
+            self.add_code_cell('''\
+            fo.model.free_params = tc.get_free_params(fo)
+            check_fit(fo,skip_check=tc.skip_check)
 
-        write_par(fo,toatype=tc.get_toa_type(),addext='_prenoise')
-        fo.print_summary()\
-        ''')
+            fo.fit_toas()
+            plot_residuals_time(fo, restype='postfit')
+            if mo.is_binary:
+                plot_residuals_orb(fo, restype='postfit')
+
+            write_par(fo,toatype=tc.get_toa_type(),addext='_prenoise')
+            fo.print_summary()\
+            ''')
+        else:
+            self.add_code_cell('''\
+            to = setup_dmx(mo,to,frequency_ratio=tc.get_fratio(),max_delta_t=tc.get_sw_delay())
+            center_epochs(mo,to)
+            fo = tc.construct_fitter(to,mo)
+            fo.model.free_params = tc.get_free_params(fo)
+            check_fit(fo,skip_check=tc.skip_check)
+            fo.fit_toas()\
+            ''')
 
     def add_excision_cells(self):
         """ Add cells that perform the various TOA excision stages """
@@ -468,7 +480,7 @@ class TimingNotebook:
     def add_significance(self):
         """ Add cells that calculate resid stats, do F-tests """
         self.add_markdown_cell('''\
-        # check parameter \[significance\], generate summary info
+        # check parameter \[significance\]
 
         Get information on the weighted (W)RMS residuals per backend. Set `epoch_avg = True` to get the (W)RMS of the epoch-averaged residuals (does not work for wideband analysis; the timing model must have `ECORR` in order for epoch averaging to work). Set `whitened = True` to get the (W)RMS of the whitened residuals. Set both to `True` to get the (W)RMS of the whitened, epoch-averaged residuals.
 

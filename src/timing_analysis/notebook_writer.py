@@ -21,13 +21,15 @@ parser.add_argument("config", \
                     type=str, help="YAML configuration filename")
 parser.add_argument("-f", "--filename", default="process.ipynb", \
                     type=str, help="Output filename")
-parser.add_argument("-w", "--working", action="store_true", \
-                    help="Write out the working notebook template used \
-                    for working through the timing models.")
+#parser.add_argument("-w", "--working", action="store_true", \
+#                    help="Write out the working notebook template used \
+#                    for working through the timing models.")
 parser.add_argument("-t", "--timdir", default=None, \
                     type=str, help="Path to directory with tim file")
 parser.add_argument("-p", "--pardir", default=None, \
                     type=str, help="Path to directory with par file")
+parser.add_argument("-a", "--autorun", action="store_true", \
+                    help="Use for batch runs; removes plotting/interactive cells")
 
 args = parser.parse_args()
 
@@ -36,7 +38,8 @@ tn = TimingNotebook()
 
 
 tn.add_setup()
-tn.add_prenoise(filename=args.config,tim_directory=args.timdir,par_directory=args.pardir)
+tn.add_prenoise(filename=args.config,tim_directory=args.timdir,
+                par_directory=args.pardir,autorun=args.autorun)
 tn.add_noise()
 tn.add_compare()
 tn.add_significance()
