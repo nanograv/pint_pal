@@ -366,3 +366,24 @@ def new_changelog_entry(tag, note):
             now = datetime.now()
             date = now.strftime('%Y-%m-%d')
             print(f'  - \'{date} {username} {tag}: {note}\'')
+
+def check_bad_lo_range(toas):
+    """Check: no Arecibo TOAs exist in MJD range affected by bad LO (57984-58447)
+
+    15-yr specific mitigation strategy for excising affected data. Will raise
+    log.warning if Arecibo TOAs exist in this range.
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    """
+    selection = np.ones(len(toas),dtype=bool)
+    bad_lo_start = (toas.get_mjds() > 57984.0*u.d)
+    bad_lo_end = (toas.get_mjds() < 58447.0*u.d)
+    lo_check = np.logical_xor(min_crit, max_crit)
+    ao_check = (toas.get_obss() == 'arecibo')
+    
+    if np.any(ao_check*lo_check):
+        log.warning('Add [57984,58447] to ignore/bad-range in your .yaml file (TOAs affected by bad LO at AO)') 
+    else:
+        pass
