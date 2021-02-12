@@ -57,7 +57,7 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
 
     return wn_dict, rn_bf
 
-def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = False, run_noise_analysis = True):
+def model_noise(mo, to, red_noise = True, n_iter = int(1e5), using_wideband = False, resume = False, run_noise_analysis = True):
     """
     Setup enterprise PTA and perform MCMC noise analysis
 
@@ -65,6 +65,7 @@ def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = Fals
     ==========
     mo: PINT (or tempo2) timing model
     to: PINT (or tempo2) TOAs
+    red_noise: include red noise in the model
     n_iter: number of MCMC iterations; Default: 1e5; Recommended > 5e4
     using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
     run_noise_analysis: Flag to toggle execution of noise modeling; Default: True
@@ -99,11 +100,9 @@ def model_noise(mo, to, n_iter = int(1e5), using_wideband = False, resume = Fals
 
     #Setup a single pulsar PTA using enterprise_extensions
     if not using_wideband:
-        pta = models.model_singlepsr_noise(e_psr, white_vary = True, is_wideband = False, use_dmdata = False,
-                                  dmjump_var = False)
+        pta = models.model_singlepsr_noise(e_psr, white_vary = True, red_var = red_noise, is_wideband = False, use_dmdata = False, dmjump_var = False)
     else:
-        pta = models.model_singlepsr_noise(e_psr, is_wideband = True, use_dmdata = True, white_vary = True,
-                                  dmjump_var = False)
+        pta = models.model_singlepsr_noise(e_psr, is_wideband = True, use_dmdata = True, white_vary = True, red_var = red_noise, dmjump_var = False)
         dmjump_params = {}
         for param in mo.params:
             if param.startswith('DMJUMP'):

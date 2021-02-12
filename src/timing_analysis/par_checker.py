@@ -1,12 +1,9 @@
 """ This is a set of utilities which check par files for completeness """
 
 import re
-from astropy import log
 import copy
-
-# Latest versions of bipm/ephem tracked here; update as necessary.
-LATEST_BIPM = "BIPM2019"
-LATEST_EPHEM = "DE438"
+from astropy import log
+from timing_analysis.defaults import *
 
 def check_if_fit(model, *param):
     """
@@ -336,4 +333,80 @@ def check_ecliptic(model):
     else:
         msg = "Neither AstrometryEcliptic nor AstrometryEquatorial in model components."
         log.warning(msg)
+    return
+
+def check_troposphere(model):
+    """Check that the model will (or will not) correct for the troposphere.
+
+    Parameters
+    =========
+    model: PINT toa object
+
+    Warnings
+    ========
+    UserWarning
+        If CORRECT_TROPOSPHERE is not set to the default boolean and/or if the component is not in the model.
+    """
+    if 'TroposphereDelay' not in model.components.keys():
+        from pint.models.timing_model import Component
+        troposphere_delay = Component.component_types["TroposphereDelay"]
+        model.add_component(troposphere_delay())
+        msg = "Added TroposphereDelay to model components."
+        log.warning(msg)
+    tropo = model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.value
+    if tropo != CORRECT_TROPOSPHERE:
+        model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.set( \
+                CORRECT_TROPOSPHERE)
+        msg = "Switching CORRECT_TROPOSPHERE setting."
+        log.warning(msg)
+    tropo = model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.value
+    msg = f"CORRECT_TROPOSPHERE is set to {tropo}."
+    log.info(msg)
+    return
+
+def check_planet_shapiro(model):
+    """Check that the model will (or will not) correct for the planets' Shapiro delays.
+
+    Parameters
+    =========
+    model: PINT toa object
+
+    Warnings
+    ========
+    UserWarning
+        If PLANET_SHAPIRO is not set to the default boolean and/or if the component is not in the model.
+    """
+    if 'SolarSystemShapiro' not in model.components.keys():
+        from pint.models.timing_model import Component
+        sss_delay = Component.component_types["SolarSystemShapiro"]
+        model.add_component(sss_delay())
+        msg = "Added SolarSystemShapiro to model components."
+        log.warning(msg)
+    sss = model.components['SolarSystemShapiro'].PLANET_SHAPIRO.value
+    if sss != PLANET_SHAPIRO:
+        model.components['SolarSystemShapiro'].PLANET_SHAPIRO.set( \
+                PLANET_SHAPIRO)
+        msg = "Switching PLANET_SHAPIRO setting."
+        log.warning(msg)
+    sss = model.components['SolarSystemShapiro'].PLANET_SHAPIRO.value
+    msg = f"PLANET_SHAPIRO is set to {sss}."
+    log.info(msg)
+    return
+
+def check_settings(model, toas, check_these=['name', 'ephem', 'bipm',
+    'ecliptic', 'troposphere', 'planet_shapiro']):
+    """Umbrella function to run numerous check_ functions."""
+    requires_model = {'name', 'ecliptic', 'troposphere', 'planet_shapiro'}
+    requires_toas = {'ephem', 'bipm'}
+    requires_both = {}
+    for thing in check_these:
+        if thing in requires_model:
+            globals()[f"check_{thing}"](model)
+        elif thing in requires_toas:
+            globals()[f"check_{thing}"](toas)
+        elif thing in requires_both:
+            globals()[f"check_{thing}"](model,toas)
+        else:
+            msg = f"check_{thing} not executed."
+            log.warning(msg)
     return

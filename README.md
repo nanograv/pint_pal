@@ -42,7 +42,7 @@ If it is already installed, then `cd` into `timing_analysis`, run `git pull` and
 Timing workflow
 ---------------
 
-This package has a variety of tools to support timing for NANOGrav, but the basic goal here is to produce a config `.yaml` file and a `.par` file that together produce clean timing residuals for a new pulsar. Note that for each pulsar, there will be wideband (wb) and narrowband (nb) versions of both configuration and parameter files. For examples that follow, we will use narrowband file naming conventions and we recommend using these files for now; the machinery to use wideband TOAs is not as well developed. (If the pulsar is new to long-term timing, you may need more tools than this to put together an initial `.par` file.) This section will describe how to do that.
+This package has a variety of tools to support timing for NANOGrav, but the basic goal here is to produce a config `.yaml` file and a `.par` file that together produce clean timing residuals for a new pulsar. Note that for each pulsar, there will be wideband (wb) and narrowband (nb) versions of both configuration and parameter files. For examples that follow, we will use narrowband file naming conventions and we recommend using these files for now. (If the pulsar is new to long-term timing, you may need more tools than this to put together an initial `.par` file.) This section will describe how to do that.
 
 1. Pick a pulsar for which timing hasn't been finalized, but for which `.tim` and initial `.par` files exist. The easiest may just be to look in `results` and the most recent `/nanograv/releases/15y/toagen/releases/` for pulsars not represented in `configs`. You might also check https://gitlab.nanograv.org/nano-time/timing_analysis/-/branches to make sure no one is working on it.
 
@@ -74,9 +74,9 @@ There are a lot of things that can go wrong at this point; that's why this isn't
 
 - Can't find one or all of your `.tim` files: make sure you can see them at that location on the same machine your notebook is running on. You probably need to be on the NANOGrav notebook server.
 
-- Few TOAs and they look weird: Wideband TOAs may not work well, and nothing will work if the `toa-type` doesn't match the kind of TOA you're using.
+- Few TOAs and they look weird: Nothing will work if the `toa-type` doesn't match the kind of TOA you're using.
 
-- Tons of PINT `INFO` messages: sadly, this is normal.
+- Tons of PINT `INFO` messages: sadly, this is normal.  However, some of these `INFO` messages arise from `setup_dmx()` in `src/timing_analysis/dmx_utils.py` or from the global settings in `src/timing_analysis/defaults.py`.
 
 - Plots are thrown off by a few points with huge error bars: You should be able to zoom in and identify the MJD, then open the `.tim` file and find which TOAs from this day have huge uncertainties. You can use the excision features in the `.yaml` file to remove these.
 
@@ -95,6 +95,7 @@ There are a lot of things that can go wrong at this point; that's why this isn't
 - You see weird kinks in the time series, or peaks at orbital phase 0.25, or sinusoidal variations with orbital phase that change over time: you may need to add features to your timing model.
 
 There are a number of helpful functions available in `timing_analysis.lite_utils` that are imported at the top of the template notebook; you may want to look inside the `src/timing_analysis/lite_utils.py`, which contains the functions and some documentation. You might also try `import timing_analysis.lite_utils; dir(lite_utils)`.
+There are also global default settings in `src/timing_analysis/defaults.py`.
 
 Submitting a good timing solution
 ---------------------------------
