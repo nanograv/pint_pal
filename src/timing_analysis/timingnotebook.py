@@ -329,7 +329,7 @@ class TimingNotebook:
         Run F-tests to check significance of existing/new parameters; `alpha` is the F-statistic required for a parameter to be marked as significant. This cell may take 5-10 minutes to run.\
         ''',autorun)
         self.add_code_cell('''\
-        Ftest_dict = run_Ftests(fo, alpha = 0.0027)
+        Ftest_dict = run_Ftests(fo, alpha = 0.0027)\
         ''')
 
     def add_summary(self,autorun=False):
