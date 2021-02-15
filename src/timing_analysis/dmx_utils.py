@@ -617,10 +617,10 @@ def add_dmx(model, bin_width=1.0):
 
     if 'DispersionDMX' not in model.components.keys():
         from pint.models.timing_model import Component
-        all_components = Component.component_types
-        model.add_component(all_components["DispersionDMX"]())
+        dmx_component = Component.component_types["DispersionDMX"]
+        model.add_component(dmx_component())
         dmx = model.components["DispersionDMX"]
-        dmx.remove_DMX_range(1)
+        dmx.remove_DMX_range(1)  # remove the range it automatically initiates
         dmx.DMX.set(bin_width)
     else:
         dmx = model.components["DispersionDMX"]
@@ -643,7 +643,8 @@ def model_dmx_params(model):
             low_mjd = getattr(model, f"DMXR1_{idx:04d}").value
             high_mjd = getattr(model, f"DMXR2_{idx:04d}").value
             dmx_val = getattr(model, f"DMX_{idx:04d}").value
-            dmx_err = getattr(model, f"DMX_{idx:04d}").uncertainty.value
+            try: dmx_err = getattr(model, f"DMX_{idx:04d}").uncertainty.value
+            except AttributeError: dmx_err = 0.0
             dmx_ranges.append((low_mjd, high_mjd))
             dmx_vals.append(dmx_val)
             dmx_errs.append(dmx_err)
@@ -694,9 +695,10 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
 
     # Get existing DMX ranges and values from model; adjust the mean DM
     old_dmx_ranges, old_dmx_vals, old_dmx_errs = model_dmx_params(model)
-    if len(old_dmx_ranges):
-        mean_old_dmx_val, sum_of_weights = np.average(old_dmx_vals,
-                weights=old_dmx_errs**-2, returned=True)
+    if len(old_dmx_ranges) and np.sum(old_dmx_errs):
+        idmx = old_dmx_errs != 0.0
+        mean_old_dmx_val, sum_of_weights = np.average(old_dmx_vals[idmx],
+                weights=old_dmx_errs[idmx]**-2, returned=True)
         mean_old_dmx_val_err = sum_of_weights**-0.5
         if abs(mean_old_dmx_val / mean_old_dmx_val_err) > 1.0:
             adjust_old_dmx = True
@@ -707,6 +709,8 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
             log.info(msg)
         else:
             adjust_old_dmx = False
+    else:
+        adjust_old_dmx = False
 
     # Set up DMX model
     if 'gbt' in toas.observatories: bin_width = 6.5  # day
