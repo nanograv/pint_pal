@@ -1,25 +1,18 @@
-"""
-This is the primary script containing the "recipe" that will
-generate a NANOGrav-specific pipeline notebook using the TimingNotebook class.
-
-Very basic usage:
-> python notebook_writer.py config/J1910+1256.nb.yaml
-This will output a notebook named process.ipynb that runs on the J1910+1256.nb.yaml
-configuration file in the config/ directory.
-"""
-
+import os
 import argparse
 from timingnotebook import TimingNotebook
 
 
 ## Argument parser setup
 parser = argparse.ArgumentParser(description="""\
-                                 NANOGrav Notebook Writer
-                                 Outputs a .ipynb with the appropriate variables set
-                                 """)
+    NANOGrav Notebook Writer: script to generate NANOGrav-specific
+    timing notebooks with the TimingNotebook class; the output notebook
+    filename will resemble the input config filename
+    (e.g. process-J1910+1256.nb.ipynb), unless otherwise specified.
+    """)
 parser.add_argument("config", \
                     type=str, help="YAML configuration filename")
-parser.add_argument("-f", "--filename", default="process.ipynb", \
+parser.add_argument("-f", "--filename", default=None, \
                     type=str, help="Output filename")
 parser.add_argument("-t", "--timdir", default=None, \
                     type=str, help="Path to directory with tim file")
@@ -54,5 +47,12 @@ if not args.prenoise_only:
     tn.add_summary(autorun=args.autorun)
     tn.add_changelog(autorun=args.autorun)
 
+# Determine output filename
+if args.filename is not None:
+    outfile = args.filename
+else:
+    config_only = args.config.split('/')[-1]
+    config_base = os.path.splitext(config_only)[0]
+    outfile = f"process-{config_base}.ipynb"
 
-tn.write_out(filename=args.filename)
+tn.write_out(filename=outfile)
