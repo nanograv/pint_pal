@@ -145,20 +145,32 @@ class TimingNotebook:
         Load configuration (`.yaml`) file, get TOAs and timing model; if you're running from the root of the git distribution, simply edit the `.yaml` file name, otherwise include relevant paths to the `.yaml` file, and `.par`/`.tim` directories as kwargs (see commented example).\
         ''',autorun)
 
-        # Allow for None to be passed if these are not strings.
-        if isinstance(filename, str):
-            filename = f'"{filename}"'
-        if isinstance(tim_directory, str):
-            tim_directory = f'"{tim_directory}"'
-        if isinstance(par_directory, str):
-            par_directory = f'"{par_directory}"'
+        if filename is not None:
+            # Allow for None to be passed if these are not strings.
+            if isinstance(filename, str):
+                filename = f'"{filename}"'
+            if isinstance(tim_directory, str):
+                tim_directory = f'"{tim_directory}"'
+            if isinstance(par_directory, str):
+                par_directory = f'"{par_directory}"'
 
-        self.add_code_cell(f'''\
-        tc = TimingConfiguration({filename}, tim_directory={tim_directory}, par_directory={par_directory})
+            self.add_code_cell(f'''\
+            tc = TimingConfiguration({filename}, tim_directory={tim_directory}, par_directory={par_directory})
 
-        using_wideband = tc.get_fitter() == 'WidebandTOAFitter'
-        mo,to = tc.get_model_and_toas()\
-        ''')
+            using_wideband = tc.get_fitter() == 'WidebandTOAFitter'
+            mo,to = tc.get_model_and_toas()\
+            ''')
+        else:
+            # If no config file is provided, generate template version of notebook
+            # Does not yet handle tim_directory/par_directory, but these should not be set with no config.
+            self.add_code_cell('''\
+            tc = TimingConfiguration("configs/[filename].yaml")
+            # tc = TimingConfiguration("[path/to/config/filename].yaml", par_directory="[path/to/results]", tim_directory="[/path/to/wherever/the/tim/files/are]")
+
+            using_wideband = tc.get_fitter() == 'WidebandTOAFitter'
+            mo,to = tc.get_model_and_toas()\
+            ''')
+
         self.add_markdown_cell_skip('''\
         Run basic checks for pulsar name, solar system ephemeris, clock correction, tropospheric delays, planet Shapiro delays. Also check for the appropriate number of receiver JUMPs and DMJUMPs and fix them automatically if necessary.\
         ''',autorun)

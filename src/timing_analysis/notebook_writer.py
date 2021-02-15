@@ -10,8 +10,8 @@ parser = argparse.ArgumentParser(description="""\
     filename will resemble the input config filename
     (e.g. process-J1910+1256.nb.ipynb), unless otherwise specified.
     """)
-parser.add_argument("config", \
-                    type=str, help="YAML configuration filename")
+parser.add_argument("-c", "--config", default=None, \
+                    type=str, help="configuration (.yaml) filename")
 parser.add_argument("-f", "--filename", default=None, \
                     type=str, help="Output filename")
 parser.add_argument("-t", "--timdir", default=None, \
@@ -50,9 +50,11 @@ if not args.prenoise_only:
 # Determine output filename
 if args.filename is not None:
     outfile = args.filename
-else:
+elif args.config is not None:
     config_only = args.config.split('/')[-1]
     config_base = os.path.splitext(config_only)[0]
     outfile = f"process-{config_base}.ipynb"
+else:
+    outfile = "process.ipynb"
 
 tn.write_out(filename=outfile)
