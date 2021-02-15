@@ -12,7 +12,7 @@ free-dmx: Yes
 toa-type: NB
 fitter: GLSFitter
 n-iterations: 1
-ephem: DE438
+ephem: DE440
 bipm: BIPM2019
 
 dmx:  # control dmx windowing/fixing
