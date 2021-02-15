@@ -335,8 +335,8 @@ def get_receivers(toas):
 
 def git_config_info():
     """Reports user's git config (name/email) with log.info"""
-    gitname = os.popen('git config --get user.name')
-    gitemail = os.popen('git config --get user.email')
+    gitname = os.popen('git config --get user.name').read().rstrip()
+    gitemail = os.popen('git config --get user.email').read().rstrip()
     log.info(f'Your git config user.name is: {gitname}')
     log.info('...to change this, in a terminal: git config user.name "First Last"')
     log.info(f'Your git config user.email is: {gitemail}')

@@ -109,14 +109,7 @@ class TimingNotebook:
         ```
         > git config user.name "FirstName LastName"
         > git config user.email "first.last@nanograv.org"
-        ```
-
-        Imports include:
-
-        + Standard Python imports
-        + PINT
-        + enterprise
-        + `timing_analysis` utilities\
+        ```\
         ''',autorun)
         self.add_code_cell('''\
         from timing_analysis.lite_utils import *
@@ -138,7 +131,8 @@ class TimingNotebook:
         %matplotlib notebook\
         ''')
         self.add_code_cell_skip('''\
-        log.setLevel("INFO") # Set desired verbosity of log statements (DEBUG/INFO/WARNING/ERROR)\
+        log.setLevel("INFO") # Set desired verbosity of log statements (DEBUG/INFO/WARNING/ERROR)
+        git_config_info()\
         ''',autorun)
 
     def add_prenoise(self,filename="config.yaml",
