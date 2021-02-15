@@ -380,10 +380,10 @@ def check_bad_lo_range(toas):
     selection = np.ones(len(toas),dtype=bool)
     bad_lo_start = (toas.get_mjds() > 57984.0*u.d)
     bad_lo_end = (toas.get_mjds() < 58447.0*u.d)
-    lo_check = np.logical_xor(min_crit, max_crit)
+    lo_check = np.logical_and(bad_lo_start, bad_lo_end)
     ao_check = (toas.get_obss() == 'arecibo')
     
     if np.any(ao_check*lo_check):
-        log.warning('Add [57984,58447] to ignore/bad-range in your .yaml file (TOAs affected by bad LO at AO)') 
+        log.warning('Add [57984,58447,"PUPPI"] to ignore/bad-range in your .yaml file.') 
     else:
         pass
