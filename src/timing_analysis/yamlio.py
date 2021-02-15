@@ -172,7 +172,7 @@ def curate_comments(yaml_file,overwrite=True,extension='fix'):
 
     if config.get('ignore').get('bad-range'):
         try:
-            config['ignore'].yaml_add_eol_comment("designated by [mjd_start,mjd_end]",'bad-range')
+            config['ignore'].yaml_add_eol_comment("designated by [mjd_start,mjd_end,(backend optional)]",'bad-range')
         except:
             pass
     else:
