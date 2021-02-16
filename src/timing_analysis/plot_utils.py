@@ -742,8 +742,6 @@ def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False
         else:
             stamp_color = "#FD9927"
 
-        print(dm_resids[:2], mjds[:2])
-
         def onclick(event):
             # Get X and Y axis data
             xdata = mjds
@@ -2245,7 +2243,6 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
     title [boolean] : If True, will add titles to ALL plots [default: False].
     legend [boolean] : If True, will add legends to ALL plots [default: False].
     """
-    print(fitter.model.get_components_by_category().keys())
     
     if "Wideband" in fitter.__class__.__name__:
         raise ValueError("Cannot use this function with WidebandTOAFitter, please use `plots_for_summary_pdf_wb` instead.")
