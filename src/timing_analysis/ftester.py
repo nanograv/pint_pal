@@ -13,7 +13,7 @@ import warnings
 #    parameter as p,
 #)
 import timing_analysis.PINT_parameters as pparams
-import pint.models as model
+import pint.models as m
 import copy
 import astropy.units as u
 import numpy as np
@@ -102,7 +102,7 @@ def binary_params_ftest(bparams, fitter, remove):
             if param_check(bp, fitter):
                 p_test.append(bp)
     else:
-        # Figure out what is in the model and needs to be added
+        # Figure out what is in the model and needs to be removed
         for bp in bparams:
             if not param_check(bp, fitter):
                 p_test.append(bp)
@@ -187,10 +187,10 @@ def reset_params(params):
     """
     for p in params:
         if p.name == 'M2':
-            p.value = pparams.M2.value
+            p.value = 0.25
             p.uncertainty = 0.0
         elif p.name == 'SINI':
-            p.value = pparams.SINI.value
+            p.value = 0.8
             p.uncertainty = 0.0
         else:
             p.value = 0.0
@@ -412,10 +412,12 @@ def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
     else:
         print("Testing adding FD terms (", cur_fd, "enabled):")
         
-    # Check if fitter is wideband, if yes add try adding FD component to timing model
-    if "Wideband" in fitter.__class__.__name__:
+    # Check if timing model has FD component in it (includes wideband models)
+    fd_in_origin = True
+    if "FD" not in fitter.model.components.keys():
+        fd_in_origin = False
         try:
-            all_components = model.timing_model.Component.component_types
+            all_components = m.timing_model.Component.component_types
             fd_class = all_components["FD"]
             fd = fd_class()
             fitter.model.add_component(fd, validate=False)
@@ -442,8 +444,7 @@ def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
         d_label = d_label[:-2]
         # Run F-test
         try:
-            ftest_dict = fitter.ftest(param_list[i], component_list[i], maxiter=NITS,\
-                                               remove=remove, full_output=True)
+            ftest_dict = fitter.ftest(param_list[i], component_list[i], maxiter=NITS, remove=remove, full_output=True)
         # If there's an error running the F-test in the fit for some reason, we catch it
         except ValueError:
             warnings.warn(f"Error when running F-test for: {d_label}")
@@ -456,115 +457,13 @@ def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
         # This edits the values in the file for some reason, want to reset them to zeros
         reset_params(param_list[i])
     # If wideband, remove the FD component at the end
-    if "Wideband" in fitter.__class__.__name__:
+    if not fd_in_origin:
         try:
             fitter.model.remove_component('FD')
         except AttributeError:
             warnings.warn("No FD parameters in the initial timing model...")
     # Return the dictionary
     return retdict
-
-def check_FD_old(fitter, alpha=ALPHA, maxcomponent=5, NITS = 1):
-    """
-    Check adding FD parameters with an F-test.
-    
-    This function for F-testing the FD parameters is depricated.
-
-    Input:
-    --------
-    fitter [object]: The PINT fitter object.
-    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
-    maxcomponent [int]: Maximum number of FD parameters to add to the model [default: 5].
-    NITS [int]: Number of fit iterations to run when adding FD parameters to the timing model after 
-        each F-test is run. Should only need to be increased if FD parameter F-tests do not appear 
-        to be converged [default: 1].
-
-    Returns:
-    --------
-    retdict [dictionary]: Returns the dictionary output from the F-tests.
-    """
-    # Print how many FD currently enabled
-    cur_fd = [param for param in fitter.model.params if "FD" in param]
-    print("Testing FD terms (", cur_fd, "enabled):")
-    # Add dictionary for return values
-    retdict = {}
-    # For FD, need to remove components and then add it back in to start with no FD parameters
-    psr_fitter_nofd = copy.deepcopy(fitter)
-    try:
-        psr_fitter_nofd.model.remove_component('FD')
-    except AttributeError:
-        warnings.warn("No FD parameters in the initial timing model...")
-
-    # Check if fitter is wideband or not
-    if "Wideband" in fitter.__class__.__name__:
-        NB = False
-    #    resids = fitter.resids.residual_objs['toa']
-    #    dm_resids = fitter.resids.residual_objs['dm']
-    else:
-        NB = True
-    #    resids = fitter.resids
-    
-    psr_fitter_nofd.fit_toas(NITS) # May want more than 2 iterations
-    
-    resids = psr_fitter_nofd.resids
-    
-    if NB:
-        base_rms_nofd = resids.time_resids.std().to(u.us)
-        base_wrms_nofd = resids.rms_weighted() # assumes the input fitter has been fit already
-    else:
-        base_rms_nofd = resids.residual_objs['toa'].time_resids.std().to(u.us)
-        base_wrms_nofd = resids.residual_objs['toa'].rms_weighted() # assumes the input fitter has been fit already
-    base_chi2_nofd = resids.chi2
-    base_ndof_nofd = resids.dof
-    # Add to dictionary
-    if NB:
-        retdict['NoFD'] = {'ft':None, 'resid_rms_test':base_rms_nofd, 'resid_wrms_test':base_wrms_nofd, 'chi2_test':base_chi2_nofd, 'dof_test':base_ndof_nofd}
-    else:
-        dm_resid_rms_test_nofd = psr_fitter_nofd.resids.residual_objs['dm'].resids.std()
-        dm_resid_wrms_test_nofd = psr_fitter_nofd.resids.residual_objs['dm'].rms_weighted()
-        # Add initial values to F-test dictionary
-        retdict['NoFD'] = {'ft':None, 'resid_rms_test':base_rms_nofd, 'resid_wrms_test':base_wrms_nofd, 'chi2_test':base_chi2_nofd, 'dof_test':base_ndof_nofd, "dm_resid_rms_test": dm_resid_rms_test_nofd, "dm_resid_wrms_test": dm_resid_wrms_test_nofd}
-    # and report the value
-    report_ptest("no FD", retdict['NoFD'])
-    # Now add the FD component back into the timing model
-    all_components = model.timing_model.Component.component_types
-    fd_class = all_components["FD"]
-    fd = fd_class()
-    psr_fitter_nofd.model.add_component(fd, validate=False)
-
-    for i in range(1, maxcomponent+1):
-        param_list = [getattr(pparams, 'FD%s'%(i))]
-        component_list = [getattr(pparams, "FD%i_Component"%(i))]
-        # Run F-test
-        try:
-            ftest_dict = psr_fitter_nofd.ftest(param_list, component_list, remove=False, full_output=True)
-        # If there's an error running the F-test in the fit for some reason, we catch it
-        except ValueError:
-            warnings.warn(f"Error when running F-test for: FD1 through FD{i}")
-            ftest_dict = None
-        # Add to dictionary to return
-        retdict['FD%s'%i] = ftest_dict
-        # Report the values
-        report_ptest('FD1 through FD%s'%i, ftest_dict, alpha = alpha)
-        # This edits the values in the file for some reason, want to reset them to zeros
-        reset_params(param_list)
-        # Add the FD parameter to the timing model permanently
-        if param_list[0].name == 'FD1':
-            # If FD1, this already exists once the FD component class is added, so we just unfreeze it
-            getattr(psr_fitter_nofd.model, "{:}".format(param_list[0].name)).frozen = False
-        else:
-            # Else the parameter must be added permanently
-            psr_fitter_nofd.model.components[component_list[0]].add_param(param_list[0], setup=True)
-            #print(psr_fitter_nofd.model.components['FD'])
-        if i < maxcomponent:
-            # validate and setup model
-            psr_fitter_nofd.model.validate()
-            psr_fitter_nofd.model.setup()
-            psr_fitter_nofd.fit_toas(NITS)
-    # Return the dictionary
-    return retdict
-
 
 def check_binary_DD(fitter, alpha=ALPHA, remove = False):
     """
