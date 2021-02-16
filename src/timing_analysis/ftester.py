@@ -268,6 +268,9 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
         elif fitter.model.binary_model_name == 'ELL1H':
             binarydict = check_binary_ELL1H(fitter, alpha=ALPHA, remove = False)
         retdict['Add']['Binary'] = binarydict
+    # Test adding FD parameters
+    FDdict = check_FD(fitter, alpha=ALPHA, remove = False, maxcomponent=FDnparams, NITS = NITS)
+    retdict['Add']['FD'] = FDdict
     print("Testing removal of parameters:")
     retdict['Remove'] = {}
     # Check parallax, NOTE - cannot remove PX if binary model is DDK, so check for that.
@@ -291,6 +294,9 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
         elif fitter.model.binary_model_name == 'ELL1H':
             binarydict = check_binary_ELL1H(fitter, alpha=ALPHA, remove = True)
         retdict['Remove']['Binary'] = binarydict
+    # Test removing FD parameters
+    FDdict = check_FD(fitter, alpha=ALPHA, remove = True, maxcomponent=FDnparams, NITS = NITS)
+    retdict['Remove']['FD'] = FDdict
     # Get current number of spin frequency derivatives
     current_freq_deriv = 1
     for i in range(2,21):
@@ -307,9 +313,6 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
             FBdict = check_FB(fitter, alpha=ALPHA, fbmax = 5)
             if FBdict:
                 retdict['FB'] = FBdict
-    # Now run various functions individually (FD only right now):
-    FDdict = check_FD(fitter, alpha=ALPHA, maxcomponent=FDnparams, NITS = NITS)
-    retdict['FD'] = FDdict
 
     return retdict
 
@@ -381,9 +384,91 @@ def check_PX(fitter, alpha=ALPHA):
     # Return the dictionary
     return retdict
 
-def check_FD(fitter, alpha=ALPHA, maxcomponent=5, NITS = 1):
+def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
     """
     Check adding FD parameters with an F-test.
+
+    Input:
+    --------
+    fitter [object]: The PINT fitter object.
+    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
+    remove [boolean]: If True, will do and report F-test values for removing parameters.
+        If False, will look for and report F-test values for adding parameters [default: False].
+    maxcomponent [int]: Maximum number of FD parameters to add to the model [default: 5]. If remove=True,
+        This parameter is ignored.
+    NITS [int]: Number of fit iterations to run when adding FD parameters to the timing model after 
+        each F-test is run. Should only need to be increased if FD parameter F-tests do not appear 
+        to be converged [default: 1].
+
+    Returns:
+    --------
+    retdict [dictionary]: Returns the dictionary output from the F-tests.
+    """
+    # Print how many FD currently enabled
+    cur_fd = [param for param in fitter.model.params if "FD" in param]
+    if remove:
+        print("Testing removing FD terms (", cur_fd, "enabled):")
+    else:
+        print("Testing adding FD terms (", cur_fd, "enabled):")
+        
+    # Check if fitter is wideband, if yes add try adding FD component to timing model
+    if "Wideband" in fitter.__class__.__name__:
+        try:
+            all_components = model.timing_model.Component.component_types
+            fd_class = all_components["FD"]
+            fd = fd_class()
+            fitter.model.add_component(fd, validate=False)
+        except ValueError:
+            warnings.warn("FD Component already in timing model.")
+    # Add dictionary for return values
+    retdict = {}
+    
+    # Get list of FD parameters to add or remove
+    param_list = []
+    component_list = []
+    if remove:
+        for i in range(len(cur_fd), 0, -1):
+            param_list.append([getattr(pparams, f'FD{q}') for q in range(len(cur_fd),i-1,-1)])
+            component_list.append([getattr(pparams, f"FD{q}_Component") for q in range(len(cur_fd),i-1,-1)])
+    else:
+        for i in range(len(cur_fd)+1, maxcomponent+1):
+            param_list.append([getattr(pparams, f'FD{q}') for q in range(len(cur_fd)+1,i+1)])
+            component_list.append([getattr(pparams, f"FD{q}_Component") for q in range(len(cur_fd)+1,i+1)])
+    for i in range(len(param_list)):
+        d_label = ""
+        for fd in param_list[i]:
+            d_label += f"{fd.name}, "
+        d_label = d_label[:-2]
+        # Run F-test
+        try:
+            ftest_dict = fitter.ftest(param_list[i], component_list[i], maxiter=NITS,\
+                                               remove=remove, full_output=True)
+        # If there's an error running the F-test in the fit for some reason, we catch it
+        except ValueError:
+            warnings.warn(f"Error when running F-test for: {d_label}")
+            ftest_dict = None
+        # Add to dictionary to return
+        retdict[d_label] = ftest_dict
+        # Report the values
+        #report_ptest('FD1 through FD%s'%i, ftest_dict, alpha = alpha)
+        report_ptest(d_label, ftest_dict, alpha = alpha)
+        # This edits the values in the file for some reason, want to reset them to zeros
+        reset_params(param_list[i])
+    # If wideband, remove the FD component at the end
+    if "Wideband" in fitter.__class__.__name__:
+        try:
+            fitter.model.remove_component('FD')
+        except AttributeError:
+            warnings.warn("No FD parameters in the initial timing model...")
+    # Return the dictionary
+    return retdict
+
+def check_FD_old(fitter, alpha=ALPHA, maxcomponent=5, NITS = 1):
+    """
+    Check adding FD parameters with an F-test.
+    
+    This function for F-testing the FD parameters is depricated.
 
     Input:
     --------

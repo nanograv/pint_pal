@@ -327,19 +327,10 @@ def get_Ftest_lines(Ftest_dict, fitter, alpha = ALPHA):
     ftest_lines [list]: List of nicely formatted F-test results lines to be printed elsewhere.
     """
     ftest_lines = []
+    cur_fd = [param for param in fitter.model.params if "FD" in param]
     for fk in Ftest_dict.keys():
-        if 'FD' in fk:
-            for ffk in Ftest_dict[fk].keys():
-                if ffk == 'NoFD':
-                    label = 'no FD'
-                    cur_fd = [param for param in fitter.model.params if "FD" in param]
-                    ftest_lines.append("\nTesting FD terms (%s enabled):" % (cur_fd))
-                else:
-                    label = "FD1 through %s" % (ffk)
-                l = report_ptest(label, Ftest_dict[fk][ffk], alpha = alpha)
-                ftest_lines.append(l)
         # Get the FB parameter lines
-        elif 'FB' in fk:
+        if 'FB' in fk:
             # Get the value of fbmax, note, may need fixes somewhere
             try:
                 fbmax = (int(max(Ftest_dict[fk].keys())[-1]))
@@ -361,11 +352,11 @@ def get_Ftest_lines(Ftest_dict, fitter, alpha = ALPHA):
                 ffk = 'FB%s'%i
                 l = report_ptest(" ".join(p), Ftest_dict[fk][ffk], alpha = alpha)
                 ftest_lines.append(l)
-
-
+        # Report the intial values        
         elif 'initial' in fk:
             l = report_ptest(fk, Ftest_dict[fk])
             ftest_lines.append(l)
+        # Report any added F-tested parameters, including FD
         elif "Add" in fk:
             ftest_lines.append('Testing additional parameters:')
             for ffk in Ftest_dict[fk].keys():
@@ -373,9 +364,15 @@ def get_Ftest_lines(Ftest_dict, fitter, alpha = ALPHA):
                     for fffk in Ftest_dict[fk][ffk].keys():
                         l = report_ptest(fffk, Ftest_dict[fk][ffk][fffk], alpha = alpha)
                         ftest_lines.append(l)
+                elif 'FD' in ffk:
+                    ftest_lines.append("\nTesting adding FD terms (%s enabled):" % (cur_fd))
+                    for fffk in Ftest_dict[fk][ffk].keys():
+                        l = report_ptest(fffk, Ftest_dict[fk][ffk][fffk], alpha = alpha)
+                        ftest_lines.append(l)
                 else:
                     l = report_ptest(ffk, Ftest_dict[fk][ffk], alpha = alpha)
                     ftest_lines.append(l)
+        # Report any removed F-tested parameters, including FD 
         elif "Remove" in fk:
             ftest_lines.append('\nTesting removal of parameters:')
             for ffk in Ftest_dict[fk].keys():
@@ -383,9 +380,15 @@ def get_Ftest_lines(Ftest_dict, fitter, alpha = ALPHA):
                     for fffk in Ftest_dict[fk][ffk].keys():
                         l = report_ptest(fffk, Ftest_dict[fk][ffk][fffk], alpha = alpha)
                         ftest_lines.append(l)
+                elif 'FD' in ffk:
+                    ftest_lines.append("\nTesting removing FD terms (%s enabled):" % (cur_fd))
+                    for fffk in Ftest_dict[fk][ffk].keys():
+                        l = report_ptest(fffk, Ftest_dict[fk][ffk][fffk], alpha = alpha)
+                        ftest_lines.append(l)
                 else:
                     l = report_ptest(ffk, Ftest_dict[fk][ffk], alpha = alpha)
                     ftest_lines.append(l)
+                    
         elif fk == 'F':
             # Get current number of spin frequency derivatives
             current_freq_deriv = 1
