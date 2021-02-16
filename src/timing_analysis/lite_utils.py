@@ -241,7 +241,7 @@ def large_residuals(fo,threshold_us,threshold_dm=None,n_sigma=None,max_sigma=Non
     max_sigma: float or None
         If not None, also discard all TOAs and/or DMs with claimed uncertainties larger than this many microseconds
     prefit: bool
-        If True, will examine the prefit residuals
+        If True, will explicitly examine the prefit residual objects in the pinter.fitter object; this will give the same result as when prefit=False but no fit has yet been performed.
     ignore_ASP_dms: bool
         If True, it will not flag/excise any TOAs from ASP or GASP data based on DM criteria
     print_bad: bool
@@ -257,6 +257,7 @@ def large_residuals(fo,threshold_us,threshold_dm=None,n_sigma=None,max_sigma=Non
     # check if using wideband TOAs, as this changes how to access the residuals
 
     if "Wideband" in str(type(fo)):
+        is_wideband = True
         if prefit:
             time_resids = fo.resids_init.toa.time_resids.to_value(u.us)
             dm_resids = fo.resids_init.dm.resids.value
@@ -267,10 +268,15 @@ def large_residuals(fo,threshold_us,threshold_dm=None,n_sigma=None,max_sigma=Non
         bes = fo.toas.get_flag_value('be')[0]  # For ignoring G/ASP DMs
         c_dm = np.zeros(len(dm_resids), dtype=bool)
     else:
+        is_wideband = False
         if prefit:
             time_resids = fo.resids_init.time_resids.to_value(u.us)
         else:
             time_resids = fo.resids.time_resids.to_value(u.us)
+        if threshold_dm is not None:
+            msg = 'Thresholding of wideband DM measurements can only be performed with WidebandTOAFitter and wideband TOAs; threshold_dm will be ignored.'
+            log.warning(msg)
+            threshold_dm = None
 
     toa_errors = fo.toas.get_errors().to_value(u.us)
     c_toa = np.zeros(len(time_resids), dtype=bool)
@@ -290,9 +296,8 @@ def large_residuals(fo,threshold_us,threshold_dm=None,n_sigma=None,max_sigma=Non
         if ignore_ASP_dms:
             c_dm &= np.logical_not([be.endswith('ASP') for be in bes])
     if threshold_us is None and threshold_dm is None:
-        print("You must specify one or both of threshold_us or threshold_dm to be not None.")
-        return
-    if "Wideband" in str(type(fo)):
+        raise ValueError("You must specify one or both of threshold_us and threshold_dm to be not None.")
+    if is_wideband:
         c = c_toa | c_dm
     else:
         c = c_toa
@@ -308,8 +313,8 @@ def large_residuals(fo,threshold_us,threshold_dm=None,n_sigma=None,max_sigma=Non
         subint = subints[ibad]
         if print_bad: print(f"    - ['{name}',{chan},{subint}]")
     if return_good:
-        mask = np.logical_not(c)
-        msg = f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(np.logical_not(mask))} removed) based on large_residual() criteria.'
+        mask = ~c
+        msg = f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(c)} removed) based on large_residual() criteria.'
         log.info(msg)
         return fo.toas[mask]
 
