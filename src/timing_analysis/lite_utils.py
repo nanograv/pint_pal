@@ -382,8 +382,6 @@ def check_bad_lo_range(toas):
     bad_lo_end = (toas.get_mjds() < 58447.0*u.d)
     lo_check = np.logical_and(bad_lo_start, bad_lo_end)
     ao_check = (toas.get_obss() == 'arecibo')
-    
+
     if np.any(ao_check*lo_check):
-        log.warning('Add [57984,58447,"PUPPI"] to ignore/bad-range in your .yaml file.') 
-    else:
-        pass
+        log.warning('Add [57984,58447,"PUPPI"] to ignore/bad-range in your .yaml file.')
