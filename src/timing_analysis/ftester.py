@@ -102,7 +102,7 @@ def binary_params_ftest(bparams, fitter, remove):
             if param_check(bp, fitter):
                 p_test.append(bp)
     else:
-        # Figure out what is in the model and needs to be removed
+        # Figure out what is in the model and needs to be added
         for bp in bparams:
             if not param_check(bp, fitter):
                 p_test.append(bp)
@@ -187,10 +187,10 @@ def reset_params(params):
     """
     for p in params:
         if p.name == 'M2':
-            p.value = 0.25
+            p.value = pparams.M2.value
             p.uncertainty = 0.0
         elif p.name == 'SINI':
-            p.value = 0.8
+            p.value = pparams.SINI.value
             p.uncertainty = 0.0
         else:
             p.value = 0.0
