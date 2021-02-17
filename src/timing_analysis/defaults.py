@@ -2,7 +2,7 @@
 
 # Choice of clock, SSE
 LATEST_BIPM = "BIPM2019"    # latest clock realization to use
-LATEST_EPHEM = "DE438"      # latest solar system ephemeris to use
+LATEST_EPHEM = "DE440"      # latest solar system ephemeris to use
 
 # Toggle various corrections
 PLANET_SHAPIRO = True       # correct for Shapiro delay from planets

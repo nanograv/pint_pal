@@ -86,7 +86,7 @@ free-params: {free_params_str}
 free-dmx: True
 toa-type: {uptoatype}
 fitter: {fitter}
-ephem: DE438
+ephem: DE440
 bipm: BIPM2019
 
 # Global/subset TOA excision
