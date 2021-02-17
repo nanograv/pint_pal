@@ -3,6 +3,7 @@
 import re
 import copy
 from astropy import log
+import astropy.units as u
 from timing_analysis.defaults import *
 
 def check_if_fit(model, *param):
@@ -394,10 +395,10 @@ def check_planet_shapiro(model):
     return
 
 def check_settings(model, toas, check_these=['name', 'ephem', 'bipm',
-    'ecliptic', 'troposphere', 'planet_shapiro']):
+    'ecliptic', 'troposphere', 'planet_shapiro', 'bad_lo_range']):
     """Umbrella function to run numerous check_ functions."""
     requires_model = {'name', 'ecliptic', 'troposphere', 'planet_shapiro'}
-    requires_toas = {'ephem', 'bipm'}
+    requires_toas = {'ephem', 'bipm', 'bad_lo_range'}
     requires_both = {}
     for thing in check_these:
         if thing in requires_model:
@@ -407,6 +408,31 @@ def check_settings(model, toas, check_these=['name', 'ephem', 'bipm',
         elif thing in requires_both:
             globals()[f"check_{thing}"](model,toas)
         else:
-            msg = f"check_{thing} not executed."
-            log.warning(msg)
+            log.warning(f"check_{thing} not executed.")
     return
+
+def check_bad_lo_range(toas):
+    """Check: no Arecibo TOAs exist in MJD range affected by bad LO (57984-58447)
+
+    15-yr specific mitigation strategy for excising affected data. Will raise
+    log.warning if Arecibo TOAs exist in this range.
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    """
+    bad_lo_start = (toas.get_mjds() > 57984.0*u.d)
+    bad_lo_end = (toas.get_mjds() < 58447.0*u.d)
+    lo_check = (bad_lo_start & bad_lo_end)
+    ao_check = (toas.get_obss() == 'arecibo')
+
+    if any(ao_check & lo_check):
+        log.warning('Data affected by Arecibo bad LO should be excised (add bad-range to .yaml).')
+        print('''
+Add the following line(s) to the ignore block of your .yaml file...
+
+  bad-range:
+  - [57984,58447,"PUPPI"]
+        ''')
+    elif any(ao_check):
+        log.info('Arecibo data affected by bad LO (MJD 57984-58447) has been ignored.')

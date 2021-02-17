@@ -78,8 +78,7 @@ class TimingConfiguration:
         m = model.get_model(par_path)
 
         if m.PSR.value != self.get_source():
-            msg = f'{self.filename} source entry does not match par file value ({m.PSR.value}).'
-            log.warning(msg)
+            log.warning(f'{self.filename} source entry does not match par file value ({m.PSR.value}).')
 
         picklefilename = os.path.basename(self.filename) + ".pickle.gz"
         # Merge toa_objects (check this works for list of length 1)
@@ -272,8 +271,12 @@ class TimingConfiguration:
             for br in self.get_bad_ranges():
                 min_crit = (toas.get_mjds() > br[0]*u.d)
                 max_crit = (toas.get_mjds() < br[1]*u.d)
-                br_select = np.logical_xor(min_crit, max_crit)
-                selection *= br_select
+                br_select = (min_crit & max_crit)
+                # Look for backend (be) flag to further refine selection, if present
+                if len(br) > 2:
+                    be_select = np.array([(be == br[2]) for be in toas.get_flag_value('be')[0]])
+                    br_select *= be_select
+                selection =~ br_select
         if 'bad-toa' in valid_valued:
             for bt in self.get_bad_toas():
                 name,chan,subint = bt
@@ -287,7 +290,6 @@ class TimingConfiguration:
                     bt_select = np.invert(name_match * subint_match)
                 selection &= bt_select
 
-        msg = f"Selecting {sum(selection)} TOAs out of {toas.ntoas} ({sum(np.logical_not(selection))} removed) based on the 'ignore' configuration block."
-        log.info(msg)
+        log.info(f"Selecting {sum(selection)} TOAs out of {toas.ntoas} ({sum(np.logical_not(selection))} removed) based on the 'ignore' configuration block.")
 
         return toas[selection]
