@@ -225,7 +225,7 @@ def add_feDMJumps(mo,rcvrs):
             DMJUMPn = maskParameter('DMJUMP',key='-fe',key_value=[j],value=0.0,units=u.pc*u.cm**-3)
             dmjump.add_param(DMJUMPn,setup=True)
 
-def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
+def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True):
     """Quick and dirty routine to find outlier residuals based on some threshold.
     Automatically deals with Wideband vs. Narrowband fitters.
 
@@ -233,45 +233,83 @@ def large_residuals(fo,threshold_us,n_sigma=None,max_sigma=None):
     ==========
     fo: `pint.fitter` object
     threshold_us: float
-        not a quantity, but threshold for residuals larger (magnitude) than some delay in microseconds
+        not a quantity, but threshold for TOA residuals larger (magnitude) than some delay in microseconds; if None, will not look at TOA residuals
+    threshold_dm: float
+        not a quantity, but threshold for DM residuals larger (magnitude) than some delay in pc cm**-3; if None, will not look at DM residuals
     n_sigma: float or None
-        If not None, only discard TOAs that are at least this many sigma as well as large
+        If not None, only discard TOAs and/or DMs that are at least this many sigma as well as large
     max_sigma: float or None
-        If not None, also discard all TOAs with claimed uncertainties larger than this many microseconds
+        If not None, also discard all TOAs and/or DMs with claimed uncertainties larger than this many microseconds
+    prefit: bool
+        If True, will explicitly examine the prefit residual objects in the pinter.fitter object; this will give the same result as when prefit=False but no fit has yet been performed.
+    ignore_ASP_dms: bool
+        If True, it will not flag/excise any TOAs from ASP or GASP data based on DM criteria
+    print_bad: bool
+        If True, prints bad-toa lines that can be copied directly into a yaml file
 
     Returns
     =======
-    None
-        prints bad-toa lines that can be copied directly into a yaml file
+    PINT TOA object of filtered TOAs
     """
 
     # check if using wideband TOAs, as this changes how to access the residuals
 
     if "Wideband" in str(type(fo)):
-        init_time_resids = fo.resids_init.toa.time_resids
+        is_wideband = True
+        if prefit:
+            time_resids = fo.resids_init.toa.time_resids.to_value(u.us)
+            dm_resids = fo.resids_init.dm.resids.value
+        else:
+            time_resids = fo.resids.toa.time_resids.to_value(u.us)
+            dm_resids = fo.resids.dm.resids.value
+        dm_errors = fo.toas.get_dm_errors().value
+        bes = fo.toas.get_flag_value('be')[0]  # For ignoring G/ASP DMs
+        c_dm = np.zeros(len(dm_resids), dtype=bool)
     else:
-        init_time_resids = fo.resids_init.time_resids
+        is_wideband = False
+        if prefit:
+            time_resids = fo.resids_init.time_resids.to_value(u.us)
+        else:
+            time_resids = fo.resids.time_resids.to_value(u.us)
+        if threshold_dm is not None:
+            log.warning('Thresholding of wideband DM measurements can only be performed with WidebandTOAFitter and wideband TOAs; threshold_dm will be ignored.')
+            threshold_dm = None
 
-    toa_errors = fo.toas.get_errors()
+    toa_errors = fo.toas.get_errors().to_value(u.us)
+    c_toa = np.zeros(len(time_resids), dtype=bool)
 
-    c = np.abs(init_time_resids.to_value(u.us)) > threshold_us
-    if n_sigma is not None:
-        c &= np.abs((init_time_resids/toa_errors).to_value(1)) > n_sigma
-    if max_sigma is not None:
-        c |= toa_errors.to_value(u.us) > max_sigma
-    badtoalist = np.where(c)
-    # FIXME: will go wrong if some TOAs lack -chan or -subint
+    if threshold_us is not None:
+        c_toa |= np.abs(time_resids) > threshold_us
+        if n_sigma is not None:
+            c_toa &= np.abs(time_resids/toa_errors) > n_sigma
+        if max_sigma is not None:
+            c_toa |= toa_errors > max_sigma
+    if threshold_dm is not None:
+        c_dm |= np.abs(dm_resids) > threshold_dm
+        if n_sigma is not None:
+            c_dm &= np.abs(dm_resids/dm_errors) > n_sigma
+        if max_sigma is not None:
+            c_dm |= dm_errors > max_sigma
+        if ignore_ASP_dms:
+            c_dm &= np.logical_not([be.endswith('ASP') for be in bes])
+    if threshold_us is None and threshold_dm is None:
+        raise ValueError("You must specify one or both of threshold_us and threshold_dm to be not None.")
+    if is_wideband:
+        c = c_toa | c_dm
+    else:
+        c = c_toa
+
+    badlist = np.where(c)
     names = fo.toas.get_flag_value('name')[0]
     chans = fo.toas.get_flag_value('chan')[0]
     subints = fo.toas.get_flag_value('subint')[0]
-    for i in badtoalist[0]:
-        name = names[i]
-        chan = chans[i]
-        subint = subints[i]
-        print(f"    - ['{name}',{chan},{subint}]")
-    mask = np.logical_not(c)
-    msg = f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(np.logical_not(mask))} removed) based on large_residual() criteria.'
-    log.info(msg)
+    for ibad in badlist[0]:
+        name = names[ibad]
+        chan = chans[ibad]
+        subint = subints[ibad]
+        if print_bad: print(f"    - ['{name}',{chan},{subint}]")
+    mask = ~c
+    log.info(f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(c)} removed) based on large_residual() criteria.')
     return fo.toas[mask]
 
 def compare_models(fo,model_to_compare=None,verbosity='check',threshold_sigma=3.,nodmx=True):
@@ -360,16 +398,14 @@ def new_changelog_entry(tag, note):
     VALID_TAGS = ['INIT','ADD','REMOVE','BINARY','NOISE','CURATE','TEST']
     vtstr = ', '.join(VALID_TAGS)
     if tag not in VALID_TAGS:
-        msg = f'{tag} is not a valid tag; valid tags are: {vtstr}.'
-        log.error(msg)
+        log.error(f'{tag} is not a valid tag; valid tags are: {vtstr}.')
     else:
         # Read the git user.email from .gitconfig, return exception if not set
         stream = os.popen('git config --get user.email')
         username = stream.read().rstrip().split('@')[0]
 
         if not username:
-            msg = 'Update your git config with... git config --global user.email \"your.email@nanograv.org\"'
-            log.error(msg)
+            log.error('Update your git config with... git config --global user.email \"your.email@nanograv.org\"')
         else:
             # Date in YYYY-MM-DD format
             now = datetime.now()
