@@ -225,7 +225,7 @@ def add_feDMJumps(mo,rcvrs):
             DMJUMPn = maskParameter('DMJUMP',key='-fe',key_value=[j],value=0.0,units=u.pc*u.cm**-3)
             dmjump.add_param(DMJUMPn,setup=True)
 
-def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True,return_good=True):
+def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True):
     """Quick and dirty routine to find outlier residuals based on some threshold.
     Automatically deals with Wideband vs. Narrowband fitters.
 
@@ -246,12 +246,10 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
         If True, it will not flag/excise any TOAs from ASP or GASP data based on DM criteria
     print_bad: bool
         If True, prints bad-toa lines that can be copied directly into a yaml file
-    return_good: bool
-        If True, returns PINT TOA object of the filtered (good) TOAs
 
     Returns
     =======
-    PINT TOA object if return_good, else None
+    PINT TOA object of filtered TOAs
     """
 
     # check if using wideband TOAs, as this changes how to access the residuals
@@ -302,7 +300,6 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
         c = c_toa
 
     badlist = np.where(c)
-    # FIXME: will go wrong if some TOAs lack -chan or -subint
     names = fo.toas.get_flag_value('name')[0]
     chans = fo.toas.get_flag_value('chan')[0]
     subints = fo.toas.get_flag_value('subint')[0]
@@ -311,10 +308,9 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
         chan = chans[ibad]
         subint = subints[ibad]
         if print_bad: print(f"    - ['{name}',{chan},{subint}]")
-    if return_good:
-        mask = ~c
-        log.info(f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(c)} removed) based on large_residual() criteria.')
-        return fo.toas[mask]
+    mask = ~c
+    log.info(f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(c)} removed) based on large_residual() criteria.')
+    return fo.toas[mask]
 
 def compare_models(fo,model_to_compare=None,verbosity='check',threshold_sigma=3.,nodmx=True):
     """Wrapper function to compare post-fit results to a user-specified comparison model.
