@@ -411,16 +411,16 @@ def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
         print("Testing removing FD terms (", cur_fd, "enabled):")
     else:
         print("Testing adding FD terms (", cur_fd, "enabled):")
-        
+    
+    fitter_fd = copy.deepcopy(fitter)
+    
     # Check if timing model has FD component in it (includes wideband models)
-    fd_in_origin = True
     if "FD" not in fitter.model.components.keys():
-        fd_in_origin = False
         try:
             all_components = m.timing_model.Component.component_types
             fd_class = all_components["FD"]
             fd = fd_class()
-            fitter.model.add_component(fd, validate=False)
+            fitter_fd.model.add_component(fd, validate=False)
         except ValueError:
             warnings.warn("FD Component already in timing model.")
     # Add dictionary for return values
@@ -444,7 +444,7 @@ def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
         d_label = d_label[:-2]
         # Run F-test
         try:
-            ftest_dict = fitter.ftest(param_list[i], component_list[i], maxiter=NITS, remove=remove, full_output=True)
+            ftest_dict = fitter_fd.ftest(param_list[i], component_list[i], maxiter=NITS, remove=remove, full_output=True)
         # If there's an error running the F-test in the fit for some reason, we catch it
         except ValueError:
             warnings.warn(f"Error when running F-test for: {d_label}")
@@ -456,12 +456,7 @@ def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
         report_ptest(d_label, ftest_dict, alpha = alpha)
         # This edits the values in the file for some reason, want to reset them to zeros
         reset_params(param_list[i])
-    # If wideband, remove the FD component at the end
-    if not fd_in_origin:
-        try:
-            fitter.model.remove_component('FD')
-        except AttributeError:
-            warnings.warn("No FD parameters in the initial timing model...")
+
     # Return the dictionary
     return retdict
 
