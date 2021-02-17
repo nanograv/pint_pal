@@ -427,6 +427,12 @@ def check_bad_lo_range(toas):
     ao_check = (toas.get_obss() == 'arecibo')
 
     if any(ao_check & lo_check):
-        log.warning('Data affected by bad LO at Arecibo should be excised; add [57984,58447,"PUPPI"] to ignore/bad-range in your .yaml file.')
+        log.warning('Data affected by Arecibo bad LO should be excised (add bad-range to .yaml).')
+        print('''
+Add the following line(s) to the ignore block of your .yaml file...
+
+  bad-range:
+  - [57984,58447,"PUPPI"]
+        ''')
     elif any(ao_check):
         log.info('Arecibo data affected by bad LO (MJD 57984-58447) has been ignored.')
