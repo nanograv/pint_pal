@@ -13,7 +13,7 @@ import warnings
 #    parameter as p,
 #)
 import timing_analysis.PINT_parameters as pparams
-import pint.models as m
+from pint.models import timing_model
 import copy
 import astropy.units as u
 import numpy as np
@@ -417,7 +417,7 @@ def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
     # Check if timing model has FD component in it (includes wideband models)
     if "FD" not in fitter.model.components.keys():
         try:
-            all_components = m.timing_model.Component.component_types
+            all_components = timing_model.Component.component_types
             fd_class = all_components["FD"]
             fd = fd_class()
             fitter_fd.model.add_component(fd, validate=False)
