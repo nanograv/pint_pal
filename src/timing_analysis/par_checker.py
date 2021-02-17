@@ -449,5 +449,5 @@ def check_toa_release(toas):
     if all(release_check):
         log.info(f'TOAS from the latest release ({LATEST_TOA_RELEASE}) are being used.')
     else:
-        log.warning(f'TOAs in use are not from the latest release ({LATEST_TOA_RELEASE}); update tim-directory in the .yaml accordingly.')
+        log.warning(f'TOAs in use are not all from the latest release ({LATEST_TOA_RELEASE}); update tim-directory in the .yaml accordingly.')
 
