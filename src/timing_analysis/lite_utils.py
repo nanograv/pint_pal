@@ -349,9 +349,10 @@ def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
     model: PINT model object
     noise_components: list of model component names to remove from model
     """
+    log.info('Removing pre-existing noise parameters...')
     for component in noise_components:
         if component in model.components:
-            log.info("Removing {component} from model.")
+            log.info(f"Removing {component} from model.")
             model.remove_component(component)
     return
 
@@ -369,6 +370,15 @@ def get_receivers(toas):
     """
     receivers = list(set([str(f) for f in set(toas.get_flag_value('fe')[0])]))
     return receivers
+
+def git_config_info():
+    """Reports user's git config (name/email) with log.info"""
+    gitname = os.popen('git config --get user.name').read().rstrip()
+    gitemail = os.popen('git config --get user.email').read().rstrip()
+    log.info(f'Your git config user.name is: {gitname}')
+    log.info('...to change this, in a terminal: git config user.name "First Last"')
+    log.info(f'Your git config user.email is: {gitemail}')
+    log.info('...to change this, in a terminal: git config user.email "first.last@nanograv.org"')
 
 def new_changelog_entry(tag, note):
     """Checks for valid tag and auto-generates entry to be copy/pasted into .yaml changelog block.
