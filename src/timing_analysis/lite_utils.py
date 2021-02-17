@@ -225,7 +225,7 @@ def add_feDMJumps(mo,rcvrs):
             DMJUMPn = maskParameter('DMJUMP',key='-fe',key_value=[j],value=0.0,units=u.pc*u.cm**-3)
             dmjump.add_param(DMJUMPn,setup=True)
 
-def large_residuals(fo,threshold_us,threshold_dm=None,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True,return_good=True):
+def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True,return_good=True):
     """Quick and dirty routine to find outlier residuals based on some threshold.
     Automatically deals with Wideband vs. Narrowband fitters.
 
@@ -274,8 +274,7 @@ def large_residuals(fo,threshold_us,threshold_dm=None,n_sigma=None,max_sigma=Non
         else:
             time_resids = fo.resids.time_resids.to_value(u.us)
         if threshold_dm is not None:
-            msg = 'Thresholding of wideband DM measurements can only be performed with WidebandTOAFitter and wideband TOAs; threshold_dm will be ignored.'
-            log.warning(msg)
+            log.warning('Thresholding of wideband DM measurements can only be performed with WidebandTOAFitter and wideband TOAs; threshold_dm will be ignored.')
             threshold_dm = None
 
     toa_errors = fo.toas.get_errors().to_value(u.us)
@@ -314,8 +313,7 @@ def large_residuals(fo,threshold_us,threshold_dm=None,n_sigma=None,max_sigma=Non
         if print_bad: print(f"    - ['{name}',{chan},{subint}]")
     if return_good:
         mask = ~c
-        msg = f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(c)} removed) based on large_residual() criteria.'
-        log.info(msg)
+        log.info(f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(c)} removed) based on large_residual() criteria.')
         return fo.toas[mask]
 
 def compare_models(fo,model_to_compare=None,verbosity='check',threshold_sigma=3.,nodmx=True):
@@ -357,8 +355,7 @@ def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
     """
     for component in noise_components:
         if component in model.components:
-            msg = f"Removing {component} from model."
-            log.info(msg)
+            log.info("Removing {component} from model.")
             model.remove_component(component)
     return
 
@@ -395,16 +392,14 @@ def new_changelog_entry(tag, note):
     VALID_TAGS = ['INIT','ADD','REMOVE','BINARY','NOISE','CURATE','TEST']
     vtstr = ', '.join(VALID_TAGS)
     if tag not in VALID_TAGS:
-        msg = f'{tag} is not a valid tag; valid tags are: {vtstr}.'
-        log.error(msg)
+        log.error(f'{tag} is not a valid tag; valid tags are: {vtstr}.')
     else:
         # Read the git user.email from .gitconfig, return exception if not set
         stream = os.popen('git config --get user.email')
         username = stream.read().rstrip().split('@')[0]
 
         if not username:
-            msg = 'Update your git config with... git config --global user.email \"your.email@nanograv.org\"'
-            log.error(msg)
+            log.error('Update your git config with... git config --global user.email \"your.email@nanograv.org\"')
         else:
             # Date in YYYY-MM-DD format
             now = datetime.now()
