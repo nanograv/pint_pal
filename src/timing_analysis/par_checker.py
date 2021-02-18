@@ -395,10 +395,10 @@ def check_planet_shapiro(model):
     return
 
 def check_settings(model, toas, check_these=['name', 'ephem', 'bipm',
-    'ecliptic', 'troposphere', 'planet_shapiro', 'bad_lo_range']):
+    'ecliptic', 'troposphere', 'planet_shapiro', 'bad_lo_range','toa_release']):
     """Umbrella function to run numerous check_ functions."""
     requires_model = {'name', 'ecliptic', 'troposphere', 'planet_shapiro'}
-    requires_toas = {'ephem', 'bipm', 'bad_lo_range'}
+    requires_toas = {'ephem', 'bipm', 'bad_lo_range', 'toa_release'}
     requires_both = {}
     for thing in check_these:
         if thing in requires_model:
@@ -436,3 +436,19 @@ Add the following line(s) to the ignore block of your .yaml file...
         ''')
     elif any(ao_check):
         log.info('Arecibo data affected by bad LO (MJD 57984-58447) has been ignored.')
+
+def check_toa_release(toas):
+    """Check: TOAs being used are from the most recent release
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    """
+    release_flags = toas.get_flag_value('ver')[0]
+    if len(set(release_flags)) > 1:
+        log.error(f'TOAs from multiple releases should not be combined: {set(release_flags)}')
+    else:
+        if release_flags[0] == LATEST_TOA_RELEASE:
+            log.info(f'All TOAs are from the latest release ({LATEST_TOA_RELEASE}).')
+        else:
+            log.warning(f'TOAs in use are from an old release {release_flags[0]}, not {LATEST_TOA_RELEASE}; update tim-directory in the .yaml accordingly.')

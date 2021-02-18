@@ -172,7 +172,7 @@ class TimingNotebook:
             ''')
 
         self.add_markdown_cell_skip('''\
-        Run basic checks for pulsar name, solar system ephemeris, clock correction, ecliptic coordinates, tropospheric delays, planet Shapiro delays, and if applicable, removal of Arecibo data affected by bad LO. Also check for the appropriate number of receiver JUMPs and DMJUMPs and fix them automatically if necessary.\
+        Run basic checks for pulsar name, solar system ephemeris, clock correction, ecliptic coordinates, tropospheric delays, planet Shapiro delays, and if applicable, removal of Arecibo data affected by bad LO. Check that TOAs being used are from the latest `toagen` release. Also check for the appropriate number of receiver JUMPs and DMJUMPs and fix them automatically if necessary.\
         ''',autorun)
         self.add_code_cell('''\
         check_settings(mo,to)
