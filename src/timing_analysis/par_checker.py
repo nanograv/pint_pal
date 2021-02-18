@@ -445,8 +445,6 @@ def check_toa_release(toas):
     toas: `pint.toa.TOAs` object
     """
     release_flags = toas.get_flag_value('ver')[0]
-    #release_check = [(rel == LATEST_TOA_RELEASE) for rel in release_flags]
-
     if len(set(release_flags)) > 1:
         log.error(f'TOAs from multiple releases should not be combined: {set(release_flags)}')
     else:
@@ -454,4 +452,3 @@ def check_toa_release(toas):
             log.info(f'All TOAs are from the latest release ({LATEST_TOA_RELEASE}).')
         else:
             log.warning(f'TOAs in use are from an old release {release_flags[0]}, not {LATEST_TOA_RELEASE}; update tim-directory in the .yaml accordingly.')
-
