@@ -21,7 +21,7 @@ def config_files():
 
 @pytest.fixture
 def notebook_code():
-    notebook_location = join(base_dir, 'nb_templates/draft_process.ipynb')
+    notebook_location = join(base_dir, 'nb_templates/process_v0.9.ipynb')
     template_notebook = nbformat.read(notebook_location, as_version=4)
     
     code_blocks = []
