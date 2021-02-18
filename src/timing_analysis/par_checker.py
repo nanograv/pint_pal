@@ -444,10 +444,14 @@ def check_toa_release(toas):
     ==========
     toas: `pint.toa.TOAs` object
     """
-    release_check = [(rel == LATEST_TOA_RELEASE) for rel in toas.get_flag_value('ver')[0]]
+    release_flags = toas.get_flag_value('ver')[0]
+    #release_check = [(rel == LATEST_TOA_RELEASE) for rel in release_flags]
 
-    if all(release_check):
-        log.info(f'TOAS from the latest release ({LATEST_TOA_RELEASE}) are being used.')
+    if len(set(release_flags)) > 1:
+        log.error(f'TOAs from multiple releases should not be combined: {set(release_flags)}')
     else:
-        log.warning(f'TOAs in use are not all from the latest release ({LATEST_TOA_RELEASE}); update tim-directory in the .yaml accordingly.')
+        if release_flags[0] == LATEST_TOA_RELEASE:
+            log.info(f'All TOAs are from the latest release ({LATEST_TOA_RELEASE}).')
+        else:
+            log.warning(f'TOAs in use are from an old release {release_flags[0]}, not {LATEST_TOA_RELEASE}; update tim-directory in the .yaml accordingly.')
 
