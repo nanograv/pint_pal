@@ -267,46 +267,53 @@ def year(mjd):
     return (mjd - 51544.0)/365.25 + 2000.0
 
 
-def report_ptest(label, rms, chi2, ndof, dmrms = None, Fstatistic=None, alpha=ALPHA):
+def report_ptest(label, ftest_dict = None, alpha=ALPHA):
     """
-    Nicely formats the results of F-tests in a human-readable format.
+    Nicely prints the results of F-tests in a human-readable format.
     
     Input:
     --------
     label [string]: Name of the parameter(s) that were added/removed for the F-test.
-    rms [float]: RMS or Weighted RMS of the timing residuals for the F-tested model.
-    chi2 [float]: Chi^2 value for the F-tested model.
-    ndof [int]: Degrees of freedom for the F-tested model.
-    dmrms [float]: RMS or Weighted RMS of the DM residuals for the F-tested model. For Wideband timing only.
-    Fstatistic [float]: F-statistic output by the F-test for this model.
+    ftest_dict [dictionary]: Dictionary of output values from the PINT `ftest()` function. If `None`, will
+        print a line of NaNs for each reported value.
     alpha [float]: Value to compare for F-statistic significance. If the F-statistic is lower than alpha, 
         the timing model parameters are deemed statistically significant to the timing model.
-        
-    Returns:
-    ---------
-    line [string]: Nicely formatted line to be printed elsewhere.
     """
-    if Fstatistic is None:
-        if dmrms != None:
-            line = "%42s %7.3f %16.6f %9.2f %5d --" % (label, rms, dmrms, chi2, ndof)
-        else:
-            line = "%42s %7.3f %9.2f %5d --" % (label, rms, chi2, ndof)
-    elif Fstatistic:
-        if dmrms != None:
-            line = "%42s %7.3f %16.6f %9.2f %5d %.3g" % (label, rms, dmrms, chi2, ndof, Fstatistic)
-        else:
-            line = "%42s %7.3f %9.2f %5d %.3g" % (label, rms, chi2, ndof, Fstatistic)
-        if Fstatistic < alpha:
-            line += " ***"
+    # If F-test fails, print line of NaNs
+    if ftest_dict == None:
+        line = "%42s %7.3f %9.2f %5f %.3f" % (label, np.nan, np.nan, np.nan, np.nan)
+    # Else print the computed values
     else:
-        if dmrms != None:
-            line = "%42s %7.3f %16.6f %9.2f %5d xxx" % (label, rms, dmrms, chi2, ndof)
+        # Get values from input dictionary
+        rms = ftest_dict['resid_wrms_test'].value # weighted root mean square of timing residuals
+        chi2 = ftest_dict['chi2_test'] # chi-squared value of the fit of the F-tested model
+        ndof = ftest_dict['dof_test'] # number of degrees of freedom in the F-tested model
+        if "dm_resid_wrms_test" in ftest_dict.keys():
+            dmrms = ftest_dict['dm_resid_wrms_test'].value # weighted root mean square of DM residuals
         else:
-            line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
+            dmrms = None
+        Fstatistic=  ftest_dict['ft'] # F-statistic from the F-test comparison
+        if Fstatistic is None:
+            if dmrms != None:
+                line = "%42s %7.3f %16.6f %9.2f %5d --" % (label, rms, dmrms, chi2, ndof)
+            else:
+                line = "%42s %7.3f %9.2f %5d --" % (label, rms, chi2, ndof)
+        elif Fstatistic:
+            if dmrms != None:
+                line = "%42s %7.3f %16.6f %9.2f %5d %.3g" % (label, rms, dmrms, chi2, ndof, Fstatistic)
+            else:
+                line = "%42s %7.3f %9.2f %5d %.3g" % (label, rms, chi2, ndof, Fstatistic)
+            if Fstatistic < alpha:
+                line += " ***"
+        else:
+            if dmrms != None:
+                line = "%42s %7.3f %16.6f %9.2f %5d xxx" % (label, rms, dmrms, chi2, ndof)
+            else:
+                line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
     return line
 
 
-def get_Ftest_lines(Ftest_dict, fitter):
+def get_Ftest_lines(Ftest_dict, fitter, alpha = ALPHA):
     """
     Function to get nicely formatted lines from F-test dictionary.
 
@@ -320,22 +327,10 @@ def get_Ftest_lines(Ftest_dict, fitter):
     ftest_lines [list]: List of nicely formatted F-test results lines to be printed elsewhere.
     """
     ftest_lines = []
+    cur_fd = [param for param in fitter.model.params if "FD" in param]
     for fk in Ftest_dict.keys():
-        if 'FD' in fk:
-            for ffk in Ftest_dict[fk].keys():
-                if ffk == 'NoFD':
-                    label = 'no FD'
-                    cur_fd = [param for param in fitter.model.params if "FD" in param]
-                    ftest_lines.append("\nTesting FD terms (%s enabled):" % (cur_fd))
-                    ft = None
-                else:
-                    label = "FD1 through %s" % (ffk)
-                    ft = Ftest_dict[fk][ffk]['ft']
-                l = report_ptest(label, Ftest_dict[fk][ffk]['resid_wrms_test'].value , Ftest_dict[fk][ffk]['chi2_test'],
-                                 Ftest_dict[fk][ffk]['dof_test'], Fstatistic=ft)
-                ftest_lines.append(l)
         # Get the FB parameter lines
-        elif 'FB' in fk:
+        if 'FB' in fk:
             # Get the value of fbmax, note, may need fixes somewhere
             try:
                 fbmax = (int(max(Ftest_dict[fk].keys())[-1]))
@@ -349,44 +344,51 @@ def get_Ftest_lines(Ftest_dict, fitter):
             for i in range(1,len(fblist)):
                 p = [fbp[j] for j in range(i,len(fbp))]
                 ffk = 'FB%s+'%i
-                l = report_ptest(" ".join(p), Ftest_dict[fk][ffk]['resid_wrms_test'].value, Ftest_dict[fk][ffk]['chi2_test'], Ftest_dict[fk][ffk]['dof_test'], Fstatistic=Ftest_dict[fk][ffk]['ft'], alpha=ALPHA)
+                l = report_ptest(" ".join(p), Ftest_dict[fk][ffk], alpha = alpha)
                 ftest_lines.append(l)
             ftest_lines.append("Testing addition of FB parameters:")
             for i in range(len(fblist),fbmax+1):
                 p = ["FB%d" % (j) for j in range(len(fblist),i+1)]
                 ffk = 'FB%s'%i
-                l = report_ptest(" ".join(p), Ftest_dict[fk][ffk]['resid_wrms_test'].value, Ftest_dict[fk][ffk]['chi2_test'], Ftest_dict[fk][ffk]['dof_test'], Fstatistic=Ftest_dict[fk][ffk]['ft'], alpha=ALPHA)
+                l = report_ptest(" ".join(p), Ftest_dict[fk][ffk], alpha = alpha)
                 ftest_lines.append(l)
-
-
+        # Report the intial values        
         elif 'initial' in fk:
-            l = report_ptest(fk, Ftest_dict[fk]['resid_wrms_test'].value , Ftest_dict[fk]['chi2_test'],
-                             Ftest_dict[fk]['dof_test'], Fstatistic=None)
+            l = report_ptest(fk, Ftest_dict[fk])
             ftest_lines.append(l)
+        # Report any added F-tested parameters, including FD
         elif "Add" in fk:
             ftest_lines.append('Testing additional parameters:')
             for ffk in Ftest_dict[fk].keys():
                 if ffk == 'Binary':
                     for fffk in Ftest_dict[fk][ffk].keys():
-                        l = report_ptest(fffk, Ftest_dict[fk][ffk][fffk]['resid_wrms_test'].value , Ftest_dict[fk][ffk][fffk]['chi2_test'],
-                                 Ftest_dict[fk][ffk][fffk]['dof_test'], Fstatistic=Ftest_dict[fk][ffk][fffk]['ft'])
+                        l = report_ptest(fffk, Ftest_dict[fk][ffk][fffk], alpha = alpha)
+                        ftest_lines.append(l)
+                elif 'FD' in ffk:
+                    ftest_lines.append("\nTesting adding FD terms (%s enabled):" % (cur_fd))
+                    for fffk in Ftest_dict[fk][ffk].keys():
+                        l = report_ptest(fffk, Ftest_dict[fk][ffk][fffk], alpha = alpha)
                         ftest_lines.append(l)
                 else:
-                    l = report_ptest(ffk, Ftest_dict[fk][ffk]['resid_wrms_test'].value , Ftest_dict[fk][ffk]['chi2_test'],
-                                 Ftest_dict[fk][ffk]['dof_test'], Fstatistic=Ftest_dict[fk][ffk]['ft'])
+                    l = report_ptest(ffk, Ftest_dict[fk][ffk], alpha = alpha)
                     ftest_lines.append(l)
+        # Report any removed F-tested parameters, including FD 
         elif "Remove" in fk:
             ftest_lines.append('\nTesting removal of parameters:')
             for ffk in Ftest_dict[fk].keys():
                 if ffk == 'Binary':
                     for fffk in Ftest_dict[fk][ffk].keys():
-                        l = report_ptest(fffk, Ftest_dict[fk][ffk][fffk]['resid_wrms_test'].value , Ftest_dict[fk][ffk][fffk]['chi2_test'],
-                                 Ftest_dict[fk][ffk][fffk]['dof_test'], Fstatistic=Ftest_dict[fk][ffk][fffk]['ft'])
+                        l = report_ptest(fffk, Ftest_dict[fk][ffk][fffk], alpha = alpha)
+                        ftest_lines.append(l)
+                elif 'FD' in ffk:
+                    ftest_lines.append("\nTesting removing FD terms (%s enabled):" % (cur_fd))
+                    for fffk in Ftest_dict[fk][ffk].keys():
+                        l = report_ptest(fffk, Ftest_dict[fk][ffk][fffk], alpha = alpha)
                         ftest_lines.append(l)
                 else:
-                    l = report_ptest(ffk, Ftest_dict[fk][ffk]['resid_wrms_test'].value , Ftest_dict[fk][ffk]['chi2_test'],
-                                 Ftest_dict[fk][ffk]['dof_test'], Fstatistic=Ftest_dict[fk][ffk]['ft'])
+                    l = report_ptest(ffk, Ftest_dict[fk][ffk], alpha = alpha)
                     ftest_lines.append(l)
+                    
         elif fk == 'F':
             # Get current number of spin frequency derivatives
             current_freq_deriv = 1
@@ -396,8 +398,7 @@ def get_Ftest_lines(Ftest_dict, fitter):
                     current_freq_deriv = i
             ftest_lines.append("Testing spin freq derivs (%s enabled):" % (current_freq_deriv))
             for ffk in Ftest_dict[fk].keys():
-                l = report_ptest(ffk, Ftest_dict[fk][ffk]['resid_wrms_test'].value , Ftest_dict[fk][ffk]['chi2_test'],
-                                 Ftest_dict[fk][ffk]['dof_test'], Fstatistic=Ftest_dict[fk][ffk]['ft'])
+                l = report_ptest(ffk, Ftest_dict[fk][ffk], alpha = alpha)
                 ftest_lines.append(l)
 
     return ftest_lines
@@ -533,7 +534,10 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
         fsum.write(r'\end{verbatim}' + '\n')
 
     # Get lines to write for F-tests
-    hdrline = "%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")
+    if NB:
+        hdrline = "%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")
+    else:
+        hdrline = "%42s %7s %9s %9s %5s %s" % ("", "RMS(us)", "DM RMS(pc cm^-3)", "Chi2", "NDOF", "Ftest")
     ftest_lines = get_Ftest_lines(Ftest_dict, fitter)
     # Write F-test results
     fsum.write(r'\subsection*{Parameter tests}' + '\n')

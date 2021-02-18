@@ -11,7 +11,7 @@ PX, PMLABMDA, PMBETA, PMRA, PMDEC, H3, H4, K96, M2, SINI, PBDOT, XDOT, EPS1DOT, 
 TO DO: Check units, check parameters/components are appropriately set for different binary models.
 -> May want to manually add the binary model prefix to each parameter appropriately e.g. component = 'BINARY', add 'DD' before F-Test.
 
-Those are the default values in the stand along binary models
+Those are the default values in the stand alone binary models
 "PB": np.longdouble(10.0) u.day,
 "PBDOT": 0.0 u.day / u.day,
 "ECC": 0.0 u.Unit(""),
