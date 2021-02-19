@@ -576,7 +576,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     #MIGHT NEED TO FIDDLE WITH THIS
 
     #msg = f"The SD Bayes factor for red noise in this pulsar is: {rn_bf}"
-    #log.info(msg)
+    log.info(f"The SD Bayes factor for red noise in this pulsar is: {rn_bf}")
     if (rn_bf >= rn_bf_thres or np.isnan(rn_bf)) and (not ignore_red_noise):
 
         log.info("Including red noise for this pulsar")
