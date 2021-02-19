@@ -82,14 +82,15 @@ def test_run_notebook(notebook_code, config_file, tmpdir, suppress_errors=False)
                 exec(code_block)
 
             with open(global_log, 'a') as f:
-                print(f"{config_file}: success!", file=f)
+                print(f"{cfg_name}: success!", file=f)
         except Exception as e:
             with open(err_file, 'w') as f:
-                print(f"Processing config file {config_file} failed with the following error:", file=f)
+                print(f"Processing config file {config_file} failed with the following error:\n", file=f)
                 print(traceback.format_exc(), file=f)
+                print(f"While processing the following code block:\n\n{code_block}", file=f)
 
             with open(global_log, 'a') as f:
-                print(f"{config_file}: failure - {repr(e)}", file=f)
+                print(f"{cfg_name}: failure - {repr(e)}", file=f)
             if not suppress_errors:
                 raise e
 
