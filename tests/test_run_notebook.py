@@ -1,6 +1,7 @@
 from astropy import log
-from os import mkdir, chdir
+from os import makedirs, chdir
 from os.path import dirname, join, split, splitext
+from datetime import datetime
 from multiprocessing import Pool
 import traceback
 from glob import glob
@@ -8,7 +9,6 @@ import pytest
 import nbformat
 
 base_dir = dirname(dirname(__file__))
-global_log = join(base_dir, 'test-run-notebooks.log')
 
 def config_files():
     config_files = (glob(join(base_dir, 'configs/B*.nb.yaml'))
@@ -38,17 +38,16 @@ def notebook_code():
     return code_blocks
 
 @pytest.fixture(scope='session', autouse=True)
-def startup():
-    try:
-        mkdir(join(base_dir, 'logs'))
-    except FileExistsError:
-        pass
-    # clear global log
-    with open(global_log, 'w') as f:
-        pass
+def log_paths():
+    now = datetime.strftime(datetime.now(), '%Y-%m-%dT%H:%M:%S')
+    logdir = join('logs', now)
+    logdir = join(base_dir, logdir)
+    makedirs(logdir, exist_ok=True)
+    global_log = join(base_dir, f'test-run-notebooks-{now}.log')
+    return logdir, global_log
 
 @pytest.mark.parametrize('config_file', config_files())
-def test_run_notebook(notebook_code, config_file, tmpdir, suppress_errors=False):
+def test_run_notebook(notebook_code, config_file, tmpdir, log_paths, suppress_errors=False):
     """
     Run through the functions called in the notebook for each pulsar (excluding plotting).
     This will create a global log called test-run-notebooks.log, and a log file for each pulsar.
@@ -61,9 +60,10 @@ def test_run_notebook(notebook_code, config_file, tmpdir, suppress_errors=False)
         <workers> is the number of worker processes to launch (e.g. 4 to use 4 CPU threads)
     """
     log.setLevel("INFO")
+    logdir, global_log = log_paths
     cfg_name = splitext(split(config_file)[1])[0]
-    log_file = join(join(base_dir, 'logs'), f'{cfg_name}.log')
-    err_file = join(join(base_dir, 'logs'), f'{cfg_name}.traceback')
+    log_file = join(logdir, f'{cfg_name}.log')
+    err_file = join(logdir, f'{cfg_name}.traceback')
 
     # clear log file
     with open(log_file, 'w') as f:
