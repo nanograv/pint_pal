@@ -393,9 +393,10 @@ def new_changelog_entry(tag, note):
       - BINARY: change in the binary model (e.g. ELL1 -> DD)
       - NOISE: changes in noise parameters, unusual values of note
       - CURATE: notable changes in TOA excision, or adding TOAs
+      - NOTE: for anything else
       - TEST: for testing!
     """
-    VALID_TAGS = ['INIT','ADD','REMOVE','BINARY','NOISE','CURATE','TEST']
+    VALID_TAGS = ['INIT','ADD','REMOVE','BINARY','NOISE','CURATE','NOTE','TEST']
     vtstr = ', '.join(VALID_TAGS)
     if tag not in VALID_TAGS:
         log.error(f'{tag} is not a valid tag; valid tags are: {vtstr}.')
