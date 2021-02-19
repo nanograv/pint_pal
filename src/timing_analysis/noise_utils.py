@@ -380,7 +380,7 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
 
     return wn_dict, rn_bf
 
-def model_noise(mo, to, vary_red_noise = True, n_iter = int(1e5), using_wideband = False, resume = False, run_noise_analysis = True, wb_efac_sigma = 0.25):
+def model_noise(mo, to, vary_red_noise = True, n_iter = int(1e5), using_wideband = False, resume = False, run_noise_analysis = True, wb_efac_sigma = 0.25, base_op_dir = "./"):
     """
     Setup enterprise PTA and perform MCMC noise analysis
 
@@ -399,9 +399,9 @@ def model_noise(mo, to, vary_red_noise = True, n_iter = int(1e5), using_wideband
     """
 
     if not using_wideband:
-        outdir = './noise_run_chains/' + mo.PSR.value + '_nb/'
+        outdir = base_op_dir + '/noise_run_chains/' + mo.PSR.value + '_nb/'
     else:
-        outdir = './noise_run_chains/' + mo.PSR.value + '_wb/'
+        outdir = base_op_dir + '/noise_run_chains/' + mo.PSR.value + '_wb/'
 
     if os.path.exists(outdir) and (run_noise_analysis) and (not resume):
         log.info("INFO: A noise directory for pulsar {} already exists! Re-running noise modeling from scratch".format(mo.PSR.value))
@@ -441,15 +441,16 @@ def model_noise(mo, to, vary_red_noise = True, n_iter = int(1e5), using_wideband
     x0 = np.hstack([p.sample() for p in pta.params])
 
     #Start sampling
-    samp.sample(x0, n_iter, SCAMweight=30, AMweight=15, DEweight=50,)
 
+    samp.sample(x0, n_iter, SCAMweight=30, AMweight=15, DEweight=50,)
+    
 def convert_to_RNAMP(value):
     """
     Utility function to convert enterprise RN amplitude to tempo2/PINT parfile RN amplitude
     """
     return (86400.*365.24*1e6)/(2.0*np.pi*np.sqrt(3.0)) * 10 ** value
 
-def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_noise = False, using_wideband = False, rn_bf_thres = 1e2):
+def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_noise = False, using_wideband = False, rn_bf_thres = 1e2, base_ip_dir = "./"):
     """
     Add WN and RN parameters to timing model.
 
@@ -468,9 +469,9 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     """
 
     if not using_wideband:
-        chaindir = './noise_run_chains/' + model.PSR.value + '_nb/'
+        chaindir = base_ip_dir + model.PSR.value + '_nb/'
     else:
-        chaindir = './noise_run_chains/' + model.PSR.value + '_wb/'
+        chaindir = base_ip_dir + model.PSR.value + '_wb/'
 
     log.info('Adding new noise parameters to model.')
     wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner)
