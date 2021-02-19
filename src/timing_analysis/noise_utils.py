@@ -150,7 +150,7 @@ def red_noise_block(psd='powerlaw', prior='log-uniform', Tspan=None,
         else:
             #gamma = parameter.Uniform(0, 7)
             ##########This is specific for timing##################
-            gamma = parameter.Uniform(-1.2, 7)
+            gamma = parameter.Uniform(1.2, 7)
 
         # different PSD function parameters
         if psd == 'powerlaw':
@@ -234,7 +234,7 @@ def model_singlepsr_noise(psr, tm_var=False, tm_linear=False,
                           white_vary=True, components=30, upper_limit=False,
                           is_wideband=False, use_dmdata=False,
                           dmjump_var=False, gamma_val=None, extra_sigs=None,
-                          select='backend', wb_efac_sigma = 0.25):
+                          select='backend', wb_efac_sigma = 0.25, coefficients=False):
     """
     Single pulsar noise model
     :param psr: enterprise pulsar object
@@ -270,7 +270,9 @@ def model_singlepsr_noise(psr, tm_var=False, tm_linear=False,
             else:
                 dmjump = parameter.Constant()
             if white_vary:
-                dmefac = parameter.Uniform(pmin=0.1, pmax=10.0)
+                #dmefac = parameter.Uniform(pmin=0.1, pmax=10.0)
+                ################Timing specific#######################
+                dmefac = parameter.Normal(1.0, wb_efac_sigma)
                 log10_dmequad = parameter.Uniform(pmin=-7.0, pmax=0.0)
                 #dmjump = parameter.Uniform(pmin=-0.005, pmax=0.005)
             else:
