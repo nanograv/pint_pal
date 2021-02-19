@@ -10,6 +10,128 @@ from pint.models.parameter import maskParameter
 
 import matplotlib.pyplot as pl
 
+#Imports necessary for e_e noise modeling functions
+import functools
+from collections import OrderedDict
+
+from enterprise.signals import parameter
+from enterprise.signals import selections
+from enterprise.signals import signal_base
+from enterprise.signals import white_signals
+from enterprise.signals import gp_signals
+from enterprise.signals import deterministic_signals
+from enterprise import constants as const
+
+from enterprise_extensions import model_utils
+from enterprise_extensions import deterministic
+from enterprise_extensions.timing import timing_block
+from enterprise_extensions.blocks import (white_noise_block, red_noise_block)
+
+
+def model_singlepsr_noise(psr, tm_var=False, tm_linear=False,
+                          tmparam_list=None,
+                          red_var=True, psd='powerlaw', red_select=None,
+                          noisedict=None, tm_svd=False, tm_norm=True,
+                          white_vary=True, components=30, upper_limit=False,
+                          is_wideband=False, use_dmdata=False,
+                          dmjump_var=False, gamma_val=None, extra_sigs=None,
+                          select='backend'):
+    """
+    Single pulsar noise model
+    :param psr: enterprise pulsar object
+    :param tm_var: explicitly vary the timing model parameters
+    :param tm_linear: vary the timing model in the linear approximation
+    :param tmparam_list: an explicit list of timing model parameters to vary
+    :param red_var: include red noise in the model
+    :param psd: red noise psd model
+    :param noisedict: dictionary of noise parameters
+    :param tm_svd: boolean for svd-stabilised timing model design matrix
+    :param tm_norm: normalize the timing model, or provide custom normalization
+    :param white_vary: boolean for varying white noise or keeping fixed
+    :param components: number of modes in Fourier domain processes
+    :param upper_limit: whether to do an upper-limit analysis
+    :param is_wideband: whether input TOAs are wideband TOAs; will exclude
+           ecorr from the white noise model
+    :param use_dmdata: whether to use DM data (WidebandTimingModel) if
+           is_wideband
+    :param gamma_val: red noise spectral index to fix
+    :param extra_sigs: Any additional `enterprise` signals to be added to the
+        model.
+        
+    :return s: single pulsar noise model
+    """
+    
+    amp_prior = 'uniform' if upper_limit else 'log-uniform'
+
+    # timing model
+    if not tm_var:
+        if (is_wideband and use_dmdata):
+            if dmjump_var:
+                dmjump = parameter.Uniform(pmin=-0.005, pmax=0.005)
+            else:
+                dmjump = parameter.Constant()
+            if white_vary:
+                dmefac = parameter.Uniform(pmin=0.1, pmax=10.0)
+                log10_dmequad = parameter.Uniform(pmin=-7.0, pmax=0.0)
+                #dmjump = parameter.Uniform(pmin=-0.005, pmax=0.005)
+            else:
+                dmefac = parameter.Constant()
+                log10_dmequad = parameter.Constant()
+                #dmjump = parameter.Constant()
+            s = gp_signals.WidebandTimingModel(dmefac=dmefac,
+                    log10_dmequad=log10_dmequad, dmjump=dmjump,
+                    dmefac_selection=selections.Selection(
+                        selections.by_backend),
+                    log10_dmequad_selection=selections.Selection(
+                        selections.by_backend),
+                    dmjump_selection=selections.Selection(
+                        selections.by_frontend))
+        else:
+            s = gp_signals.TimingModel(use_svd=tm_svd, normed=tm_norm,
+                                   coefficients=coefficients)
+    else:
+        # create new attribute for enterprise pulsar object
+        psr.tmparams_orig = OrderedDict.fromkeys(psr.t2pulsar.pars())
+        for key in psr.tmparams_orig:
+            psr.tmparams_orig[key] = (psr.t2pulsar[key].val,
+                                      psr.t2pulsar[key].err)
+        if not tm_linear:
+            s = timing_block(tmparam_list=tmparam_list)
+        else:
+            pass
+
+    # red noise
+    if red_var:
+        s += red_noise_block(psd=psd, prior=amp_prior,
+                             components=components, gamma_val=gamma_val,
+                             coefficients=coefficients, select=red_select)
+
+    if extra_sigs is not None:
+        s += extra_sigs
+        
+    # adding white-noise, and acting on psr objects
+    if 'NANOGrav' in psr.flags['pta'] and not is_wideband:
+        s2 = s + white_noise_block(vary=white_vary, inc_ecorr=True,
+                select=select)
+        model = s2(psr)
+    else:
+        s3 = s + white_noise_block(vary=white_vary, inc_ecorr=False,
+                select=select)
+        model = s3(psr)
+
+    # set up PTA
+    pta = signal_base.PTA([model])
+
+    # set white noise parameters
+    if not white_vary or (is_wideband and use_dmdata):
+        if noisedict is None:
+            print('No noise dictionary provided!...')
+        else:
+            noisedict = noisedict
+            pta.set_default_params(noisedict)
+
+    return pta
+
 def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True):
     """
     Reads enterprise chain file; produces and saves corner plot; returns WN dictionary and RN (SD) BF
@@ -100,9 +222,9 @@ def model_noise(mo, to, red_noise = True, n_iter = int(1e5), using_wideband = Fa
 
     #Setup a single pulsar PTA using enterprise_extensions
     if not using_wideband:
-        pta = models.model_singlepsr_noise(e_psr, white_vary = True, red_var = red_noise, is_wideband = False, use_dmdata = False, dmjump_var = False)
+        pta = model_singlepsr_noise(e_psr, white_vary = True, red_var = red_noise, is_wideband = False, use_dmdata = False, dmjump_var = False)
     else:
-        pta = models.model_singlepsr_noise(e_psr, is_wideband = True, use_dmdata = True, white_vary = True, red_var = red_noise, dmjump_var = False)
+        pta = model_singlepsr_noise(e_psr, is_wideband = True, use_dmdata = True, white_vary = True, red_var = red_noise, dmjump_var = False)
         dmjump_params = {}
         for param in mo.params:
             if param.startswith('DMJUMP'):
