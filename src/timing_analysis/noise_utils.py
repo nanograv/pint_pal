@@ -399,9 +399,9 @@ def model_noise(mo, to, vary_red_noise = True, n_iter = int(1e5), using_wideband
     """
 
     if not using_wideband:
-        outdir = base_op_dir + '/noise_run_chains/' + mo.PSR.value + '_nb/'
+        outdir = base_op_dir + mo.PSR.value + '_nb/'
     else:
-        outdir = base_op_dir + '/noise_run_chains/' + mo.PSR.value + '_wb/'
+        outdir = base_op_dir + mo.PSR.value + '_wb/'
 
     if os.path.exists(outdir) and (run_noise_analysis) and (not resume):
         log.info("INFO: A noise directory for pulsar {} already exists! Re-running noise modeling from scratch".format(mo.PSR.value))
