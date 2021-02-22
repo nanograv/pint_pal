@@ -260,13 +260,13 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
     retdict['Add'] = {}
     if hasattr(fitter.model, "binary_model_name"):
         if fitter.model.binary_model_name == 'DD' or fitter.model.binary_model_name == 'BT':
-            binarydict = check_binary_DD(fitter, alpha=ALPHA, remove = False)
+            binarydict = check_binary_DD(fitter, alpha=ALPHA, remove = False, NITS=NITS)
         elif fitter.model.binary_model_name == 'DDK':
-            binarydict = check_binary_DDK(fitter, alpha=ALPHA, remove = False)
+            binarydict = check_binary_DDK(fitter, alpha=ALPHA, remove = False, NITS=NITS)
         elif fitter.model.binary_model_name == 'ELL1':
-            binarydict = check_binary_ELL1(fitter, alpha=ALPHA, remove = False)
+            binarydict = check_binary_ELL1(fitter, alpha=ALPHA, remove = False, NITS=NITS)
         elif fitter.model.binary_model_name == 'ELL1H':
-            binarydict = check_binary_ELL1H(fitter, alpha=ALPHA, remove = False)
+            binarydict = check_binary_ELL1H(fitter, alpha=ALPHA, remove = False, NITS=NITS)
         retdict['Add']['Binary'] = binarydict
     # Test adding FD parameters
     FDdict = check_FD(fitter, alpha=ALPHA, remove = False, maxcomponent=FDnparams, NITS = NITS)
@@ -278,21 +278,21 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
         if fitter.model.binary_model_name == 'DDK':
             print(" PX, KOM and KIN cannot be removed in DDK.")
         else:
-            PXdict = check_PX(fitter, alpha=ALPHA)
+            PXdict = check_PX(fitter, alpha=ALPHA, NITS=NITS)
             retdict['Remove']['PX'] = PXdict['PX']
     else:
-        PXdict = check_PX(fitter, alpha=ALPHA)
+        PXdict = check_PX(fitter, alpha=ALPHA, NITS=NITS)
         retdict['Remove']['PX'] = PXdict['PX']
     # Check removing binary parameters
     if hasattr(fitter.model, "binary_model_name"):
         if fitter.model.binary_model_name == 'DD' or fitter.model.binary_model_name == 'BT':
-            binarydict = check_binary_DD(fitter, alpha=ALPHA, remove = True)
+            binarydict = check_binary_DD(fitter, alpha=ALPHA, remove = True, NITS=NITS)
         elif fitter.model.binary_model_name == 'DDK':
-            binarydict = check_binary_DDK(fitter, alpha=ALPHA, remove = True)
+            binarydict = check_binary_DDK(fitter, alpha=ALPHA, remove = True, NITS=NITS)
         elif fitter.model.binary_model_name == 'ELL1':
-            binarydict = check_binary_ELL1(fitter, alpha=ALPHA, remove = True)
+            binarydict = check_binary_ELL1(fitter, alpha=ALPHA, remove = True, NITS=NITS)
         elif fitter.model.binary_model_name == 'ELL1H':
-            binarydict = check_binary_ELL1H(fitter, alpha=ALPHA, remove = True)
+            binarydict = check_binary_ELL1H(fitter, alpha=ALPHA, remove = True, NITS=NITS)
         retdict['Remove']['Binary'] = binarydict
     # Test removing FD parameters
     FDdict = check_FD(fitter, alpha=ALPHA, remove = True, maxcomponent=FDnparams, NITS = NITS)
@@ -305,19 +305,19 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
             current_freq_deriv = i
     print("Testing spin freq derivs (%s enabled):" % (current_freq_deriv))
     # NOTE - CURRENTLY ONLY TESTS F2
-    F2dict = check_F2(fitter, alpha=ALPHA)
+    F2dict = check_F2(fitter, alpha=ALPHA, NITS=NITS)
     retdict['F'] = F2dict
     # Now check FB parameters
     if hasattr(fitter.model, "binary_model_name"):
         if fitter.model.binary_model_name == 'ELL1':
-            FBdict = check_FB(fitter, alpha=ALPHA, fbmax = 5)
+            FBdict = check_FB(fitter, alpha=ALPHA, fbmax = 5, NITS=NITS)
             if FBdict:
                 retdict['FB'] = FBdict
 
     return retdict
 
 
-def check_F2(fitter, alpha=ALPHA):
+def check_F2(fitter, alpha=ALPHA, NITS=1):
     """
     Check the significance of F2 with an F-test.
     In general, we do not allow F2 to be added but we will still check as in the past.
@@ -336,10 +336,10 @@ def check_F2(fitter, alpha=ALPHA):
     retdict = {}
     # Run the F2 F-test
     try:
-        ftest_dict = fitter.ftest(pparams.F2, pparams.F2_Component, remove=False, full_output=True)
+        ftest_dict = fitter.ftest(pparams.F2, pparams.F2_Component, remove=False, full_output=True, maxiter=NITS)
     # If there's an error running the F-test in the fit for some reason, we catch it
-    except ValueError:
-        warnings.warn("Error when running F-test for: F2")
+    except ValueError as e:
+        warnings.warn(f"Error when running F-test for F2: {e}")
         ftest_dict = None
     # Add to dictionary
     retdict['F2'] = ftest_dict
@@ -351,7 +351,7 @@ def check_F2(fitter, alpha=ALPHA):
     return retdict
 
 
-def check_PX(fitter, alpha=ALPHA):
+def check_PX(fitter, alpha=ALPHA, NITS=1):
     """
     Check the significance of PX with an F-test.
     In general, we fit PX but we still wish to test for this as in the past.
@@ -370,10 +370,10 @@ def check_PX(fitter, alpha=ALPHA):
     retdict = {}
     # Run the parallax F-test
     try:
-        ftest_dict = fitter.ftest(pparams.PX, pparams.PX_Component, remove=True, full_output=True)
+        ftest_dict = fitter.ftest(pparams.PX, pparams.PX_Component, remove=True, full_output=True, maxiter=NITS)
     # If there's an error running the F-test in the fit for some reason, we catch it
-    except ValueError:
-        warnings.warn("Error when running F-test for: PX")
+    except ValueError as e:
+        warnings.warn(f"Error when running F-test for PX: {e}")
         ftest_dict = None
     # Add to dictionary
     retdict['PX'] = ftest_dict
@@ -446,8 +446,8 @@ def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
         try:
             ftest_dict = fitter_fd.ftest(param_list[i], component_list[i], maxiter=NITS, remove=remove, full_output=True)
         # If there's an error running the F-test in the fit for some reason, we catch it
-        except ValueError:
-            warnings.warn(f"Error when running F-test for: {d_label}")
+        except ValueError as e:
+            warnings.warn(f"Error when running F-test for {d_label}: {e}")
             ftest_dict = None
         # Add to dictionary to return
         retdict[d_label] = ftest_dict
@@ -460,7 +460,7 @@ def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
     # Return the dictionary
     return retdict
 
-def check_binary_DD(fitter, alpha=ALPHA, remove = False):
+def check_binary_DD(fitter, alpha=ALPHA, remove = False, NITS=1):
     """
     Check the binary parameter F-tests for the DD binary model, either removing or adding parameters.
 
@@ -492,9 +492,9 @@ def check_binary_DD(fitter, alpha=ALPHA, remove = False):
     # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
     for ii in range(len(pint_params)):
         try:
-            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-        except ValueError:
-            warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
+            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True, maxiter=NITS)
+        except ValueError as e:
+            warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
             ftest_dict = None
         # Get dictionary label
         if len(pint_params[ii]) > 1:
@@ -510,7 +510,7 @@ def check_binary_DD(fitter, alpha=ALPHA, remove = False):
     # Return the dictionary
     return retdict
 
-def check_binary_DDK(fitter, alpha=ALPHA, remove = False):
+def check_binary_DDK(fitter, alpha=ALPHA, remove = False, NITS=1):
     """
     Check the binary parameter F-tests for the DDK binary model, either removing or adding parameters.
 
@@ -542,9 +542,9 @@ def check_binary_DDK(fitter, alpha=ALPHA, remove = False):
     # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
     for ii in range(len(pint_params)):
         try:
-            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-        except ValueError:
-            warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
+            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True, maxiter=NITS)
+        except ValueError as e:
+            warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
             ftest_dict = None
         # Get dictionary label
         if len(pint_params[ii]) > 1:
@@ -561,7 +561,7 @@ def check_binary_DDK(fitter, alpha=ALPHA, remove = False):
     return retdict
 
 
-def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
+def check_binary_ELL1(fitter, alpha=ALPHA, remove = False, NITS=1):
     """
     Check the binary parameter F-tests for the ELL1 binary model, either removing or adding parameters.
 
@@ -604,9 +604,9 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
         # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
         for ii in range(len(pint_params)):
             try:
-                ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-            except ValueError:
-                warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
+                ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True, maxiter=NITS)
+            except ValueError as e:
+                warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
                 ftest_dict = None
             # Get dictionary label
             if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'M2' or pint_params[ii][0].name == 'SINI'):
@@ -630,9 +630,9 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
         # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
         for ii in range(len(pint_params)):
             try:
-                ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-            except ValueError:
-                warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
+                ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True, maxiter=NITS)
+            except ValueError as e:
+                warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
                 ftest_dict = None
             # Get dictionary label
             if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'M2' or pint_params[ii][0].name == 'SINI'):
@@ -650,7 +650,7 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False):
         # Return the dictionary
         return retdict
 
-def check_binary_ELL1H(fitter, alpha=ALPHA, remove = False):
+def check_binary_ELL1H(fitter, alpha=ALPHA, remove = False, NITS=1):
     """
     Check the binary parameter F-tests for the ELL1H binary model, either removing or adding parameters.
 
@@ -681,9 +681,9 @@ def check_binary_ELL1H(fitter, alpha=ALPHA, remove = False):
     # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
     for ii in range(len(pint_params)):
         try:
-            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True)
-        except ValueError:
-            warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
+            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True, maxiter=NITS)
+        except ValueError as e:
+            warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
             ftest_dict = None
         # Get dictionary label
         if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'H3' or pint_params[ii][0].name == 'H4'):
@@ -701,7 +701,7 @@ def check_binary_ELL1H(fitter, alpha=ALPHA, remove = False):
     # Return the dictionary
     return retdict
 
-def check_FB(fitter, alpha=ALPHA, fbmax = 5):
+def check_FB(fitter, alpha=ALPHA, fbmax = 5, NITS=1):
     """
     Check the FB parameter F-tests for the ELL1 binary model doing both removing and addtion.
 
@@ -733,9 +733,9 @@ def check_FB(fitter, alpha=ALPHA, fbmax = 5):
             component_list = [(getattr(pparams, "%s_Component"%(fp))+"ELL1") for fp in p]
             # Run F-test
             try:
-                ftest_dict = fitter.ftest(param_list, component_list, remove=True, full_output=True)
-            except ValueError:
-                warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
+                ftest_dict = fitter.ftest(param_list, component_list, remove=True, full_output=True, maxiter=NITS)
+            except ValueError as e:
+                warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
                 ftest_dict = None
             # Add to dictionary to return
             retdict['FB%s+'%i] = ftest_dict
@@ -751,9 +751,9 @@ def check_FB(fitter, alpha=ALPHA, fbmax = 5):
             component_list = [(getattr(pparams, "%s_Component"%(fp))+"ELL1") for fp in p]
             # Run F-test
             try:
-                ftest_dict = fitter.ftest(param_list, component_list, remove=False, full_output=True)
-            except ValueError:
-                warnings.warn(f"Error when running F-test for: {[p.name for p in pint_params[ii]]}")
+                ftest_dict = fitter.ftest(param_list, component_list, remove=False, full_output=True, maxiter=NITS)
+            except ValueError as e:
+                warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
                 ftest_dict = None
             # Add to dictionary to return
             retdict['FB%s'%i] = ftest_dict
