@@ -34,7 +34,7 @@ Even if PINT is already installed, run this same command to update to the latest
 
 5. To install and make sure paths are set up properly, `cd` into `timing_analysis` and:
 ```
-pip install -e .
+pip install --user -e .
 ```
 If it is already installed, then `cd` into `timing_analysis`, run `git pull` and then `pip install .`
 
