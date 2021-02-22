@@ -52,14 +52,15 @@ This package has a variety of tools to support timing for NANOGrav, but the basi
 > git checkout -b psr/J1234+5678/{your_initials}
 ```
 
-3. Copy `configs/template.nb.yaml` to `configs/J1234+5678.nb.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). For now you may want to select *narrowband* `.tim` files (indicated by `.nb.tim` rather than `.wb.tim`) and ensure `toa-type` is set correctly in the `.yaml` file. If you are timing a pulsar that's been around for a while, check to see if ASP/GASP `.tim` files are available for your source in the latest release directory and ensure they're listed in the `.yaml` file if so; these were recently added.
+3. If no .yaml file exists in the configs directory for the pulsar (this really shouldn't be the case), copy `configs/template.nb.yaml` to `configs/J1234+5678.nb.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). For now you may want to select *narrowband* `.tim` files (indicated by `.nb.tim` rather than `.wb.tim`) and ensure `toa-type` is set correctly in the `.yaml` file. If you are timing a pulsar that's been around for a while, check to see if ASP/GASP `.tim` files are available for your source in the latest release directory and ensure they're listed in the `.yaml` file if so; these were recently added.
 
 4. You may need to select which parameters to fit - at a minimum they should be ones that are in the `.par` file. For position, prefer `ELONG`/`ELAT` rather than `RAJ`/`DECJ` or `LAMBDA`/`BETA`; likewise the proper motion parameters `PMELONG`/`PMELAT`. More, NANOGrav policy is that all pulsars should be fit for at least `ELONG`, `ELAT`, `PMELONG`, `PMELAT`, `PX`, `F0`, `F1` in every pulsar.
 
 5. Copy the template notebook to the root directory (where you should probably work):
 ```
-> cp nb_templates/draft_process.ipynb J1234+5678.ipynb
+> cp nb_templates/process_v0.9.ipynb J1234+5678.ipynb
 ```
+Because the notebooks aren't version controlled, you can technically name them whatever you'd like. However, we strongly recommend using the psrname + wb/nb + ipynb formatting (you will likely want to keep nb/wb notebooks separate).
 
 6. Open the notebook, fill in your pulsar name, and try running it. Various things will go wrong.
 
