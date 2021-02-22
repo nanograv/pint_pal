@@ -103,7 +103,7 @@ class TimingNotebook:
         > pip install git+git://github.com/nanograv/pint --upgrade --user
         > pip install git+https://github.com/nanograv/enterprise.git --upgrade --user
         > pip install git+https://github.com/nanograv/enterprise_extensions.git --upgrade --user
-        > pip install .
+        > pip install --user -e .
         ```
         Also, if you haven't done so in a while:
         ```
