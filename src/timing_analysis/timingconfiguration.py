@@ -282,7 +282,7 @@ class TimingConfiguration:
                 if len(br) > 2:
                     be_select = np.array([(be == br[2]) for be in toas.get_flag_value('be')[0]])
                     br_select *= be_select
-                selection =~ br_select
+                selection *= (~br_select)
         if 'bad-toa' in valid_valued:
             for bt in self.get_bad_toas():
                 name,chan,subint = bt
