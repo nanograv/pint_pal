@@ -64,7 +64,7 @@ class TimingConfiguration:
         else:
             return self.config['free-params']
 
-    def get_model_and_toas(self,usepickle=True):
+    def get_model_and_toas(self,usepickle=True,print_all_ignores=False):
         """Return the PINT model and TOA objects"""
         par_path = os.path.join(self.par_directory,self.config["timing-model"])
         toas = self.config["toas"]
@@ -89,6 +89,8 @@ class TimingConfiguration:
                           planets=PLANET_SHAPIRO,
                           model=m,
                           picklefilename=picklefilename)
+
+        self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
         t = self.apply_ignore(t)
@@ -190,6 +192,83 @@ class TimingConfiguration:
         if 'bad-toa' in self.config['ignore'].keys():
             return self.config['ignore']['bad-toa']
         return None
+
+    def check_for_bad_epochs(self, toas, threshold=0.9, print_all=False):
+        """Check the bad-toas entries for epochs where more than a given
+        percentance of TOAs have been flagged.
+
+        Parameters
+        ----------
+        toas: pint.TOA
+            A PINT TOA object that contains a table of TOAs loaded
+
+        threhsold: float
+            A threshold fraction used to determine whether to suggest adding
+            a bad-epoch line to the config file. Should be in the range [0, 1].
+            Default is 0.9.
+
+        print_all: bool
+            If true, print both the suggested bad-epoch lines AND the new bad-toa
+            lines, where the new bad-toa lines now have TOAs from the suggested
+            bad-epochs removed. Default is False.
+        """
+        # get the list of bad-toas already in the config file
+        # only continue if that list has entries
+        provided_bad_toas = self.get_bad_toas()
+        if isinstance(provided_bad_toas, list):
+            bad_toa_epochs = np.asarray(provided_bad_toas)[:, 0]
+
+            # how many bad TOAs per epoch?
+            unique, counts = np.unique(bad_toa_epochs, return_counts=True)
+            bad_toa_epoch_counts = dict(zip(unique, counts))
+
+            # how many raw TOAs per epoch?
+            toa_epochs = toas.get_flag_value("name")[0]
+            unique, counts = np.unique(toa_epochs, return_counts=True)
+            toa_epoch_counts = dict(zip(unique, counts))
+
+            # get the list of bad-epochs already in the config
+            provided_bad_epochs = self.get_bad_epochs()
+            if not isinstance(provided_bad_epochs, list):
+                provided_bad_epochs = []
+
+            # are there any epochs that have too many bad TOAs?
+            new_bad_epochs = []
+            for k in bad_toa_epoch_counts:
+                # at this point, TOAs could have already been removed,
+                # so check that the key exists first
+                if k in toa_epoch_counts.keys():
+                    n_toas = toa_epoch_counts[k]
+                    n_bad = bad_toa_epoch_counts[k]
+                    bad_frac = float(n_bad) / n_toas
+                    # check that the bad fraction exceeds the threshold
+                    # AND that the current epoch isn't already listed
+                    if bad_frac >= threshold and k not in provided_bad_epochs:
+                        new_bad_epochs.append(k)
+
+            # only bother printing anything if there's a suggestion
+            if len(new_bad_epochs) > 0:
+                log.warn(
+                    f"More than {threshold * 100}% of TOAs have been excised for some epochs"
+                )
+                log.info("Consider adding the following to `bad-epoch` in your config file:")
+                for e in new_bad_epochs:
+                    print(f"    - '{e}'")
+
+            # if requested to update the bad-toa lines, figure out which
+            # entries need to be removed
+            if print_all:
+                all_bad_epochs = np.concatenate((new_bad_epochs, provided_bad_epochs))
+                bad_toas_to_del = []
+                for e in all_bad_epochs:
+                    _idx = np.where(bad_toa_epochs == e)[0]
+                    bad_toas_to_del.extend(_idx)
+                new_bad_toa_list = np.delete(np.asarray(provided_bad_toas), bad_toas_to_del, 0)
+                log.info("The `bad-toa` list in your config file can be reduced to:")
+                for t in new_bad_toa_list:
+                    print(f"    - ['{t[0]}',{t[1]},{t[2]}]")
+
+
 
     def get_prob_outlier(self):
         if "prob-outlier" in self.config['ignore'].keys():
