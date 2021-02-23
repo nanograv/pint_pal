@@ -11,10 +11,10 @@ Installing on the notebook server
 
 3. Clone timing_analysis to your (i.e. "jovyan") home directory and checkout the working branch; in a terminal:
 ```
-> cd ~/work/
-> git clone git@gitlab.nanograv.org:nano-time/timing_analysis.git
-> cd timing_analysis
-> git checkout -b 15yr origin/15yr
+cd ~/work/
+git clone git@gitlab.nanograv.org:nano-time/timing_analysis.git
+cd timing_analysis
+git checkout -b 15yr origin/15yr
 ```
 If the last command tells you `15yr` exists already, great.
 
@@ -28,7 +28,7 @@ Note: You may have to reconfigure this if your container is brought down at any 
 
 4. Get the latest copy of PINT; in a terminal:
 ```
-> pip install git+git://github.com/nanograv/pint --user --upgrade
+pip install git+git://github.com/nanograv/pint --user --upgrade
 ```
 Even if PINT is already installed, run this same command to update to the latest version.
 
@@ -36,7 +36,7 @@ Even if PINT is already installed, run this same command to update to the latest
 ```
 pip install --user -e .
 ```
-If it is already installed, then `cd` into `timing_analysis`, run `git pull` and then `pip install .`
+If it is already installed, then `cd` into `timing_analysis`, run `git pull`. When you install with `-e` as above, the installation is basically a link to the source directory so you can update the code (e.g. with `git pull`) and it will be used immediately, without the need to run pip install again.
 
 
 Timing workflow
