@@ -8,10 +8,10 @@ import argparse
 import glob
 from astropy import log
 import numpy as np
+from timing_analysis.defaults import *
 
-RELEASE='/nanograv/releases/15y/toagen/releases/2021.01.06-d05fdbc/'
 yaml = YAML()
-log.setLevel('INFO')
+RELEASE = f'/nanograv/timing/releases/15y/toagen/releases/{LATEST_TOA_RELEASE}/' 
 
 def fix_toa_info(yaml_file,current_release=RELEASE,overwrite=True,extension='fix'):
     """Checks/fixes tim-directory, toas, toa-type from existing yaml; writes new one.
@@ -89,7 +89,7 @@ def fix_toa_info(yaml_file,current_release=RELEASE,overwrite=True,extension='fix
         log.info(f'{source} changes were made to: {changes}')
         write_yaml(config, out_yaml)
 
-def add_niterations(yaml_file,overwrite=True,extension='fix'):
+def add_niterations(yaml_file,overwrite=True,extension='fix',insert_after='fitter'):
     """Adds n-iterations field to yaml file
 
     Parameters
@@ -99,21 +99,52 @@ def add_niterations(yaml_file,overwrite=True,extension='fix'):
         write yaml with same name (true), or add extenion (false)
     extension: str, optional
         extention added to output filename if overwrite=False
+    insert_after: str, optional
+        field after which to insert this field in the yaml
     """
     config = read_yaml(yaml_file)
     out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
 
     if not config.get('n-iterations'):
-        # n-iterations field goes after fitter
-        fitter_ind = list(config).index('fitter')
-        config.insert(fitter_ind+1,'n-iterations',1)
+        # n-iterations field goes after fitter by default (insert_after)
+        insert_ind = list(config).index(insert_after)+1
+        config.insert(insert_ind,'n-iterations',1)
 
         log.info(f'Adding n-iterations to {out_yaml}.')
         write_yaml(config, out_yaml)
     else:
         log.info(f'{yaml_file} already contains n-iterations field.')
 
-def add_dmx_block(yaml_file,overwrite=True,extension='fix'):
+def add_noise_block(yaml_file,overwrite=True,extension='fix',insert_after='bipm',
+        noise_dir=None):
+    """Adds noise block to yaml file
+
+    Parameters
+    ==========
+    yaml_file: str, input file
+    overwrite: bool, optional
+        write yaml with same name (true), or add extenion (false)
+    extension: str, optional
+        extention added to output filename if overwrite=False
+    insert_after: str, optional
+        field after which to insert this block in the yaml
+    noise_dir: str, optional
+        base directory where existing noise results can be found
+    """
+    config = read_yaml(yaml_file)
+    out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
+
+    if not config.get('noise'):
+        # noise block goes after bipm by default (insert_after)
+        insert_ind = list(config).index(insert_after) + 1
+        noise_block = {'results-dir':noise_dir}
+        config.insert(insert_ind,'noise',noise_block,'control noise runs, apply results')
+        log.info(f'Adding standard noise block to {out_yaml}.')
+        write_yaml(config, out_yaml)
+    else:
+        log.info(f'{yaml_file} already contains noise block.')
+
+def add_dmx_block(yaml_file,overwrite=True,extension='fix',insert_after='noise'):
     """Adds dmx block to yaml file
 
     Parameters
@@ -123,15 +154,17 @@ def add_dmx_block(yaml_file,overwrite=True,extension='fix'):
         write yaml with same name (true), or add extenion (false)
     extension: str, optional
         extention added to output filename if overwrite=False
+    insert_after: str, optional
+        field after which to insert this block in the yaml
     """
     config = read_yaml(yaml_file)
     out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
 
     if not config.get('dmx'):
-        # dmx block goes after bipm
-        bipm_ind = list(config).index('bipm')
+        # dmx block goes after noise by default (insert_after)
+        insert_ind = list(config).index(insert_after) + 1
         dmx_block = {'ignore-dmx':False,'fratio':1.1,'max-sw-delay':0.1,'custom-dmx':[]}
-        config.insert(bipm_ind+1,'dmx',dmx_block,'control dmx windowing/fixing')
+        config.insert(insert_ind,'dmx',dmx_block,'control dmx windowing/fixing')
         log.info(f'Adding standard dmx block to {out_yaml}.')
         write_yaml(config, out_yaml)
     else:
@@ -269,12 +302,20 @@ def main():
         default=False,
         help="read/write input yaml file(s)",
     )
+    parser.add_argument(
+        "--addnoise",
+        action="store_true",
+        default=False,
+        help="add noise block to input yaml file(s)",
+    )
     args = parser.parse_args()
 
     if args.check:
         for ff in args.files:
+            log.setLevel('DEBUG')
             fix_toa_info(ff,overwrite=args.overwrite)
             add_niterations(ff,overwrite=args.overwrite)
+            add_noise_block(ff,overwrite=args.overwrite)
             add_dmx_block(ff,overwrite=args.overwrite)
             curate_comments(ff,overwrite=args.overwrite)
     elif args.roundtrip:
@@ -282,7 +323,9 @@ def main():
             config = read_yaml(ff)
             outfile = get_outfile(ff,overwrite=args.overwrite,extension='rt')
             write_yaml(config,outfile)
+    elif args.addnoise:
+        for ff in args.files:
+            add_noise_block(ff,overwrite=args.overwrite)
 
 if __name__ == "__main__":
-    #log.info(f'Current release dir: {RELEASE}')
     main()

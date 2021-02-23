@@ -7,8 +7,8 @@ toas:
 - J0605+3757.Rcvr1_2.GUPPI.15y.x.wb.tim
 - J0605+3757.Rcvr_800.GUPPI.15y.x.wb.tim
 
-free-params: [ELONG, ELAT, PMELONG, PMELAT, PX, F0, F1, A1, PB, T0, E, OM,
-  JUMP1, DMJUMP1, DMJUMP2]  # parameters not included here will be frozen
+free-params: [ELONG, ELAT, PMELONG, PMELAT, PX, F0, F1, A1, PB, T0, E, OM, JUMP1,
+  DMJUMP1, DMJUMP2]  # parameters not included here will be frozen
 free-dmx: Yes
 toa-type: WB
 fitter: WidebandTOAFitter
@@ -16,6 +16,8 @@ n-iterations: 1
 ephem: DE440
 bipm: BIPM2019
 
+noise: # control noise runs, apply results
+  results-dir:
 dmx:  # control dmx windowing/fixing
   ignore-dmx: false
   fratio: 1.1
