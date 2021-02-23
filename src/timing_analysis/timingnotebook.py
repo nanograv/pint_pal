@@ -104,11 +104,6 @@ class TimingNotebook:
         > pip install git+https://github.com/nanograv/enterprise.git --upgrade --user
         > pip install git+https://github.com/nanograv/enterprise_extensions.git --upgrade --user
         > pip install --user -e .
-        ```
-        Also, if you haven't done so in a while:
-        ```
-        > git config user.name "FirstName LastName"
-        > git config user.email "first.last@nanograv.org"
         ```\
         ''',autorun)
         self.add_code_cell('''\
@@ -246,9 +241,9 @@ class TimingNotebook:
         self.add_markdown_cell_skip('''\
         # \[noise\] analysis, re-fit
 
-        Noise analysis runs are required for the 15-yr v0.9 data set, using the latest available timing model and set of TOAs. For 12.5-yr pulsars, noise runs are currently too computationally expensive to be run on the notebook server. For those pulsars, we will likely conduct runs with acceptable pre-noise solutions and independent HPC resources, then resulting chains will be made available. The exact procedure to do this is still TBD.
+        Noise analysis runs are required for the 15-yr v0.9 data set, using the latest available timing model and set of TOAs. Once a new `.yaml` file is merged, noise runs will get kicked off on Thorny Flats (HPCs) using the `timing-model` and `toas` indicated therein. For pulsars without existing pre-noise solutions, timers should use the [prenoise] section of this notebook to improve TOA excision, ensure residuals are flat, then submit a merge request with that solution, and wait for noise results to be made available before proceeding.
 
-        If skipping noise analysis here, set run_noise_analysis = False. Only set this to True for new MSPs once you have an acceptable pre-noise solution and reasonable TOA excision. Or if appropriate results are already available, set use_existing_noise_dir = True to apply these noise parameters to the timing model without re-running model_noise.\
+        We strongly discourage running noise analyses from on the notebook server, since doing so can take several hours (or days!) to complete and hogs lots of shared resources. Set `run_noise_analysis = False` unless you have a good reason to do otherwise.\
         ''',autorun)
 
         # Allow these to be toggled in writing the notebook, via argparse
@@ -257,13 +252,13 @@ class TimingNotebook:
         use_existing_noise_dir = {use_existing}\
         ''')
         self.add_markdown_cell_skip('''\
-        If `run_noise_analysis = True`, perform noise modeling using enterprise and enterprise_extensions; this cell will likely take at least an hour to run, if not several times that. Status can be monitored once modeling is 1% complete. New noise parameters will be added to the timing model if there are existing results or `model_noise` is run. Redefine the fitter object (`fo`), now with noise parameters, and re-fit.\
+        If `run_noise_analysis = True`, perform noise modeling using enterprise and enterprise_extensions; this cell will take a long time to run. Status can be monitored once modeling is 1% complete. New noise parameters will be added to the timing model if there are existing results or `model_noise` is run. Redefine the fitter object (`fo`), now with noise parameters, and re-fit.\
         ''',autorun)
         self.add_code_cell_skip('''\
         if run_noise_analysis or use_existing_noise_dir:
             remove_noise(mo)
             nu.model_noise(mo, to, using_wideband = using_wideband, run_noise_analysis = run_noise_analysis)
-            mo = nu.add_noise_to_model(mo, using_wideband = using_wideband)
+            mo = nu.add_noise_to_model(mo, using_wideband = using_wideband, base_dir=tc.get_noise_dir())
 
             fo = tc.construct_fitter(to,mo)
             fo.model.free_params = tc.get_free_params(fo)

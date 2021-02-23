@@ -450,7 +450,7 @@ def convert_to_RNAMP(value):
     """
     return (86400.*365.24*1e6)/(2.0*np.pi*np.sqrt(3.0)) * 10 ** value
 
-def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_noise = False, using_wideband = False, rn_bf_thres = 1e2, base_ip_dir = "./"):
+def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_noise = False, using_wideband = False, rn_bf_thres = 1e2, base_dir = None):
     """
     Add WN and RN parameters to timing model.
 
@@ -459,20 +459,28 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     model: PINT (or tempo2) timing model
     burn_frac: fraction of chain to use for burn-in; Default: 0.25
     save_corner: Flag to toggle saving of corner plots; Default: True
-    ignore_red_noise: Flag to manually force RN exclusion from timing model. When False, code determines whether
+    ignore_red_noise: Flag to manually force RN exclusion from timing model. When False,
+        code determines whether
     RN is necessary based on whether the RN BF > 1e3. Default: False
     using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
+    base_dir: directory containing {psr}_nb and {psr}_wb chains directories; if None, will
+        check for results in the current working directory './'.
 
     Returns
     =======
     model: New timing model which includes WN and RN parameters
     """
 
-    if not using_wideband:
-        chaindir = base_ip_dir + model.PSR.value + '_nb/'
-    else:
-        chaindir = base_ip_dir + model.PSR.value + '_wb/'
+    # Assume results are in current working directory if not specified
+    if not base_dir:
+        base_dir = './'
 
+    if not using_wideband:
+        chaindir = os.path.join(base_dir,f'{model.PSR.value}_nb/')
+    else:
+        chaindir = os.path.join(base_dir,f'{model.PSR.value}_wb/')
+
+    log.info(f'Using existing noise analysis results in {chaindir}')
     log.info('Adding new noise parameters to model.')
     wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner)
 

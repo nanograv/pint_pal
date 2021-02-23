@@ -196,6 +196,12 @@ class TimingConfiguration:
             return self.config['ignore']['prob-outlier']
         return None #return some default value instead?
 
+    def get_noise_dir(self):
+        """ Return base directory for noise results """
+        if 'results-dir' in self.config['noise'].keys():
+            return self.config['noise']['results-dir']
+        return None
+
     def get_ignore_dmx(self):
         """ Return ignore-dmx toggle """
         if 'ignore-dmx' in self.config['dmx'].keys():
