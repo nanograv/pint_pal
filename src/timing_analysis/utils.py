@@ -404,7 +404,7 @@ def get_Ftest_lines(Ftest_dict, fitter, alpha = ALPHA):
     return ftest_lines
 
 
-def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None):
+def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, append=None):
     """
     Function to take output from timing notebook functions and write things out nicely in a summary pdf.
 
@@ -413,7 +413,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     fitter [object]: The PINT fitter object.
     parfile [string]: Name of parfile used to generate residuals.
     rs_dict [dictionary]: Dictionary of residual stats output by the `resid_stats()` function.
-    Ftest_dict [dictionary]: Dictionary of F-test results output by the `run_Ftests()` function.
+    Ftest_dict [dictionary]: Optional dictionary of F-test results output by the `run_Ftests()` function.
     dm_dict [dictionary]: Optional dictionary of DM residual stats output by the `resid_stats()` function for WB timing.
         Input is optional. if `None` will not write out the DM residual stats [default: None].
     append [string or Nonetype]: default is `None`, else should be a string to the path to the texfile to append output to.
@@ -546,19 +546,22 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
         fsum.write(r'\end{verbatim}' + '\n')
 
     # Get lines to write for F-tests
-    if NB:
-        hdrline = "%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")
-    else:
-        hdrline = "%42s %7s %9s %9s %5s %s" % ("", "RMS(us)", "DM RMS(pc cm^-3)", "Chi2", "NDOF", "Ftest")
-    ftest_lines = get_Ftest_lines(Ftest_dict, fitter)
-    # Write F-test results
     fsum.write(r'\subsection*{Parameter tests}' + '\n')
-    fsum.write("F-test results used PINT\n")
-    fsum.write(r'\begin{verbatim}' + '\n')
-    fsum.write(hdrline + '\n')
-    for l in ftest_lines:
-        fsum.write(l + '\n')
-    fsum.write(r'\end{verbatim}' + '\n')
+    if Ftest_dict != None:
+        if NB:
+            hdrline = "%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")
+        else:
+            hdrline = "%42s %7s %9s %9s %5s %s" % ("", "RMS(us)", "DM RMS(pc cm^-3)", "Chi2", "NDOF", "Ftest")
+        ftest_lines = get_Ftest_lines(Ftest_dict, fitter)
+        # Write F-test results
+        fsum.write(r"F-test results used PINT\n")
+        fsum.write(r'\begin{verbatim}' + '\n')
+        fsum.write(hdrline + '\n')
+        for l in ftest_lines:
+            fsum.write(l + '\n')
+        fsum.write(r'\end{verbatim}' + '\n')
+    else:
+        fsum.write(r'No F-test dictionary was given; F-tests not run.' + '\n')
 
     # Write Epochs section
     fsum.write(r'\subsection*{Epochs near center of data span?}' + '\n')
@@ -577,8 +580,10 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
 
     # Write out if reduced chi squared is close to 1
     fsum.write(r'\subsection*{Reduced $\chi^2$ close to 1.00?}' + '\n')
-    chi2_0 = Ftest_dict['initial']['chi2_test']
-    ndof_0 = Ftest_dict['initial']['dof_test']
+    #chi2_0 = Ftest_dict['initial']['chi2_test']
+    #ndof_0 = Ftest_dict['initial']['dof_test']
+    chi2_0 = fitter.resids.chi2
+    ndof_0 = fitter.resids.dof
     rchi= chi2_0/ndof_0
     fsum.write('Reduced $\chi^2$ is %f/%d = %f\n' % (chi2_0,ndof_0,rchi))
     if rchi<0.95 or rchi>1.05:
