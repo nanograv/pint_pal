@@ -580,8 +580,6 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
 
     # Write out if reduced chi squared is close to 1
     fsum.write(r'\subsection*{Reduced $\chi^2$ close to 1.00?}' + '\n')
-    #chi2_0 = Ftest_dict['initial']['chi2_test']
-    #ndof_0 = Ftest_dict['initial']['dof_test']
     chi2_0 = fitter.resids.chi2
     ndof_0 = fitter.resids.dof
     rchi= chi2_0/ndof_0
