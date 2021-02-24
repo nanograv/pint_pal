@@ -471,10 +471,22 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     fsum.write(r'Summary generated on ' + time.ctime() \
             + ' by ' + check_output('whoami').strip().decode("utf-8")  \
             + r'\\' + '\n')
-    Inputline = r'Input files: \verb@' + parfile
+    # print par file
+    fsum.write(r'Input par file: \verb@' + parfile + r'@\\' + '\n')
+    # print tim file directory
+    rls_dir = fitter.toas.filename[0].rpartition('/')[0]
+    fsum.write(r'Input tim file directory: \verb@' + rls_dir + r'@\\' + '\n')
+    # print list of tim file names, limit two tim files per line
+    Inputline = r'Input tim files:\verb@'
+    ntfs = 0
     for tf in fitter.toas.filename:
-        Inputline += r'@, '+ r'\verb@' + tf
-    fsum.write(Inputline + r'@\\' + '\n')
+        Inputline += r'@ '+ r'\verb@' + tf.split('/')[-1] + ','
+        if ntfs % 2 == 0 and ntfs != 0:
+            fsum.write(Inputline + r'@\\' + '\n')
+            Inputline = r'\verb@'
+        ntfs += 1
+    if ntfs % 2 == 0:
+        fsum.write(Inputline + r'@\\' + '\n')
     fsum.write('Span: %.1f years (%.1f -- %.1f)\\\\\n ' % (span/365.24,
         year(float(start)), year(float(finish))))
 
