@@ -195,22 +195,24 @@ class TimingConfiguration:
 
     def check_for_bad_epochs(self, toas, threshold=0.9, print_all=False):
         """Check the bad-toas entries for epochs where more than a given
-        percentance of TOAs have been flagged.
+        percentange of TOAs have been flagged. Make appropriate suggestions
+        for the user to update the `bad-epoch` entires, and optionally
+        supply the revised `bad-toa` entires.
 
         Parameters
         ----------
         toas: pint.TOA
             A PINT TOA object that contains a table of TOAs loaded
 
-        threhsold: float
+        threshold: float
             A threshold fraction used to determine whether to suggest adding
             a bad-epoch line to the config file. Should be in the range [0, 1].
             Default is 0.9.
 
         print_all: bool
-            If true, print both the suggested bad-epoch lines AND the new bad-toa
-            lines, where the new bad-toa lines now have TOAs from the suggested
-            bad-epochs removed. Default is False.
+            If True, print both the suggested bad-epoch lines AND the revised
+            bad-toa lines, where the new bad-toa lines now have entries from
+            the suggested bad-epochs removed. Default is False.
         """
         # get the list of bad-toas already in the config file
         # only continue if that list has entries
