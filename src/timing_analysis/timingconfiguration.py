@@ -90,7 +90,10 @@ class TimingConfiguration:
                           model=m,
                           picklefilename=picklefilename)
 
-        self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
+        # if we're dealing with wideband TOAs, each epoch has a single TOA, 
+        # so don't bother checking to see if we can reduce entries
+        if self.get_toa_type() == "NB":
+            self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
 
         # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
         t = self.apply_ignore(t)
