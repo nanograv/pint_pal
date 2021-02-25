@@ -229,6 +229,36 @@ def curate_comments(yaml_file,overwrite=True,extension='fix'):
     config['dmx'].yaml_add_eol_comment("designated by [mjd_low,mjd_hi,binsize]",'custom-dmx')
     write_yaml(config, out_yaml)
 
+def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
+    """Sets yaml field to provided value
+
+    Parameters
+    ==========
+    yaml_file: str, yaml filename
+    field: str, valid yaml key 
+    value: str/list/dict, desired value
+    overwrite: bool, optional
+        write yaml with same name (true), or add extenion (false)
+    extension: str, optional
+        extention added to output filename if overwrite=False
+    """
+    config = read_yaml(yaml_file)
+    out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
+
+    valid_keys = ['source','par-directory','tim-directory','timing-model',
+            'compare-model','toas','free-params','free-dmx','toa-type','fitter',
+            'n-iterations','ephem','bipm','noise','results-dir','dmx','ignore-dmx',
+            'fratio','max-sw-delay','custom-dmx','ignore','mjd-start','mjd-end',
+            'snr-cut','bad-toa','bad-range','bad-epoch','changelog']
+
+    if field not in valid_keys:
+        log.warning(f'Provided field ({field}) not valid.')
+    else:
+        if field == 'results-dir' and isinstance(value,str):
+            config['noise']['results-dir'] = value
+
+    write_yaml(config, out_yaml)
+
 def read_yaml(yaml_file):
     """Reads a yaml file, returns the object
 
