@@ -201,7 +201,9 @@ class TimingNotebook:
             fo = tc.construct_fitter(to,mo)
             plot_residuals_time(fo, restype='prefit')
             if mo.is_binary:
-                plot_residuals_orb(fo, restype='prefit')\
+                plot_residuals_orb(fo, restype='prefit')
+            if using_wideband:
+                plot_dm_residuals(fo, restype='prefit')\
             ''')
             self.add_markdown_cell('''\
             Check that free parameters follow convention, do the fit, plot post-fit residuals, write a pre-noise par file and print a summary of fit results.\
@@ -214,6 +216,8 @@ class TimingNotebook:
             plot_residuals_time(fo, restype='postfit')
             if mo.is_binary:
                 plot_residuals_orb(fo, restype='postfit')
+            if using_wideband:
+                plot_dm_residuals(fo, restype='postfit')
 
             fo.print_summary()\
             ''')
