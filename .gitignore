@@ -21,3 +21,11 @@ logs/
 # Temporary pickle files and .tim files
 *.tim
 *.tim.pickle.gz
+
+# other tex files
+*.tex
+*.aux
+
+# intermediate summary pngs and summary pdfs
+*summary_plot*.png
+*.pdf
