@@ -38,7 +38,11 @@ colorschemes = {'thankful_2':{
               "Rcvr_800_GUPPI":  "#61C853",
               "S-wide_ASP":      "#855CA0",
               "S-wide_PUPPI":    "#855CA0",
-             }}
+              "1.5GHz_YUPPI":    "#000000",
+              "3GHz_YUPPI":      "#000000",
+              "6GHz_YUPPI":      "#000000",
+
+              }}
 # marker dictionary to be used if desired, currently all 'x'
 markers = {"327_ASP":        "x",
           "327_PUPPI":       "x",
@@ -52,6 +56,10 @@ markers = {"327_ASP":        "x",
           "Rcvr_800_GUPPI":  "x",
           "S-wide_ASP":      "x",
           "S-wide_PUPPI":    "x",
+          "1.5GHz_YUPPI":    "x",
+          "3GHz_YUPPI":      "x",
+          "6GHz_YUPPI":      "x",
+
             }
 # Define the color map option
 colorscheme = colorschemes['thankful_2']
