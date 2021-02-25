@@ -256,6 +256,10 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
     else:
         if field == 'results-dir' and isinstance(value,str):
             config['noise']['results-dir'] = value
+        elif field == 'ephem' and isinstance(value,str):
+            config['ephem'] = value
+        else:
+            log.error(f'Provided field ({field}) is valid, but not yet implemented in set_field(); doing nothing.')
 
     write_yaml(config, out_yaml)
 
