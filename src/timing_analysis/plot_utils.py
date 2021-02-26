@@ -738,8 +738,8 @@ def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False
             ext += "_prefit"
         elif restype == "both":
             ext += "_prefit_and_postfit"
-        plt.savefig("%s_dm_resids_v_time%s.png" % (fitter.model.PSR.name, ext))
-    
+        plt.savefig("%s_dm_resids_v_time%s.png" % (fitter.model.PSR.value, ext))
+
     if axs == None:
         # Define clickable points
         text = ax2.text(0,0,"")
