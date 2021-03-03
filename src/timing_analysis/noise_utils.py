@@ -351,7 +351,7 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
 
     chain = np.loadtxt(chaindir + 'chain_1.txt')
     burn = int(burn_frac * chain.shape[0])
-    pars = np.loadtxt(chaindir + 'pars.txt', dtype = np.unicode)
+    pars = np.loadtxt(chaindir + 'pars.txt', dtype = str)
 
     psr_name = pars[0].split('_')[0]
 
