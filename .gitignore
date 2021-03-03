@@ -21,3 +21,4 @@ logs/
 # Temporary pickle files and .tim files
 *.tim
 *.tim.pickle.gz
+tmp/
