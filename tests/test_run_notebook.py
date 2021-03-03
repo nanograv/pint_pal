@@ -47,7 +47,7 @@ def log_paths():
     return logdir, global_log
 
 @pytest.mark.parametrize('config_file', config_files())
-def test_run_notebook(notebook_code, config_file, tmpdir, log_paths, suppress_errors=False):
+def test_run_notebook(notebook_code, config_file, log_paths, suppress_errors=False):
     """
     Run through the functions called in the notebook for each pulsar (excluding plotting).
     This will create a global log called test-run-notebooks.log, and a log file for each pulsar.
@@ -64,6 +64,8 @@ def test_run_notebook(notebook_code, config_file, tmpdir, log_paths, suppress_er
     cfg_name = splitext(split(config_file)[1])[0]
     log_file = join(logdir, f'{cfg_name}.log')
     err_file = join(logdir, f'{cfg_name}.traceback')
+    tmpdir = join(base_dir, f'tmp/{cfg_name}')
+    makedirs(tmpdir)
 
     # clear log file
     with open(log_file, 'w') as f:
