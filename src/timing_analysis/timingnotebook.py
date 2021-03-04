@@ -328,7 +328,7 @@ class TimingNotebook:
             rs_dict, dm_dict = resid_stats(fo, whitened = True, dm_stats = True, print_pretty = True)\
         ''')
         self.add_markdown_cell_skip('''\
-        Run F-tests to check significance of existing/new parameters; `alpha` is the F-statistic required for a parameter to be marked as significant. This cell may take 5-10 minutes to run.\
+        Run F-tests to check significance of existing/new parameters; `alpha` is the p-value threshold for rejecting the null hypothesis that a parameter is not significant. This cell may take 5-10 minutes to run.\
         ''',autorun)
         self.add_code_cell('''\
         savedLevel = log.getEffectiveLevel()
