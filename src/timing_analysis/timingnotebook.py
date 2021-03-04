@@ -123,7 +123,10 @@ class TimingNotebook:
         from astropy.visualization import quantity_support
         quantity_support()
 
-        %matplotlib notebook\
+        # notebook gives interactive plots but not until the kernel is done
+        %matplotlib notebook
+        # inline gives non-interactive plots right away
+        #%matplotlib inline\
         ''')
         self.add_code_cell_skip('''\
         log.setLevel("INFO") # Set desired verbosity of log statements (DEBUG/INFO/WARNING/ERROR)
@@ -210,8 +213,9 @@ class TimingNotebook:
             ''')
             self.add_code_cell('''\
             fo.model.free_params = tc.get_free_params(fo)
-            check_fit(fo,skip_check=tc.skip_check)
-
+            check_fit(fo,skip_check=tc.skip_check)\
+            ''')
+            self.add_code_cell('''\
             fo.fit_toas()
             plot_residuals_time(fo, restype='postfit')
             if mo.is_binary:
@@ -219,7 +223,21 @@ class TimingNotebook:
             if using_wideband:
                 plot_dm_residuals(fo, restype='postfit')
 
-            fo.print_summary()\
+            fo.print_summary()
+            
+            chi2_decrease = fo.resids_init.chi2-fo.resids.chi2
+            print(f"chi-squared decreased during fit by {chi2_decrease}")
+            if hasattr(fo, "converged") and fo.converged:
+                print("Fitter has converged")
+            else:
+                if abs(chi2_decrease)<0.01:
+                    print("Fitter has probably converged")
+                elif chi2_decrease<0:
+                    log.warning("Fitter has increased chi2!")
+                else:
+                    log.warning("Fitter may not have converged")
+            if chi2_decrease > 0.01:
+                log.warning("Input par file is not fully fitted")\
             ''')
             self.add_code_cell(f'''\
             write_prenoise = {write}
