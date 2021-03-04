@@ -406,7 +406,7 @@ def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
     retdict [dictionary]: Returns the dictionary output from the F-tests.
     """
     # Print how many FD currently enabled
-    cur_fd = [param for param in fitter.model.params if "FD" in param and param_check(param, fitter, check_enabled=True)]
+    cur_fd = [param for param in fitter.model.free_params if "FD" in param]
     if remove:
         print("Testing removing FD terms (", cur_fd, "enabled):")
     else:
