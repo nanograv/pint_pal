@@ -369,7 +369,7 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
 
         pl.show()
 
-    ml_idx = np.argmax(chain[burn:, -3])
+    ml_idx = np.argmax(chain[burn:, -4])
 
     wn_vals = chain[burn:, :-4][ml_idx]
 
