@@ -310,8 +310,9 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
     # Now check FB parameters
     if hasattr(fitter.model, "binary_model_name"):
         if fitter.model.binary_model_name == 'ELL1':
-            FBdict = check_FB(fitter, alpha=ALPHA, fbmax = 5, NITS=NITS)
-            if FBdict:
+            fblist = get_fblist(fitter)
+            if fblist:
+                FBdict = check_FB(fitter, alpha=ALPHA, fbmax = 5, NITS=NITS)
                 retdict['FB'] = FBdict
 
     return retdict
