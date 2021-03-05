@@ -177,6 +177,86 @@ def report_ptest(label, ftest_dict = None, alpha=ALPHA):
                 line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
     print(line)
     
+def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
+    """
+    Function to determine and print what parameters are recommended to be added from F-test dictionary.
+
+    Input:
+    ----------
+    Ftest_dict [dictionary]: Dictionary of F-test results output by the `run_Ftests()` function.
+    fitter [object]: The PINT fitter object.
+    alpha [float]: Value to compare for F-statistic significance. If the F-statistic is lower than alpha, 
+        the timing model parameters are deemed statistically significant to the timing model.
+    
+    """
+    add_params = []
+    remove_params = []
+    fd_add = []
+    fd_remove = []
+    for fk in Ftest_dict.keys():
+        if 'FB' in fk:
+            try:
+                fbmax = (int(max(Ftest_dict[fk].keys())[-1]))
+            except:
+                fbmax = (int(max(Ftest_dict[fk].keys())[-2]))
+            fblist = get_fblist(fitter)
+            fbused = (len(fblist)>0)
+            fbp = [fblist[ifb] for ifb in sorted(fblist.keys())]  # sorted list of fb parameters
+            # Remoeing FB parameters
+            for i in range(1,len(fblist)):
+                p = [fbp[j] for j in range(i,len(fbp))]
+                ffk = 'FB%s+'%i
+                if Ftest_dict[fk][ffk]['ft'] > alpha and Ftest_dict[fk][ffk]['ft']:
+                    remove_params.append(ffk)
+            # Adding FB parameters
+            for i in range(len(fblist),fbmax+1):
+                p = ["FB%d" % (j) for j in range(len(fblist),i+1)]
+                ffk = 'FB%s'%i
+                if Ftest_dict[fk][ffk]['ft'] <= alpha and Ftest_dict[fk][ffk]['ft']:
+                    add_params.append(ffk)
+        # Check which parameters should be removed
+        elif "Remove" in fk:
+            for ffk in Ftest_dict[fk].keys():
+                if ffk == 'Binary':
+                    for fffk in Ftest_dict[fk][ffk].keys():
+                        if Ftest_dict[fk][ffk][fffk]['ft'] > alpha and Ftest_dict[fk][ffk][fffk]['ft']:
+                            remove_params.append(fffk)
+                elif ffk == 'FD':
+                    for fffk in Ftest_dict[fk][ffk].keys():
+                        if Ftest_dict[fk][ffk][fffk]['ft'] > alpha and Ftest_dict[fk][ffk][fffk]['ft']:
+                            fd_remove.append(fffk)
+                else:
+                    if Ftest_dict[fk][ffk]['ft'] > alpha and Ftest_dict[fk][ffk]['ft']:
+                        # Policy is never to remove parallax
+                        if ffk != 'PX':
+                            remove_params.append(ffk)
+        # Check which parameters should be added
+        elif "Add" in fk:
+            for ffk in Ftest_dict[fk].keys():
+                if ffk == 'Binary':
+                    for fffk in Ftest_dict[fk][ffk].keys():
+                        if Ftest_dict[fk][ffk][fffk]['ft'] <= alpha and Ftest_dict[fk][ffk][fffk]['ft']:
+                            add_params.append(fffk)
+                elif ffk == 'FD':
+                    for fffk in Ftest_dict[fk][ffk].keys():
+                        if Ftest_dict[fk][ffk][fffk]['ft'] <= alpha and Ftest_dict[fk][ffk][fffk]['ft']:
+                            fd_add.append(fffk)
+                else:
+                    if Ftest_dict[fk][ffk]['ft'] <= alpha and Ftest_dict[fk][ffk]['ft']:
+                        add_params.append(ffk)
+        # Policy is to never add additional spin derivatives in general
+        elif fk == 'F':
+            pass
+
+    # Now print which parameters to add/remove
+    if fd_remove:
+        remove_params.append(max(fd_remove, key=len))
+    if fd_add:
+        add_params.append(min(fd_add, key=len))
+
+    print("F-tests recommend adding the following parameters: " + " ".join(add_params))
+    print("F-tests recommend removing the following parameters: " + " ".join(remove_params))
+    
 def reset_params(params):
     """
     Resets parameter values to defaults as assigned in pint_parameters.py. Most are reset to zero.
@@ -314,6 +394,9 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
             if fblist:
                 FBdict = check_FB(fitter, alpha=ALPHA, fbmax = 5, NITS=NITS)
                 retdict['FB'] = FBdict
+    
+    # Print a summary of the F-tests results and suggestions
+    summarize_Ftest(retdict, fitter, alpha = ALPHA)
 
     return retdict
 
