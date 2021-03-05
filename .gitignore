@@ -10,6 +10,7 @@ dist/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+[BJ]*.ipynb
 
 # editor save files
 *~
