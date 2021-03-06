@@ -6,9 +6,10 @@ from astropy import log
 from pint.utils import weighted_mean
 import pint.residuals as Resid
 import pint.models.parameter
+from pint.models import get_model
 import os
 import time
-from subprocess import check_output
+from subprocess import check_output, check_call
 import glob
 # Import some software so we have appropriate versions
 import pint
@@ -406,7 +407,7 @@ def get_Ftest_lines(Ftest_dict, fitter, alpha = ALPHA):
     return ftest_lines
 
 
-def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, append=None):
+def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None, previous_parfile=None):
     """
     Function to take output from timing notebook functions and write things out nicely in a summary pdf.
 
@@ -415,11 +416,10 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
     fitter [object]: The PINT fitter object.
     parfile [string]: Name of parfile used to generate residuals.
     rs_dict [dictionary]: Dictionary of residual stats output by the `resid_stats()` function.
-    Ftest_dict [dictionary]: Optional dictionary of F-test results output by the `run_Ftests()` function.
+    Ftest_dict [dictionary]: Dictionary of F-test results output by the `run_Ftests()` function.
     dm_dict [dictionary]: Optional dictionary of DM residual stats output by the `resid_stats()` function for WB timing.
         Input is optional. if `None` will not write out the DM residual stats [default: None].
     append [string or Nonetype]: default is `None`, else should be a string to the path to the texfile to append output to.
-
     """
     # Check if fitter is wideband or not
     if fitter.is_wideband:
@@ -447,6 +447,21 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
     
     if write_header:
         fsum.write(r'\documentclass[11pt]{article}' + '\n')
+        fsum.write(r'\usepackage[T1]{fontenc}' + '\n')
+        fsum.write(r'\usepackage[utf8]{inputenc}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{D7}{\textsuperscript{*}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{B9}{\textsuperscript{1}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{207B}{\textsuperscript{-}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{2070}{\textsuperscript{0}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{2071}{\textsuperscript{1}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{2072}{\textsuperscript{2}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{2073}{\textsuperscript{3}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{2074}{\textsuperscript{4}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{2075}{\textsuperscript{5}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{2076}{\textsuperscript{6}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{2077}{\textsuperscript{7}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{2078}{\textsuperscript{8}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{2079}{\textsuperscript{9}}' + '\n')
         fsum.write(r'\usepackage{graphicx}' + '\n')
         fsum.write(r'\addtolength{\hoffset}{-2.5cm}' + '\n')
         fsum.write(r'\addtolength{\textwidth}{5.0cm}' + '\n')
@@ -548,22 +563,19 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
         fsum.write(r'\end{verbatim}' + '\n')
 
     # Get lines to write for F-tests
-    fsum.write(r'\subsection*{Parameter tests}' + '\n')
-    if Ftest_dict != None:
-        if NB:
-            hdrline = "%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")
-        else:
-            hdrline = "%42s %7s %9s %9s %5s %s" % ("", "RMS(us)", "DM RMS(pc cm^-3)", "Chi2", "NDOF", "Ftest")
-        ftest_lines = get_Ftest_lines(Ftest_dict, fitter)
-        # Write F-test results
-        fsum.write(r"F-test results used PINT\n")
-        fsum.write(r'\begin{verbatim}' + '\n')
-        fsum.write(hdrline + '\n')
-        for l in ftest_lines:
-            fsum.write(l + '\n')
-        fsum.write(r'\end{verbatim}' + '\n')
+    if NB:
+        hdrline = "%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")
     else:
-        fsum.write(r'No F-test dictionary was given; F-tests not run.' + '\n')
+        hdrline = "%42s %7s %9s %9s %5s %s" % ("", "RMS(us)", "DM RMS(pc cm^-3)", "Chi2", "NDOF", "Ftest")
+    ftest_lines = get_Ftest_lines(Ftest_dict, fitter)
+    # Write F-test results
+    fsum.write(r'\subsection*{Parameter tests}' + '\n')
+    fsum.write("F-test results used PINT\n")
+    fsum.write(r'\begin{verbatim}' + '\n')
+    fsum.write(hdrline + '\n')
+    for l in ftest_lines:
+        fsum.write(l + '\n')
+    fsum.write(r'\end{verbatim}' + '\n')
 
     # Write Epochs section
     fsum.write(r'\subsection*{Epochs near center of data span?}' + '\n')
@@ -637,8 +649,8 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
             
     # Write out if reduced chi squared is close to 1
     fsum.write(r'\subsection*{Reduced $\chi^2$ close to 1.00?}' + '\n')
-    chi2_0 = fitter.resids.chi2
-    ndof_0 = fitter.resids.dof
+    chi2_0 = Ftest_dict['initial']['chi2_test']
+    ndof_0 = Ftest_dict['initial']['dof_test']
     rchi= chi2_0/ndof_0
     fpp = scipy.stats.chi2(int(ndof_0)).sf(float(chi2_0))
     fsum.write('Reduced $\chi^2$ is %f/%d = %f (false positive probability %g)\n' % (chi2_0,ndof_0,rchi,fpp))
@@ -692,7 +704,8 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
     if not os.path.basename(parfile).startswith(fitter.model.PSR.value):
         msg = f'Warning: parfile is called {parfile} but pulsar name is {fitter.model.PSR.value}'
         fsum.write(msg + r"\\" + "\n")
-        
+    fsum.write("\n")
+    
     # Write if there are bad DMX ranges
 
     # NOTE - CURRENTLY CANNOT DO THIS, NEED DMX CHECKER FIRST
@@ -712,6 +725,25 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
         if not NB:
             fsum.write('No fractional bandwidth check for DMX ranges with wideband data!\\\\\n')
 
+    # compare_models
+    if previous_parfile is not None:
+        fsum.write(r'\subsection*{Comparison with previous model}' + '\n')
+        fsum.write("\n")
+        fsum.write(f'Current par file: \\verb@{parfile}@' + '\\\\\n')
+        fsum.write(f'Previous par file: \\verb@{previous_parfile}@' + '\\\\\n')
+        cm = fitter.model.compare(get_model(previous_parfile),
+                                  verbosity='med',
+                                  nodmx=True,
+                                  threshold_sigma=3)
+        fsum.write("\n")
+        fsum.write(r"{\small" + "\n")
+        fsum.write(r"\begin{verbatim}" + "\n")
+        fsum.write("\n".join(cm))
+        fsum.write(r"\end{verbatim}" + "\n")
+        fsum.write(r"}" + "\n")
+        fsum.write("\n")
+        
+    
     # Write out software versions used
     fsum.write(r'\subsection*{Software versions used in Analysis:}' + '\n')
     fsum.write('PINT: %s\\\\\n' % (pint.__version__))
@@ -757,8 +789,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
         fsum.close()
 
         # FIXME: we can do better than this; subprocess.check_call, probably
-        os.system('pdflatex -interaction=batchmode '
-                + texfile + ' 2>&1 > /dev/null')
+        check_call(['pdflatex','-interaction=batchmode', texfile])
 
 def write_if_changed(filename, contents):
     """Write contents to filename, touching the file only if it does not already contain them.
