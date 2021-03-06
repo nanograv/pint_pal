@@ -34,10 +34,10 @@ if __name__ == '__main__':
     'write_results = False'; this script lets you replace this with 'write_results = True'.
     """)
     def parse(s):
-        key, value = s.split(",")
-        return key, value
+        key, value = s.split("=")
+        return key.strip(), value.strip()
     parser.add_argument("-s", "--set-variable", type=parse, action="append", 
-                        help="The variable to replace and its value, separated by a comma. "
+                        help="The variable to replace and its value, separated by an equal sign. "
                         "May require quotes to protect it from your shell; the value is "
                         "python source code (so strings need quotes in addition to whatever "
                         "the shell requires. Can be specified multiple times to have multiple "
