@@ -103,7 +103,7 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
     alpha [float] : matplotlib alpha options for plot points [default: 0.5]
     """
     # Check if wideband
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         NB = False
         if avg == True:
             raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
@@ -398,7 +398,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
     psrname = fitter.model.PSR.value
 
     # Check if wideband
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         NB = False
         dmxname = "%s_dmxparse.wb.out" % (psrname)
     else:
@@ -585,7 +585,7 @@ def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False
     alpha [float] : matplotlib alpha options for plot points [default: 0.5]
     """
     # Check if wideband
-    if "Wideband" not in fitter.__class__.__name__:
+    if not fitter.is_wideband:
         raise RuntimeError("Error: Narrowband TOAs have no DM residuals, use `plot_dmx_time() instead.")
 
     # Get the DM residuals
@@ -809,7 +809,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
     alpha [float] : matplotlib alpha options for plot points [default: 0.5]
     """
     # Check if wideband
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         NB = False
         if avg == True:
             raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
@@ -1050,7 +1050,7 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
     color ['string'] : matplotlib color option for plot [default: color dictionary in plot_utils.py file]
     """
     # Check if wideband
-    if "Wideband" not in fitter.__class__.__name__:
+    if not fitter.is_wideband:
             raise ValueError("Narrowband Fitters have have no DM residuals, please use `plot_measurements_v_dmres` instead.")
     
     # Get the DM residuals
@@ -1211,7 +1211,7 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
     alpha [float] : matplotlib alpha options for plot points [default: 0.5]
     """
     # Check if wideband
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         NB = False
         if avg == True:
             raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
@@ -1497,7 +1497,7 @@ def plot_toas_freq(fitter, save = False, legend = True, title = True, axs = None
     alpha [float] : matplotlib alpha options for plot points [default: 0.5]
     """
     # Check if wideband
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         NB = False
     else:
         NB = True
@@ -1655,7 +1655,7 @@ def plot_fd_res_v_freq(fitter, plotsig = False, comp_FD = True, avg = False, whi
     alpha [float] : matplotlib alpha options for plot points [default: 0.5]
     """
     # Check if fitter is wideband or not
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         NB = False
         if avg == True:
             raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
@@ -1819,7 +1819,7 @@ def plot_fd_res_v_freq(fitter, plotsig = False, comp_FD = True, avg = False, whi
             log.warning("No FD parameters in the initial timing model...")
 
         # Check if fitter is wideband or not
-        if "Wideband" in psr_fitter_nofd.__class__.__name__:
+        if psr_fitter_nofd.is_wideband:
             resids = psr_fitter_nofd.resids.residual_objs['toa']
         else:
             resids = psr_fitter_nofd.resids
@@ -1929,7 +1929,7 @@ def summary_plots(fitter, title = None, legends = False, save = False, avg = Tru
     whitened [boolean] : If True will make plots of whitened residuals [default: True].
     """
 
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         if avg == True:
             raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
     # Determine how long the figure size needs to be
@@ -2109,7 +2109,7 @@ def summary_plots_ft(fitter, title = None, legends = False, save = False):
     if not hasattr(fitter.model, 'binary_model_name'):
         figlength -= 9
         gs_rows -= 3
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         figlength -= 9
         gs_rows -= 3
 
@@ -2126,14 +2126,14 @@ def summary_plots_ft(fitter, title = None, legends = False, save = False):
     k += 1
 
     # Then the epoch averaged residuals v. time
-    if not "Wideband" in fitter.__class__.__name__:
+    if not fitter.is_wideband:
         ax10 = fig.add_subplot(gs[count+k, :])
         plot_residuals_time(fitter, title = False, legend = False, avg = True, axs = ax10, figsize=(12,3))
         k += 1
 
     # Epoch averaged vs. orbital phase
     if hasattr(fitter.model, 'binary_model_name'):
-        if not "Wideband" in fitter.__class__.__name__:
+        if not fitter.is_wideband:
             ax12 = fig.add_subplot(gs[count+k, :])
             plot_residuals_orb(fitter, title = False, legend = False, avg = True, axs = ax12, figsize=(12,3))
             k += 1
@@ -2153,7 +2153,7 @@ def summary_plots_ft(fitter, title = None, legends = False, save = False):
     k += 1
 
     # Whitened epoch averaged residuals v. time
-    if not "Wideband" in fitter.__class__.__name__:
+    if not fitter.is_wideband:
         ax15 = fig.add_subplot(gs[count+k, :])
         plot_residuals_time(fitter, title = False, legend = False, plotsig = False, avg = True, \
                             whitened = True, axs = ax15, figsize=(12,3))
@@ -2161,7 +2161,7 @@ def summary_plots_ft(fitter, title = None, legends = False, save = False):
 
     # Whitened epoch averaged residuals v. orbital phase
     if hasattr(fitter.model, 'binary_model_name'):
-        if not "Wideband" in fitter.__class__.__name__:
+        if not fitter.is_wideband:
             ax16 = fig.add_subplot(gs[count+k, :])
             plot_residuals_orb(fitter, title = False, legend = False, \
                                  avg = True, whitened = True, axs = ax16, figsize=(12,3))
@@ -2177,7 +2177,7 @@ def summary_plots_ft(fitter, title = None, legends = False, save = False):
     ax3_1 = fig.add_subplot(gs[count+k, 1])
     plot_measurements_v_res(fitter, nbin = 50, title = False, legend = False, plotsig=False, \
                             whitened = True, axs = ax3_0, figsize=(6,3))
-    if not "Wideband" in fitter.__class__.__name__:
+    if not fitter.is_wideband:
         plot_measurements_v_res(fitter, nbin = 50, title = False, legend = False, avg = True, \
                                 whitened = True, axs = ax3_1, figsize=(6,3))
         k += 1
@@ -2193,7 +2193,7 @@ def summary_plots_ft(fitter, title = None, legends = False, save = False):
     k += 1
 
     # Epoch averaged Whitened residual/uncertainty v. time
-    if not "Wideband" in fitter.__class__.__name__:
+    if not fitter.is_wideband:
         ax25 = fig.add_subplot(gs[count+k, :])
         plot_residuals_time(fitter, title = False, legend = False, plotsig = True, \
                             avg = True, whitened = True, axs = ax25, figsize=(12,3))
@@ -2201,7 +2201,7 @@ def summary_plots_ft(fitter, title = None, legends = False, save = False):
 
     # Epoch averaged Whitened residual/uncertainty v. orbital phase
     if hasattr(fitter.model, 'binary_model_name'):
-        if not "Wideband" in fitter.__class__.__name__:
+        if not fitter.is_wideband:
             ax36 = fig.add_subplot(gs[count+k, :])
             plot_residuals_orb(fitter, title = False, legend = False, plotsig = True, avg = True, \
                                whitened = True, axs = ax36,  figsize=(12,3))
@@ -2217,7 +2217,7 @@ def summary_plots_ft(fitter, title = None, legends = False, save = False):
     ax17_1 = fig.add_subplot(gs[count+k, 1])
     plot_measurements_v_res(fitter, nbin = 50, plotsig=True, title = False, legend = False, whitened = True,\
                            axs = ax17_0, figsize=(6,3))
-    if not "Wideband" in fitter.__class__.__name__:
+    if not fitter.is_wideband:
         plot_measurements_v_res(fitter, nbin = 50, title = False, plotsig=True, \
                             legend = False, avg = True, whitened = True, axs = ax17_1, figsize=(6,3))
         k += 1
@@ -2252,7 +2252,7 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
     legend [boolean] : If True, will add legends to ALL plots [default: False].
     """
     
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         raise ValueError("Cannot use this function with WidebandTOAFitter, please use `plots_for_summary_pdf_wb` instead.")
     # Need to make four sets of plots
     for ii in range(4):
@@ -2396,7 +2396,7 @@ def plots_for_summary_pdf_wb(fitter, title = None, legends = False):
     title [boolean] : If True, will add titles to ALL plots [default: False].
     legend [boolean] : If True, will add legends to ALL plots [default: False].
     """
-    if "Wideband" not in fitter.__class__.__name__:
+    if not fitter.is_wideband:
         raise ValueError("Cannot use this function with non-WidebandTOAFitter, please use `plots_for_summary_pdf_nb` instead.")
     # Need to make four sets of plots
     for ii in range(4):
