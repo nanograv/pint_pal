@@ -254,7 +254,7 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
 
     # check if using wideband TOAs, as this changes how to access the residuals
 
-    if "Wideband" in str(type(fo)):
+    if fo.is_wideband:
         is_wideband = True
         if prefit:
             time_resids = fo.resids_init.toa.time_resids.to_value(u.us)

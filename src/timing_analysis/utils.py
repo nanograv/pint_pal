@@ -45,7 +45,7 @@ def whiten_resids(fitter, restype = 'postfit'):
     # if not assume it's a PINT fitter class object
     else:
         # Check if WB or NB
-        if "Wideband" in fitter.__class__.__name__:
+        if fitter.is_wideband:
             if restype == 'postfit':
                 time_resids = fitter.resids.residual_objs['toa'].time_resids
                 noise_resids = fitter.resids.noise_resids
@@ -161,7 +161,7 @@ def resid_stats(fitter, epoch_avg = False, whitened = False, dm_stats = False, p
     dm_dict [nested dictionary]: Same as rs_dict but for DM residuals with unit of pc cm^-3.
     """
     # Check if fitter is WB or not
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         resids = fitter.resids.residual_objs['toa']
         dm_resids = fitter.resids.residual_objs['dm']
         NB = False
@@ -420,7 +420,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
 
     """
     # Check if fitter is wideband or not
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         NB = False
         resids = fitter.resids.residual_objs['toa']
         dm_resids = fitter.resids.residual_objs['dm']
