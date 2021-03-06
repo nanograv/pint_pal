@@ -209,7 +209,7 @@ def check_binary(model):
     else:
         raise ValueError("Atypical binary model used")
 
-def check_jumps(model,receivers,fitter_type=None):
+def check_jumps(model,receivers,toa_type=None):
     """Checks for correct type/number of JUMP/DMJUMPs in the par file
 
     Parameters
@@ -248,7 +248,7 @@ def check_jumps(model,receivers,fitter_type=None):
         raise ValueError("All receivers have JUMPs, one must be removed")
 
     # Check DMJUMPS for wideband models
-    if fitter_type == 'WidebandTOAFitter':
+    if toa_type == 'WB':
         dmjumps = []
         rcvrs = copy.copy(receivers)
 

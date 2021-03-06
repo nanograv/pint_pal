@@ -155,7 +155,7 @@ class TimingNotebook:
             self.add_code_cell(f'''\
             tc = TimingConfiguration({filename}, tim_directory={tim_directory}, par_directory={par_directory})
 
-            using_wideband = tc.get_fitter() == 'WidebandTOAFitter'
+            using_wideband = tc.get_toa_type() == 'WB'
             mo,to = tc.get_model_and_toas()\
             ''')
         else:
@@ -179,7 +179,7 @@ class TimingNotebook:
         add_feJumps(mo,receivers)
         if using_wideband:
             add_feDMJumps(mo,receivers)
-        check_jumps(mo,receivers,fitter_type=tc.get_fitter())\
+        check_jumps(mo,receivers,toa_type=tc.get_toa_type())\
         ''')
         self.add_markdown_cell_skip('''\
         Compute pulse numbers; this ensures that parameter changes made in the model will not break phase connection.\
