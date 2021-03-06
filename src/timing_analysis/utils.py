@@ -5,6 +5,7 @@ import astropy.units as u
 from astropy import log
 from pint.utils import weighted_mean
 import pint.residuals as Resid
+import pint.models.parameter
 import os
 import time
 from subprocess import check_output
@@ -14,6 +15,7 @@ import pint
 import astropy
 # import enterprise_extensions as e_e # NOTE - enterprise_extensions has no attribute __version__
 from timing_analysis.ftester import get_fblist, param_check
+import scipy.stats
 
 ALPHA = 0.0027
 
@@ -468,9 +470,9 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
     # Write beginning header info
     fsum.write(r'\section*{PSR ' + psr + '\markboth{' + psr + '}{}}\n')
 
-    fsum.write(r'Summary generated on ' + time.ctime() \
-            + ' by ' + check_output('whoami').strip().decode("utf-8")  \
-            + r'\\' + '\n')
+    who = check_output(['git','config','--get','user.name'], text=True).strip()
+    when = time.strftime("%Y %b %d (%a) %H:%M:%S GMT", time.gmtime())
+    fsum.write(f'Summary generated on {when} by {who}' + r'\\' + '\n')
     # print par file
     fsum.write(r'Input par file: \verb@' + parfile + r'@\\' + '\n')
     # print tim file directory
@@ -509,7 +511,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
     fsum.write('Epochs (defined as observations within %.1f-day spans): %d\\\\\n' % (maxepoch,nepoch))
 
     # Print what fitter was used:
-    fsum.write('Wideband data: %s\n' %{False:'No',True:'Yes'}[not NB])
+    fsum.write('Wideband data: %s\n' %('No' if NB else 'Yes'))
     fsum.write('\\\\Fitter: %s\n' %(fitter.__class__.__name__))
 
     # Write out the timing model
@@ -578,14 +580,74 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
 
     fsum.write('\n')
 
+    
+    fsum.write(r'\subsection*{Frozen parameters all zero?}' + '\n')
+    any_dodgy = False
+    for p in fitter.model.params_ordered:
+        if p in {"DM", "DMX", "NTOA", "CHI2", "DMDATA", "TZRFRQ"}:
+            continue
+        skip = False
+        for pfx in ["EFAC", "EQUAD", "TN", "ECORR", "DMEFAC", "DMEQUAD"]:
+            if p.startswith(pfx):
+                skip = True
+                break
+        if skip:
+            continue
+        pm = getattr(fitter.model, p)
+        if isinstance(pm, pint.models.parameter.floatParameter) and pm.frozen and pm.value != 0:
+            any_dodgy = True
+            fsum.write(f"Parameter {p} is frozen at {pm.value}\\\\\n")
+    if not any_dodgy:
+        fsum.write("Yes.\\\\\n")
+
+    # Check EFACs, EQUADs, ECORRs:
+    fsum.write(r'\subsection*{Error parameters reasonable?}' + '\n')
+    for p in sorted(fitter.model.params):
+        pm = getattr(fitter.model, p)
+        if p.startswith("EFAC") or p.startswith("DMEFAC"):
+            if not 0.8 < pm.value < 1.2:
+                msg = f"\\verb@{p} {pm.key} {pm.key_value[0]}@ is not close to 1: {pm.value:.3f}"
+                log.warning(msg)
+                fsum.write("WARNING: " + msg + "\\\\\n")
+        if p.startswith("EQUAD") or p.startswith("ECORR"):
+            unc = np.median(fitter.toas.table["error"][pm.select_toa_mask(fitter.toas)])
+            fsum.write(f"\\verb@{p} {pm.key} {pm.key_value[0]}@ is {pm.value:.3f} $\\mu$s and its TOAs "
+                       f"have median uncertainty {unc:.3f} $\\mu$s" + "\\\\\n")
+        if p.startswith("DMEQUAD"):
+            unc = np.median(fitter.toas.get_dm_errors().to_value(pint.dmu)[pm.select_toa_mask(fitter.toas)])
+            fsum.write(f"\\verb@{p} {pm.key} {pm.key_value[0]}@ is {pm.value:.3g} dmu and its TOAs "
+                       f"have median uncertainty {unc:.3g} dmu" + "\\\\\n")
+                
+    fsum.write(r'\subsection*{par file fully fit?}' + '\n')
+    chi2_initial = fitter.resids_init.chi2
+    chi2_final = fitter.resids.chi2
+    chi2_decrease = chi2_initial-chi2_final
+    fsum.write(f"par file initial $\\chi^2$: {chi2_initial}\\\\\n")
+    fsum.write(f"par file final $\\chi^2$: {chi2_final}\\\\\n")
+    fsum.write(f"Decrease: {chi2_decrease}\\\\\n")
+    if abs(chi2_decrease) > 0.01:
+        if chi2_decrease > 0:
+            msg = f"par file $\\chi^2$ decreased by {chi2_decrease} during fitting, fitter has not fully converged"
+        else:
+            msg = f"par file $\\chi^2$ increased by {-chi2_decrease} during fitting, fitter has produced bogus result"
+        log.warning(msg)
+        fsum.write(f'\\\\ Warning: {msg}\\\\\n')
+   
+         
+            
     # Write out if reduced chi squared is close to 1
     fsum.write(r'\subsection*{Reduced $\chi^2$ close to 1.00?}' + '\n')
     chi2_0 = fitter.resids.chi2
     ndof_0 = fitter.resids.dof
     rchi= chi2_0/ndof_0
-    fsum.write('Reduced $\chi^2$ is %f/%d = %f\n' % (chi2_0,ndof_0,rchi))
+    fpp = scipy.stats.chi2(int(ndof_0)).sf(float(chi2_0))
+    fsum.write('Reduced $\chi^2$ is %f/%d = %f (false positive probability %g)\n' % (chi2_0,ndof_0,rchi,fpp))
     if rchi<0.95 or rchi>1.05:
+        # Eh. Not clear if this is useful given an FPP.
         fsum.write('\\\\ Warning: $\chi^2$ is far from 1.00\n')
+    if not 0.001<fpp<0.999:
+        log.warning(f"Reduced chi-squared of {rchi} has unlikely false positive probability of {fpp}") 
+        fsum.write('\\\\ Warning: False positive probability not believable\n')
 
     # Check for more than one jumped receiver
     fsum.write(r'\subsection*{Receivers and JUMPs}' + '\n')
@@ -597,7 +659,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
         if "JUMP" in p and "DM" not in p:
             jumped.append(getattr(fitter.model, p).key_value[0])
     if len(jumped)==0:
-        print("WARNING: no JUMPs")
+        log.warning("no JUMPs")
         jumped = ()
     nnotjumped = 0
     fsum.write('{\\setlength{\\topsep}{6pt}%\n\\setlength{\\partopsep}{0pt}%\n')  # starts a new environment
@@ -624,28 +686,31 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
     fsum.write(r'\subsection*{Pulsar name check in .par file}' + '\n')
     fsum.write('Name in .par file: %s\\\\\n' % (fitter.model.PSR.value))
     if fitter.model.PSR.value.startswith("B") or fitter.model.PSR.value.startswith("J"):
-        fsum.write('OK: starts with B or J\n')
+        fsum.write('OK: starts with B or J\\\\\n')
     else:
-        fsum.write('Warning: does not start with B or J\n')
-
+        fsum.write('Warning: does not start with B or J\\\\\n')
+    if not os.path.basename(parfile).startswith(fitter.model.PSR.value):
+        msg = f'Warning: parfile is called {parfile} but pulsar name is {fitter.model.PSR.value}'
+        fsum.write(msg + r"\\" + "\n")
+        
     # Write if there are bad DMX ranges
 
     # NOTE - CURRENTLY CANNOT DO THIS, NEED DMX CHECKER FIRST
-
-    fsum.write(r'\subsection*{Check for bad DMX ranges, less than 10\% bandwidth}' + '\n')
-    """
-    if not is_wideband:
-        if len(baddmx)==0:
-            fsum.write('No bad dmx ranges\\\\\n')
+    if False:
+        fsum.write(r'\subsection*{Check for bad DMX ranges, less than 10\% bandwidth}' + '\n')
+        """
+        if not is_wideband:
+            if len(baddmx)==0:
+                fsum.write('No bad dmx ranges\\\\\n')
+            else:
+                fsum.write('Bad DMX ranges found, %d out of %d DMX ranges:\\\\\n' % (len(baddmx),ndmx))
+                for l in baddmx:
+                    fsum.write('{\\tt '+l+'}\\\\\n')
         else:
-            fsum.write('Bad DMX ranges found, %d out of %d DMX ranges:\\\\\n' % (len(baddmx),ndmx))
-            for l in baddmx:
-                fsum.write('{\\tt '+l+'}\\\\\n')
-    else:
-        fsum.write('No fractional bandwidth check for DMX ranges with wideband data!\\\\\n')
-    """
-    if not NB:
-        fsum.write('No fractional bandwidth check for DMX ranges with wideband data!\\\\\n')
+            fsum.write('No fractional bandwidth check for DMX ranges with wideband data!\\\\\n')
+        """
+        if not NB:
+            fsum.write('No fractional bandwidth check for DMX ranges with wideband data!\\\\\n')
 
     # Write out software versions used
     fsum.write(r'\subsection*{Software versions used in Analysis:}' + '\n')
@@ -663,6 +728,8 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
     except ImportError as error:
         log.warning(str(error)+ ", cannot print PTMCMCSampler version.")
     try:
+        # FIXME: this is the psrchive version on the notebook server, but we never use this version
+        # Is there any point reporting it?
         psrchive_v = check_output(["psrchive", "--version"]).decode("utf-8")
         fsum.write('PSRCHIVE: %s\\\\\n' % (psrchive_v))
     except (ImportError, FileNotFoundError) as error:
@@ -671,9 +738,11 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
     # Write out the plots - Assuming we have already made the summary plot previous to this
     # TODO Fix the plots...
     if NB:
-        plot_file_list = np.sort(glob.glob("%s*summary_plot_*_nb.*" % (fitter.model.PSR.value)))
+        plot_file_list = sorted(glob.glob("%s*summary_plot_*_nb.*" % (fitter.model.PSR.value)))
     else:
-        plot_file_list = np.sort(glob.glob("%s*summary_plot_*_wb.*" % (fitter.model.PSR.value)))
+        plot_file_list = sorted(glob.glob("%s*summary_plot_*_wb.*" % (fitter.model.PSR.value)))
+    if not plot_file_list:
+        raise IOError("Unable to find any summary plots to include in summary PDF!")
     for plot_file in plot_file_list:
         fsum.write(r'\begin{figure}[p]' + '\n')
         #fsum.write(r'\begin{center}' + '\n')
@@ -687,6 +756,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict = None, dm_dict = None, appe
         fsum.write(r'\end{document}' + '\n')
         fsum.close()
 
+        # FIXME: we can do better than this; subprocess.check_call, probably
         os.system('pdflatex -interaction=batchmode '
                 + texfile + ' 2>&1 > /dev/null')
 
