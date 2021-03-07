@@ -100,17 +100,17 @@ def center_epochs(model,toas):
     model: `pint.model.TimingModel` object
         with centered epoch(s)
     """
-    midmjd=(toas.get_mjds().value.max()+toas.get_mjds().value.min())/2.
+    midmjd=np.round((toas.get_mjds().value.max()+toas.get_mjds().value.min())/2.)
     model.change_pepoch(midmjd)
 
     try:
         model.change_posepoch(midmjd)
-    except:
+    except AttributeError:
         pass
 
     try:
         model.change_dmepoch(midmjd)
-    except:
+    except AttributeError:
         pass
 
     return model
