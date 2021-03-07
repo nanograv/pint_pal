@@ -449,7 +449,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
         fsum.write(r'\documentclass[11pt]{article}' + '\n')
         fsum.write(r'\usepackage[T1]{fontenc}' + '\n')
         fsum.write(r'\usepackage[utf8]{inputenc}' + '\n')
-        fsum.write(r'\DeclareUnicodeCharacter{D7}{\textsuperscript{*}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{D7}{\times}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{B9}{\textsuperscript{1}}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{207B}{\textsuperscript{-}}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{2070}{\textsuperscript{0}}' + '\n')
@@ -732,7 +732,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
         fsum.write(f'Current par file: \\verb@{parfile}@' + '\\\\\n')
         fsum.write(f'Previous par file: \\verb@{previous_parfile}@' + '\\\\\n')
         cm = fitter.model.compare(get_model(previous_parfile),
-                                  verbosity='med',
+                                  verbosity='max',
                                   nodmx=True,
                                   threshold_sigma=3)
         fsum.write("\n")
