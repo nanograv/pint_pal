@@ -17,6 +17,7 @@ import astropy
 # import enterprise_extensions as e_e # NOTE - enterprise_extensions has no attribute __version__
 from timing_analysis.ftester import get_fblist, param_check
 import scipy.stats
+import copy
 
 ALPHA = 0.0027
 
@@ -449,7 +450,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
         fsum.write(r'\documentclass[11pt]{article}' + '\n')
         fsum.write(r'\usepackage[T1]{fontenc}' + '\n')
         fsum.write(r'\usepackage[utf8]{inputenc}' + '\n')
-        fsum.write(r'\DeclareUnicodeCharacter{D7}{\times}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{D7}{$\times$}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{B9}{\textsuperscript{1}}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{207B}{\textsuperscript{-}}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{2070}{\textsuperscript{0}}' + '\n')
@@ -595,25 +596,38 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     
     fsum.write(r'\subsection*{Frozen parameters all zero?}' + '\n')
     any_dodgy = False
+    ignoring = []
     for p in fitter.model.params_ordered:
-        if p in {"DM", "DMX", "NTOA", "CHI2", "DMDATA", "TZRFRQ"}:
-            continue
-        skip = False
-        for pfx in ["EFAC", "EQUAD", "TN", "ECORR", "DMEFAC", "DMEQUAD"]:
-            if p.startswith(pfx):
-                skip = True
-                break
-        if skip:
-            continue
         pm = getattr(fitter.model, p)
-        if isinstance(pm, pint.models.parameter.floatParameter) and pm.frozen and pm.value != 0:
+        if (isinstance(pm, (pint.models.parameter.floatParameter, 
+                            pint.models.parameter.maskParameter,
+                            pint.models.parameter.MJDParameter,
+                            pint.models.parameter.AngleParameter,
+                           )) 
+            and pm.frozen 
+            and pm.value != 0):
+            if p in {"START", "FINISH", "POSEPOCH", "DMEPOCH", "PEPOCH", "TZRMJD", "DM", "DMX", "NTOA", "CHI2", "DMDATA", "TZRFRQ"}:
+                ignoring.append(p)
+                continue
+            skip = False
+            for pfx in ["EFAC", "EQUAD", "TN", "ECORR", "DMEFAC", "DMEQUAD"]:
+                if p.startswith(pfx):
+                    ignoring.append(p)
+                    skip = True
+                    break
+            if skip:
+                continue
             any_dodgy = True
             fsum.write(f"Parameter {p} is frozen at {pm.value}\\\\\n")
+    if ignoring:
+        w = [r'\verb@'+i+'@' for i in ignoring]
+        fsum.write(f"Ignoring {', '.join(w)}\\\\\n")
     if not any_dodgy:
         fsum.write("Yes.\\\\\n")
 
     # Check EFACs, EQUADs, ECORRs:
     fsum.write(r'\subsection*{Error parameters reasonable?}' + '\n')
+    any_bad_efac = False
     for p in sorted(fitter.model.params):
         pm = getattr(fitter.model, p)
         if p.startswith("EFAC") or p.startswith("DMEFAC"):
@@ -621,6 +635,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
                 msg = f"\\verb@{p} {pm.key} {pm.key_value[0]}@ is not close to 1: {pm.value:.3f}"
                 log.warning(msg)
                 fsum.write("WARNING: " + msg + "\\\\\n")
+                any_bad_efac = True
         if p.startswith("EQUAD") or p.startswith("ECORR"):
             unc = np.median(fitter.toas.table["error"][pm.select_toa_mask(fitter.toas)])
             fsum.write(f"\\verb@{p} {pm.key} {pm.key_value[0]}@ is {pm.value:.3f} $\\mu$s and its TOAs "
@@ -629,7 +644,13 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
             unc = np.median(fitter.toas.get_dm_errors().to_value(pint.dmu)[pm.select_toa_mask(fitter.toas)])
             fsum.write(f"\\verb@{p} {pm.key} {pm.key_value[0]}@ is {pm.value:.3g} dmu and its TOAs "
                        f"have median uncertainty {unc:.3g} dmu" + "\\\\\n")
-                
+    fsum.write("EQUADs and DMEQUADs that are large compared to the uncertainties on the "
+               "relevant TOAs may be a sign of something strange.\\\\\n")
+    if any_bad_efac:
+        fsum.write("Some EFACs seem very large or small, has something gone wrong?\\\\\n")
+    else:
+        fsum.write("All EFACs seem reasonable.\\\\\n")
+
     fsum.write(r'\subsection*{par file fully fit?}' + '\n')
     chi2_initial = fitter.resids_init.chi2
     chi2_final = fitter.resids.chi2
@@ -644,7 +665,8 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
             msg = f"par file $\\chi^2$ increased by {-chi2_decrease} during fitting, fitter has produced bogus result"
         log.warning(msg)
         fsum.write(f'\\\\ Warning: {msg}\\\\\n')
-   
+    else:
+        fsum.write(f'\\\\ Fitting produces no major change, all is probably fine.\\\\\n')
          
             
     # Write out if reduced chi squared is close to 1
@@ -657,7 +679,9 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     if rchi<0.95 or rchi>1.05:
         # Eh. Not clear if this is useful given an FPP.
         fsum.write('\\\\ Warning: $\chi^2$ is far from 1.00\n')
-    if not 0.001<fpp<0.999:
+    if 0.001<fpp<0.999:
+        fsum.write('\\\\ False positive probability is believable\n')
+    else:
         log.warning(f"Reduced chi-squared of {rchi} has unlikely false positive probability of {fpp}") 
         fsum.write('\\\\ Warning: False positive probability not believable\n')
 
@@ -731,17 +755,25 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
         fsum.write("\n")
         fsum.write(f'Current par file: \\verb@{parfile}@' + '\\\\\n')
         fsum.write(f'Previous par file: \\verb@{previous_parfile}@' + '\\\\\n')
-        cm = fitter.model.compare(get_model(previous_parfile),
-                                  verbosity='max',
-                                  nodmx=True,
-                                  threshold_sigma=3)
         fsum.write("\n")
-        fsum.write(r"{\small" + "\n")
-        fsum.write(r"\begin{verbatim}" + "\n")
-        fsum.write("\n".join(cm))
-        fsum.write(r"\end{verbatim}" + "\n")
-        fsum.write(r"}" + "\n")
-        fsum.write("\n")
+        model = copy.deepcopy(fitter.model)
+        previous_model = get_model(previous_parfile)
+        model.name = "Current"
+        previous_model.name = "Previous"
+        try:
+            cm = model.compare(previous_model,
+                               verbosity='max',
+                               nodmx=True,
+                               threshold_sigma=3)
+        except ValueError as e:
+            fsum.write(f"WARNING: compare_models failed because of {e}\\\\\n")
+        else:
+            fsum.write(r"{\small" + "\n")
+            fsum.write(r"\begin{verbatim}" + "\n")
+            fsum.write("\n".join(cm))
+            fsum.write(r"\end{verbatim}" + "\n")
+            fsum.write(r"}" + "\n")
+            fsum.write("\n")
         
     
     # Write out software versions used
