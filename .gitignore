@@ -8,9 +8,9 @@ build/
 dist/
 *.egg-info/
 
-# Jupyter Notebook
+# Jupyter Notebook (initial / means only in this directory)
 .ipynb_checkpoints
-[BJ]*.ipynb
+/*.ipynb
 
 # editor save files
 *~
@@ -28,5 +28,14 @@ logs/
 *.aux
 
 # intermediate summary pngs and summary pdfs
-*summary_plot*.png
-*.pdf
+/*summary_plot*.png
+/*.pdf
+
+# stray stuff
+core.*
+
+# intermediate files not to be checked in
+/*.par
+/*.tim
+*.pickle.gz
+/*.out
