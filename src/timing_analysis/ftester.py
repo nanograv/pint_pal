@@ -192,7 +192,9 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
     add_params = []
     remove_params = []
     fd_add = []
+    fd_add_ft = []
     fd_remove = []
+    fd_remove_ft = []
     for fk in Ftest_dict.keys():
         if 'FB' in fk:
             try:
@@ -225,6 +227,7 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
                     for fffk in Ftest_dict[fk][ffk].keys():
                         if Ftest_dict[fk][ffk][fffk]['ft'] > alpha and Ftest_dict[fk][ffk][fffk]['ft']:
                             fd_remove.append(fffk)
+                            fd_remove_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
                 else:
                     if Ftest_dict[fk][ffk]['ft'] > alpha and Ftest_dict[fk][ffk]['ft']:
                         # Policy is never to remove parallax
@@ -241,6 +244,7 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
                     for fffk in Ftest_dict[fk][ffk].keys():
                         if Ftest_dict[fk][ffk][fffk]['ft'] <= alpha and Ftest_dict[fk][ffk][fffk]['ft']:
                             fd_add.append(fffk)
+                            fd_add_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
                 else:
                     if Ftest_dict[fk][ffk]['ft'] <= alpha and Ftest_dict[fk][ffk]['ft']:
                         add_params.append(ffk)
@@ -250,9 +254,9 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
 
     # Now print which parameters to add/remove
     if fd_remove:
-        remove_params.append(max(fd_remove, key=len))
+        remove_params.append(fd_remove[np.where(fd_remove_ft==min(fd_remove_ft))[0][0]])
     if fd_add:
-        add_params.append(min(fd_add, key=len))
+        add_params.append(fd_add[np.where(fd_add_ft==min(fd_add_ft))[0][0]])
 
     print("F-tests recommend adding the following parameters: " + " ".join(add_params))
     print("F-tests recommend removing the following parameters: " + " ".join(remove_params))
