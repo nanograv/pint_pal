@@ -219,7 +219,7 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
         and within each of those, further nested dictionaries of parameters [e.g. 'PX'], and the reported values.
     """
     # Check if fitter is wideband or not
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         NB = False
     #    resids = fitter.resids.residual_objs['toa']
     #    dm_resids = fitter.resids.residual_objs['dm']
