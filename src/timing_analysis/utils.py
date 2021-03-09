@@ -483,8 +483,9 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     finish = fitter.toas.last_MJD.value
     span = finish - start
 
+    label = f"{psr} {'narrowband' if NB else 'wideband'}"
     # Write beginning header info
-    fsum.write(r'\section*{PSR ' + psr + '\markboth{' + psr + '}{}}\n')
+    fsum.write(r'\section*{PSR ' + label + '\markboth{' + label + '}{}}\n')
 
     who = check_output(['git','config','--get','user.name'], text=True).strip()
     when = time.strftime("%Y %b %d (%a) %H:%M:%S GMT", time.gmtime())
@@ -495,16 +496,11 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     rls_dir = fitter.toas.filename[0].rpartition('/')[0]
     fsum.write(r'Input tim file directory: \verb@' + rls_dir + r'@\\' + '\n')
     # print list of tim file names, limit two tim files per line
-    Inputline = r'Input tim files:\verb@'
-    ntfs = 0
+    fsum.write(r'Input tim files:' + "\n")
+    fsum.write(r'\begin{itemize}' + "\n")
     for tf in fitter.toas.filename:
-        Inputline += r'@ '+ r'\verb@' + tf.split('/')[-1] + ','
-        if ntfs % 2 == 0 and ntfs != 0:
-            fsum.write(Inputline + r'@\\' + '\n')
-            Inputline = r'\verb@'
-        ntfs += 1
-    if ntfs % 2 == 0:
-        fsum.write(Inputline + r'@\\' + '\n')
+        fsum.write(r'\item \verb@' + tf.split('/')[-1] + '@\n')
+    fsum.write(r'\end{itemize}' + "\n")
     fsum.write('Span: %.1f years (%.1f -- %.1f)\\\\\n ' % (span/365.24,
         year(float(start)), year(float(finish))))
 
@@ -530,11 +526,12 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     fsum.write('Wideband data: %s\n' %('No' if NB else 'Yes'))
     fsum.write('\\\\Fitter: %s\n' %(fitter.__class__.__name__))
 
+    model = get_model(parfile)
     # Write out the timing model
     fsum.write(r'\subsection*{Timing model}' + '\n')
     fsum.write(r'\begin{verbatim}' + '\n')
     # Get the parfile lines
-    parlines = fitter.model.as_parfile().split('\n')
+    parlines = model.as_parfile().split('\n')
     for l in parlines:
         if l.startswith('DMX'): continue
         fsum.write(l+"\n")
@@ -582,13 +579,13 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     fsum.write(r'\subsection*{Epochs near center of data span?}' + '\n')
     tmidspan = 0.5*(float(finish)+float(start))
     fsum.write('Middle of data span: midspan = %.0f\\\\\n' % (tmidspan))
-    dtpepoch = float(fitter.model.PEPOCH.value)-tmidspan
+    dtpepoch = float(model.PEPOCH.value)-tmidspan
     fsum.write('PEPOCH - midspan = $%.0f$ days = $%.1f$ years\\\\\n'  % ( dtpepoch, dtpepoch/365.24))
     if param_check('TASC', fitter, check_enabled=True):
-        dttasc = float(fitter.model.TASC.value)-tmidspan
+        dttasc = float(model.TASC.value)-tmidspan
         fsum.write('TASC - midspan = $%.0f$ days = $%.1f$ years\\\\\n'  % ( dttasc, dttasc/365.24))
     if param_check('T0', fitter, check_enabled=True):
-        dtt0 = float(fitter.model.T0.value)-tmidspan
+        dtt0 = float(model.T0.value)-tmidspan
         fsum.write('TASC - midspan = $%.0f$ days = $%.1f$ years\\\\\n'  % ( dtt0, dtt0/365.24))
 
     fsum.write('\n')
@@ -597,8 +594,8 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     fsum.write(r'\subsection*{Frozen parameters all zero?}' + '\n')
     any_dodgy = False
     ignoring = []
-    for p in fitter.model.params_ordered:
-        pm = getattr(fitter.model, p)
+    for p in model.params_ordered:
+        pm = getattr(model, p)
         if (isinstance(pm, (pint.models.parameter.floatParameter, 
                             pint.models.parameter.maskParameter,
                             pint.models.parameter.MJDParameter,
@@ -628,8 +625,8 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     # Check EFACs, EQUADs, ECORRs:
     fsum.write(r'\subsection*{Error parameters reasonable?}' + '\n')
     any_bad_efac = False
-    for p in sorted(fitter.model.params):
-        pm = getattr(fitter.model, p)
+    for p in sorted(model.params):
+        pm = getattr(model, p)
         if p.startswith("EFAC") or p.startswith("DMEFAC"):
             if not 0.8 < pm.value < 1.2:
                 msg = f"\\verb@{p} {pm.key} {pm.key_value[0]}@ is not close to 1: {pm.value:.3f}"
@@ -691,9 +688,9 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     receivers = set([g.replace("_GUPPI","").replace("_GASP","").replace("_PUPPI","").replace("_ASP","") for g in groups])
 
     jumped = []
-    for p in fitter.model.params:
+    for p in model.params:
         if "JUMP" in p and "DM" not in p:
-            jumped.append(getattr(fitter.model, p).key_value[0])
+            jumped.append(getattr(model, p).key_value[0])
     if len(jumped)==0:
         log.warning("no JUMPs")
         jumped = ()
@@ -720,13 +717,13 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
 
     # Check pulsar name
     fsum.write(r'\subsection*{Pulsar name check in .par file}' + '\n')
-    fsum.write('Name in .par file: %s\\\\\n' % (fitter.model.PSR.value))
-    if fitter.model.PSR.value.startswith("B") or fitter.model.PSR.value.startswith("J"):
+    fsum.write('Name in .par file: %s\\\\\n' % (model.PSR.value))
+    if model.PSR.value.startswith("B") or model.PSR.value.startswith("J"):
         fsum.write('OK: starts with B or J\\\\\n')
     else:
         fsum.write('Warning: does not start with B or J\\\\\n')
-    if not os.path.basename(parfile).startswith(fitter.model.PSR.value):
-        msg = f'Warning: parfile is called {parfile} but pulsar name is {fitter.model.PSR.value}'
+    if not os.path.basename(parfile).startswith(model.PSR.value):
+        msg = f'Warning: parfile is called {parfile} but pulsar name is {model.PSR.value}'
         fsum.write(msg + r"\\" + "\n")
     fsum.write("\n")
     
@@ -756,12 +753,12 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
         fsum.write(f'Current par file: \\verb@{parfile}@' + '\\\\\n')
         fsum.write(f'Previous par file: \\verb@{previous_parfile}@' + '\\\\\n')
         fsum.write("\n")
-        model = copy.deepcopy(fitter.model)
+        model_copy = copy.deepcopy(model)
         previous_model = get_model(previous_parfile)
-        model.name = "Current"
+        model_copy.name = "Current"
         previous_model.name = "Previous"
         try:
-            cm = model.compare(previous_model,
+            cm = model_copy.compare(previous_model,
                                verbosity='max',
                                nodmx=True,
                                threshold_sigma=3)
@@ -802,9 +799,9 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     # Write out the plots - Assuming we have already made the summary plot previous to this
     # TODO Fix the plots...
     if NB:
-        plot_file_list = sorted(glob.glob("%s*summary_plot_*_nb.*" % (fitter.model.PSR.value)))
+        plot_file_list = sorted(glob.glob("%s*summary_plot_*_nb.*" % (model.PSR.value)))
     else:
-        plot_file_list = sorted(glob.glob("%s*summary_plot_*_wb.*" % (fitter.model.PSR.value)))
+        plot_file_list = sorted(glob.glob("%s*summary_plot_*_wb.*" % (model.PSR.value)))
     if not plot_file_list:
         raise IOError("Unable to find any summary plots to include in summary PDF!")
     for plot_file in plot_file_list:
