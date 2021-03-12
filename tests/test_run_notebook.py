@@ -1,6 +1,7 @@
 from astropy import log
-from os import mkdir, chdir
+from os import makedirs, chdir
 from os.path import dirname, join, split, splitext
+from datetime import datetime
 from multiprocessing import Pool
 import traceback
 from glob import glob
@@ -8,7 +9,6 @@ import pytest
 import nbformat
 
 base_dir = dirname(dirname(__file__))
-global_log = join(base_dir, 'test-run-notebooks.log')
 
 def config_files():
     config_files = (glob(join(base_dir, 'configs/B*.nb.yaml'))
@@ -21,9 +21,9 @@ def config_files():
 
 @pytest.fixture
 def notebook_code():
-    notebook_location = join(base_dir, 'nb_templates/draft_process.ipynb')
+    notebook_location = join(base_dir, 'nb_templates/process_v0.9.ipynb')
     template_notebook = nbformat.read(notebook_location, as_version=4)
-    
+
     code_blocks = []
     for cell in template_notebook['cells']:
         if cell['cell_type'] == 'code':
@@ -33,31 +33,26 @@ def notebook_code():
                 # Skip full-line comments and IPython magics
                 if line.startswith('#') or line.startswith('%'):
                     continue
-                # Skip certain kinds of lines that aren't useful here
-                if ('log.setLevel' in line
-                    or 'plot_residuals' in line):
-                    continue
                 code_lines.append(line)
             code_blocks.append('\n'.join(code_lines))
     return code_blocks
 
 @pytest.fixture(scope='session', autouse=True)
-def startup():
-    try:
-        mkdir(join(base_dir, 'logs'))
-    except FileExistsError:
-        pass
-    # clear global log
-    with open(global_log, 'w') as f:
-        pass
+def log_paths():
+    now = datetime.strftime(datetime.now(), '%Y-%m-%dT%H:%M:%S')
+    logdir = join('logs', now)
+    logdir = join(base_dir, logdir)
+    makedirs(logdir, exist_ok=True)
+    global_log = join(base_dir, f'test-run-notebooks-{now}.log')
+    return logdir, global_log
 
 @pytest.mark.parametrize('config_file', config_files())
-def test_run_notebook(notebook_code, config_file, tmpdir, suppress_errors=False):
+def test_run_notebook(notebook_code, config_file, log_paths, suppress_errors=False):
     """
     Run through the functions called in the notebook for each pulsar (excluding plotting).
     This will create a global log called test-run-notebooks.log, and a log file for each pulsar.
-    
-    To run for only one pulsar (using J1713+0747 as an example): 
+
+    To run for only one pulsar (using J1713+0747 as an example):
         `pytest tests/test_run_notebook.py::test_run_notebook[J1713+0747.nb]`
         or `pytest -k J1713+0747` (selects tests whose name contains "J1713+0747")
     To run for all pulsars in parallel (requires `pytest-xdist`):
@@ -65,9 +60,12 @@ def test_run_notebook(notebook_code, config_file, tmpdir, suppress_errors=False)
         <workers> is the number of worker processes to launch (e.g. 4 to use 4 CPU threads)
     """
     log.setLevel("INFO")
+    logdir, global_log = log_paths
     cfg_name = splitext(split(config_file)[1])[0]
-    log_file = join(join(base_dir, 'logs'), f'{cfg_name}.log')
-    err_file = join(join(base_dir, 'logs'), f'{cfg_name}.traceback')
+    log_file = join(logdir, f'{cfg_name}.log')
+    err_file = join(logdir, f'{cfg_name}.traceback')
+    tmpdir = join(base_dir, f'tmp/{cfg_name}')
+    makedirs(tmpdir)
 
     # clear log file
     with open(log_file, 'w') as f:
@@ -86,14 +84,15 @@ def test_run_notebook(notebook_code, config_file, tmpdir, suppress_errors=False)
                 exec(code_block)
 
             with open(global_log, 'a') as f:
-                print(f"{config_file}: success!", file=f)
+                print(f"{cfg_name}: success!", file=f)
         except Exception as e:
             with open(err_file, 'w') as f:
-                print(f"Processing config file {config_file} failed with the following error:", file=f)
+                print(f"Processing config file {config_file} failed with the following error:\n", file=f)
                 print(traceback.format_exc(), file=f)
+                print(f"While processing the following code block:\n\n{code_block}", file=f)
 
             with open(global_log, 'a') as f:
-                print(f"{config_file}: failure - {repr(e)}", file=f)
+                print(f"{cfg_name}: failure - {repr(e)}", file=f)
             if not suppress_errors:
                 raise e
 
