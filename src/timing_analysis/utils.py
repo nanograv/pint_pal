@@ -508,6 +508,7 @@ def pdf_writer(fitter,
         who = check_output(['git','config','--get','user.name'], text=True).strip()
     except CalledProcessError:
         who = "anonymous user"
+
     when = time.strftime("%Y %b %d (%a) %H:%M:%S GMT", time.gmtime())
     fsum.write(f'Summary generated on {when} by {who}' + r'\\' + '\n')
     # print par file
