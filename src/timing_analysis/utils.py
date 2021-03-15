@@ -615,7 +615,7 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
             if skip:
                 continue
             any_dodgy = True
-            fsum.write(f"Parameter {p} is frozen at {pm.value}\\\\\n")
+            fsum.write(f"Parameter \\verb@{p}@ is frozen at {pm.value}\\\\\n")
     if ignoring:
         w = [r'\verb@'+i+'@' for i in ignoring]
         fsum.write(f"Ignoring {', '.join(w)}\\\\\n")
