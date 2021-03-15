@@ -6,6 +6,23 @@ import sys
 assignment = re.compile(r"^(\w+)\s*=\s*(.*)\n$")
 
 def transform_notebook(nb, transformations, verbose=False):
+    """Change variable assignments in a loaded notebook.
+    
+    This looks for lines in the code that look like
+    
+    >>> variable = value
+    
+    If variable is in transformations, value is replaced with the string that
+    transformations maps variable to. This is done only for non-indented lines,
+    and only once, so as not to catch keyword arguments.
+    
+    Parameters
+    ----------
+    nb : dict coming from json.load on a notebook
+        The notebook whose code cells should be transformed.
+    transformations : dict
+        A dictionary mapping variable names to string representations of their values.
+    """
     subs = 0
     transformed = {k: False for k in transformations}
     for cell in nb["cells"]:
