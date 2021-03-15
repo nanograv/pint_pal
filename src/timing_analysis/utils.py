@@ -430,6 +430,13 @@ def pdf_writer(fitter,
     previous_parfile [string or None]: If provided, report a comparison with this par file (presumably from a previous release).
     fitter_noise [pint.fitter.Fitter]: Fitter that has had new noise parameters applied (if available).
     """
+    def verb(s):
+        for c in "@|!%":
+            if c not in s:
+                return r'\verb' + c + s + c
+        else:
+            raise ValueError(f"String {s} contains all my known verbatim quoting characters")
+    
     # Check if fitter is wideband or not
     if fitter.is_wideband:
         NB = False
@@ -460,6 +467,8 @@ def pdf_writer(fitter,
         fsum.write(r'\usepackage[utf8]{inputenc}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{D7}{$\times$}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{B9}{\textsuperscript{1}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{B2}{\textsuperscript{2}}' + '\n')
+        fsum.write(r'\DeclareUnicodeCharacter{B3}{\textsuperscript{3}}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{207B}{\textsuperscript{-}}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{2070}{\textsuperscript{0}}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{2071}{\textsuperscript{1}}' + '\n')
@@ -502,15 +511,15 @@ def pdf_writer(fitter,
     when = time.strftime("%Y %b %d (%a) %H:%M:%S GMT", time.gmtime())
     fsum.write(f'Summary generated on {when} by {who}' + r'\\' + '\n')
     # print par file
-    fsum.write(r'Input par file: \verb@' + parfile + r'@\\' + '\n')
+    fsum.write(r'Input par file: ' + verb(parfile) + r'\\' + '\n')
     # print tim file directory
     rls_dir = fitter.toas.filename[0].rpartition('/')[0]
-    fsum.write(r'Input tim file directory: \verb@' + rls_dir + r'@\\' + '\n')
+    fsum.write(r'Input tim file directory: ' + verb(rls_dir) + r'\\' + '\n')
     # print list of tim file names, limit two tim files per line
     fsum.write(r'Input tim files:' + "\n")
     fsum.write(r'\begin{itemize}' + "\n")
     for tf in fitter.toas.filename:
-        fsum.write(r'\item \verb@' + tf.split('/')[-1] + '@\n')
+        fsum.write(r'\item ' + verb(tf.split('/')[-1]) + '\n')
     fsum.write(r'\end{itemize}' + "\n")
     fsum.write('Span: %.1f years (%.1f -- %.1f)\\\\\n ' % (span/365.24,
         year(float(start)), year(float(finish))))
@@ -627,9 +636,9 @@ def pdf_writer(fitter,
             if skip:
                 continue
             any_dodgy = True
-            fsum.write(f"Parameter {p} is frozen at {pm.value}\\\\\n")
+            fsum.write(f"Parameter {verb(p)} is frozen at {pm.value}\\\\\n")
     if ignoring:
-        w = ', '.join([r'\verb@'+i+'@' for i in ignoring])
+        w = ', '.join([verb(i) for i in ignoring])
         fsum.write(f"Ignoring {w}\\\\\n")
     if not any_dodgy:
         fsum.write("Yes.\\\\\n")
@@ -641,7 +650,7 @@ def pdf_writer(fitter,
         pm = getattr(model, p)
         if p.startswith("EFAC") or p.startswith("DMEFAC"):
             if not 0.8 < pm.value < 1.2:
-                msg = f"\\verb@{p} {pm.key} {pm.key_value[0]}@ is not close to 1: {pm.value:.3f}"
+                msg = verb(f"{p} {pm.key} {pm.key_value[0]}") + f" is not close to 1: {pm.value:.3f}"
                 log.warning(msg)
                 fsum.write("WARNING: " + msg + "\\\\\n")
                 any_bad_efac = True
@@ -661,7 +670,7 @@ def pdf_writer(fitter,
                 r = r"\textbf{"+f"{ratio:.2f}"+"}"
             else:
                 r = f"{ratio:.2f}"
-            fsum.write(f"\\verb@{p} {pm.key} {pm.key_value[0]}@ & {pm.value:.3f} $\\mu$s & "
+            fsum.write(verb(f"{p} {pm.key} {pm.key_value[0]}") + f" & {pm.value:.3f} $\\mu$s & "
                        f"{unc:.3f} $\\mu$s & {r}" + "\\\\\n")
         if p.startswith("DMEQUAD"):
             unc = np.median(fitter.toas.get_dm_errors().to_value(pint.dmu)[pm.select_toa_mask(fitter.toas)])
@@ -670,7 +679,7 @@ def pdf_writer(fitter,
                 r = r"\textbf{"+f"{ratio:.2f}"+"}"
             else:
                 r = f"{ratio:.2f}"
-            fsum.write(f"\\verb@{p} {pm.key} {pm.key_value[0]}@ & {pm.value:.3g} dmu & "
+            fsum.write(verb(f"{p} {pm.key} {pm.key_value[0]}") + f" & {pm.value:.3g} dmu & "
                        f"{unc:.3g} dmu & {r}" + "\\\\\n")
     fsum.write(r"\end{tabular}\\" + "\n")
     fsum.write("EQUADs and DMEQUADs that are large compared to the uncertainties on the "
@@ -704,7 +713,7 @@ def pdf_writer(fitter,
                     name = f"{p} {pm.key} {pm.key_value[0] if pm.key_value else pm.key_value}"
                 else:
                     name = p
-                fsum.write(f"\\verb@{name}@ & {pm.value:.3g} {pm.units} & {pm_noise_value} & {r}" + "\\\\\n")
+                fsum.write(f"{verb(name)} & {pm.value:.3g} {pm.units} & {pm_noise_value} & {r}" + "\\\\\n")
         fsum.write(r"\end{tabular}\\" + "\n")
         if any_bogus:
             fsum.write("Some noise parameters (marked in bold) appear to be different "
@@ -714,12 +723,12 @@ def pdf_writer(fitter,
         par_not_noise = list(sorted(model_set_params - noise_model_set_params))
         if par_not_noise:
             fsum.write("WARNING: the par file contains (a) parameter(s) missing from the post-noise model:")
-            fsum.write(", ".join(r"\verb@" + p + "@" for p in par_not_noise))
+            fsum.write(", ".join(verb(p) for p in par_not_noise))
             fsum.write(r"\\" + "\n")
         noise_not_par = list(sorted(model_set_params - noise_model_set_params))
         if noise_not_par:
             fsum.write("WARNING: the post-noise model contains (a) parameter(s) missing from the par file:")
-            fsum.write(", ".join(r"\verb@" + p + "@" for p in noise_not_par))
+            fsum.write(", ".join(verb(p) for p in noise_not_par))
             fsum.write(r"\\" + "\n")
        
     fsum.write(r'\subsection*{par file fully fit?}' + '\n')
@@ -740,6 +749,7 @@ def pdf_writer(fitter,
         fsum.write(f'\\\\ Fitting produces no major change, all is probably fine.\\\\\n')
     any_change = False
     for p in model.free_params:
+        # FIXME: replicate compare_model here? run compare_model? maybe with low verbosity but capture log messages?
         pass
                    
             
@@ -800,7 +810,7 @@ def pdf_writer(fitter,
     else:
         fsum.write('Warning: does not start with B or J\\\\\n')
     if not os.path.basename(parfile).startswith(model.PSR.value):
-        msg = f'Warning: parfile is called {parfile} but pulsar name is {model.PSR.value}'
+        msg = f'Warning: parfile is called {verb(parfile)} but pulsar name is {model.PSR.value}'
         fsum.write(msg + r"\\" + "\n")
     fsum.write("\n")
     
@@ -827,8 +837,8 @@ def pdf_writer(fitter,
     if previous_parfile is not None:
         fsum.write(r'\subsection*{Comparison with previous model}' + '\n')
         fsum.write("\n")
-        fsum.write(f'Current par file: \\verb@{parfile}@' + '\\\\\n')
-        fsum.write(f'Previous par file: \\verb@{previous_parfile}@' + '\\\\\n')
+        fsum.write(f'Current par file: {verb(parfile)}' + '\\\\\n')
+        fsum.write(f'Previous par file: {verb(previous_parfile)}' + '\\\\\n')
         fsum.write("\n")
         model_copy = copy.deepcopy(model)
         previous_model = get_model(previous_parfile)
@@ -898,7 +908,7 @@ def pdf_writer(fitter,
         fsum.write(r'\end{figure}' + '\n')
     else:
         log.info(f"Could not find noise corner plot {noise_plot}")
-        fsum.write(r'Noise corner plot \verb@' + noise_plot + "@ not found.\\\\\n")
+        fsum.write(f"Noise corner plot {verb(noise_plot)} not found.\\\\\n")
         
 
     if append is None:
@@ -906,8 +916,10 @@ def pdf_writer(fitter,
         fsum.write(r'\end{document}' + '\n')
         fsum.close()
 
-        # FIXME: we can do better than this; subprocess.check_call, probably
-        check_call(['pdflatex','-interaction=batchmode', texfile])
+        try:
+            check_call(['pdflatex','-interaction=batchmode', texfile])
+        except CalledProcessError as e:
+            log.warning(f"Latex run failed: {e}")
 
 def write_if_changed(filename, contents):
     """Write contents to filename, touching the file only if it does not already contain them.
