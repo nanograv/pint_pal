@@ -3,10 +3,11 @@ import re
 import argparse
 import sys
 
-assignment = re.compile(r"^(\s*)(\w+)\s*=\s*(.*)\n$")
+assignment = re.compile(r"^(\w+)\s*=\s*(.*)\n$")
 
 def transform_notebook(nb, transformations, verbose=False):
     subs = 0
+    transformed = {k: False for k in transformations}
     for cell in nb["cells"]:
         if cell["cell_type"]!="code":
             continue
@@ -14,15 +15,15 @@ def transform_notebook(nb, transformations, verbose=False):
             m = assignment.match(l)
             if not m:
                 continue
-            try:
-                val = transformations[m.group(2)]
-            except KeyError:
-                continue
-            new_line = f"{m.group(1)}{m.group(2)} = {val}\n"
-            if verbose:
-                print(f"replacing line {repr(l)} by {repr(new_line)}")
-            cell["source"][i] = new_line
-            subs += 1
+            k = m.group(1)
+            if k in transformations and not transformed[k]:
+                val = transformations[k]
+                transformed[k] = True
+                new_line = f"{m.group(1)} = {val}\n"
+                if verbose:
+                    print(f"replacing line {repr(l)} by {repr(new_line)}")
+                cell["source"][i] = new_line
+                subs += 1            
     return subs
 
 if __name__ == '__main__':
@@ -32,6 +33,9 @@ if __name__ == '__main__':
     The idea is that it allows you to have a variable, say 'write_results' that controls
     the notebook's behaviour. Then in a template notebook there will be a line that says
     'write_results = False'; this script lets you replace this with 'write_results = True'.
+    
+    Variable assignments will be replaced only once, and only if they are not indented, to avoid
+    confusion with keyword arguments.
     """)
     def parse(s):
         key, value = s.split("=")
