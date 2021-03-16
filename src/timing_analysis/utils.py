@@ -748,10 +748,24 @@ def pdf_writer(fitter,
         fsum.write(f'\\\\ Warning: {msg}\\\\\n')
     else:
         fsum.write(f'\\\\ Fitting produces no major change, all is probably fine.\\\\\n')
-    any_change = False
-    for p in model.free_params:
+    sigma_threshold = 0.1
+    max_cs = 0
+    changed = None
+    for p in fitter.model.free_params:
         # FIXME: replicate compare_model here? run compare_model? maybe with low verbosity but capture log messages?
-        pass
+        pm = getattr(fitter.model, p)
+        iv = getattr(fitter.model_init, p).value
+        fv = pm.value
+        u = pm.uncertainty.value
+        cs = (iv-fv)/u
+        if abs(cs) >= abs(max_cs):
+            max_cs = cs
+            changed = p
+        if abs(cs) > sigma_threshold:
+            msg = f"parameter {verb(p)} changed from {iv} to {fv} ({cs:.2g} sigma) during fit."
+            log.warn(msg)
+            fsum.write("WARNING: " + msg + "\\\\\n")
+    fsum.write(f"Largest parameter change during fit was {verb(changed)} by {max_cs:.2g} sigma.\\\\\n")
                    
             
     # Write out if reduced chi squared is close to 1
