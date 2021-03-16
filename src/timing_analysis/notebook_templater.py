@@ -3,7 +3,7 @@ import re
 import argparse
 import sys
 
-assignment = re.compile(r"^(\w+)\s*=\s*(.*)\n$")
+assignment = re.compile(r"^(\w+)\s*=\s*(.*)$")
 
 def transform_notebook(nb, transformations, verbose=False):
     """Change variable assignments in a loaded notebook.
