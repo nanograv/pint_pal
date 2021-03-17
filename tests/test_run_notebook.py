@@ -101,7 +101,7 @@ if __name__ == '__main__':
     with open(global_log, 'w') as f:
         pass
 
-    with Pool(processes=4) as pool:
+    with Pool(processes=1) as pool:
         code = notebook_code.__wrapped__()
         results = []
         for config_file in config_files():
