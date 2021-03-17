@@ -328,10 +328,8 @@ class TimingConfiguration:
         if len(valid_valued):
             log.info(f'Valid TOA excision keys in use: {valid_valued}')
 
-        #selection = np.ones(len(toas),dtype=bool)
-
         # All info here about selecting various TOAs.
-        # Select TOAs to cut, then use apply_cut_flag (cut can be toggled elsewhere based on flags)
+        # Select TOAs to cut, then use apply_cut_flag.
         if 'mjd-start' in valid_valued:
             start_select = (toas.get_mjds() < self.get_mjd_start()) # cut toas before mjd-start
             apply_cut_flag(toas,start_select,'mjdstart')
