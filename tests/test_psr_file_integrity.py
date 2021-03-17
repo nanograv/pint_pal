@@ -2,7 +2,7 @@ from os.path import join, exists
 from glob import glob
 import yaml
 
-if __name__ == '__main__':
+def test_psr_file_integrity():
     bad_yamls = {}
     results = {p:[] for p in glob("results/*.par")}
     bad_results = {}
