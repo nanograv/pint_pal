@@ -862,7 +862,7 @@ def apply_cut_select(toas,reason='???'):
     reason [string]: String 
     """
     cutselect = np.array([(not c) for c in toas.get_flag_value('cut')[0]])
-    if sum(cutselect) == toas.ntoas:
+    if sum(cutselect) != toas.ntoas:
         log.info(f"Selecting {sum(cutselect)} TOAs out of {toas.ntoas} ({sum(np.logical_not(cutselect))} removed based on {reason}).")
         toas.select(cutselect)
     else:
