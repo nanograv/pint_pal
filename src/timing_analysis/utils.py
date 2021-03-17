@@ -9,7 +9,7 @@ import pint.models.parameter
 from pint.models import get_model
 import os
 import time
-from subprocess import check_output, check_call
+from subprocess import check_output, check_call, CalledProcessError
 import glob
 # Import some software so we have appropriate versions
 import pint
@@ -486,8 +486,11 @@ def pdf_writer(fitter, parfile, rs_dict, Ftest_dict, dm_dict = None, append=None
     label = f"{psr} {'narrowband' if NB else 'wideband'}"
     # Write beginning header info
     fsum.write(r'\section*{PSR ' + label + '\markboth{' + label + '}{}}\n')
-
-    who = check_output(['git','config','--get','user.name'], text=True).strip()
+    
+    try:
+        who = check_output(['git','config','--get','user.name'], text=True).strip()
+    except CalledProcessError:
+        who = "anonymous user"
     when = time.strftime("%Y %b %d (%a) %H:%M:%S GMT", time.gmtime())
     fsum.write(f'Summary generated on {when} by {who}' + r'\\' + '\n')
     # print par file
