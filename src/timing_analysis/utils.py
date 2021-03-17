@@ -853,13 +853,17 @@ def apply_cut_flag(toas, selection, flagvalue, warn=False):
         elif cuts[i] is not None and warn:
             log.warning(f'Skipping TOA {names[i]} (chan {chans[i]}, subint {subints[i]}) already cut: {cuts[i]}.')
 
-def apply_cut_select(toas):
+def apply_cut_select(toas,reason='???'):
     """Apply toa selection based on cut flags present.
 
     Inputs:
     ----------
     toas [pint.TOA]: PINT TOA object
+    reason [string]: String 
     """
     cutselect = np.array([(not c) for c in toas.get_flag_value('cut')[0]])
-    log.info(f"Selecting {sum(cutselect)} TOAs out of {toas.ntoas} ({sum(np.logical_not(cutselect))} removed).")
-    toas.select(cutselect)
+    if sum(cutselect) == toas.ntoas:
+        log.info(f"Selecting {sum(cutselect)} TOAs out of {toas.ntoas} ({sum(np.logical_not(cutselect))} removed based on {reason}).")
+        toas.select(cutselect)
+    else:
+        pass

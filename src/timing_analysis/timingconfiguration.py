@@ -15,7 +15,7 @@ import numpy as np
 import astropy.units as u
 from astropy import log
 import yaml
-from timing_analysis.utils import write_if_changed, apply_cut_flag
+from timing_analysis.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from timing_analysis.defaults import *
 
 class TimingConfiguration:
@@ -97,6 +97,7 @@ class TimingConfiguration:
 
         # Add 'cut' flags to TOAs according to config 'ignore' block.
         t = self.apply_ignore(t)
+        apply_cut_select(t,reason='configuration ignore block')
 
         # To facilitate TOA excision, frontend/backend info
         febe_pairs = set(t.get_flag_value('f')[0])

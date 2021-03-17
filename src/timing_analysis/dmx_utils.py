@@ -1,5 +1,6 @@
 import numpy as np
 from astropy import log
+from timing_analysis.utils import apply_cut_flag, apply_cut_select
 
 class DMXParameter:
     """
@@ -748,9 +749,13 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
             quiet=quiet)
     itoas, iranges = check_frequency_ratio(toas, dmx_ranges,
             frequency_ratio=frequency_ratio, quiet=quiet)
-    msg = f"Selecting {len(itoas)} TOAs out of {toas.ntoas} ({toas.ntoas - len(itoas)} removed) based on the frequency ratio check."
-    log.info(msg)
-    toas, dmx_ranges = toas[itoas], np.array(dmx_ranges)[iranges]
+
+    fratio_select = np.ones(len(toas),dtype=bool)
+    fratio_select[itoas] = False
+    apply_cut_flag(toas,fratio_select,'dmx') 
+    apply_cut_select(toas,reason='frequency ratio check')
+
+    dmx_ranges = np.array(dmx_ranges)[iranges]
     dmx_ranges = list(map(tuple, dmx_ranges))
 
     # Sort the ranges
