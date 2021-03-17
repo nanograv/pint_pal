@@ -833,3 +833,22 @@ def write_if_changed(filename, contents):
             return
     with open(filename, "w") as f:
         f.write(contents)
+
+def apply_cut_flag(toas, selection, flagvalue, warn=False):
+    """Apply appropriate cut flag to a selection of toas.
+
+    Inputs:
+    ----------
+    toas [pint.TOA]: PINT TOA object
+    selection [bool]: Boolean array, True designates TOAs to cut
+    flagvalue [string]: String to apply to TOA line
+    """
+    names = toas.get_flag_value('name')[0]
+    chans = toas.get_flag_value('chan')[0]
+    subints = toas.get_flag_value('subint')[0]
+    cuts = toas.get_flag_value('cut')[0]
+    for i,s in enumerate(selection):
+        if s and (not cuts[i]):
+            toas.table['flags'][i]['cut'] = flagvalue
+        elif cuts[i] is not None and warn:
+            log.warning(f'Skipping TOA {names[i]} (chan {chans[i]}, subint {subints[i]}) already cut: {cuts[i]}.')
