@@ -95,7 +95,7 @@ class TimingConfiguration:
         if self.get_toa_type() == "NB":
             self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
 
-        # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
+        # Add 'cut' flags to TOAs according to config 'ignore' block.
         t = self.apply_ignore(t)
 
         # To facilitate TOA excision, frontend/backend info
@@ -376,7 +376,5 @@ class TimingConfiguration:
                     bt_select = (name_match * subint_match)
                 selection += bt_select
             apply_cut_flag(toas,selection,'badtoa')
-
-        #log.info(f"Selecting {sum(selection)} TOAs out of {toas.ntoas} ({sum(np.logical_not(selection))} removed) based on the 'ignore' configuration block.")
 
         return toas
