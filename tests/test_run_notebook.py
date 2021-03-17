@@ -33,6 +33,9 @@ def notebook_code():
                 # Skip full-line comments and IPython magics
                 if line.startswith('#') or line.startswith('%'):
                     continue
+                # Don't try to get info about user's git configuration
+                if line.startswith('git_config_info()'):
+                    continue
                 code_lines.append(line)
             code_blocks.append('\n'.join(code_lines))
     return code_blocks
