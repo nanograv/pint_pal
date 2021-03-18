@@ -83,7 +83,7 @@ def test_run_notebook(notebook_code, config_file, log_paths, suppress_errors=Fal
                 code_block = code_block.replace('config/[psr_name].[nb or wb].yaml', config_file)
                 code_block = code_block.replace(
                     'par_directory = None',
-                    f'par_directory = {join(base_dir, 'results')}',
+                    f'par_directory = {join(base_dir, "results")}',
                 )
                 exec(code_block)
 
