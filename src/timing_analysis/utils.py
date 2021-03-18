@@ -862,8 +862,19 @@ def apply_cut_select(toas,reason='???'):
     reason [string]: String 
     """
     cutselect = np.array([(not c) for c in toas.get_flag_value('cut')[0]])
+    if 'ignore' in reason:
+        fout = 'ignore_cut.tim'
+    elif 'ratio' in reason:
+        fout = 'dmx_cut.tim'
+    else:
+        fout = 'other_cut.tim'
+
     if sum(cutselect) != toas.ntoas:
-        log.info(f"Selecting {sum(cutselect)} TOAs out of {toas.ntoas} ({sum(np.logical_not(cutselect))} removed based on {reason}).")
+        cut = np.logical_not(cutselect)
+        cut_toas = toas[cut]
+        cut_toas.write_TOA_file(fout, format='tempo2')
+
+        log.info(f"Selecting {sum(cutselect)} TOAs out of {toas.ntoas} ({sum(cut)} removed based on {reason}).")
         toas.select(cutselect)
     else:
         pass
