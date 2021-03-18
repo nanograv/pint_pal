@@ -63,6 +63,32 @@ def write_tim(fitter,toatype='',addext='',outfile=None):
             outfile = f'{source}_PINT_{date_str}{addext}.tim'
 
     fitter.toas.write_TOA_file(outfile, format='tempo2')
+    add_cut_tims(outfile)
+
+def add_cut_tims(timfile):
+    """Temporary cludge to add cut TOAs back into output tim file (with cut flags).
+
+    Parameters
+    ==========
+    timfile: str
+        tim file to extend with commented TOAs including -cut flags
+    """
+    from glob import glob
+    import subprocess
+
+    cut_tims = glob('*cut.tim')
+    commented_lines = []
+    for ct in cut_tims:
+        with open(ct,'r') as f: commented_lines.extend(f.readlines())
+    
+    commented_lines = [cl for cl in commented_lines if '-cut' in cl]  # remove unnecessary FORMAT lines
+
+    with open(timfile,'a+') as f:
+        for line in commented_lines:
+            f.write(f'C {line}')
+
+    for f in cut_tims:
+        subprocess.run(['rm',f])
 
 def write_include_tim(source,tim_file_list):
     """Writes file listing tim files to load as one PINT toa object (using INCLUDE).
