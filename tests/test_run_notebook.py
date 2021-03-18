@@ -85,6 +85,10 @@ def test_run_notebook(notebook_code, config_file, log_paths, suppress_errors=Fal
                     'par_directory = None',
                     f'par_directory = "{join(base_dir, "results")}"',
                 )
+                code_block = code_block.replace(
+                    'use_existing_noise_dir = False',
+                    'use_existing_noise_dir = True',
+                )
                 exec(code_block)
 
             with open(global_log, 'a') as f:
