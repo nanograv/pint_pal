@@ -80,9 +80,10 @@ def test_run_notebook(notebook_code, config_file, log_paths, suppress_errors=Fal
             # Execute notebook contents
             for code_block in notebook_code:
                 # Fill in the name of the config file
+                code_block = code_block.replace('config/[psr_name].[nb or wb].yaml', config_file)
                 code_block = code_block.replace(
-                    '"configs/[filename].yaml"',
-                    f'"{config_file}", par_directory="{join(base_dir, "results")}"'
+                    'par_directory = None',
+                    f'par_directory = "{join(base_dir, "results")}"',
                 )
                 exec(code_block)
 
