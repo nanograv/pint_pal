@@ -38,9 +38,9 @@ colorschemes = {'thankful_2':{
               "Rcvr_800_GUPPI":  "#61C853",
               "S-wide_ASP":      "#855CA0",
               "S-wide_PUPPI":    "#855CA0",
-              "1.5GHz_YUPPI":    "#000000",
-              "3GHz_YUPPI":      "#000000",
-              "6GHz_YUPPI":      "#000000",
+              "1.5GHz_YUPPI":    "#45062E",
+              "3GHz_YUPPI":      "#E5A4CB",
+              "6GHz_YUPPI":      "#40635F",
 
               }}
 # marker dictionary to be used if desired, currently all 'x'
