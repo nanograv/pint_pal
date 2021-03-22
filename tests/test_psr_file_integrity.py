@@ -3,6 +3,8 @@ from glob import glob
 import yaml
 import pytest
 
+yamls = sorted(glob("configs/[BJ]*.yaml"))
+
 @pytest.fixture(scope="module")
 def find_bad():
     bad_yamls = {}
@@ -51,4 +53,14 @@ def test_par_files_not_shared(find_bad):
     wrong_number = {r:l for r,l in results.items() if len(l)!=1}
     if wrong_number:
         raise ValueError(f"Some par files are referenced by no or more than one config yaml: {wrong_number}")
+
+@pytest.mark.parametrize("config", yamls)
+def test_name(config):
+    with open(config) as f:
+        y = yaml.load(f, Loader=yaml.FullLoader)
+    source = y["source"]
+    assert source[0] in "BJ"
+    toa_type = y["toa-type"].lower()
+    assert toa_type in {"wb", "nb"}
+    assert config == f"configs/{source}.{toa_type}.yaml"
 
