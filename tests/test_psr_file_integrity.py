@@ -52,6 +52,8 @@ def test_results_all_used(result_par, find_bad):
 @pytest.mark.parametrize("result_par", results)
 def test_result_not_shared(result_par, find_bad):
     _, _, _, configs = find_bad
+    if result_par in {"results/J1705-1903_PINT_20201102.par"}:
+        pytest.xfail("This pulsar hasn't been timed yet as it has problems.")
     assert len(configs[result_par])<=1
 
 @pytest.mark.parametrize("config", yamls)
