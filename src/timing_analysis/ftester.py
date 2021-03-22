@@ -219,7 +219,7 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
         and within each of those, further nested dictionaries of parameters [e.g. 'PX'], and the reported values.
     """
     # Check if fitter is wideband or not
-    if "Wideband" in fitter.__class__.__name__:
+    if fitter.is_wideband:
         NB = False
     #    resids = fitter.resids.residual_objs['toa']
     #    dm_resids = fitter.resids.residual_objs['dm']
@@ -406,7 +406,7 @@ def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
     retdict [dictionary]: Returns the dictionary output from the F-tests.
     """
     # Print how many FD currently enabled
-    cur_fd = [param for param in fitter.model.params if "FD" in param]
+    cur_fd = [param for param in fitter.model.free_params if "FD" in param]
     if remove:
         print("Testing removing FD terms (", cur_fd, "enabled):")
     else:

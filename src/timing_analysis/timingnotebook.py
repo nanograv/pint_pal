@@ -123,7 +123,10 @@ class TimingNotebook:
         from astropy.visualization import quantity_support
         quantity_support()
 
-        %matplotlib notebook\
+        # notebook gives interactive plots but not until the kernel is done
+        %matplotlib notebook
+        # inline gives non-interactive plots right away
+        #%matplotlib inline\
         ''')
         self.add_code_cell_skip('''\
         log.setLevel("INFO") # Set desired verbosity of log statements (DEBUG/INFO/WARNING/ERROR)
@@ -152,7 +155,7 @@ class TimingNotebook:
             self.add_code_cell(f'''\
             tc = TimingConfiguration({filename}, tim_directory={tim_directory}, par_directory={par_directory})
 
-            using_wideband = tc.get_fitter() == 'WidebandTOAFitter'
+            using_wideband = tc.get_toa_type() == 'WB'
             mo,to = tc.get_model_and_toas()\
             ''')
         else:
@@ -176,7 +179,7 @@ class TimingNotebook:
         add_feJumps(mo,receivers)
         if using_wideband:
             add_feDMJumps(mo,receivers)
-        check_jumps(mo,receivers,fitter_type=tc.get_fitter())\
+        check_jumps(mo,receivers,toa_type=tc.get_toa_type())\
         ''')
         self.add_markdown_cell_skip('''\
         Compute pulse numbers; this ensures that parameter changes made in the model will not break phase connection.\
@@ -210,8 +213,9 @@ class TimingNotebook:
             ''')
             self.add_code_cell('''\
             fo.model.free_params = tc.get_free_params(fo)
-            check_fit(fo,skip_check=tc.skip_check)
-
+            check_fit(fo,skip_check=tc.skip_check)\
+            ''')
+            self.add_code_cell('''\
             fo.fit_toas()
             plot_residuals_time(fo, restype='postfit')
             if mo.is_binary:
@@ -219,7 +223,21 @@ class TimingNotebook:
             if using_wideband:
                 plot_dm_residuals(fo, restype='postfit')
 
-            fo.print_summary()\
+            fo.print_summary()
+            
+            chi2_decrease = fo.resids_init.chi2-fo.resids.chi2
+            print(f"chi-squared decreased during fit by {chi2_decrease}")
+            if hasattr(fo, "converged") and fo.converged:
+                print("Fitter has converged")
+            else:
+                if abs(chi2_decrease)<0.01:
+                    print("Fitter has probably converged")
+                elif chi2_decrease<0:
+                    log.warning("Fitter has increased chi2!")
+                else:
+                    log.warning("Fitter may not have converged")
+            if chi2_decrease > 0.01:
+                log.warning("Input par file is not fully fitted")\
             ''')
             self.add_code_cell(f'''\
             write_prenoise = {write}
@@ -328,7 +346,7 @@ class TimingNotebook:
             rs_dict, dm_dict = resid_stats(fo, whitened = True, dm_stats = True, print_pretty = True)\
         ''')
         self.add_markdown_cell_skip('''\
-        Run F-tests to check significance of existing/new parameters; `alpha` is the F-statistic required for a parameter to be marked as significant. This cell may take 5-10 minutes to run.\
+        Run F-tests to check significance of existing/new parameters; `alpha` is the p-value threshold for rejecting the null hypothesis that a parameter is not significant. This cell may take 5-10 minutes to run.\
         ''',autorun)
         self.add_code_cell('''\
         savedLevel = log.getEffectiveLevel()

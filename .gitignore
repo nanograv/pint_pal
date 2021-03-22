@@ -8,8 +8,9 @@ build/
 dist/
 *.egg-info/
 
-# Jupyter Notebook
+# Jupyter Notebook (initial / means only in this directory)
 .ipynb_checkpoints
+/*.ipynb
 
 # editor save files
 *~
@@ -21,3 +22,21 @@ logs/
 # Temporary pickle files and .tim files
 *.tim
 *.tim.pickle.gz
+temp/
+
+# other tex files
+*.tex
+*.aux
+
+# intermediate summary pngs and summary pdfs
+/*summary_plot*.png
+/*.pdf
+
+# stray stuff
+core.*
+
+# intermediate files not to be checked in
+/*.par
+/*.tim
+*.pickle.gz
+/*.out
