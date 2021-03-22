@@ -4,6 +4,7 @@ import yaml
 import pytest
 
 yamls = sorted(glob("configs/[BJ]*.yaml"))
+results = sorted(glob("results/*.par"))
 
 @pytest.fixture(scope="module")
 def find_bad():
@@ -33,27 +34,6 @@ def find_bad():
 
     return bad_yamls, bad_results, bad_comparisons, results
 
-def test_yaml_ok(find_bad):
-    bad_yamls, _, _, _ = find_bad
-    if bad_yamls:
-        raise ValueError(f"Some yamls do not parse correctly: {bad_yamls}")
-
-def test_par_files_exist(find_bad):
-    _, bad_results, _, _ = find_bad
-    if bad_results:
-        raise ValueError(f"Some par files are referenced but do not exist: {bad_results}")
-
-def test_compare_par_files_exist(find_bad):
-    _, _, bad_comparisons, _ = find_bad
-    if bad_comparisons:
-        raise ValueError(f"Some comparison par files are referenced but do not exist: {bad_comparisons}")
-
-def test_par_files_not_shared(find_bad):
-    _, _, _, results = find_bad
-    wrong_number = {r:l for r,l in results.items() if len(l)!=1}
-    if wrong_number:
-        raise ValueError(f"Some par files are referenced by no or more than one config yaml: {wrong_number}")
-
 @pytest.mark.parametrize("config", yamls)
 def test_name(config):
     with open(config) as f:
@@ -64,3 +44,25 @@ def test_name(config):
     assert toa_type in {"wb", "nb"}
     assert config == f"configs/{source}.{toa_type}.yaml"
 
+@pytest.mark.parametrize("result_par", results)
+def test_results_all_used(result_par, find_bad):
+    _, _, _, configs = find_bad
+    assert configs[result_par]
+
+@pytest.mark.parametrize("result_par", results)
+def test_result_not_shared(result_par, find_bad):
+    _, _, _, configs = find_bad
+    assert len(configs[result_par])<=1
+
+@pytest.mark.parametrize("config", yamls)
+def test_par_exists(config):
+    with open(config) as f:
+        y = yaml.load(f, Loader=yaml.FullLoader)
+    assert exists(join("results", y["timing-model"]))
+
+@pytest.mark.parametrize("config", yamls)
+def test_comparison_par(config):
+    with open(config) as f:
+        y = yaml.load(f, Loader=yaml.FullLoader)
+    assert y["compare-model"] is not None
+    assert exists(join("results", y["compare-model"]))
