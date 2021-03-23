@@ -775,8 +775,8 @@ def pdf_writer(fitter,
         fsum.write("Noise chains not available.\\\\\n")
     else:
         any_bogus = False
-        fsum.write(r"\begin{tabular}{l c c c}" + "\n")
-        fsum.write(r"Parameter & par value & chain value & ratio\\" + "\n")
+        fsum.write(r"\begin{tabular}{l c c c c}" + "\n")
+        fsum.write(r"Parameter & par value & chain value & ratio & TOA median\\" + "\n")
         for p in sorted(model.params):
             pm = getattr(model, p)
             for pfx in ["EQUAD", "ECORR", "EFAC", "DMEQUAD", "DMECORR", "TN"]: 
@@ -800,7 +800,15 @@ def pdf_writer(fitter,
                     name = f"{p} {pm.key} {pm.key_value[0] if pm.key_value else pm.key_value}"
                 else:
                     name = p
-                fsum.write(f"{verb(name)} & {pm.value:.3g} {pm.units} & {pm_noise_value} & {r}" + "\\\\\n")
+                if p.startswith("DMEQUAD"):
+                    unc = np.median(fitter.toas.get_dm_errors().to_value(pint.dmu)[pm.select_toa_mask(fitter.toas)])
+                    median = f"{unc:.3g} {pm.units}"
+                elif p.startswith("EQUAD") or p.startswith("ECORR"):
+                    unc = np.median(fitter.toas.table["error"][pm.select_toa_mask(fitter.toas)])
+                    median = f"{unc:.3g} {pm.units}"
+                else:
+                    median = ""
+                fsum.write(f"{verb(name)} & {pm.value:.3g} {pm.units} & {pm_noise_value} & {r} & {median}" + "\\\\\n")
         fsum.write(r"\end{tabular}\\" + "\n")
         if any_bogus:
             fsum.write("Some noise parameters (marked in bold) appear to be different "
@@ -885,7 +893,6 @@ def pdf_writer(fitter,
             fsum.write(r"}" + "\n")
             fsum.write("\n")
         
-    
     # Write out software versions used
     fsum.write(r'\subsection*{Software versions used in Analysis:}' + '\n')
     fsum.write('PINT: %s\\\\\n' % (pint.__version__))
