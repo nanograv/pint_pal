@@ -10,19 +10,11 @@ from timing_analysis.notebook_templater import transform_notebook
 base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 ansi_color = re.compile(r'\x1b\[([0-9]{1,3};)*[0-9]{1,3}m')
 
-def run_notebook(template_nb, output_nb, log_file, err_file, workdir=base_dir, color_err=False, transformations=None):
+def run_notebook(template_nb, output_nb, err_file, workdir=base_dir, color_err=False, transformations=None):
     with open(template_nb) as f:
         nb = nbformat.read(f, as_version=4)
     if transformations is not None:
         n_subs = transform_notebook(nb, transformations)
-    
-    for cell in nb['cells']:
-        if 'tags' in cell['metadata'] and 'logging' in cell['metadata']['tags']:
-            cell['source'] = f'''
-            log.setLevel("INFO")
-            log.log_to_file("{log_file}")
-            '''
-            cell['source'] = textwrap.dedent(cell['source']).strip()
     
     ep = ExecutePreprocessor()
     try:
