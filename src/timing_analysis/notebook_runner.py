@@ -16,7 +16,7 @@ def run_notebook(template_nb, output_nb, err_file=None, workdir=base_dir, color_
     if transformations is not None:
         n_subs = transform_notebook(nb, transformations)
     
-    ep = ExecutePreprocessor()
+    ep = ExecutePreprocessor(timeout=0)
     try:
         ep.preprocess(nb, {'metadata': {'path': workdir}})
     except CellExecutionError as err:
