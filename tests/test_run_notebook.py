@@ -58,7 +58,7 @@ def test_run_notebook(config_file, output_dir, suppress_errors=False):
 
     try:
         run_notebook(
-            join(base_dir, 'nb_templates/process_v0.7.ipynb'),
+            join(base_dir, 'nb_templates/process_v0.9.ipynb'),
             output_nb,
             err_file = err_file,
             workdir = cfg_dir,
