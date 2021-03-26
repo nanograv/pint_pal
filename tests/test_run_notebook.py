@@ -58,7 +58,7 @@ def test_run_notebook(config_file, output_dir, suppress_errors=False):
 
     try:
         run_notebook(
-            join(base_dir, 'nb_templates/process_v0.9.ipynb'),
+            join(base_dir, 'nb_templates/process_v0.7.ipynb'),
             output_nb,
             err_file = err_file,
             workdir = cfg_dir,
@@ -68,5 +68,8 @@ def test_run_notebook(config_file, output_dir, suppress_errors=False):
             print(f"{cfg_name}: success!", file=f)
     except Exception as err:
         with open(global_log, 'a') as f:
-            print(f"{cfg_name}: failure - {err.ename}", file=f)
+            if hasattr(err, ename):
+                print(f"{cfg_name}: failure - {err.ename}", file=f)
+            else:
+                print(f"{cfg_name}: failure - {err}", file=f)
         raise err
