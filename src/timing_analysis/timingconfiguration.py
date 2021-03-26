@@ -15,7 +15,7 @@ import numpy as np
 import astropy.units as u
 from astropy import log
 import yaml
-from timing_analysis.utils import write_if_changed
+from timing_analysis.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from timing_analysis.defaults import *
 
 class TimingConfiguration:
@@ -95,8 +95,9 @@ class TimingConfiguration:
         if self.get_toa_type() == "NB":
             self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
 
-        # Excise TOAs according to config 'ignore' block. Hard-coded for now...?
+        # Add 'cut' flags to TOAs according to config 'ignore' block.
         t = self.apply_ignore(t)
+        apply_cut_select(t,reason='configuration ignore block')
 
         # To facilitate TOA excision, frontend/backend info
         febe_pairs = set(t.get_flag_value('f')[0])
@@ -139,13 +140,7 @@ class TimingConfiguration:
         """ Return the fitter, tracking pulse numbers if available """
         fitter_name = self.config['fitter']
         fitter_class = getattr(pint.fitter, fitter_name)
-        if 'pulse_number' in to.table.columns:
-            if fitter_name.startswith("Wideband"):
-                return fitter_class(to, mo, additional_args=dict(toa=dict(track_mode="use_pulse_numbers")))
-            else:
-                return fitter_class(to, mo, track_mode="use_pulse_numbers")
-        else:
-            return fitter_class(to, mo)
+        return fitter_class(to, mo)
 
 
     def get_toa_type(self):
@@ -333,18 +328,17 @@ class TimingConfiguration:
         if len(valid_valued):
             log.info(f'Valid TOA excision keys in use: {valid_valued}')
 
-        selection = np.ones(len(toas),dtype=bool)
-
         # All info here about selecting various TOAs.
+        # Select TOAs to cut, then use apply_cut_flag.
         if 'mjd-start' in valid_valued:
-            start_select = (toas.get_mjds() > self.get_mjd_start())
-            selection &= start_select
+            start_select = (toas.get_mjds() < self.get_mjd_start()) # cut toas before mjd-start
+            apply_cut_flag(toas,start_select,'mjdstart')
         if 'mjd-end' in valid_valued:
-            end_select = (toas.get_mjds() < self.get_mjd_end())
-            selection &= end_select
+            end_select = (toas.get_mjds() > self.get_mjd_end()) # cut toas after mjd-end
+            apply_cut_flag(toas,end_select,'mjdend')
         if 'snr-cut' in valid_valued:
-            snr_select = ((np.array(toas.get_flag_value('snr')) > self.get_snr_cut())[0])
-            selection &= snr_select
+            snr_select = ((np.array(toas.get_flag_value('snr')) < self.get_snr_cut())[0]) # cut toas below snr-cut
+            apply_cut_flag(toas,snr_select,'snr')
             if self.get_snr_cut() > 8.0 and self.get_toa_type() == 'NB':
                 log.warning('snr-cut should be set to 8; try excising TOAs using other methods.')
             if self.get_snr_cut() > 25.0 and self.get_toa_type() == 'WB':
@@ -355,8 +349,8 @@ class TimingConfiguration:
             pass
         if 'bad-epoch' in valid_valued:
             for be in self.get_bad_epochs():
-                be_select = np.array([(be not in n) for n in toas.get_flag_value('name')[0]])
-                selection *= be_select
+                be_select = np.array([(be in n) for n in toas.get_flag_value('name')[0]])
+                apply_cut_flag(toas,be_select,'badepoch')
         if 'bad-range' in valid_valued:
             for br in self.get_bad_ranges():
                 min_crit = (toas.get_mjds() > br[0]*u.d)
@@ -366,20 +360,20 @@ class TimingConfiguration:
                 if len(br) > 2:
                     be_select = np.array([(be == br[2]) for be in toas.get_flag_value('be')[0]])
                     br_select *= be_select
-                selection *= (~br_select)
+                apply_cut_flag(toas,br_select,'badrange')
         if 'bad-toa' in valid_valued:
+            selection = np.zeros(len(toas),dtype=bool)
             for bt in self.get_bad_toas():
                 name,chan,subint = bt
                 name_match = np.array([(n == name) for n in toas.get_flag_value('name')[0]])
                 chan_match = np.array([(ch == chan) for ch in toas.get_flag_value('chan')[0]])
                 subint_match = np.array([(si == subint) for si in toas.get_flag_value('subint')[0]])
                 if self.get_toa_type() == 'NB':
-                    bt_select = np.invert(name_match * subint_match * chan_match)
+                    bt_select = (name_match * subint_match * chan_match)
                 else:
                     # don't match based on -chan flags, since WB TOAs don't have them
-                    bt_select = np.invert(name_match * subint_match)
-                selection &= bt_select
+                    bt_select = (name_match * subint_match)
+                selection += bt_select
+            apply_cut_flag(toas,selection,'badtoa')
 
-        log.info(f"Selecting {sum(selection)} TOAs out of {toas.ntoas} ({sum(np.logical_not(selection))} removed) based on the 'ignore' configuration block.")
-
-        return toas[selection]
+        return toas

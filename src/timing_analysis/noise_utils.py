@@ -359,13 +359,14 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
         corner.corner(chain[burn:, :-4], labels = pars)
 
         if '_wb' in chaindir:
-            figname = f"./{psr_name}_noise_corner.wb.pdf"
+            figname = f"./{psr_name}_noise_corner_wb.pdf"
         elif '_nb' in chaindir:
-            figname = f"./{psr_name}_noise_corner.nb.pdf"
+            figname = f"./{psr_name}_noise_corner_nb.pdf"
         else:
             figname = f"./{psr_name}_noise_corner.pdf"
 
         pl.savefig(figname)
+        pl.savefig(figname.replace(".pdf",".png"), dpi=300)
 
         pl.show()
 

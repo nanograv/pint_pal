@@ -10,8 +10,8 @@ toas:
 free-params: [ELONG, ELAT, PMELONG, PMELAT, PX, F0, F1, A1, PB, T0, E, OM, JUMP1]  # parameters not included here will be frozen
 free-dmx: Yes
 toa-type: NB
-fitter: GLSFitter
-n-iterations: 1
+fitter: DownhillGLSFitter
+n-iterations: 20
 ephem: DE440
 bipm: BIPM2019
 
