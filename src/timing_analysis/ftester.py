@@ -199,7 +199,7 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
         if 'FB' in fk:
             try:
                 fbmax = (int(max(Ftest_dict[fk].keys())[-1]))
-            except:
+            except IndexError:
                 fbmax = (int(max(Ftest_dict[fk].keys())[-2]))
             fblist = get_fblist(fitter)
             fbused = (len(fblist)>0)
