@@ -68,7 +68,7 @@ def test_run_notebook(config_file, output_dir, suppress_errors=False):
             print(f"{cfg_name}: success!", file=f)
     except Exception as err:
         with open(global_log, 'a') as f:
-            if hasattr(err, ename):
+            if hasattr(err, 'ename'):
                 print(f"{cfg_name}: failure - {err.ename}", file=f)
             else:
                 print(f"{cfg_name}: failure - {err}", file=f)
