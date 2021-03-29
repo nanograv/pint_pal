@@ -7,6 +7,7 @@ from datetime import date
 import yaml
 import os
 import timing_analysis.par_checker as pc
+from ipywidgets import widgets
 
 # Read tim/par files
 import pint.toa as toa
@@ -438,3 +439,15 @@ def new_changelog_entry(tag, note):
             now = datetime.now()
             date = now.strftime('%Y-%m-%d')
             print(f'  - \'{date} {username} {tag}: {note}\'')
+
+def display_excise_checkbox(obs_list):
+    # Strip full path to just .zap file:
+    short_names = []
+    for i in obs_list:
+        sn = i.split('/')[-1]
+        short_names.append(sn)
+    # Define checkboxes and print short names with them
+    checkboxes = [widgets.Checkbox(value=False,description=label,indent=False) for label in short_names]
+    output = widgets.VBox(children=checkboxes)
+    display(output)
+    return checkboxes

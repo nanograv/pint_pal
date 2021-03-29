@@ -8,11 +8,13 @@ Very basic usage:
 """
 import io
 import os
+import glob
 import pint.toa as toa
 import pint.models as model
 import pint.fitter
 import numpy as np
 import astropy.units as u
+from astropy.time import Time
 from astropy import log
 import yaml
 from timing_analysis.utils import write_if_changed, apply_cut_flag, apply_cut_select
@@ -190,6 +192,37 @@ class TimingConfiguration:
         if 'bad-toa' in self.config['ignore'].keys():
             return self.config['ignore']['bad-toa']
         return None
+
+    def get_investigation_info(self, path_base='/nanograv/timing/data/'):
+        """ Makes a list from which the timer can choose which epochs they'd like to manually inspect
+        Parameters
+        ----------
+        path_base: str
+            The basename for the path to raw data
+        """
+        investigation_list = []
+        #if 'bad-toa' in self.config['ignore'].keys():
+        # LET'S JUST WORRY ABOUT EPOCHS TO START
+        
+        if 'bad-epoch' in self.config['ignore'].keys():
+            for be in self.config['ignore']['bad-epoch']:
+                check_exist = []
+                short_list = []
+                # strip bad-epoch entry for info
+                bknd, mjdyr, psr_name = be.split('_')
+                # need year from MJD in bad-epoch
+                t = Time(float(mjdyr),format='mjd').byear
+                # craft the path name using the base provided and other info from bad-epoch, append to list
+                pathnm = '%s%s/%s/%s/processed/*%s*.zap' % (path_base, psr_name[1:], bknd, int(np.floor(t)), mjdyr)
+                check_exist = glob.glob(pathnm)
+                # must check for overlapping backends
+                if len(check_exist) == 0:
+                    print('Couldn\'t find anything for %s' % (be))
+                else:
+                    #print(check_exist)
+                    investigation_list.append(check_exist)
+
+        return investigation_list
 
     def check_for_bad_epochs(self, toas, threshold=0.9, print_all=False):
         """Check the bad-toas entries for epochs where more than a given
