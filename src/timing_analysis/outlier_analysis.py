@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numdifftools as nd
 import corner
 
-# Non-traditional packages
+# PINT/enterprise (pta-outlier) imports
 import pint.toa as toa
 import pint.models as model
 from enterprise.pulsar import PintPulsar
@@ -17,14 +17,18 @@ from enterprise.pulsar import PintPulsar
 import interval as itvl
 from nutstrajectory import nuts6
 
+# Epochalyptica imports
+import pint
+import pint.toa
+import pint.fitter
+import pint.models.model_builder as mb
+import copy
+from scipy.special import fdtr
+
 # Joanna's imports (should be able to clean this up quite a bit)
-import numpy as np
-import glob
 import matplotlib
-import matplotlib.pyplot as plt
 from matplotlib.ticker import NullFormatter
 import scipy.linalg as sl
-import os
 import time
 import enterprise
 from enterprise.pulsar import Pulsar
@@ -38,7 +42,6 @@ from enterprise.signals import gp_signals
 from enterprise.signals import deterministic_signals
 #import libstempo as T (commented out, because ?!?!)
 from enterprise.signals.selections import Selection
-import sys 
 import scipy.linalg as sl, scipy.stats, scipy.special
 import corner
 from PTMCMCSampler.PTMCMCSampler import PTSampler as ptmcmc
@@ -629,3 +632,207 @@ class Gibbs(object):
         np.savetxt('{}/poutchain.txt'.format(outdir), gibbs.poutchain)
         np.savetxt('{}/thetachain.txt'.format(outdir), gibbs.thetachain)
         np.savetxt('{}/alphachain.txt'.format(outdir),gibbs.alphachain)
+
+
+# Some sort of description?
+class epoch:
+    receiver = ""
+    filename = ""
+    mjdlist = []
+    ftestlist = []
+    dailyres = []
+    def __init__(self,rec,filename):
+        self.receiver = rec
+        self.filename = filename
+        self.mjdlist = []
+        self.ftestlist = []
+        self.dailyres = []
+
+def Ftest(chi2_1, dof_1, chi2_2, dof_2):
+    """
+    Ftest(chi2_1, dof_1, chi2_2, dof_2):
+        Compute an F-test to see if a model with extra parameters is
+        significant compared to a simpler model.  The input values are the
+        (non-reduced) chi^2 values and the numbers of DOF for '1' the
+        original model and '2' for the new model (with more fit params).
+        The probability is computed exactly like Sherpa's F-test routine
+        (in Ciao) and is also described in the Wikipedia article on the
+        F-test:  http://en.wikipedia.org/wiki/F-test
+        The returned value is the probability that the improvement in
+        chi2 is due to chance (i.e. a low probability means that the
+        new fit is quantitatively better, while a value near 1 means
+        that the new model should likely be rejected).
+        If the new model has a higher chi^2 than the original model,
+        returns value of False
+    """
+    delta_chi2 = chi2_1 - chi2_2
+    if delta_chi2 > 0:
+      delta_dof = dof_1 - dof_2
+      new_redchi2 = chi2_2 / dof_2
+      F = (delta_chi2 / delta_dof) / new_redchi2
+      ft = 1.0 - fdtr(delta_dof, dof_2, F)
+    else:
+      ft = False
+    return ft
+
+def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
+    """ This does things
+
+    Parameters:
+    ===========
+
+    Returns:
+    ========
+
+    """
+    f = pint.fitter.GLSFitter(toas,model_i)
+    chi2_init = f.fit_toas()
+    ndof_init = pint.residuals.resids(toas,model_i).dof
+    ntoas_init = toas.ntoas
+    redchi2_init = chi2_init / ndof_init
+    #print(chi2_init,ndof_init)
+
+    #simplify
+    filenames = []
+    flags = toas.get_flags()
+    for toaflag in flags:
+        filenames.append(toaflag['name'])
+
+    fout = open(outfile,'w')
+    numepochs = len(set(filenames))
+    for filename in set(filenames):
+        maskarray = np.ones(len(filenames),dtype=bool)
+        receiver = None
+        mjd = None
+        toaval = None
+        dmxindex = None
+        dmxlower = None
+        dmxupper = None
+        sum = 0.0
+        for index,t in enumerate(toas.table):
+            if t[6]['name'] == filename:
+                if receiver == None:
+                    receiver = f'{str(t[6]['be'])}_{str(t[6]['fe'])}' # isn't this just the -f flag?
+                if mjd == None:
+                    mjd = int(t[1].value)
+                if toaval == None:
+                    toaval = t[2]
+                    i = 1
+                    while dmxindex == None:
+                        DMXval = f"DMXR1_{i:04d}"
+                        lowerbound = getattr(model_i.components['DispersionDMX'],DMXval).value
+                        DMXval = f"DMXR2_{i:04d}"
+                        upperbound = getattr(model_i.components['DispersionDMX'],DMXval).value
+                        if toaval > lowerbound and toaval < upperbound:
+                            dmxindex = f"{i:04d}"
+                            dmxlower = lowerbound
+                            dmxupper = upperbound
+                        i += 1
+                sum = sum + 1.0 / (float(t[3])**2.0)
+                maskarray[index] = False
+    
+        toas.select(maskarray)
+        f.reset_model()
+        numtoas_in_dmxrange = 0
+        for toa in toas.table:
+            if toa[2] > dmxlower and toa[2] < dmxupper:
+                numtoas_in_dmxrange += 1
+        newmodel = model_i
+        if numtoas_in_dmxrange == 0:
+            print(f"Removing DMX range {dmxindex}")
+            newmodel = copy.deepcopy(model_i)
+            newmodel.components['DispersionDMX'].remove_param(f'DMXR1_{dmxindex}')
+            newmodel.components['DispersionDMX'].remove_param(f'DMXR2_{dmxindex}')
+            newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
+        f = pint.fitter.GLSFitter(toas,newmodel)
+        chi2 = f.fit_toas()
+        ndof = pint.residuals.resids(toas,newmodel).dof
+        ntoas = toas.ntoas
+        redchi2 = chi2 / ndof
+        #print(chi2,ndof,chi2_init,ndof_init)
+        if ndof_init != ndof:
+            ftest = Ftest(float(chi2_init),int(ndof_init),float(chi2),int(ndof))
+        else:
+            ftest = False
+        fout.write(f"{filename} {receiver} {mjd:d} {(ntoas_init - ntoas):d} {ftest:e} {1.0/np.sqrt(sum)}\n")
+        toas.unselect()
+    fout.close()
+
+    #Now make plots from the output file
+    if plot_results:
+        input = np.genfromtxt(outfile,dtype=None)
+        mjd1 = []
+        chi2diff1 = []
+        ftest1 = []
+        mjd2 = []
+        chi2diff2 = []
+        ftest2 = []
+        data = []
+
+        for line in input:
+            if len(data) == 0:
+                e=epoch(line[1],line[0])
+                e.mjdlist.append(line[2])
+                e.ftestlist.append(line[4])
+                e.dailyres.append(line[5])
+                data.append(e)
+            else:
+                foundmatch=False
+                for rec in data:
+                    if line[1] == rec.receiver:
+                        foundmatch=True
+                        rec.mjdlist.append(line[2])
+                        rec.ftestlist.append(line[4])
+                        rec.dailyres.append(line[5])
+                if not foundmatch:
+                    e=epoch(line[1],line[0])
+                    e.mjdlist.append(line[2])
+                    e.ftestlist.append(line[4])
+                    e.dailyres.append(line[5])
+                    data.append(e)
+
+        tempoutfile=f"{outfile}.out"
+        fout = open(tempoutfile,'w')
+        for rec in data:
+            for ft,mjd in zip(rec.ftestlist,rec.mjdlist):
+                if ft < 0.0027:
+                    fout.write(f"{rec.filename} {rec.receiver} {mjd} {ft}\n"
+        fout.close()
+
+        f, axs = plt.subplots(1,2, figsize=(12,5))
+        f.suptitle(model_i.PSR.value,fontsize=16)
+
+        axs[0].set_xlabel('MJD')
+        axs[0].set_ylabel('F-test')
+        axs[0].set_yscale('log')
+        axs[0].axhline(y=0.0027,color='black',linestyle=':',label='3-$\sigma$')
+        axs[0].axhline(y=(1.0/numepochs),color='red',linestyle=':',label='1/$N_{epochs}$')
+        for rec in data:
+            axs[0].plot(rec.mjdlist,rec.ftestlist,'.',linestyle='',label='%s' % rec.receiver)
+        axs[0].axhline(y=0.0027,color='black',linestyle=':')
+        axs[0].legend(fancybox=True,framealpha=0.5)
+
+        axs[1].set_xlabel('Uncertainty ($\mu$s)')
+        axs[1].set_ylabel('F-test')
+        axs[1].set_yscale('log')
+        axs[1].set_xscale('log')
+        axs[1].axhline(y=0.0027,color='black',linestyle=':')
+        axs[1].axhline(y=(1.0/numepochs),color='red',linestyle=':')
+        for rec in data:
+            axs[1].plot(rec.dailyres,rec.ftestlist,'.',linestyle='',label='%s' % rec.receiver)
+        f.subplots_adjust(bottom=0.15)
+        try:
+            rntext = "RNAMP: %f, RNIDX: %f" % (model_i.RNAMP.value, model_i.RNIDX.value)
+            axs[0].annotate(rntext, (0,0), (0, -35), xycoords='axes fraction', textcoords='offset points', va='top')
+        except:
+            pass
+        try:
+            ecorrs = model_i.components['EcorrNoise'].get_ecorrs()
+            ecorrtext = ""
+            for a in range(len(ecorrs)):
+                ecorrtext = ecorrtext + str(ecorrs[a]) + ","
+            axs[0].annotate(ecorrtext[:-1], (0,0), (0, -45), xycoords='axes fraction', textcoords='offset points', va='top')
+        except KeyError:
+            pass
+        outfile=f"{outfile}.png"
+        plt.savefig(outfile)
