@@ -97,7 +97,7 @@ class TimingConfiguration:
 
         # Add 'cut' flags to TOAs according to config 'ignore' block.
         t = self.apply_ignore(t)
-        apply_cut_select(t,reason='configuration ignore block')
+        apply_cut_select(t,cut_flag_values=['mjdstart','mjdend','snr','badrange'],reason='initial cuts - ignore block')
 
         # To facilitate TOA excision, frontend/backend info
         febe_pairs = set(t.get_flag_value('f')[0])
