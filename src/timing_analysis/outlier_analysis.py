@@ -1,30 +1,20 @@
 ## Tools/modules for running outlier analyses; will need to modify functions to accept model/toa objects from tc.
 
 # Generic imports
-import os, sys, glob, tempfile, pickle
-import numpy as np
-import scipy.linalg as sl, scipy.optimize as so
+import os, sys
 import matplotlib.pyplot as plt
-import numdifftools as nd
-import corner
-
-# PINT/enterprise (pta-outlier) imports
-import pint.toa as toa
-import pint.models as model
-from enterprise.pulsar import PintPulsar
-
-# The actual outlier code
-import interval as itvl
-from nutstrajectory import nuts6
+import numpy as np
 
 # Epochalyptica imports
-import pint
-import pint.toa
+#import pint
+#import pint.toa
 import pint.fitter
-import pint.models.model_builder as mb
+#import pint.models.model_builder as mb
+from pint.residuals import Residuals
 import copy
 from scipy.special import fdtr
 
+"""
 # Joanna's imports (should be able to clean this up quite a bit)
 import matplotlib
 from matplotlib.ticker import NullFormatter
@@ -45,6 +35,7 @@ from enterprise.signals.selections import Selection
 import scipy.linalg as sl, scipy.stats, scipy.special
 import corner
 from PTMCMCSampler.PTMCMCSampler import PTSampler as ptmcmc
+"""
 
 def get_entPintPulsar(model,toas,sort=False):
     """Return enterprise.PintPulsar object with PINT model, toas embedded.
@@ -100,6 +91,16 @@ def get_outliers_piccard(epp,Nsamples=20000,Nburnin=1000):
     =======
     ???
     """
+    # pta-outliers-specific imports
+    import tempfile, pickle
+    import scipy.linalg as sl, scipy.optimize as so
+    import matplotlib.pyplot as plt
+    import numdifftools as nd
+    import corner
+    from enterprise.pulsar import PintPulsar
+    import interval as itvl
+    from nutstrajectory import nuts6
+
     # Create interval likelihood object
     likob = itvl.Interval(epp)
 
@@ -159,7 +160,8 @@ def get_outliers_piccard(epp,Nsamples=20000,Nburnin=1000):
     # Time to sample...
     psr = epp.model.PSR.value
     chaindir = 'outlier_' + psr
-    !mkdir -p {chaindir}
+    if not os.path.exists(chaindir):
+        os.makedirs(chaindir)
 
     chainfile = chaindir + '/samples.txt'
     if not os.path.isfile(chainfile) or len(open(chainfile,'r').readlines()) < 19999:
@@ -687,7 +689,7 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
     """
     f = pint.fitter.GLSFitter(toas,model_i)
     chi2_init = f.fit_toas()
-    ndof_init = pint.residuals.resids(toas,model_i).dof
+    ndof_init = pint.residuals.Residuals(toas,model_i).dof
     ntoas_init = toas.ntoas
     redchi2_init = chi2_init / ndof_init
     #print(chi2_init,ndof_init)
@@ -712,7 +714,7 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
         for index,t in enumerate(toas.table):
             if t[6]['name'] == filename:
                 if receiver == None:
-                    receiver = f'{str(t[6]['be'])}_{str(t[6]['fe'])}' # isn't this just the -f flag?
+                    receiver = toas.get_flag_value('f')[0]
                 if mjd == None:
                     mjd = int(t[1].value)
                 if toaval == None:
@@ -746,7 +748,7 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
             newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
         f = pint.fitter.GLSFitter(toas,newmodel)
         chi2 = f.fit_toas()
-        ndof = pint.residuals.resids(toas,newmodel).dof
+        ndof = pint.residuals.Residuals(toas,newmodel).dof
         ntoas = toas.ntoas
         redchi2 = chi2 / ndof
         #print(chi2,ndof,chi2_init,ndof_init)
@@ -796,7 +798,7 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
         for rec in data:
             for ft,mjd in zip(rec.ftestlist,rec.mjdlist):
                 if ft < 0.0027:
-                    fout.write(f"{rec.filename} {rec.receiver} {mjd} {ft}\n"
+                    fout.write(f"{rec.filename} {rec.receiver} {mjd} {ft}\n")
         fout.close()
 
         f, axs = plt.subplots(1,2, figsize=(12,5))
