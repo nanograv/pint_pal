@@ -1,3 +1,5 @@
+## Tools/modules for running outlier analyses; will need to modify functions to accept model/toa objects from tc.
+
 # Generic imports
 import os, sys, glob, tempfile, pickle
 import numpy as np
@@ -14,6 +16,32 @@ from enterprise.pulsar import PintPulsar
 # The actual outlier code
 import interval as itvl
 from nutstrajectory import nuts6
+
+# Joanna's imports (should be able to clean this up quite a bit)
+import numpy as np
+import glob
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.ticker import NullFormatter
+import scipy.linalg as sl
+import os
+import time
+import enterprise
+from enterprise.pulsar import Pulsar
+import enterprise.signals.parameter as parameter
+from enterprise.signals import utils
+from enterprise.signals import signal_base
+from enterprise.signals import selections
+from enterprise.signals.selections import Selection
+from enterprise.signals import white_signals
+from enterprise.signals import gp_signals
+from enterprise.signals import deterministic_signals
+#import libstempo as T (commented out, because ?!?!)
+from enterprise.signals.selections import Selection
+import sys 
+import scipy.linalg as sl, scipy.stats, scipy.special
+import corner
+from PTMCMCSampler.PTMCMCSampler import PTSampler as ptmcmc
 
 def get_entPintPulsar(model,toas,sort=False):
     """Return enterprise.PintPulsar object with PINT model, toas embedded.
