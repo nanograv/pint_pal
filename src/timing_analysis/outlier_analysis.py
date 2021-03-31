@@ -694,14 +694,14 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
     redchi2_init = chi2_init / ndof_init
     #print(chi2_init,ndof_init)
 
-    #simplify
-    filenames = []
-    flags = toas.get_flags()
-    for toaflag in flags:
-        filenames.append(toaflag['name'])
+    filenames = toas.get_flag_value('name')[0]
 
     fout = open(outfile,'w')
+    print(f'Working with {ntoas_init} TOAs...')
     numepochs = len(set(filenames))
+    print(f'There are {numepochs} epochs (filenames).')
+    snrs = toas.get_flag_value('snr')[0]
+    print(f'Minimum snr: {min(snrs)}; maximum snr: {max(snrs)}')
     for filename in set(filenames):
         maskarray = np.ones(len(filenames),dtype=bool)
         receiver = None
@@ -711,10 +711,12 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
         dmxlower = None
         dmxupper = None
         sum = 0.0
+        # Re-think to refer to columns with, e.g. toas.get_flag_value('f')[0] etc.?
+        # t[1]: mjd, t[2]: mjd (d), t[3]: error (us), t[6]: flags dict
         for index,t in enumerate(toas.table):
             if t[6]['name'] == filename:
                 if receiver == None:
-                    receiver = toas.get_flag_value('f')[0]
+                    receiver = t[6]['f']
                 if mjd == None:
                     mjd = int(t[1].value)
                 if toaval == None:
@@ -729,6 +731,8 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
                             dmxindex = f"{i:04d}"
                             dmxlower = lowerbound
                             dmxupper = upperbound
+                        else:
+                            print(toaval,snrs[index],lowerbound,upperbound)
                         i += 1
                 sum = sum + 1.0 / (float(t[3])**2.0)
                 maskarray[index] = False
