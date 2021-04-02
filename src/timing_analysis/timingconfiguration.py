@@ -149,6 +149,12 @@ class TimingConfiguration:
             return self.config['toa-type']
         return None
 
+    def get_outfile_basename(self,ext=''):
+        """ Return source.[nw]b basename (e.g. J1234+5678.nb) """
+        basename = f'{self.get_source()}.{self.get_toa_type().lower()}'
+        if ext: basename = '.'.join([basename,ext])
+        return basename
+
     def get_niter(self):
         """ Return an integer of the number of iterations to fit """
         if "n-iterations" in self.config.keys():

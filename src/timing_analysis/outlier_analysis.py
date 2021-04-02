@@ -664,15 +664,19 @@ def Ftest(chi2_1, dof_1, chi2_2, dof_2):
       ft = False
     return ft
 
-def epochalyptica(model,toas,outfile='out.txt',ftest_threshold=1.0e-6):
-    """ This does things
+def epochalyptica(model,toas,outfile='epochdrop.txt',ftest_threshold=1.0e-6):
+    """ Test for the presence of remaining bad epochs by removing one at a
+        time and examining its impact on the residuals; pre/post reduced
+        chi-squared values are assessed using an F-statistic.  
 
     Parameters:
     ===========
-
-    Returns:
-    ========
-
+    model: `pint.model.TimingModel` object
+    toas: `pint.toa.TOAs` object
+    outfile: string
+        optional, name of output results file
+    ftest_threshold: float
+        optional, threshold below which epochs will be dropped
     """
     f = pint.fitter.GLSFitter(toas,model)
     chi2_init = f.fit_toas()
@@ -684,7 +688,7 @@ def epochalyptica(model,toas,outfile='out.txt',ftest_threshold=1.0e-6):
     fout = open(outfile,'w')
     numepochs = len(set(filenames))
     log.info(f'There are {numepochs} epochs (filenames) to analyze.')
-    snrs = toas.get_flag_value('snr')[0]
+    epochs_to_drop = []
     for filename in set(filenames):
         maskarray = np.ones(len(filenames),dtype=bool)
         receiver = None
@@ -737,17 +741,12 @@ def epochalyptica(model,toas,outfile='out.txt',ftest_threshold=1.0e-6):
         redchi2 = chi2 / ndof
         if ndof_init != ndof:
             ftest = Ftest(float(chi2_init),int(ndof_init),float(chi2),int(ndof))
+            if ftest < ftest_threshold: epochs_to_drop.append(filename)
         else:
             ftest = False
         fout.write(f"{filename} {receiver} {mjd:d} {(ntoas_init - ntoas):d} {ftest:e} {1.0/np.sqrt(sum)}\n")
         toas.unselect()
     fout.close()
-
-    ftest_results = np.genfromtxt(outfile,dtype=None,encoding=None)
-    epochs_to_drop = []
-    for line in ftest_results:
-        if line[4] < ftest_threshold:
-            epochs_to_drop.append(line[0])
 
     # Make the cuts.
     toas_to_cut = [(f in epochs_to_drop) for f in filenames]
