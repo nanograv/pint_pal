@@ -1006,6 +1006,8 @@ def apply_cut_select(toas,cut_flag_values=None,reason='???'):
         fout = 'initial_cut.tim'
     elif 'ratio' in reason:
         fout = 'dmx_cut.tim'
+    elif 'epoch drop' in reason:
+        fout = 'epochdrop_cut.tim'
     elif 'manual' in reason:
         fout = 'manual_cut.tim'
     else:
@@ -1019,4 +1021,4 @@ def apply_cut_select(toas,cut_flag_values=None,reason='???'):
         log.info(f"Selecting {sum(cutselect)} TOAs out of {toas.ntoas} ({sum(cut)} removed based on {reason}).")
         toas.select(cutselect)
     else:
-        pass
+        log.info(f"No TOAs selected for removal based on {reason}.")

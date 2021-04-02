@@ -4,6 +4,7 @@
 import os, sys
 import matplotlib.pyplot as plt
 import numpy as np
+from astropy import log
 
 # Epochalyptica imports
 #import pint
@@ -13,6 +14,7 @@ import pint.fitter
 from pint.residuals import Residuals
 import copy
 from scipy.special import fdtr
+from timing_analysis.utils import apply_cut_flag, apply_cut_select
 
 """
 # Joanna's imports (should be able to clean this up quite a bit)
@@ -635,21 +637,6 @@ class Gibbs(object):
         np.savetxt('{}/thetachain.txt'.format(outdir), gibbs.thetachain)
         np.savetxt('{}/alphachain.txt'.format(outdir),gibbs.alphachain)
 
-
-# Some sort of description?
-class epoch:
-    receiver = ""
-    filename = ""
-    mjdlist = []
-    ftestlist = []
-    dailyres = []
-    def __init__(self,rec,filename):
-        self.receiver = rec
-        self.filename = filename
-        self.mjdlist = []
-        self.ftestlist = []
-        self.dailyres = []
-
 def Ftest(chi2_1, dof_1, chi2_2, dof_2):
     """
     Ftest(chi2_1, dof_1, chi2_2, dof_2):
@@ -677,7 +664,7 @@ def Ftest(chi2_1, dof_1, chi2_2, dof_2):
       ft = False
     return ft
 
-def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
+def epochalyptica(model,toas,outfile='out.txt',ftest_threshold=1.0e-6):
     """ This does things
 
     Parameters:
@@ -687,21 +674,17 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
     ========
 
     """
-    f = pint.fitter.GLSFitter(toas,model_i)
+    f = pint.fitter.GLSFitter(toas,model)
     chi2_init = f.fit_toas()
-    ndof_init = pint.residuals.Residuals(toas,model_i).dof
+    ndof_init = pint.residuals.Residuals(toas,model).dof
     ntoas_init = toas.ntoas
     redchi2_init = chi2_init / ndof_init
-    #print(chi2_init,ndof_init)
 
     filenames = toas.get_flag_value('name')[0]
-
     fout = open(outfile,'w')
-    print(f'Working with {ntoas_init} TOAs...')
     numepochs = len(set(filenames))
-    print(f'There are {numepochs} epochs (filenames).')
+    log.info(f'There are {numepochs} epochs (filenames) to analyze.')
     snrs = toas.get_flag_value('snr')[0]
-    print(f'Minimum snr: {min(snrs)}; maximum snr: {max(snrs)}')
     for filename in set(filenames):
         maskarray = np.ones(len(filenames),dtype=bool)
         receiver = None
@@ -711,8 +694,7 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
         dmxlower = None
         dmxupper = None
         sum = 0.0
-        # Re-think to refer to columns with, e.g. toas.get_flag_value('f')[0] etc.?
-        # t[1]: mjd, t[2]: mjd (d), t[3]: error (us), t[6]: flags dict
+        # Note, t[1]: mjd, t[2]: mjd (d), t[3]: error (us), t[6]: flags dict
         for index,t in enumerate(toas.table):
             if t[6]['name'] == filename:
                 if receiver == None:
@@ -724,15 +706,13 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
                     i = 1
                     while dmxindex == None:
                         DMXval = f"DMXR1_{i:04d}"
-                        lowerbound = getattr(model_i.components['DispersionDMX'],DMXval).value
+                        lowerbound = getattr(model.components['DispersionDMX'],DMXval).value
                         DMXval = f"DMXR2_{i:04d}"
-                        upperbound = getattr(model_i.components['DispersionDMX'],DMXval).value
+                        upperbound = getattr(model.components['DispersionDMX'],DMXval).value
                         if toaval > lowerbound and toaval < upperbound:
                             dmxindex = f"{i:04d}"
                             dmxlower = lowerbound
                             dmxupper = upperbound
-                        else:
-                            print(toaval,snrs[index],lowerbound,upperbound)
                         i += 1
                 sum = sum + 1.0 / (float(t[3])**2.0)
                 maskarray[index] = False
@@ -743,10 +723,10 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
         for toa in toas.table:
             if toa[2] > dmxlower and toa[2] < dmxupper:
                 numtoas_in_dmxrange += 1
-        newmodel = model_i
+        newmodel = model
         if numtoas_in_dmxrange == 0:
-            print(f"Removing DMX range {dmxindex}")
-            newmodel = copy.deepcopy(model_i)
+            log.debug(f"Removing DMX range {dmxindex}")
+            newmodel = copy.deepcopy(model)
             newmodel.components['DispersionDMX'].remove_param(f'DMXR1_{dmxindex}')
             newmodel.components['DispersionDMX'].remove_param(f'DMXR2_{dmxindex}')
             newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
@@ -755,7 +735,6 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
         ndof = pint.residuals.Residuals(toas,newmodel).dof
         ntoas = toas.ntoas
         redchi2 = chi2 / ndof
-        #print(chi2,ndof,chi2_init,ndof_init)
         if ndof_init != ndof:
             ftest = Ftest(float(chi2_init),int(ndof_init),float(chi2),int(ndof))
         else:
@@ -764,81 +743,13 @@ def epochalyptica(model_i,toas,outfile='out.txt',plot_results=False):
         toas.unselect()
     fout.close()
 
-    #Now make plots from the output file
-    if plot_results:
-        input = np.genfromtxt(outfile,dtype=None)
-        mjd1 = []
-        chi2diff1 = []
-        ftest1 = []
-        mjd2 = []
-        chi2diff2 = []
-        ftest2 = []
-        data = []
+    ftest_results = np.genfromtxt(outfile,dtype=None,encoding=None)
+    epochs_to_drop = []
+    for line in ftest_results:
+        if line[4] < ftest_threshold:
+            epochs_to_drop.append(line[0])
 
-        for line in input:
-            if len(data) == 0:
-                e=epoch(line[1],line[0])
-                e.mjdlist.append(line[2])
-                e.ftestlist.append(line[4])
-                e.dailyres.append(line[5])
-                data.append(e)
-            else:
-                foundmatch=False
-                for rec in data:
-                    if line[1] == rec.receiver:
-                        foundmatch=True
-                        rec.mjdlist.append(line[2])
-                        rec.ftestlist.append(line[4])
-                        rec.dailyres.append(line[5])
-                if not foundmatch:
-                    e=epoch(line[1],line[0])
-                    e.mjdlist.append(line[2])
-                    e.ftestlist.append(line[4])
-                    e.dailyres.append(line[5])
-                    data.append(e)
-
-        tempoutfile=f"{outfile}.out"
-        fout = open(tempoutfile,'w')
-        for rec in data:
-            for ft,mjd in zip(rec.ftestlist,rec.mjdlist):
-                if ft < 0.0027:
-                    fout.write(f"{rec.filename} {rec.receiver} {mjd} {ft}\n")
-        fout.close()
-
-        f, axs = plt.subplots(1,2, figsize=(12,5))
-        f.suptitle(model_i.PSR.value,fontsize=16)
-
-        axs[0].set_xlabel('MJD')
-        axs[0].set_ylabel('F-test')
-        axs[0].set_yscale('log')
-        axs[0].axhline(y=0.0027,color='black',linestyle=':',label='3-$\sigma$')
-        axs[0].axhline(y=(1.0/numepochs),color='red',linestyle=':',label='1/$N_{epochs}$')
-        for rec in data:
-            axs[0].plot(rec.mjdlist,rec.ftestlist,'.',linestyle='',label='%s' % rec.receiver)
-        axs[0].axhline(y=0.0027,color='black',linestyle=':')
-        axs[0].legend(fancybox=True,framealpha=0.5)
-
-        axs[1].set_xlabel('Uncertainty ($\mu$s)')
-        axs[1].set_ylabel('F-test')
-        axs[1].set_yscale('log')
-        axs[1].set_xscale('log')
-        axs[1].axhline(y=0.0027,color='black',linestyle=':')
-        axs[1].axhline(y=(1.0/numepochs),color='red',linestyle=':')
-        for rec in data:
-            axs[1].plot(rec.dailyres,rec.ftestlist,'.',linestyle='',label='%s' % rec.receiver)
-        f.subplots_adjust(bottom=0.15)
-        try:
-            rntext = "RNAMP: %f, RNIDX: %f" % (model_i.RNAMP.value, model_i.RNIDX.value)
-            axs[0].annotate(rntext, (0,0), (0, -35), xycoords='axes fraction', textcoords='offset points', va='top')
-        except:
-            pass
-        try:
-            ecorrs = model_i.components['EcorrNoise'].get_ecorrs()
-            ecorrtext = ""
-            for a in range(len(ecorrs)):
-                ecorrtext = ecorrtext + str(ecorrs[a]) + ","
-            axs[0].annotate(ecorrtext[:-1], (0,0), (0, -45), xycoords='axes fraction', textcoords='offset points', va='top')
-        except KeyError:
-            pass
-        outfile=f"{outfile}.png"
-        plt.savefig(outfile)
+    # Make the cuts.
+    toas_to_cut = [(f in epochs_to_drop) for f in filenames]
+    apply_cut_flag(toas,toas_to_cut,'epochdrop',warn=True)  # Useful to see if overlap with bad-toa
+    apply_cut_select(toas,cut_flag_values=['epochdrop'],reason='epoch drop analysis')
