@@ -39,20 +39,24 @@ import corner
 from PTMCMCSampler.PTMCMCSampler import PTSampler as ptmcmc
 """
 
-def get_entPintPulsar(model,toas,sort=False):
+def get_entPintPulsar(model,toas,sort=False,drop_pintpsr=True):
     """Return enterprise.PintPulsar object with PINT model, toas embedded.
 
     Parameters
     ==========
     model: `pint.model.TimingModel` object
     toas: `pint.toa.TOAs` object
+    sort: bool
+        optional, ...
+    drop_pintpsr: bool
+        optional, if False, pint toas/model remain embedded in PintPulsar object 
 
     Returns
     =======
     model: `enterprise.PintPulsar` object
-        with drop_pintpsr=False (PINT model, toas embedded)
     """
-    return PintPulsar(toas,model,sort=sort,planets=m.PLANET_SHAPIRO.value) # pickle kwarg?
+    from enterprise.pulsar import PintPulsar 
+    return PintPulsar(toas,model,sort=sort,drop_pintpsr=drop_pintpsr)
 
 def poutlier(p,likob):
     """Invoked on a sample parameter set and the appropriate likelihood,

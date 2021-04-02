@@ -95,6 +95,9 @@ class TimingConfiguration:
         if self.get_toa_type() == "NB":
             self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
 
+        # Make a clean copy of original TOAs table (to track cut TOAs, flag_values)
+        t.orig_table = t.table.copy()
+
         # Add 'cut' flags to TOAs according to config 'ignore' block.
         t = self.apply_ignore(t)
         apply_cut_select(t,cut_flag_values=['mjdstart','mjdend','snr','badrange'],reason='initial cuts - ignore block')
