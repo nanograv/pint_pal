@@ -20,7 +20,7 @@ def config_files():
     basenames = [splitext(split(filename)[1])[0] for filename in config_files]
     return [pytest.param(filename, id=basename) for filename, basename in zip(config_files, basenames)]
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='session')
 def output_dir():
     output_dir = datetime.strftime(datetime.now(), 'tmp-%Y-%m-%dT%H-%M-%S')
     output_dir = join(base_dir, output_dir)
@@ -28,7 +28,7 @@ def output_dir():
     return output_dir
 
 @pytest.mark.parametrize('config_file', config_files())
-def test_run_notebook(config_file, output_dir, suppress_errors=False):
+def test_run_notebook(config_file, output_dir):
     """
     Run through the functions called in the notebook for each pulsar (excluding plotting).
     This will create a global log called test-run-notebooks.log, and a log file for each pulsar.
@@ -54,6 +54,7 @@ def test_run_notebook(config_file, output_dir, suppress_errors=False):
         'par_directory': f'"{join(base_dir, "results")}"',
         'use_existing_noise_dir': 'True',
         'log_to_file': 'True',
+        'Ftest_log_level': '"INFO"',
     }
 
     try:
