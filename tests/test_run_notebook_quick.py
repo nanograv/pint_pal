@@ -1,12 +1,10 @@
-from astropy import log
-from os import makedirs, chdir
 from os.path import dirname, join, split, splitext, basename
+from os import makedirs
+import shutil
 from datetime import datetime
-from multiprocessing import Pool
 import traceback
 from glob import glob
 import pytest
-import nbformat
 from timing_analysis.notebook_runner import run_notebook
 
 base_dir = dirname(dirname(__file__))
@@ -28,49 +26,32 @@ def output_dir():
     return output_dir
 
 @pytest.mark.parametrize('config_file', config_files())
-def test_run_notebook(config_file, output_dir):
+def test_run_notebook_quick(config_file, tmp_path, output_dir):
     """
     Run through the functions called in the notebook for each pulsar (excluding plotting).
-    This will create a global log called test-run-notebooks.log, and a log file for each pulsar.
 
     To run for only one pulsar (using J1713+0747 as an example):
-        `pytest tests/test_run_notebook.py::test_run_notebook[J1713+0747.nb]`
+        `pytest tests/test_run_notebook_quick.py::test_run_notebook_quick[J1713+0747.nb]`
         or `pytest -k J1713+0747` (selects tests whose name contains "J1713+0747")
     To run for all pulsars in parallel (requires `pytest-xdist`):
-        `pytest -n <workers> tests/test_run_notebook.py`
+        `pytest -n <workers> tests/test_run_notebook_quick.py`
         <workers> is the number of worker processes to launch (e.g. 4 to use 4 CPU threads)
     """
-    log.setLevel("INFO")
-    global_log = join(output_dir, f'test-run-notebook.log')
-    cfg_name = splitext(split(config_file)[1])[0]
-    cfg_dir = join(output_dir, cfg_name)
-    makedirs(cfg_dir)
-    log_file = join(cfg_dir, f'{cfg_name}.log')
-    err_file = join(cfg_dir, f'{cfg_name}.traceback')
-    output_nb = join(cfg_dir, f'{cfg_name}.ipynb')
-    
     transformations = {
         'config': f'"{config_file}"',
         'par_directory': f'"{join(base_dir, "results")}"',
         'use_existing_noise_dir': 'True',
-        'log_to_file': 'True',
-        'Ftest_log_level': '"INFO"',
+        'log_to_file': 'False',
+        'run_Ftest': 'False',
     }
 
     try:
         run_notebook(
             join(base_dir, 'nb_templates/process_v0.9.ipynb'),
-            output_nb,
-            err_file = err_file,
-            workdir = cfg_dir,
-            transformations = transformations
+            output_nb=None,
+            workdir=tmp_path,
+            transformations=transformations,
         )
-        with open(global_log, 'a') as f:
-            print(f"{cfg_name}: success!", file=f)
-    except Exception as err:
-        with open(global_log, 'a') as f:
-            if hasattr(err, 'ename'):
-                print(f"{cfg_name}: failure - {err.ename}", file=f)
-            else:
-                print(f"{cfg_name}: failure - {err}", file=f)
-        raise err
+    finally:
+        for f in glob(join(tmp_path, "*summary*.pdf")):
+            shutil.copy(f, join(output_dir, basename(f)))
