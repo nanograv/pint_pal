@@ -27,5 +27,6 @@ def run_notebook(template_nb, output_nb, err_file=None, workdir=base_dir, color_
                 print(traceback, file=f)
         raise err
     finally:
-        with open(output_nb, 'w', encoding='utf-8') as f:
-            nbformat.write(nb, f)
+        if output_nb is not None:
+            with open(output_nb, 'w', encoding='utf-8') as f:
+                nbformat.write(nb, f)
