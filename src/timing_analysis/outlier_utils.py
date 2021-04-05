@@ -753,6 +753,8 @@ def epochalyptica(model,toas,outfile='epochdrop.txt',ftest_threshold=1.0e-6):
     fout.close()
 
     # Make the cuts.
-    toas_to_cut = [(f in epochs_to_drop) for f in filenames]
-    apply_cut_flag(toas,toas_to_cut,'epochdrop',warn=True)  # Useful to see if overlap with bad-toa
-    apply_cut_select(toas,cut_flag_values=['epochdrop'],reason='epoch drop analysis')
+    names = np.array([f['name'] for f in toas.orig_table['flags']])
+    for etd in epochs_to_drop:
+        epochdropinds = np.where(names==etd)[0]
+        apply_cut_flag(toas,epochdropinds,'epochdrop')
+    apply_cut_select(toas,reason='epoch drop analysis')

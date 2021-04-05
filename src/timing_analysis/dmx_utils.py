@@ -750,10 +750,12 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
     itoas, iranges = check_frequency_ratio(toas, dmx_ranges,
             frequency_ratio=frequency_ratio, quiet=quiet)
 
-    fratio_select = np.ones(len(toas),dtype=bool)
-    fratio_select[itoas] = False
-    apply_cut_flag(toas,fratio_select,'dmx') 
-    apply_cut_select(toas,cut_flag_values=['dmx'],reason='frequency ratio check')
+    # Find TOAs failing fratio test and apply cuts
+    ftoas, franges = check_frequency_ratio(toas, dmx_ranges,
+            frequency_ratio=frequency_ratio, quiet=quiet, invert=True)
+    fratio_inds = toas.table['index'][ftoas]
+    apply_cut_flag(toas,fratio_inds,'dmx')
+    apply_cut_select(toas,reason='frequency ratio check')
 
     dmx_ranges = np.array(dmx_ranges)[iranges]
     dmx_ranges = list(map(tuple, dmx_ranges))
@@ -761,9 +763,10 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
     # Sort the ranges
     dmx_ranges = sorted(dmx_ranges, key=lambda dmx_range: dmx_range[0])
 
-    # Check for sanity
+    # Check for sanity and use inone to flag dmx cuts
     masks, ibad, iover, iempty, inone, imult = \
             check_dmx_ranges(toas, dmx_ranges, full_return=True, quiet=False)
+
     if len(ibad) + len(iover) + len(iempty) + len(inone) + len(imult) == 0:
         msg = "Proposed DMX model OK."
         log.info(msg)
