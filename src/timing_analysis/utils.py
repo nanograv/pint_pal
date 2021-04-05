@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import sys
 import numpy as np
 import astropy.units as u
 from astropy import log
@@ -431,6 +432,9 @@ def pdf_writer(fitter,
     fitter_noise [pint.fitter.Fitter]: Fitter that has had new noise parameters applied (if available).
     """
     def verb(s):
+        s = str(s).strip()
+        if "\n" in s:
+            return "\n".join(verb(p) for p in s.split("\n"))
         for c in "@|!%":
             if c not in s:
                 return r'\verb' + c + s + c
@@ -721,6 +725,20 @@ def pdf_writer(fitter,
     else:
         log.warning(f"Reduced chi-squared of {rchi} has unlikely false positive probability of {fpp}") 
         fsum.write('\\\\ Warning: False positive probability not believable\n')
+    if fitter_noise is not None:
+        fsum.write("\\\\\n")
+        fsum.write("\\\\\n")
+        fsum.write("After applying new noise model:\\\\\n")
+        chi2_1 = fitter_noise.resids.chi2
+        ndof_1 = fitter_noise.resids.dof
+        rchi = chi2_1/ndof_1
+        fpp = scipy.stats.chi2(int(ndof_1)).sf(float(chi2_1))
+        fsum.write('New reduced $\chi^2$ is %f/%d = %f (false positive probability %g)\n' % (chi2_1,ndof_1,rchi,fpp))
+        if 0.001<fpp<0.999:
+            fsum.write('\\\\ New false positive probability is believable\n')
+        else:
+            log.warning(f"New reduced chi-squared of {rchi} has unlikely false positive probability of {fpp}") 
+            fsum.write('\\\\ Warning: New false positive probability not believable\n')
 
     # Check EFACs, EQUADs, ECORRs:
     fsum.write(r'\subsection*{Error parameters reasonable?}' + '\n')
@@ -884,7 +902,7 @@ def pdf_writer(fitter,
                                nodmx=True,
                                threshold_sigma=3)
         except ValueError as e:
-            fsum.write(f"WARNING: compare_models failed because of {e}\\\\\n")
+            fsum.write(f"WARNING: {verb('compare_models')} failed because of {verb(e)}\\\\\n")
         else:
             fsum.write(r"{\small" + "\n")
             fsum.write(r"\begin{verbatim}" + "\n")
@@ -894,27 +912,33 @@ def pdf_writer(fitter,
             fsum.write("\n")
         
     # Write out software versions used
-    fsum.write(r'\subsection*{Software versions used in Analysis:}' + '\n')
-    fsum.write('PINT: %s\\\\\n' % (pint.__version__))
-    fsum.write('astropy: %s\\\\\n' % (astropy.__version__))
-    fsum.write('numpy: %s\\\\\n' % (np.__version__))
+    fsum.write(r'\subsection*{Software versions used in timing\_analysis:}' + '\n')
+    fsum.write('PINT: %s\\\\\n' % verb(pint.__version__))
+    fsum.write('astropy: %s\\\\\n' % verb(astropy.__version__))
+    fsum.write('numpy: %s\\\\\n' % verb(np.__version__))
+    fsum.write('python: %s\\\\\n' % verb(sys.version))
     try:
         import enterprise
         fsum.write('enterprise: %s\\\\\n' % (enterprise.__version__))
     except ImportError as error:
         log.warning(str(error)+ ", cannot print enterprise version.")
-    try:
-        import PTMCMCSampler
-        fsum.write('PTMCMCSampler: %s\\\\\n' % (PTMCMCSampler.__version__))
-    except ImportError as error:
-        log.warning(str(error)+ ", cannot print PTMCMCSampler version.")
-    try:
-        # FIXME: this is the psrchive version on the notebook server, but we never use this version
-        # Is there any point reporting it?
-        psrchive_v = check_output(["psrchive", "--version"]).decode("utf-8")
-        fsum.write('PSRCHIVE: %s\\\\\n' % (psrchive_v))
-    except (ImportError, FileNotFoundError) as error:
-        log.warning(str(error)+ ", cannot print PSRCHIVE version.")
+    if False:
+        # We didn't run PTMCMCSampler, no guarantee this is the relevant version
+        try:
+            import PTMCMCSampler
+            fsum.write('PTMCMCSampler: %s\\\\\n' % (PTMCMCSampler.__version__))
+        except ImportError as error:
+            log.warning(str(error)+ ", cannot print PTMCMCSampler version.")
+    if False:
+        # We didn't actually use PSRCHIVE, so it's misleading to report a version here
+        # If it's available from the TOAs we could report that
+        try:
+            # FIXME: this is the psrchive version on the notebook server, but we never use this version
+            # Is there any point reporting it?
+            psrchive_v = check_output(["psrchive", "--version"]).decode("utf-8")
+            fsum.write('PSRCHIVE: %s\\\\\n' % (psrchive_v))
+        except (ImportError, FileNotFoundError) as error:
+            log.warning(str(error)+ ", cannot print PSRCHIVE version.")
     
     # Write out the plots - Assuming we have already made the summary plot previous to this
     # FIXME: why not make the summary plots here?
