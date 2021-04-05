@@ -99,8 +99,18 @@ class TimingConfiguration:
         t.orig_table = t.table.copy()
 
         # Add 'cut' flags to TOAs according to config 'ignore' block.
-        t = self.apply_ignore(t)
-        apply_cut_select(t,cut_flag_values=['mjdstart','mjdend','snr','badrange'],reason='initial cuts - ignore block')
+        t = self.apply_ignore(t,specify_keys=['mjd-start','mjd-end','snr-cut','bad-range'])
+        apply_cut_select(t,reason='initial cuts - ignore block')
+
+        """
+        for tt in t.orig_table:
+            if 'cut' in tt['flags']:
+                tf = tt['flags']
+                print(tt['index'],tf['name'],tf['snr'],tf['cut'])
+                #print(tt['index'])
+        #print(f"min(snr): {min(t.get_flag_value('snr')[0])}, max(snr): {max(t.get_flag_value('snr')[0])}")
+        print(len(t.table))
+        """
 
         # To facilitate TOA excision, frontend/backend info
         febe_pairs = set(t.get_flag_value('f')[0])
@@ -167,13 +177,13 @@ class TimingConfiguration:
     def get_mjd_start(self):
         """Return mjd-start quantity (applies units days)"""
         if 'mjd-start' in self.config['ignore'].keys():
-            return self.config['ignore']['mjd-start']*u.d
+            return self.config['ignore']['mjd-start']
         return None
 
     def get_mjd_end(self):
         """Return mjd-end quantity (applies units days)"""
         if 'mjd-end' in self.config['ignore'].keys():
-            return self.config['ignore']['mjd-end']*u.d
+            return self.config['ignore']['mjd-end']
         return None
 
     def get_snr_cut(self):
@@ -314,7 +324,7 @@ class TimingConfiguration:
             return self.config['dmx']['custom-dmx']
         return None
 
-    def apply_ignore(self,toas):
+    def apply_ignore(self,toas,specify_keys=None):
         """ Basic checks and return TOA excision info. """
         OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-epoch'] # prob-outlier, bad-ff
         EXISTING_KEYS = self.config['ignore'].keys()
@@ -335,19 +345,27 @@ class TimingConfiguration:
 
         valid_valued = set(VALUED_KEYS) - invalid
         if len(valid_valued):
-            log.info(f'Valid TOA excision keys in use: {valid_valued}')
-
+            # Provide capability to add -cut flags based on specific ignore fields
+            if specify_keys is not None:
+                valid_valued = valid_valued & set(specify_keys)
+                log.info(f'Specified TOA excision keys: {valid_valued}')
+            else:
+                log.info(f'Valid TOA excision keys in use: {valid_valued}')
+                 
         # All info here about selecting various TOAs.
         # Select TOAs to cut, then use apply_cut_flag.
         if 'mjd-start' in valid_valued:
-            start_select = (toas.get_mjds() < self.get_mjd_start()) # cut toas before mjd-start
-            apply_cut_flag(toas,start_select,'mjdstart')
+            mjds = np.array([m for m in toas.orig_table['mjd_float']])
+            startinds = np.where(mjds < self.get_mjd_start())[0]
+            apply_cut_flag(toas,startinds,'mjdstart')
         if 'mjd-end' in valid_valued:
-            end_select = (toas.get_mjds() > self.get_mjd_end()) # cut toas after mjd-end
-            apply_cut_flag(toas,end_select,'mjdend')
+            mjds = np.array([m for m in toas.orig_table['mjd_float']])
+            endinds = np.where(mjds > self.get_mjd_end())[0]
+            apply_cut_flag(toas,endinds,'mjdend')
         if 'snr-cut' in valid_valued:
-            snr_select = ((np.array(toas.get_flag_value('snr')) < self.get_snr_cut())[0]) # cut toas below snr-cut
-            apply_cut_flag(toas,snr_select,'snr')
+            snrs = np.array([f['snr'] for f in toas.orig_table['flags']])
+            snrinds = np.where(snrs < self.get_snr_cut())[0]
+            apply_cut_flag(toas,snrinds,'snr')
             if self.get_snr_cut() > 8.0 and self.get_toa_type() == 'NB':
                 log.warning('snr-cut should be set to 8; try excising TOAs using other methods.')
             if self.get_snr_cut() > 25.0 and self.get_toa_type() == 'WB':
@@ -361,15 +379,14 @@ class TimingConfiguration:
                 be_select = np.array([(be in n) for n in toas.get_flag_value('name')[0]])
                 apply_cut_flag(toas,be_select,'badepoch')
         if 'bad-range' in valid_valued:
+            mjds = np.array([m for m in toas.orig_table['mjd_float']])
+            backends = np.array([f['be'] for f in toas.orig_table['flags']])
             for br in self.get_bad_ranges():
-                min_crit = (toas.get_mjds() > br[0]*u.d)
-                max_crit = (toas.get_mjds() < br[1]*u.d)
-                br_select = (min_crit & max_crit)
-                # Look for backend (be) flag to further refine selection, if present
                 if len(br) > 2:
-                    be_select = np.array([(be == br[2]) for be in toas.get_flag_value('be')[0]])
-                    br_select *= be_select
-                apply_cut_flag(toas,br_select,'badrange')
+                    rangeinds = np.where((mjds>br[0]) & (mjds<br[1]) & (backends==br[2]))[0]
+                else:
+                    rangeinds = np.where((mjds>br[0]) & (mjds<br[1]))[0]
+                apply_cut_flag(toas,rangeinds,'badrange')
         if 'bad-toa' in valid_valued:
             selection = np.zeros(len(toas),dtype=bool)
             for bt in self.get_bad_toas():
