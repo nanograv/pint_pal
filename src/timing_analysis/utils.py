@@ -440,6 +440,9 @@ def pdf_writer(fitter,
                 return r'\verb' + c + s + c
         else:
             raise ValueError(f"String {s} contains all my known verbatim quoting characters")
+    def alert(s):
+        s = str(s)
+        return r"\textbf{" + s + "}"
     
     # Check if fitter is wideband or not
     if fitter.is_wideband:
