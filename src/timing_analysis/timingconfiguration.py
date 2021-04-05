@@ -375,9 +375,10 @@ class TimingConfiguration:
         if 'bad-ff' in valid_valued:
             pass
         if 'bad-epoch' in valid_valued:
+            names = np.array([f['name'] for f in to.orig_table['flags']])
             for be in self.get_bad_epochs():
-                be_select = np.array([(be in n) for n in toas.get_flag_value('name')[0]])
-                apply_cut_flag(toas,be_select,'badepoch')
+                epochinds = np.where([be in n for n in names])[0]
+                apply_cut_flag(toas,epochinds,'badepoch')
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             backends = np.array([f['be'] for f in toas.orig_table['flags']])
@@ -388,18 +389,16 @@ class TimingConfiguration:
                     rangeinds = np.where((mjds>br[0]) & (mjds<br[1]))[0]
                 apply_cut_flag(toas,rangeinds,'badrange')
         if 'bad-toa' in valid_valued:
-            selection = np.zeros(len(toas),dtype=bool)
+            names = np.array([f['name'] for f in toas.orig_table['flags']])
+            chans = np.array([f['chan'] for f in toas.orig_table['flags']])
+            subints = np.array([f['subint'] for f in toas.orig_table['flags']])
             for bt in self.get_bad_toas():
                 name,chan,subint = bt
-                name_match = np.array([(n == name) for n in toas.get_flag_value('name')[0]])
-                chan_match = np.array([(ch == chan) for ch in toas.get_flag_value('chan')[0]])
-                subint_match = np.array([(si == subint) for si in toas.get_flag_value('subint')[0]])
                 if self.get_toa_type() == 'NB':
-                    bt_select = (name_match * subint_match * chan_match)
+                    btind = np.where((names==name) & (chans==chan) & (subints==subint))[0]
                 else:
                     # don't match based on -chan flags, since WB TOAs don't have them
-                    bt_select = (name_match * subint_match)
-                selection += bt_select
-            apply_cut_flag(toas,selection,'badtoa')
+                    btind = np.where((names==name) & (subints==subint))[0]
+                apply_cut_flag(toas,btind,'badtoa')
 
         return toas
