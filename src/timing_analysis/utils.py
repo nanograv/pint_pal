@@ -721,6 +721,20 @@ def pdf_writer(fitter,
     else:
         log.warning(f"Reduced chi-squared of {rchi} has unlikely false positive probability of {fpp}") 
         fsum.write('\\\\ Warning: False positive probability not believable\n')
+    if fitter_noise is not None:
+        fsum.write("\\\\\n")
+        fsum.write("\\\\\n")
+        fsum.write("After applying new noise model:\\\\\n")
+        chi2_1 = fitter_noise.resids.chi2
+        ndof_1 = fitter_noise.resids.dof
+        rchi = chi2_1/ndof_1
+        fpp = scipy.stats.chi2(int(ndof_1)).sf(float(chi2_1))
+        fsum.write('New reduced $\chi^2$ is %f/%d = %f (false positive probability %g)\n' % (chi2_1,ndof_1,rchi,fpp))
+        if 0.001<fpp<0.999:
+            fsum.write('\\\\ New false positive probability is believable\n')
+        else:
+            log.warning(f"New reduced chi-squared of {rchi} has unlikely false positive probability of {fpp}") 
+            fsum.write('\\\\ Warning: New false positive probability not believable\n')
 
     # Check EFACs, EQUADs, ECORRs:
     fsum.write(r'\subsection*{Error parameters reasonable?}' + '\n')
@@ -884,7 +898,7 @@ def pdf_writer(fitter,
                                nodmx=True,
                                threshold_sigma=3)
         except ValueError as e:
-            fsum.write(f"WARNING: compare_models failed because of {e}\\\\\n")
+            fsum.write(f"WARNING: {verb('compare_models')} failed because of {verb(e)}\\\\\n")
         else:
             fsum.write(r"{\small" + "\n")
             fsum.write(r"\begin{verbatim}" + "\n")
