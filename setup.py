@@ -17,8 +17,7 @@ setup(
     install_requires=[
         'ruamel.yaml', 
         "pint_pulsar",
-        "jupyterlab",
-        "enterprise",
+        "enterprise-pulsar",
         "enterprise-extensions",
         "pytest",
         "nbconvert",
