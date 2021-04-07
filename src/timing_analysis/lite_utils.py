@@ -41,7 +41,7 @@ def write_par(fitter,toatype='',addext='',outfile=None):
     with open(outfile, 'w') as fout:
         fout.write(fitter.model.as_parfile())
 
-def write_tim(fitter,toatype='',addext='',outfile=None):
+def write_tim(fitter,toatype='',addext='',outfile=None,commentflag='cut'):
     """Writes TOAs to a tim file in the working directory.
 
     Parameters
@@ -53,6 +53,10 @@ def write_tim(fitter,toatype='',addext='',outfile=None):
         if set, adds extension to date
     outfile: str, optional
         if set, overrides default naming convention
+    commentflag: str or None, optional
+        if a string, and that string is a TOA flag,
+        that TOA will be commented in the output file;
+        if None (or non-string), no TOAs will be commented.
     """
     if outfile is None:
         source = fitter.get_allparams()['PSR'].value
@@ -62,36 +66,12 @@ def write_tim(fitter,toatype='',addext='',outfile=None):
         else:
             outfile = f'{source}_PINT_{date_str}{addext}.tim'
 
-    fitter.toas.write_TOA_file(outfile, format='tempo2')
-    add_cut_tims(outfile)
-
-def add_cut_tims(timfile):
-    """Temporary cludge to add cut TOAs back into output tim file (with cut flags).
-
-    Parameters
-    ==========
-    timfile: str
-        tim file to extend with commented TOAs including -cut flags
-    """
-    from glob import glob
-    import subprocess
-
-    cut_tims = glob('*cut.tim')
-    commented_lines = []
-    for ct in cut_tims:
-        with open(ct,'r') as f: commented_lines.extend(f.readlines())
     
-    commented_lines = [cl for cl in commented_lines if '-cut' in cl]  # remove unnecessary FORMAT lines
-
-    with open(timfile,'a+') as f:
-        for line in commented_lines:
-            f.write(f'C {line}')
-
-    for f in cut_tims:
-        subprocess.run(['rm',f])
+    fitter.toas.write_TOA_file(outfile, format='tempo2',commentflag=commentflag)
 
 def write_include_tim(source,tim_file_list):
     """Writes file listing tim files to load as one PINT toa object (using INCLUDE).
+       DEPRECATED...?
 
     Parameters
     ==========

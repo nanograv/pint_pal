@@ -13,28 +13,19 @@ import copy
 from scipy.special import fdtr
 from timing_analysis.utils import apply_cut_flag, apply_cut_select
 
-"""
-# Joanna's imports (should be able to clean this up quite a bit)
+# Possible Gibbs imports
 import matplotlib
 from matplotlib.ticker import NullFormatter
 import scipy.linalg as sl
 import time
 import enterprise
 from enterprise.pulsar import Pulsar
-import enterprise.signals.parameter as parameter
-from enterprise.signals import utils
-from enterprise.signals import signal_base
 from enterprise.signals import selections
-from enterprise.signals.selections import Selection
-from enterprise.signals import white_signals
-from enterprise.signals import gp_signals
 from enterprise.signals import deterministic_signals
 #import libstempo as T (commented out, because ?!?!)
-from enterprise.signals.selections import Selection
 import scipy.linalg as sl, scipy.stats, scipy.special
 import corner
 from PTMCMCSampler.PTMCMCSampler import PTSampler as ptmcmc
-"""
 
 def poutlier(p,likob):
     """Invoked on a sample parameter set and the appropriate likelihood,
@@ -615,16 +606,25 @@ class Gibbs(object):
                 sys.stdout.write('Finished %g percent in %g seconds.'%(ii / niter * 100, time.time()-tstart))
                 sys.stdout.flush()
                 
-        np.savetxt('{}/chain.txt'.format(results_dir), gibbs.chain)
-        np.savetxt('{}/bchain.txt'.format(results_dir), gibbs.bchain)
-        np.savetxt('{}/zchain.txt'.format(results_dir), gibbs.zchain)
-        np.savetxt('{}/poutchain.txt'.format(results_dir), gibbs.poutchain)
-        np.savetxt('{}/thetachain.txt'.format(results_dir), gibbs.thetachain)
-        np.savetxt('{}/alphachain.txt'.format(results_dir),gibbs.alphachain)
+        np.savetxt('{}/chain.txt'.format(results_dir), self.chain)
+        np.savetxt('{}/bchain.txt'.format(results_dir), self.bchain)
+        np.savetxt('{}/zchain.txt'.format(results_dir), self.zchain)
+        np.savetxt('{}/poutchain.txt'.format(results_dir), self.poutchain)
+        np.savetxt('{}/thetachain.txt'.format(results_dir), self.thetachain)
+        np.savetxt('{}/alphachain.txt'.format(results_dir), self.alphachain)
 
 def gibbs_run(entPintPulsar,file_base=None,results_dir=None,Nsamples=10000):
     """Necessary set-up to run gibbs sampler, and run it.
     """
+    # Imports
+    import enterprise.signals.parameter as parameter
+    from enterprise.signals import utils
+    from enterprise.signals import signal_base
+    from enterprise.signals.selections import Selection
+    from enterprise.signals import white_signals
+    from enterprise.signals import gp_signals
+    from enterprise.signals.selections import Selection
+
     # white noise
     efac = parameter.Uniform(0.01,10.0)
     equad = parameter.Uniform(-10, -4)
@@ -646,7 +646,6 @@ def gibbs_run(entPintPulsar,file_base=None,results_dir=None,Nsamples=10000):
     s = ef + eq + ec + rn + tm 
 
     # PTA
-    epp = 
     pta = signal_base.PTA([s(entPintPulsar)])
 
     # Instantiate Gibbs object & sample (which of these options need to be kwargs?)
@@ -701,7 +700,7 @@ def calculate_pout(model, toas, file_base=None, results_dir=None, method='hmc',
         epp = get_entPintPulsar(model, toas, drop_pintpsr=False)
     elif method == 'gibbs':
         epp = get_entPintPulsar(model, toas)
-        gibbs_run(epp,file_base=None,results_dir='outlier',Nsamples=100)  # Vastly reduce Nsamples for testing
+        gibbs_run(epp,file_base=file_base,results_dir=results_dir,Nsamples=Nsamples)  # Vastly reduce Nsamples for testing
     else:
         log.error(f'Specified method ({method}) is not recognized.')
 
