@@ -7,10 +7,7 @@ import numpy as np
 from astropy import log
 
 # Epochalyptica imports
-#import pint
-#import pint.toa
 import pint.fitter
-#import pint.models.model_builder as mb
 from pint.residuals import Residuals
 import copy
 from scipy.special import fdtr
@@ -38,25 +35,6 @@ import scipy.linalg as sl, scipy.stats, scipy.special
 import corner
 from PTMCMCSampler.PTMCMCSampler import PTSampler as ptmcmc
 """
-
-def get_entPintPulsar(model,toas,sort=False,drop_pintpsr=True):
-    """Return enterprise.PintPulsar object with PINT model, toas embedded.
-
-    Parameters
-    ==========
-    model: `pint.model.TimingModel` object
-    toas: `pint.toa.TOAs` object
-    sort: bool
-        optional, ...
-    drop_pintpsr: bool
-        optional, if False, pint toas/model remain embedded in PintPulsar object 
-
-    Returns
-    =======
-    model: `enterprise.PintPulsar` object
-    """
-    from enterprise.pulsar import PintPulsar 
-    return PintPulsar(toas,model,sort=sort,drop_pintpsr=drop_pintpsr)
 
 def poutlier(p,likob):
     """Invoked on a sample parameter set and the appropriate likelihood,
@@ -86,7 +64,7 @@ def poutlier(p,likob):
     
     return num/den, r/np.sqrt(N)
 
-def get_outliers_piccard(epp,Nsamples=20000,Nburnin=1000):
+def run_pta_outliers(epp,Nsamples=20000,Nburnin=1000):
     """Description
 
     Parameters
@@ -248,6 +226,8 @@ def get_outliers_piccard(epp,Nsamples=20000,Nburnin=1000):
     plt.savefig(residualplot)
 
     # Want to apply -pout flags to toas object and write result (outlier.tim, or something?)
+    # The following provides indices of outlier TOAs in toas.orig_table:
+    # to.table[likob.psr.isort][outliers]['index']
 
 class Gibbs(object):
     def __init__(self, pta, model = 'mixture',tdf=4, m=0.01,
@@ -587,7 +567,7 @@ class Gibbs(object):
         return np.sum(p.get_logpdf(x) for p, x in zip(self.params, xs))
 
 
-    def sample(self, xs, niter=10000):
+    def sample(self, xs, niter=10000, file_base=None, results_dir=None):
 
         self.chain = np.zeros((niter, len(xs)))
         self.bchain = np.zeros((niter, len(self._b)))
@@ -599,8 +579,9 @@ class Gibbs(object):
 
         xnew = xs
         tstart = time.time()
-        outdir = 'outlier_J1909/'
-        os.system('mkdir -p {}'.format(outdir))
+
+        if not results_dir: results_dir = './'
+        os.system('mkdir -p {}'.format(results_dir))
         for ii in range(niter):
             self.chain[ii, :] = xnew
             self.bchain[ii,:] = self._b
@@ -634,12 +615,96 @@ class Gibbs(object):
                 sys.stdout.write('Finished %g percent in %g seconds.'%(ii / niter * 100, time.time()-tstart))
                 sys.stdout.flush()
                 
-        np.savetxt('{}/chain.txt'.format(outdir), gibbs.chain)
-        np.savetxt('{}/bchain.txt'.format(outdir), gibbs.bchain)
-        np.savetxt('{}/zchain.txt'.format(outdir), gibbs.zchain)
-        np.savetxt('{}/poutchain.txt'.format(outdir), gibbs.poutchain)
-        np.savetxt('{}/thetachain.txt'.format(outdir), gibbs.thetachain)
-        np.savetxt('{}/alphachain.txt'.format(outdir),gibbs.alphachain)
+        np.savetxt('{}/chain.txt'.format(results_dir), gibbs.chain)
+        np.savetxt('{}/bchain.txt'.format(results_dir), gibbs.bchain)
+        np.savetxt('{}/zchain.txt'.format(results_dir), gibbs.zchain)
+        np.savetxt('{}/poutchain.txt'.format(results_dir), gibbs.poutchain)
+        np.savetxt('{}/thetachain.txt'.format(results_dir), gibbs.thetachain)
+        np.savetxt('{}/alphachain.txt'.format(results_dir),gibbs.alphachain)
+
+def gibbs_run(entPintPulsar,file_base=None,results_dir=None,Nsamples=10000):
+    """Necessary set-up to run gibbs sampler, and run it.
+    """
+    # white noise
+    efac = parameter.Uniform(0.01,10.0)
+    equad = parameter.Uniform(-10, -4)
+    ecorr = parameter.Uniform(-10, -4)
+    selection = selections.Selection(selections.by_backend)
+
+    ef = white_signals.MeasurementNoise(efac=efac, selection=selection)
+    eq = white_signals.EquadNoise(log10_equad=equad, selection=selection)
+    ec = gp_signals.EcorrBasisModel(log10_ecorr=ecorr, selection=selection)
+
+    # red noise
+    pl = utils.powerlaw(log10_A=parameter.Uniform(-18,-11),gamma=parameter.Uniform(0,7))
+    rn = gp_signals.FourierBasisGP(spectrum=pl, components=30)
+
+    # timing model
+    tm = gp_signals.TimingModel()
+
+    # combined signal
+    s = ef + eq + ec + rn + tm 
+
+    # PTA
+    epp = 
+    pta = signal_base.PTA([s(entPintPulsar)])
+
+    # Instantiate Gibbs object & sample (which of these options need to be kwargs?)
+    gibbs = Gibbs(pta, model = 'mixture', vary_df=False, theta_prior='beta', vary_alpha = True)
+    params = np.array([p.sample() for p in gibbs.params]).flatten()
+    gibbs.sample(params,niter=Nsamples,file_base=file_base,results_dir=results_dir)
+
+def get_entPintPulsar(model,toas,sort=False,drop_pintpsr=True):
+    """Return enterprise.PintPulsar object with PINT model, toas embedded.
+
+    Parameters
+    ==========
+    model: `pint.model.TimingModel` object
+    toas: `pint.toa.TOAs` object
+    sort: bool
+        optional, default: False
+    drop_pintpsr: bool
+        optional, default: True; PintPulsar retains model/toas if False
+
+    Returns
+    =======
+    model: `enterprise.PintPulsar` object
+    """
+    from enterprise.pulsar import PintPulsar
+    return PintPulsar(toas,model,sort=sort,drop_pintpsr=drop_pintpsr)
+
+def calculate_pout(model, toas, file_base=None, results_dir=None, method='hmc',
+                  Nsamples=10000,Nburnin=1000):
+    """Determines TOA outlier probabilities using specified method (currently
+    supported: hamilton monte carlo, hmc, or gibbs).
+
+    Parameters
+    ==========
+    model: `pint.model.TimingModel` object
+    toas: `pint.toa.TOAs` object
+    file_base: string
+        optional, basename of output files (if None, uses pulsar name)
+    results_dir: string
+        optional, directory where results are written (if None, use working directory)
+    method: string
+        optional, default is hmc (also available: gibbs)
+    Nsamples: int
+        optional, number of MCMC samples to determine outlier probability
+    Nburnin: int
+        optional, number of burn-in samples (hmc)
+
+    Returns
+    =======
+    None
+    """
+    if method == 'hmc':
+        epp = get_entPintPulsar(model, toas, drop_pintpsr=False)
+    elif method == 'gibbs':
+        epp = get_entPintPulsar(model, toas)
+        gibbs_run(epp,file_base=None,results_dir='outlier',Nsamples=100)  # Vastly reduce Nsamples for testing
+    else:
+        log.error(f'Specified method ({method}) is not recognized.')
+
 
 def Ftest(chi2_1, dof_1, chi2_2, dof_2):
     """
