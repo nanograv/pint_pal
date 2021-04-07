@@ -140,6 +140,9 @@ def center_epochs(model,toas):
     else:
         model.change_posepoch(midmjd)
 
+    if hasattr(model, "TASC") or hasattr(model, "T0"):
+        model.change_binary_epoch(midmjd)
+
     return model
 
 def check_fit(fitter,skip_check=None):

@@ -356,7 +356,9 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     psr_name = pars[0].split('_')[0]
 
     if save_corner:
-        corner.corner(chain[burn:, :-4], labels = pars)
+        pars_short = [p.split("_",1)[1] for p in pars]
+        log.info(f"Chain parameter names are {pars_short}")
+        corner.corner(chain[burn:, :-4], labels = pars_short)
 
         if '_wb' in chaindir:
             figname = f"./{psr_name}_noise_corner_wb.pdf"

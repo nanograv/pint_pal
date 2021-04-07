@@ -1,4 +1,4 @@
-import json
+import nbformat
 import re
 import argparse
 import sys
@@ -18,7 +18,7 @@ def transform_notebook(nb, transformations, verbose=False):
     
     Parameters
     ----------
-    nb : dict coming from json.load on a notebook
+    nb : nbformat.NotebookNode (dict-like object coming from nbformat.read() on a notebook)
         The notebook whose code cells should be transformed.
     transformations : dict
         A dictionary mapping variable names to string representations of their values.
@@ -28,19 +28,24 @@ def transform_notebook(nb, transformations, verbose=False):
     for cell in nb["cells"]:
         if cell["cell_type"]!="code":
             continue
-        for i, l in enumerate(cell["source"]):
+        lines = []
+        for i, l in enumerate(cell["source"].split("\n")):
             m = assignment.match(l)
             if not m:
+                lines.append(l)
                 continue
             k = m.group(1)
             if k in transformations and not transformed[k]:
                 val = transformations[k]
                 transformed[k] = True
-                new_line = f"{m.group(1)} = {val}\n"
+                new_line = f"{m.group(1)} = {val}"
                 if verbose:
                     print(f"replacing line {repr(l)} by {repr(new_line)}")
-                cell["source"][i] = new_line
-                subs += 1            
+                lines.append(new_line)
+                subs += 1
+            else:
+                lines.append(l)
+        cell["source"] = "\n".join(lines)
     return subs
 
 if __name__ == '__main__':
@@ -74,10 +79,10 @@ if __name__ == '__main__':
         sys.exit(1)
     transformations = {k: v for (k,v) in args.set_variable}
     with open(args.infile) as f:
-        nb = json.load(f)
+        nb = nbformat.read(f, as_version=4)
     if not transform_notebook(nb, transformations, verbose=args.verbose):
         print(f"No substitutions performed; requested were {transformations}", file=sys.stderr)
     with open(args.outfile, "w") as f:
-        nb = json.dump(nb, f)
+        nb = nbformat.write(nb, f)
     
     
