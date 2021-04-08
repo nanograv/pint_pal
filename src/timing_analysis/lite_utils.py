@@ -443,14 +443,27 @@ def new_changelog_entry(tag, note):
             date = now.strftime('%Y-%m-%d')
             print(f'  - \'{date} {username} {tag}: {note}\'')
 
-def display_excise_checkbox(obs_list):
-    # Strip full path to just .zap file:
-    short_names = []
-    for i in obs_list:
-        sn = i.split('/')[-1]
-        short_names.append(sn)
-    # Define checkboxes and print short names with them
-    checkboxes = [widgets.Checkbox(value=False,description=label,indent=False) for label in short_names]
-    output = widgets.VBox(children=checkboxes)
+def display_excise_dropdowns(obs_list):
+    ext_list = ['None','.ff','.calib','.zap']
+    pav_list = ['None','YFp','GTpd']
+    print('To generate plots, select both a file and plot type for each observation of interest (pav -YFp is time vs. phase; pav -GTpd is frequency vs. phase).')
+    # Strip full path to file name minus extension 
+    short_names = [o.split('/')[-1].rpartition('.')[0] for o in obs_list]
+    dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'}, 
+                                  options=ext_list, layout={'width': 'max-content'}) for s in short_names]
+    pav_drop = [widgets.Dropdown(options=pav_list) for s in short_names]
+    output = widgets.HBox([widgets.VBox(children=dropdowns),widgets.VBox(children=pav_drop)])
     display(output)
-    return checkboxes
+    return dropdowns, pav_drop
+
+def read_excise_dropdowns(select_list, pav_list, matches):
+    plot_list = []
+    for i in range(len(select_list)):
+        if (select_list[i].value is not 'None') and (pav_list[i].value is not 'None'):
+            plot_list.append([matches[i].rpartition('/')[0] + '/' + 
+                              select_list[i].description + select_list[i].value, pav_list[i].value])
+        elif (select_list[i].value is 'None') is not (pav_list[i].value is 'None'):
+            print('%s: You must select both an extension and plot type!' %(select_list[i].description))
+    if len(plot_list) == 0:
+        print('Nothing was selected. To make pav plots, select a file and plot type for the observation(s) of interest and re-run this cell.')
+    return plot_list
