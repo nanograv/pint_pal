@@ -64,7 +64,7 @@ class TimingConfiguration:
         else:
             return self.config['free-params']
 
-    def get_model_and_toas(self,usepickle=True,print_all_ignores=False):
+    def get_model_and_toas(self,usepickle=True,print_all_ignores=False,apply_initial_cuts=True):
         """Return the PINT model and TOA objects"""
         par_path = os.path.join(self.par_directory,self.config["timing-model"])
         toas = self.config["toas"]
@@ -99,18 +99,9 @@ class TimingConfiguration:
         t.orig_table = t.table.copy()
 
         # Add 'cut' flags to TOAs according to config 'ignore' block.
-        t = self.apply_ignore(t,specify_keys=['mjd-start','mjd-end','snr-cut','bad-range'])
-        apply_cut_select(t,reason='initial cuts - ignore block')
-
-        """
-        for tt in t.orig_table:
-            if 'cut' in tt['flags']:
-                tf = tt['flags']
-                print(tt['index'],tf['name'],tf['snr'],tf['cut'])
-                #print(tt['index'])
-        #print(f"min(snr): {min(t.get_flag_value('snr')[0])}, max(snr): {max(t.get_flag_value('snr')[0])}")
-        print(len(t.table))
-        """
+        if apply_initial_cuts:
+            t = self.apply_ignore(t,specify_keys=['mjd-start','mjd-end','snr-cut','bad-range'])
+            apply_cut_select(t,reason='initial cuts - ignore block')
 
         # To facilitate TOA excision, frontend/backend info
         febe_pairs = set(t.get_flag_value('f')[0])

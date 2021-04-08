@@ -571,8 +571,11 @@ class Gibbs(object):
         xnew = xs
         tstart = time.time()
 
-        if not results_dir: results_dir = './'
-        os.system('mkdir -p {}'.format(results_dir))
+        if not results_dir:
+            results_dir = './'
+        else:
+            os.system(f'mkdir -p {results_dir}')
+
         for ii in range(niter):
             self.chain[ii, :] = xnew
             self.bchain[ii,:] = self._b
@@ -605,13 +608,18 @@ class Gibbs(object):
                 sys.stdout.write('\r')
                 sys.stdout.write('Finished %g percent in %g seconds.'%(ii / niter * 100, time.time()-tstart))
                 sys.stdout.flush()
-                
-        np.savetxt('{}/chain.txt'.format(results_dir), self.chain)
-        np.savetxt('{}/bchain.txt'.format(results_dir), self.bchain)
-        np.savetxt('{}/zchain.txt'.format(results_dir), self.zchain)
-        np.savetxt('{}/poutchain.txt'.format(results_dir), self.poutchain)
-        np.savetxt('{}/thetachain.txt'.format(results_dir), self.thetachain)
-        np.savetxt('{}/alphachain.txt'.format(results_dir), self.alphachain)
+        
+        if not file_base and len(self.pta.pulsarmodels) == 1:
+            file_base = gibbs.pta.pulsarmodels[0].psrname
+        elif len(self.pta.pulsarmodels) != 1:
+            log.warning('pta.pulsarmodels has more than one element.')
+        
+        np.savetxt(f'{results_dir}/{file_base}_chain.txt', self.chain)
+        np.savetxt(f'{results_dir}/{file_base}_bchain.txt', self.bchain)
+        np.savetxt(f'{results_dir}/{file_base}_zchain.txt', self.zchain)
+        np.savetxt(f'{results_dir}/{file_base}_poutchain.txt', self.poutchain)
+        np.savetxt(f'{results_dir}/{file_base}_thetachain.txt', self.thetachain)
+        np.savetxt(f'{results_dir}/{file_base}_alphachain.txt', self.alphachain)
 
 def gibbs_run(entPintPulsar,file_base=None,results_dir=None,Nsamples=10000):
     """Necessary set-up to run gibbs sampler, and run it.
