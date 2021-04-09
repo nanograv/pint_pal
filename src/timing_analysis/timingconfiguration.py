@@ -102,8 +102,8 @@ class TimingConfiguration:
         # Add 'cut' flags to TOAs according to config 'ignore' block.
         if apply_initial_cuts:
             self.check_for_orphaned_recs(t)
-            #t = self.apply_ignore(t,specify_keys=['mjd-start','mjd-end','snr-cut','bad-range'])
-            #apply_cut_select(t,reason='initial cuts - ignore block')
+            t = self.apply_ignore(t,specify_keys=['orphaned-rec','mjd-start','mjd-end','snr-cut','bad-range'])
+            apply_cut_select(t,reason='initial cuts - ignore block')
 
         return m, t
 
@@ -207,7 +207,8 @@ class TimingConfiguration:
 
     def check_for_orphaned_recs(self, toas, nepochs_threshold=3):
         """Check for frontend/backend pairs that arise at or below threshold
-        for number of epochs; return list of those that are orphaned.
+        for number of epochs; also check that the set matches with those listed
+        in the yaml.
         
         Parameters
         ==========
@@ -215,10 +216,6 @@ class TimingConfiguration:
         nepochs_threshold: int, optional
             Number of epochs at/below which a frontend/backend pair is orphaned.
 
-        Returns
-        =======
-        febe_to_cut: list
-            List of orphaned receivers to cut.
         """
         febe_pairs = set(toas.get_flag_value('f')[0])
         log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
@@ -254,7 +251,7 @@ class TimingConfiguration:
             print(f"Add the following line to {self.filename}...")
             new_changelog_entry('CURATE',f"orphaned receivers ({nepochs_threshold} or fewer epochs): {febe_cut_str}")
 
-        return febe_to_cut
+        return None 
 
     def check_for_bad_epochs(self, toas, threshold=0.9, print_all=False):
         """Check the bad-toas entries for epochs where more than a given
@@ -372,7 +369,8 @@ class TimingConfiguration:
 
     def apply_ignore(self,toas,specify_keys=None):
         """ Basic checks and return TOA excision info. """
-        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-epoch'] # prob-outlier, bad-ff
+        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-epoch',
+                        'orphaned-rec'] # prob-outlier, bad-ff
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
 
@@ -400,6 +398,11 @@ class TimingConfiguration:
                  
         # All info here about selecting various TOAs.
         # Select TOAs to cut, then use apply_cut_flag.
+        if 'orphaned-rec' in valid_valued:
+            fs = np.array([f['f'] for f in toas.orig_table['flags']])
+            for o in self.get_orphaned_rec():
+                orphinds = np.where(fs==o)[0]
+                apply_cut_flag(toas,orphinds,'orphaned')
         if 'mjd-start' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             startinds = np.where(mjds < self.get_mjd_start())[0]
