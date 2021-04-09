@@ -16,6 +16,7 @@ import astropy.units as u
 from astropy import log
 import yaml
 from timing_analysis.utils import write_if_changed, apply_cut_flag, apply_cut_select
+from timing_analysis.lite_utils import new_changelog_entry
 from timing_analysis.defaults import *
 
 class TimingConfiguration:
@@ -100,12 +101,9 @@ class TimingConfiguration:
 
         # Add 'cut' flags to TOAs according to config 'ignore' block.
         if apply_initial_cuts:
-            t = self.apply_ignore(t,specify_keys=['mjd-start','mjd-end','snr-cut','bad-range'])
-            apply_cut_select(t,reason='initial cuts - ignore block')
-
-        # To facilitate TOA excision, frontend/backend info
-        febe_pairs = set(t.get_flag_value('f')[0])
-        log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
+            self.check_for_orphaned_recs(t)
+            #t = self.apply_ignore(t,specify_keys=['mjd-start','mjd-end','snr-cut','bad-range'])
+            #apply_cut_select(t,reason='initial cuts - ignore block')
 
         return m, t
 
@@ -177,6 +175,12 @@ class TimingConfiguration:
             return self.config['ignore']['mjd-end']
         return None
 
+    def get_orphaned_rec(self):
+        """Return orphaned receiver(s)"""
+        if 'orphaned-rec' in self.config['ignore'].keys():
+            return self.config['ignore']['orphaned-rec']
+        return None 
+
     def get_snr_cut(self):
         """ Return value of the TOA S/N cut """
         if "snr-cut" in self.config['ignore'].keys():
@@ -200,6 +204,57 @@ class TimingConfiguration:
         if 'bad-toa' in self.config['ignore'].keys():
             return self.config['ignore']['bad-toa']
         return None
+
+    def check_for_orphaned_recs(self, toas, nepochs_threshold=3):
+        """Check for frontend/backend pairs that arise at or below threshold
+        for number of epochs; return list of those that are orphaned.
+        
+        Parameters
+        ==========
+        toas: `pint.TOAs object`
+        nepochs_threshold: int, optional
+            Number of epochs at/below which a frontend/backend pair is orphaned.
+
+        Returns
+        =======
+        febe_to_cut: list
+            List of orphaned receivers to cut.
+        """
+        febe_pairs = set(toas.get_flag_value('f')[0])
+        log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
+
+        febe_to_cut = []
+        for febe in febe_pairs:
+            f_bool = np.array([f == febe for f in toas.get_flag_value('f')[0]])
+            f_names = toas[f_bool].get_flag_value('name')[0]
+            epochs = set(f_names)
+            n_epochs = len(epochs)
+            if n_epochs > nepochs_threshold:
+                log.info(f'{febe} epochs: {n_epochs}')
+            else:
+                febe_to_cut.append(febe)
+
+        if febe_to_cut and ('orphaned-rec' in self.config['ignore'].keys()):
+            ftc = set(febe_to_cut)
+            if not self.get_orphaned_rec(): orph = set()
+            else: orph = set(self.get_orphaned_rec())
+            # Do sets of receivers to cut and those listed in the yaml match?
+            if not (ftc == orph):
+                # Add/remove from orphaned-rec?
+                if (ftc - orph):
+                    log.warning(f"{nepochs_threshold} or fewer epochs, add to orphaned-rec: {', '.join(ftc-orph)}")
+                elif (orph - ftc):
+                    log.warning(f"Remove from orphaned-rec: {', '.join(orph-ftc)}")
+            else:
+                pass     
+        elif febe_to_cut:  # ...but no orphaned-rec field in the ignore block.
+            febe_cut_str = ', '.join(febe_to_cut)
+            log.warning(f"Add orphaned-rec to the ignore block in {self.filename}.")
+            log.warning(f"{nepochs_threshold} or fewer epochs, add to orphaned-rec: {febe_cut_str}")
+            print(f"Add the following line to {self.filename}...")
+            new_changelog_entry('CURATE',f"orphaned receivers ({nepochs_threshold} or fewer epochs): {febe_cut_str}")
+
+        return febe_to_cut
 
     def check_for_bad_epochs(self, toas, threshold=0.9, print_all=False):
         """Check the bad-toas entries for epochs where more than a given
