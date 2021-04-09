@@ -103,7 +103,7 @@ class TimingConfiguration:
         if apply_initial_cuts:
             self.check_for_orphaned_recs(t)
             t = self.apply_ignore(t,specify_keys=['orphaned-rec','mjd-start','mjd-end','snr-cut','bad-range'])
-            apply_cut_select(t,reason='initial cuts - ignore block')
+            apply_cut_select(t,reason='initial cuts, specified keys')
 
         return m, t
 

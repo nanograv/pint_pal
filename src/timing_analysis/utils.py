@@ -994,6 +994,11 @@ def apply_cut_select(toas,reason='???'):
     """
     n_origtoas = len(toas.orig_table)
     mask = np.array(['cut' not in x for x in toas.orig_table['flags']])
-    log.info(f"Selecting {sum(mask)} TOAs out of {n_origtoas} (X removed based on {reason}).")
+    if len(toas.table) == n_origtoas:
+        n_remove = n_origtoas - np.sum(mask)
+        log.info(f"Selecting {sum(mask)} TOAs out of {n_origtoas} ({n_remove} removed based on {reason}).")
+    else:
+        n_more = len(toas.table) - np.sum(mask)
+        log.info(f"Selecting {sum(mask)} TOAs out of {n_origtoas} ({n_more} more removed based on {reason}).")
     toas.table = toas.orig_table[mask]
     toas.table = toas.table.group_by('obs')  # otherwise table.groups.keys gets clobbered; consider using separate toas object
