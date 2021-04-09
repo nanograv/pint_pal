@@ -942,7 +942,32 @@ def pdf_writer(fitter,
         else:
             fsum.write(r"{\small" + "\n")
             fsum.write(r"\begin{verbatim}" + "\n")
-            fsum.write("\n".join(cm))
+            header_done = False
+            for c in cm:
+                cs = c.split()
+                if not cs:
+                    continue
+                if not header_done:
+                    if cs[0].startswith("----"):
+                        header_done = True
+                    continue
+                if cs[0] in {
+                        "PSR", # Right at the top of the page
+                        "UNITS", "INFO", "TIMEEPH", "T2CMETHOD", "CHI2", 
+                        "POSEPOCH", "PEPOCH", "DMEPOCH",  # Epochs are forced equal
+                        "TZRMJD", "TZRSITE", "TZRFRQ", # Don't care about absolute phase
+                        "SWM"}:
+                    continue
+                if any(cs[0].startswith(p) for p in ["JUMP", "EFAC", "EQUAD", "ECORR", "DMEFAC", "DMEQUAD", "DMJUMP"]):
+                    # Are these interesting? No guaraantee that JUMP1 refers to the same jump
+                    continue
+                try:
+                    if len(cs)==3 and float(cs[1])==float(cs[2])==0.0:
+                        continue
+                except ValueError:
+                    # not floats
+                    pass
+                fsum.write(c + "\n")
             fsum.write(r"\end{verbatim}" + "\n")
             fsum.write(r"}" + "\n")
             fsum.write("\n")
