@@ -52,6 +52,8 @@ def test_run_notebook(config_file, output_dir, suppress_errors=False):
     transformations = {
         'config': f'"{config_file}"',
         'par_directory': f'"{join(base_dir, "results")}"',
+        'write_prenoise': "True",
+        'write_results': "True",
         'use_existing_noise_dir': 'True',
         'log_to_file': 'True',
     }
