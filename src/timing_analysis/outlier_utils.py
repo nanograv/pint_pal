@@ -622,7 +622,7 @@ class Gibbs(object):
         np.savetxt(f'{results_dir}/{file_base}_alphachain.txt', self.alphachain)
 
 def gibbs_run(entPintPulsar,file_base=None,results_dir=None,Nsamples=10000):
-    """Necessary set-up to run gibbs sampler, and run it.
+    """Necessary set-up to run gibbs sampler, and run it. Return pout.
     """
     # Imports
     import enterprise.signals.parameter as parameter
@@ -661,8 +661,10 @@ def gibbs_run(entPintPulsar,file_base=None,results_dir=None,Nsamples=10000):
     params = np.array([p.sample() for p in gibbs.params]).flatten()
     gibbs.sample(params,niter=Nsamples,file_base=file_base,results_dir=results_dir)
 
+    return np.mean(gibbs.poutchain, axis = 0)
+
 def get_entPintPulsar(model,toas,sort=False,drop_pintpsr=True):
-    """Return enterprise.PintPulsar object with PINT model, toas embedded.
+    """Return enterprise.PintPulsar object
 
     Parameters
     ==========
@@ -706,12 +708,19 @@ def calculate_pout(model, toas, file_base=None, results_dir=None, method='hmc',
     """
     if method == 'hmc':
         epp = get_entPintPulsar(model, toas, drop_pintpsr=False)
+        # Some sorting will be needed here so pout refers to toas order
     elif method == 'gibbs':
         epp = get_entPintPulsar(model, toas)
-        gibbs_run(epp,file_base=file_base,results_dir=results_dir,Nsamples=Nsamples)  # Vastly reduce Nsamples for testing
+        pout = gibbs_run(epp,file_base=file_base,results_dir=results_dir,Nsamples=Nsamples)
     else:
         log.error(f'Specified method ({method}) is not recognized.')
 
+    # Apply pout flags
+    uncut = [('cut' not in f) for f in toas.orig_table['flags']]
+    remaining_inds = np.where(uncut)[0]
+    for i,ri in enumerate(remaining_inds):
+        toas.orig_table[ri]['flags'][f'pout_{method}'] = pout[i]
+    
 
 def Ftest(chi2_1, dof_1, chi2_2, dof_2):
     """
