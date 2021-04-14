@@ -418,6 +418,7 @@ def new_changelog_entry(tag, note):
 
     Valid tags:
       - INIT: creation of the .yaml file
+      - READY_FOR: indicate state of completion for release version
       - ADD or REMOVE: adding or removing a parameter
       - BINARY: change in the binary model (e.g. ELL1 -> DD)
       - NOISE: changes in noise parameters, unusual values of note
@@ -425,7 +426,7 @@ def new_changelog_entry(tag, note):
       - NOTE: for anything else
       - TEST: for testing!
     """
-    VALID_TAGS = ['INIT','ADD','REMOVE','BINARY','NOISE','CURATE','NOTE','TEST']
+    VALID_TAGS = ['INIT','READY_FOR','ADD','REMOVE','BINARY','NOISE','CURATE','NOTE','TEST']
     vtstr = ', '.join(VALID_TAGS)
     if tag not in VALID_TAGS:
         log.error(f'{tag} is not a valid tag; valid tags are: {vtstr}.')
