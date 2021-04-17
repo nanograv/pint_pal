@@ -24,10 +24,10 @@ dmx:  # control dmx windowing/fixing
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 ignore: # toa excision
   mjd-start:
-  mjd-end:
+  mjd-end: 59072.0
   snr-cut: 8
   bad-toa:
-    - ['guppi_57745_J0605+3757_0004.15y.x.ff',50,1]
+  - [guppi_57745_J0605+3757_0004.15y.x.ff, 50, 1]
   bad-range:
   bad-epoch:
 

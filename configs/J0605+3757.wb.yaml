@@ -25,7 +25,7 @@ dmx:  # control dmx windowing/fixing
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 ignore: # toa excision
   mjd-start:
-  mjd-end:
+  mjd-end: 59072.0
   snr-cut: 25
   bad-toa:
   bad-range:
