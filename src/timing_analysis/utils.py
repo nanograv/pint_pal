@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import sys
 import numpy as np
 import astropy.units as u
 from astropy import log
@@ -407,6 +408,33 @@ def get_Ftest_lines(Ftest_dict, fitter, alpha = ALPHA):
 
     return ftest_lines
 
+def interesting_compare_lines(cm):
+    header_done = False
+    for c in cm:
+        cs = c.split()
+        if not cs:
+            continue
+        if not header_done:
+            if cs[0].startswith("----"):
+                header_done = True
+            continue
+        if cs[0] in {
+                "PSR", # Right at the top of the page
+                "UNITS", "INFO", "TIMEEPH", "T2CMETHOD", "CHI2", 
+                "POSEPOCH", "PEPOCH", "DMEPOCH",  # Epochs are forced equal
+                "TZRMJD", "TZRSITE", "TZRFRQ", # Don't care about absolute phase
+                "SWM"}:
+            continue
+        if any(cs[0].startswith(p) for p in ["JUMP", "EFAC", "EQUAD", "ECORR", "DMEFAC", "DMEQUAD", "DMJUMP"]):
+            # Are these interesting? No guaraantee that JUMP1 refers to the same jump
+            continue
+        try:
+            if len(cs)==3 and float(cs[1])==float(cs[2])==0.0:
+                continue
+        except ValueError:
+            # not floats
+            pass
+        yield c
 
 def pdf_writer(fitter, 
                parfile, 
@@ -431,11 +459,17 @@ def pdf_writer(fitter,
     fitter_noise [pint.fitter.Fitter]: Fitter that has had new noise parameters applied (if available).
     """
     def verb(s):
+        s = str(s).strip()
+        if "\n" in s:
+            return "\n".join(verb(p) for p in s.split("\n"))
         for c in "@|!%":
             if c not in s:
                 return r'\verb' + c + s + c
         else:
             raise ValueError(f"String {s} contains all my known verbatim quoting characters")
+    def alert(s):
+        s = str(s)
+        return r"\textbf{\color{red}" + s + "}"
     
     # Check if fitter is wideband or not
     if fitter.is_wideband:
@@ -481,6 +515,7 @@ def pdf_writer(fitter,
         fsum.write(r'\DeclareUnicodeCharacter{2078}{\textsuperscript{8}}' + '\n')
         fsum.write(r'\DeclareUnicodeCharacter{2079}{\textsuperscript{9}}' + '\n')
         fsum.write(r'\usepackage{graphicx}' + '\n')
+        fsum.write(r'\usepackage{xcolor}' + '\n')
         fsum.write(r'\addtolength{\hoffset}{-2.5cm}' + '\n')
         fsum.write(r'\addtolength{\textwidth}{5.0cm}' + '\n')
         fsum.write(r'\addtolength{\voffset}{-2.5cm}' + '\n')
@@ -550,6 +585,7 @@ def pdf_writer(fitter,
     model = get_model(parfile)
     # Write out the timing model
     fsum.write(r'\subsection*{Timing model}' + '\n')
+    fsum.write(r"This is the timing model as specified in the input par file, with no additional fitting." + '\\\\\n')
     fsum.write(r'\begin{verbatim}' + '\n')
     # Get the parfile lines
     parlines = model.as_parfile().split('\n')
@@ -587,24 +623,36 @@ def pdf_writer(fitter,
     if model.PSR.value.startswith("B") or model.PSR.value.startswith("J"):
         fsum.write('OK: starts with B or J\\\\\n')
     else:
-        fsum.write('Warning: does not start with B or J\\\\\n')
+        fsum.write(alert('Warning: does not start with B or J')+'\\\\\n')
     if not os.path.basename(parfile).startswith(model.PSR.value):
         msg = f'Warning: parfile is called {verb(parfile)} but pulsar name is {model.PSR.value}'
-        fsum.write(msg + r"\\" + "\n")
+        fsum.write(alert(msg) + r"\\" + "\n")
     fsum.write("\n")
     
+    if hasattr(model, "PB") and model.PB.value is not None:
+        porb = model.PB.value
+    elif hasattr(model, "FB0") and model.FB0.value is not None:
+        porb = (1/model.FB0.value)/86400.
+    else:
+        porb = 0
     # Write Epochs section
     fsum.write(r'\subsection*{Epochs near center of data span?}' + '\n')
     tmidspan = 0.5*(float(finish)+float(start))
     fsum.write('Middle of data span: midspan = %.2f\\\\\n' % (tmidspan))
     dtpepoch = float(model.PEPOCH.value)-tmidspan
     fsum.write('PEPOCH - midspan = $%.2f$ days = $%.2f$ years\\\\\n'  % ( dtpepoch, dtpepoch/365.24))
+    if abs(dtpepoch) > 1:
+        fsum.write(alert('PEPOCH is not at center of data span')+"\\\\\n")
     if param_check('TASC', fitter, check_enabled=True):
         dttasc = float(model.TASC.value)-tmidspan
         fsum.write('TASC - midspan = $%.2f$ days = $%.1f$ years\\\\\n'  % ( dttasc, dttasc/365.24))
+        if abs(dttasc) > 1 + porb:
+            fsum.write(alert('TASC is not at center of data span')+"\\\\\n")
     if param_check('T0', fitter, check_enabled=True):
         dtt0 = float(model.T0.value)-tmidspan
         fsum.write('TASC - midspan = $%.2f$ days = $%.1f$ years\\\\\n'  % ( dtt0, dtt0/365.24))
+        if abs(dtt0) > 1 + porb:
+            fsum.write(alert('T0 is not at center of data span')+"\\\\\n")
     fsum.write('\n')
 
     # Check for more than one jumped receiver
@@ -684,7 +732,7 @@ def pdf_writer(fitter,
         else:
             msg = f"par file $\\chi^2$ increased by {-chi2_decrease} during fitting, fitter has produced bogus result"
         log.warning(msg)
-        fsum.write(f'\\\\ Warning: {msg}\\\\\n')
+        fsum.write(f'\\\\ Warning: {alert(msg)}\\\\\n')
     else:
         fsum.write(f'\\\\ Fitting produces no major change, all is probably fine.\\\\\n')
     sigma_threshold = 0.1
@@ -720,7 +768,21 @@ def pdf_writer(fitter,
         fsum.write('\\\\ False positive probability is believable\n')
     else:
         log.warning(f"Reduced chi-squared of {rchi} has unlikely false positive probability of {fpp}") 
-        fsum.write('\\\\ Warning: False positive probability not believable\n')
+        fsum.write('\\\\ Warning: '+alert('False positive probability not believable') + '\n')
+    if fitter_noise is not None:
+        fsum.write("\\\\\n")
+        fsum.write("\\\\\n")
+        fsum.write("After applying new noise model:\\\\\n")
+        chi2_1 = fitter_noise.resids.chi2
+        ndof_1 = fitter_noise.resids.dof
+        rchi = chi2_1/ndof_1
+        fpp = scipy.stats.chi2(int(ndof_1)).sf(float(chi2_1))
+        fsum.write('New reduced $\chi^2$ is %f/%d = %f (false positive probability %g)\n' % (chi2_1,ndof_1,rchi,fpp))
+        if 0.001<fpp<0.999:
+            fsum.write('\\\\ New false positive probability is believable\n')
+        else:
+            log.warning(f"New reduced chi-squared of {rchi} has unlikely false positive probability of {fpp}") 
+            fsum.write('\\\\ Warning: New false positive probability not believable\n')
 
     # Check EFACs, EQUADs, ECORRs:
     fsum.write(r'\subsection*{Error parameters reasonable?}' + '\n')
@@ -732,42 +794,60 @@ def pdf_writer(fitter,
         if p.startswith("EFAC") or p.startswith("DMEFAC"):
             val = f"{pm.value:.3f}"
             if not 0.8 < pm.value < 1.2:
-                val = r"\textbf{" + val + "}"
+                val = alert(val)
                 any_bad_efac.append(p)
             fsum.write(verb(f"{p} {pm.key} {pm.key_value[0]}") + f" & {val}\\\\\n")
     fsum.write(r"\end{tabular}\\" + "\n")    
     if any_bad_efac:
-        msg = f"Some EFACs seem very large or small, has something gone wrong? {', '.join(verb(e) for e in any_bad_efac)}"
-        fsum.write(msg + "\\\\\n")
-        log.warning(msg)
+        msg = f"Some EFACs seem very large or small, has something gone wrong?"
+        efacs = f" {', '.join(verb(e) for e in any_bad_efac)}"
+        fsum.write(alert(msg) + efacs + "\\\\\n")
+        log.warning(msg + efacs)
     else:
         fsum.write("All EFACs seem reasonable.\\\\\n")
     fsum.write("\n")
     fsum.write(r"\begin{tabular}{l c c c}" + "\n")
     fsum.write(r"Parameter & value & TOA median & ratio\\" + "\n")
+    prior = False
+    large_ratio = False
+    large_value = False
     for p in sorted(model.params):
         pm = getattr(model, p)
         if p.startswith("EQUAD") or p.startswith("ECORR"):
             unc = np.median(fitter.toas.table["error"][pm.select_toa_mask(fitter.toas)])
             ratio = pm.value/unc
-            if ratio>0.75:
-                r = r"\textbf{"+f"{ratio:.2f}"+"}"
-            else:
-                r = f"{ratio:.2f}"
+            r = f"{ratio:.2f}"
+            ro = r
+            if ratio>0.75: 
+                large_ratio = True
+                ro = alert(r)
+            if pm.value>9.5:
+                prior = True
+                ro = alert(r)
+            if pm.value>3:
+                large_value = True
+                ro = alert(r)
             fsum.write(verb(f"{p} {pm.key} {pm.key_value[0]}") + f" & {pm.value:.3f} $\\mu$s & "
-                       f"{unc:.3f} $\\mu$s & {r}" + "\\\\\n")
+                       f"{unc:.3f} $\\mu$s & {ro}" + "\\\\\n")
         if p.startswith("DMEQUAD"):
             unc = np.median(fitter.toas.get_dm_errors().to_value(pint.dmu)[pm.select_toa_mask(fitter.toas)])
             ratio = pm.value/unc
+            r = f"{ratio:.2f}"
             if ratio>0.75:
-                r = r"\textbf{"+f"{ratio:.2f}"+"}"
-            else:
-                r = f"{ratio:.2f}"
+                large_ratio = True
+                r = alert(r)
             fsum.write(verb(f"{p} {pm.key} {pm.key_value[0]}") + f" & {pm.value:.3g} dmu & "
                        f"{unc:.3g} dmu & {r}" + "\\\\\n")
     fsum.write(r"\end{tabular}\\" + "\n")
-    fsum.write("EQUADs and DMEQUADs that are large compared to the uncertainties on the "
-               "relevant TOAs may be a sign of something strange.\\\\\n")
+    if large_ratio:
+        fsum.write(alert("EQUADs and DMEQUADs that are large compared to the uncertainties on the "
+                   "relevant TOAs may be a sign of something strange.") + "\\\\\n")
+    if large_value:
+        fsum.write(alert("Any EQUAD or ECORR more than a few us is suspicious.")
+                   + "\\\\\n")
+    if prior:
+        fsum.write(alert("The prior limit on EQUADs and ECORRs is 10 us; any value close to this is suspicious.")
+                   + "\\\\\n")
     
     fsum.write(r'\subsection*{Error parameters agree with chains?}' + '\n')
     if fitter_noise is None:
@@ -794,7 +874,7 @@ def pdf_writer(fitter,
                     ratio = pm.value/pm_noise.value
                     r = f"{ratio:.2f}"
                     if not 0.9 < ratio < 1.1:
-                        r = r"\textbf{" + r + "}"
+                        r = alert(r)
                         any_bogus = True
                 if hasattr(pm, "select_toa_mask"):
                     name = f"{p} {pm.key} {pm.key_value[0] if pm.key_value else pm.key_value}"
@@ -811,18 +891,18 @@ def pdf_writer(fitter,
                 fsum.write(f"{verb(name)} & {pm.value:.3g} {pm.units} & {pm_noise_value} & {r} & {median}" + "\\\\\n")
         fsum.write(r"\end{tabular}\\" + "\n")
         if any_bogus:
-            fsum.write("Some noise parameters (marked in bold) appear to be different "
-                       "in the noise chains than in the par file.\\\\\n")
+            fsum.write(alert("Some noise parameters (marked in bold) appear to be different "
+                       "in the noise chains than in the par file.")+"\\\\\n")
         model_set_params = {p for p in model.params if getattr(model, p).value is not None}
         noise_model_set_params = {p for p in fitter_noise.model.params if getattr(fitter_noise.model, p).value is not None}
         par_not_noise = list(sorted(model_set_params - noise_model_set_params))
         if par_not_noise:
-            fsum.write("WARNING: the par file contains (a) parameter(s) missing from the post-noise model:")
+            fsum.write(alert("WARNING: the par file contains (a) parameter(s) missing from the post-noise model:"))
             fsum.write(", ".join(verb(p) for p in par_not_noise))
             fsum.write(r"\\" + "\n")
         noise_not_par = list(sorted(model_set_params - noise_model_set_params))
         if noise_not_par:
-            fsum.write("WARNING: the post-noise model contains (a) parameter(s) missing from the par file:")
+            fsum.write(alert("WARNING: the post-noise model contains (a) parameter(s) missing from the par file:"))
             fsum.write(", ".join(verb(p) for p in noise_not_par))
             fsum.write(r"\\" + "\n")
     
@@ -844,6 +924,7 @@ def pdf_writer(fitter,
         for l in ftest_lines:
             fsum.write(l + '\n')
         fsum.write(r'\end{verbatim}' + '\n')
+    # FIXME: report suggestions based on F test results, if any
 
     # Write if there are bad DMX ranges
 
@@ -884,37 +965,43 @@ def pdf_writer(fitter,
                                nodmx=True,
                                threshold_sigma=3)
         except ValueError as e:
-            fsum.write(f"WARNING: compare_models failed because of {e}\\\\\n")
+            fsum.write(f"WARNING: {verb('compare_models')} failed because of {verb(e)}\\\\\n")
         else:
             fsum.write(r"{\small" + "\n")
             fsum.write(r"\begin{verbatim}" + "\n")
-            fsum.write("\n".join(cm))
+            fsum.write("\n".join(interesting_compare_lines(cm)))
             fsum.write(r"\end{verbatim}" + "\n")
             fsum.write(r"}" + "\n")
             fsum.write("\n")
         
     # Write out software versions used
-    fsum.write(r'\subsection*{Software versions used in Analysis:}' + '\n')
-    fsum.write('PINT: %s\\\\\n' % (pint.__version__))
-    fsum.write('astropy: %s\\\\\n' % (astropy.__version__))
-    fsum.write('numpy: %s\\\\\n' % (np.__version__))
+    fsum.write(r'\subsection*{Software versions used in timing\_analysis:}' + '\n')
+    fsum.write('PINT: %s\\\\\n' % verb(pint.__version__))
+    fsum.write('astropy: %s\\\\\n' % verb(astropy.__version__))
+    fsum.write('numpy: %s\\\\\n' % verb(np.__version__))
+    fsum.write('python: %s\\\\\n' % verb(sys.version))
     try:
         import enterprise
         fsum.write('enterprise: %s\\\\\n' % (enterprise.__version__))
     except ImportError as error:
         log.warning(str(error)+ ", cannot print enterprise version.")
-    try:
-        import PTMCMCSampler
-        fsum.write('PTMCMCSampler: %s\\\\\n' % (PTMCMCSampler.__version__))
-    except ImportError as error:
-        log.warning(str(error)+ ", cannot print PTMCMCSampler version.")
-    try:
-        # FIXME: this is the psrchive version on the notebook server, but we never use this version
-        # Is there any point reporting it?
-        psrchive_v = check_output(["psrchive", "--version"]).decode("utf-8")
-        fsum.write('PSRCHIVE: %s\\\\\n' % (psrchive_v))
-    except (ImportError, FileNotFoundError) as error:
-        log.warning(str(error)+ ", cannot print PSRCHIVE version.")
+    if False:
+        # We didn't run PTMCMCSampler, no guarantee this is the relevant version
+        try:
+            import PTMCMCSampler
+            fsum.write('PTMCMCSampler: %s\\\\\n' % (PTMCMCSampler.__version__))
+        except ImportError as error:
+            log.warning(str(error)+ ", cannot print PTMCMCSampler version.")
+    if False:
+        # We didn't actually use PSRCHIVE, so it's misleading to report a version here
+        # If it's available from the TOAs we could report that
+        try:
+            # FIXME: this is the psrchive version on the notebook server, but we never use this version
+            # Is there any point reporting it?
+            psrchive_v = check_output(["psrchive", "--version"]).decode("utf-8")
+            fsum.write('PSRCHIVE: %s\\\\\n' % (psrchive_v))
+        except (ImportError, FileNotFoundError) as error:
+            log.warning(str(error)+ ", cannot print PSRCHIVE version.")
     
     # Write out the plots - Assuming we have already made the summary plot previous to this
     # FIXME: why not make the summary plots here?
