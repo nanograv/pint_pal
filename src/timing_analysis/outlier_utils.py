@@ -723,12 +723,6 @@ def calculate_pout(model, toas, file_base=None, results_dir=None, method='hmc',
         log.error(f'Specified method ({method}) is not recognized.')
 
     # Apply pout flags
-    #uncut = [('cut' not in f) for f in toas.orig_table['flags']]
-    #remaining_inds = np.where(uncut)[0]
-    #for i,ri in enumerate(remaining_inds):
-    #    toas.orig_table[ri]['flags'][f'pout_{method}'] = pout[i]
-
-    # see if this works...
     for i,oi in enumerate(toas.table['index']):
         toas.orig_table[oi]['flags'][f'pout_{method}'] = pout[i]
     
