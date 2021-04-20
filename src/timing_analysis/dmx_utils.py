@@ -754,8 +754,9 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
     ftoas, franges = check_frequency_ratio(toas, dmx_ranges,
             frequency_ratio=frequency_ratio, quiet=quiet, invert=True)
     fratio_inds = toas.table['index'][ftoas]
-    apply_cut_flag(toas,fratio_inds,'dmx')
-    apply_cut_select(toas,reason='frequency ratio check')
+    if len(fratio_inds):
+        apply_cut_flag(toas,fratio_inds,'dmx')
+        apply_cut_select(toas,reason='frequency ratio check')
 
     dmx_ranges = np.array(dmx_ranges)[iranges]
     dmx_ranges = list(map(tuple, dmx_ranges))

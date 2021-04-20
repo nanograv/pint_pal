@@ -6,12 +6,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from astropy import log
 
-# Epochalyptica imports
+# Outlier/Epochalyptica imports
 import pint.fitter
 from pint.residuals import Residuals
 import copy
 from scipy.special import fdtr
 from timing_analysis.utils import apply_cut_flag, apply_cut_select
+from timing_analysis.lite_utils import write_tim
+from timing_analysis.dmx_utils import *
 
 # Possible Gibbs imports
 import matplotlib
@@ -221,7 +223,7 @@ def run_pta_outliers(epp,Nsamples=20000,Nburnin=1000):
     # to.table[likob.psr.isort][outliers]['index']
 
 
-def gibbs_run(entPintPulsar,file_base=None,results_dir=None,Nsamples=10000):
+def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     """Necessary set-up to run gibbs sampler, and run it. Return pout.
     """
     # Imports
@@ -284,43 +286,54 @@ def get_entPintPulsar(model,toas,sort=False,drop_pintpsr=True):
     from enterprise.pulsar import PintPulsar
     return PintPulsar(toas,model,sort=sort,drop_pintpsr=drop_pintpsr)
 
-def calculate_pout(model, toas, file_base=None, results_dir=None, method='hmc',
-                  Nsamples=10000,Nburnin=1000):
-    """Determines TOA outlier probabilities using specified method (currently
-    supported: hamilton monte carlo, hmc, or gibbs).
+def calculate_pout(model, toas, tc_object):
+    """Determines TOA outlier probabilities using choices specified in the
+    timing configuration file's outlier block. Write tim file with pout flags/values.
 
     Parameters
     ==========
     model: `pint.model.TimingModel` object
     toas: `pint.toa.TOAs` object
-    file_base: string
-        optional, basename of output files (if None, uses pulsar name)
-    results_dir: string
-        optional, directory where results are written (if None, use working directory)
-    method: string
-        optional, default is hmc (also available: gibbs)
-    Nsamples: int
-        optional, number of MCMC samples to determine outlier probability
-    Nburnin: int
-        optional, number of burn-in samples (hmc)
-
-    Returns
-    =======
-    None
+    tc_object: `timing_analysis.timingconfiguration` object
     """
+    method = tc_object.get_outlier_method()
+    results_dir = f'outlier/{tc_object.get_outfile_basename()}'
+    Nsamples = tc_object.get_outlier_samples()
+    Nburnin = tc_object.get_outlier_burn()
+
     if method == 'hmc':
         epp = get_entPintPulsar(model, toas, drop_pintpsr=False)
         # Some sorting will be needed here so pout refers to toas order
     elif method == 'gibbs':
         epp = get_entPintPulsar(model, toas)
-        pout = gibbs_run(epp,file_base=file_base,results_dir=results_dir,Nsamples=Nsamples)
+        pout = gibbs_run(epp,results_dir=results_dir,Nsamples=Nsamples)
     else:
         log.error(f'Specified method ({method}) is not recognized.')
 
-    # Apply pout flags
+    # Apply pout flags, cuts
     for i,oi in enumerate(toas.table['index']):
         toas.orig_table[oi]['flags'][f'pout_{method}'] = pout[i]
-    
+
+    # Re-introduce cut TOAs for writing tim file that includes -cut/-pout flags
+    toas.table = toas.orig_table
+    fo = tc_object.construct_fitter(toas,model)
+    write_tim(fo,toatype=tc_object.get_toa_type(),outfile=f'{tc_object.get_outfile_basename()}_pout.tim')
+
+def make_pout_cuts(model,toas,tc_object):
+    """Apply cut flags to TOAs with outlier probabilities larger than specified threshold.
+    Also runs setup_dmx.
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    tc_object: `timing_analysis.timingconfiguration` object
+    """
+    # Need to mask TOAs once again
+    apply_cut_select(toas,reason='resumption after write_tim (pout)')
+
+    toas = tc_object.apply_ignore(toas,specify_keys=['prob-outlier'])
+    apply_cut_select(toas,reason='outlier analysis, specified key')
+    toas = setup_dmx(model,toas,frequency_ratio=tc_object.get_fratio(),max_delta_t=tc_object.get_sw_delay())
 
 def Ftest(chi2_1, dof_1, chi2_2, dof_2):
     """
