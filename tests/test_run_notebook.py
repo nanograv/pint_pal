@@ -28,7 +28,7 @@ def output_dir():
     return output_dir
 
 @pytest.mark.parametrize('config_file', config_files())
-def test_run_notebook(config_file, output_dir, suppress_errors=False):
+def test_run_notebook(config_file, output_dir):
     """
     Run through the functions called in the notebook for each pulsar (excluding plotting).
     This will create a global log called test-run-notebooks.log, and a log file for each pulsar.
@@ -55,5 +55,4 @@ def test_run_notebook(config_file, output_dir, suppress_errors=False):
             err_file = err_file,
             workdir = cfg_dir,
             log_status_to = f,
-            transformations = transformations,
         )
