@@ -93,6 +93,7 @@ def run_batch(template_nb, config_glob=None, config_files=None, processes=4, out
     if config_files is None:
         raise ValueError("Please specify at least one configuration file.")
 
+    os.makedirs(output_dir, exist_ok=True)
     global_log = os.path.join(output_dir, 'batch-status.log')
     results = []
     with Pool(processes) as p:
