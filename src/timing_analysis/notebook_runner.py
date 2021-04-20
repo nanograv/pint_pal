@@ -54,17 +54,17 @@ def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=bas
                 if not color_err:
                     traceback = re.sub(ansi_color, '', err.traceback)
                 print(traceback, file=f)
-        if args.log_status_to is not None:
+        if log_status_to is not None:
             if hasattr(err, 'ename'):
-                print(f"{cfg_name}: failure - {err.ename}", file=args.log_status_to)
+                print(f"{cfg_name}: failure - {err.ename}", file=log_status_to)
             else:
-                print(f"{cfg_name}: failure - {err}", file=args.log_status_to)
+                print(f"{cfg_name}: failure - {err}", file=log_status_to)
         raise err
     finally:
         with open(output_nb, 'w', encoding='utf-8') as f:
             nbformat.write(nb, f)
-    if args.log_status_to is not None:
-        print(f"{cfg_name}: success!", file=args.log_status_to)
+    if log_status_to is not None:
+        print(f"{cfg_name}: success!", file=log_status_to)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Run a template notebook with a set of "
