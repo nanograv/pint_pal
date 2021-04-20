@@ -27,7 +27,7 @@ def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=bas
     """
     default_transformations = {
         'config': f'"{config_file}"',
-        'par_directory': f'"{join(base_dir, "results")}"',
+        'par_directory': f'"{os.path.join(base_dir, "results")}"',
         'write_prenoise': "True",
         'write_results': "True",
         'use_existing_noise_dir': "True",
