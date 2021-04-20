@@ -368,10 +368,28 @@ class TimingConfiguration:
             return self.config['dmx']['custom-dmx']
         return None
 
+    def get_outlier_burn(self):
+        """ Return outlier analysis burn-in samples """
+        if 'n-burn' in self.config['outlier'].keys():
+            return self.config['outlier']['n-burn']
+        return None
+
+    def get_outlier_samples(self):
+        """ Return number of samples for outlier analysis """
+        if 'n-samples' in self.config['outlier'].keys():
+            return self.config['outlier']['n-samples']
+        return None
+
+    def get_outlier_method(self):
+        """ Return outlier analysis method """
+        if 'method' in self.config['outlier'].keys():
+            return self.config['outlier']['method']
+        return None
+
     def apply_ignore(self,toas,specify_keys=None):
         """ Basic checks and return TOA excision info. """
         OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-epoch',
-                        'orphaned-rec'] # prob-outlier, bad-ff
+                        'orphaned-rec','prob-outlier']  #, bad-ff
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
 
@@ -421,7 +439,20 @@ class TimingConfiguration:
             if self.get_snr_cut() > 25.0 and self.get_toa_type() == 'WB':
                 log.warning('snr-cut should be set to 25; try excising TOAs using other methods.')
         if 'prob-outlier' in valid_valued:
-            pass
+            omethod = self.get_outlier_method().lower()  # accepts Gibbs and HMC, e.g.
+            SUPPORTED_METHODS = ['gibbs','hmc']
+            if omethod in SUPPORTED_METHODS:
+                oflag = f'pout_{omethod}'
+            else:
+                log.warning(f'Outlier analysis method not recognized: {omethod}')
+                oflag = f'pout_{omethod}'  # so that run doesn't crash
+            pouts =  np.zeros(len(toas.orig_table))
+            for i,fs in enumerate(toas.orig_table['flags']):
+                if oflag in fs:
+                    pouts[i] = fs[oflag]
+            poutinds = np.where(pouts > self.get_prob_outlier())[0]
+            oprob_flag = f'outlier{int(self.get_prob_outlier()*100)}'
+            apply_cut_flag(toas,poutinds,oprob_flag)
         if 'bad-ff' in valid_valued:
             pass
         if 'bad-epoch' in valid_valued:
