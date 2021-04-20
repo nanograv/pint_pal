@@ -93,7 +93,7 @@ if __name__ == '__main__':
         args.config_file,
         args.output_nb,
         err_file = args.err_file,
-        wordir = args.workdir,
+        workdir = args.workdir,
         verbose = args.verbose,
         transformations = transformations,
     )
