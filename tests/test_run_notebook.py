@@ -40,38 +40,20 @@ def test_run_notebook(config_file, output_dir, suppress_errors=False):
         `pytest -n <workers> tests/test_run_notebook.py`
         <workers> is the number of worker processes to launch (e.g. 4 to use 4 CPU threads)
     """
-    log.setLevel("INFO")
     global_log = join(output_dir, f'test-run-notebook.log')
     cfg_name = splitext(split(config_file)[1])[0]
     cfg_dir = join(output_dir, cfg_name)
     makedirs(cfg_dir)
-    log_file = join(cfg_dir, f'{cfg_name}.log')
     err_file = join(cfg_dir, f'{cfg_name}.traceback')
     output_nb = join(cfg_dir, f'{cfg_name}.ipynb')
-    
-    transformations = {
-        'config': f'"{config_file}"',
-        'par_directory': f'"{join(base_dir, "results")}"',
-        'write_prenoise': "True",
-        'write_results': "True",
-        'use_existing_noise_dir': 'True',
-        'log_to_file': 'True',
-    }
 
-    try:
+    with open(global_log, 'a') as f:
         run_notebook(
             join(base_dir, 'nb_templates/process_v0.9.ipynb'),
+            config_file,
             output_nb,
             err_file = err_file,
             workdir = cfg_dir,
-            transformations = transformations
+            log_status_to = f,
+            transformations = transformations,
         )
-        with open(global_log, 'a') as f:
-            print(f"{cfg_name}: success!", file=f)
-    except Exception as err:
-        with open(global_log, 'a') as f:
-            if hasattr(err, 'ename'):
-                print(f"{cfg_name}: failure - {err.ename}", file=f)
-            else:
-                print(f"{cfg_name}: failure - {err}", file=f)
-        raise err
