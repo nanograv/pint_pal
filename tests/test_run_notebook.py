@@ -1,12 +1,8 @@
-from astropy import log
-from os import makedirs, chdir
+from os import makedirs
 from os.path import dirname, join, split, splitext
 from datetime import datetime
-from multiprocessing import Pool
-import traceback
 from glob import glob
 import pytest
-import nbformat
 from timing_analysis.notebook_runner import run_notebook
 
 base_dir = dirname(dirname(__file__))
