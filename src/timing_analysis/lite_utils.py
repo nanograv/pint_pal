@@ -7,6 +7,8 @@ from datetime import date
 import yaml
 import os
 import timing_analysis.par_checker as pc
+from ipywidgets import widgets
+import pypulse
 
 # Read tim/par files
 import pint.toa as toa
@@ -442,3 +444,54 @@ def new_changelog_entry(tag, note):
             now = datetime.now()
             date = now.strftime('%Y-%m-%d')
             print(f'  - \'{date} {username} {tag}: {note}\'')
+
+def display_excise_dropdowns(epoch_matches, toa_matches):
+    ext_list = ['None','.ff','.calib','.zap']
+    pav_list = ['None','YFp','GTpd']
+    short_epoch_names = [e.split('/')[-1].rpartition('.')[0] for e in epoch_matches]
+    short_toa_names = [t[0].split('/')[-1].rpartition('.')[0] for t in toa_matches]
+    epoch_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
+                                  options=ext_list, layout={'width': 'max-content'}) for s in short_epoch_names]
+    toa_dropdowns = []
+    for s in range(len(short_toa_names)):
+        toa_dropdowns.append(widgets.Dropdown(description='%s [%i, %i]'%(short_toa_names[s], toa_matches[s][1], toa_matches[s]                                     [2]), style={'description_width': 'initial'}, options=ext_list, layout={'width': 'max-content'}))
+    pav_epoch_drop = [widgets.Dropdown(options=pav_list) for s in short_epoch_names]
+    pav_toa_drop = [widgets.Dropdown(options=pav_list) for s in short_toa_names]
+    epoch_output = widgets.HBox([widgets.VBox(children=epoch_dropdowns),widgets.VBox(children=pav_epoch_drop)])
+    toa_output = widgets.HBox([widgets.VBox(children=toa_dropdowns),widgets.VBox(children=pav_toa_drop)])
+    if len(epoch_matches) != 0:
+        print('Bad-epochs in YAML:')
+        display(epoch_output)
+    if len(toa_matches) != 0:
+        print('Bad-toas in YAML:')
+        display(toa_output)
+    return epoch_dropdowns, pav_epoch_drop, toa_dropdowns, pav_toa_drop
+
+def read_excise_dropdowns(select_list, pav_list, matches):
+    plot_list = []
+    for i in range(len(select_list)):
+        if (select_list[i].value != 'None') and (pav_list[i].value != 'None'):
+            if isinstance(matches[i],list): # toa entries
+                plot_list.append([matches[i][0].rpartition('/')[0] + '/' + select_list[i].description.split(' ')[0] + 
+                                  select_list[i].value, pav_list[i].value, matches[i][2], matches[i][2]])
+            else: # epoch entries
+                plot_list.append([matches[i].rpartition('/')[0] + '/' + select_list[i].description + 
+                                  select_list[i].value,pav_list[i].value])
+        elif (select_list[i].value == 'None') != (pav_list[i].value == 'None'):
+            print('%s: You must select both an extension and plot type!' %(select_list[i].description))
+    return plot_list
+
+def make_detective_plots(plot_list):
+    for l in plot_list:
+        ar = pypulse.Archive(l[0],prepare=True)
+        print('Npol: %i, Nchan: %i, Nsubint: %i, Nbin: %i'%(ar.getNpol(), ar.getNchan(), ar.getNsubint(), ar.getNbin()))
+        if l[1] == 'YFp':
+            if ar.getNsubint() > 1:
+                ar.fscrunch()
+                ar.imshow()
+            elif ar.getNsubint() == 1:
+                print('Support for single-subint imshow not yet available!!!')
+        elif l[1] == 'GTpd':
+            ar.tscrunch()
+            ar.imshow()      
+    return

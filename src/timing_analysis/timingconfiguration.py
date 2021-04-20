@@ -8,6 +8,7 @@ Very basic usage:
 """
 import io
 import os
+import glob
 import pint.toa as toa
 import pint.models as model
 import pint.fitter
@@ -142,7 +143,6 @@ class TimingConfiguration:
         fitter_class = getattr(pint.fitter, fitter_name)
         return fitter_class(to, mo)
 
-
     def get_toa_type(self):
         """ Return the toa-type string """
         if "toa-type" in self.config.keys():
@@ -175,10 +175,20 @@ class TimingConfiguration:
 
     def get_bad_epochs(self):
         """ Return list of bad epochs (basenames: [backend]_[mjd]_[source]) """
-        if 'bad-epoch' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-epoch']
-        return None
-
+        bad_epoch_list = []
+        if 'bad-epoch' in self.config['ignore'].keys() and self.config['ignore']['bad-epoch'] != None:
+            for i in self.config['ignore']['bad-epoch']:
+                if isinstance(i, list):
+                    if len(i) == 2: # i.e. reason is provided, ignore it
+                        bad_epoch_list.append([i[0]])
+                    elif len(i) == 1: # no reason provided, but still a list
+                        bad_epoch_list.append(i)
+                elif isinstance(i, str): # still in old format
+                    bad_epoch_list.append([i])
+            return bad_epoch_list
+        else:
+            return None
+        
     def get_bad_ranges(self):
         """ Return list of bad epoch ranges by MJD ([MJD1,MJD2])"""
         if 'bad-range' in self.config['ignore'].keys():
@@ -187,9 +197,28 @@ class TimingConfiguration:
 
     def get_bad_toas(self):
         """ Return list of bad TOAs (lists: [filename, channel, subint]) """
-        if 'bad-toa' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-toa']
-        return None
+        bad_toa_list = []
+        if 'bad-toa' in self.config['ignore'].keys() and self.config['ignore']['bad-toa'] != None:
+            for i in self.config['ignore']['bad-toa']:
+                if len(i) == 4: # i.e. reason is provided
+                    bad_toa_list.append(i[:-1])
+                elif len(i) == 3: # no reason provided
+                    bad_toa_list.append(i)
+            return bad_toa_list
+        else:
+            return None
+
+    def get_investigation_files(self):
+        """ Makes a list from which the timer can choose which epochs they'd like to manually inspect"""
+        ff_list = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
+        match_epochs, match_toas = [], []
+        if 'bad-epoch' in self.config['ignore'].keys() and self.config['ignore']['bad-epoch'] != None:
+            for be in self.get_bad_epochs():       
+                match_epochs.append([filenm for filenm in ff_list if be[0] in filenm])
+        if 'bad-toa' in self.config['ignore'].keys() and self.config['ignore']['bad-toa'] != None:
+            for bt in self.get_bad_toas():
+                match_toas.append([[filenm, bt[1], bt[2]] for filenm in ff_list if bt[0] in filenm])
+        return sum(match_epochs,[]), sum(match_toas,[])
 
     def check_for_bad_epochs(self, toas, threshold=0.9, print_all=False):
         """Check the bad-toas entries for epochs where more than a given
@@ -217,7 +246,6 @@ class TimingConfiguration:
         provided_bad_toas = self.get_bad_toas()
         if isinstance(provided_bad_toas, list):
             bad_toa_epochs = np.asarray(provided_bad_toas)[:, 0]
-
             # how many bad TOAs per epoch?
             unique, counts = np.unique(bad_toa_epochs, return_counts=True)
             bad_toa_epoch_counts = dict(zip(unique, counts))
@@ -267,8 +295,6 @@ class TimingConfiguration:
                 log.info("The `bad-toa` list in your config file can be reduced to:")
                 for t in new_bad_toa_list:
                     print(f"    - ['{t[0]}',{t[1]},{t[2]}]")
-
-
 
     def get_prob_outlier(self):
         if "prob-outlier" in self.config['ignore'].keys():
@@ -349,7 +375,7 @@ class TimingConfiguration:
             pass
         if 'bad-epoch' in valid_valued:
             for be in self.get_bad_epochs():
-                be_select = np.array([(be in n) for n in toas.get_flag_value('name')[0]])
+                be_select = np.array([(be[0] in n) for n in toas.get_flag_value('name')[0]])
                 apply_cut_flag(toas,be_select,'badepoch')
         if 'bad-range' in valid_valued:
             for br in self.get_bad_ranges():
@@ -364,7 +390,7 @@ class TimingConfiguration:
         if 'bad-toa' in valid_valued:
             selection = np.zeros(len(toas),dtype=bool)
             for bt in self.get_bad_toas():
-                name,chan,subint = bt
+                name,chan,subint,reason = bt
                 name_match = np.array([(n == name) for n in toas.get_flag_value('name')[0]])
                 chan_match = np.array([(ch == chan) for ch in toas.get_flag_value('chan')[0]])
                 subint_match = np.array([(si == subint) for si in toas.get_flag_value('subint')[0]])
