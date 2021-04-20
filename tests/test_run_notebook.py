@@ -3,7 +3,7 @@ from os.path import dirname, join, split, splitext
 from datetime import datetime
 from glob import glob
 import pytest
-from timing_analysis.notebook_runner import run_notebook
+from timing_analysis.notebook_runner import run_in_subdir
 
 base_dir = dirname(dirname(__file__))
 
@@ -37,18 +37,9 @@ def test_run_notebook(config_file, output_dir):
         <workers> is the number of worker processes to launch (e.g. 4 to use 4 CPU threads)
     """
     global_log = join(output_dir, f'test-run-notebook.log')
-    cfg_name = splitext(split(config_file)[1])[0]
-    cfg_dir = join(output_dir, cfg_name)
-    makedirs(cfg_dir)
-    err_file = join(cfg_dir, f'{cfg_name}.traceback')
-    output_nb = join(cfg_dir, f'{cfg_name}.ipynb')
-
-    with open(global_log, 'a') as f:
-        run_notebook(
-            join(base_dir, 'nb_templates/process_v0.9.ipynb'),
-            config_file,
-            output_nb,
-            err_file = err_file,
-            workdir = cfg_dir,
-            log_status_to = f,
-        )
+    run_in_subdir(
+        join(base_dir, 'nb_templates/process_v0.9.ipynb'),
+        config_file,
+        output_dir,
+        global_log,
+    )
