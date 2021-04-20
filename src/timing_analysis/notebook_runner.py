@@ -10,7 +10,7 @@ from timing_analysis.notebook_templater import transform_notebook
 base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 ansi_color = re.compile(r'\x1b\[([0-9]{1,3};)*[0-9]{1,3}m')
 
-def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=base_dir, log_status_to=None, color_err=False, transformations=None):
+def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=base_dir, log_status_to=None, color_err=False, verbose=False, transformations=None):
     """
     Run a template notebook with a set of transformations and save the completed notebook,
     log, and error traceback (if any).
@@ -42,7 +42,7 @@ def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=bas
         nb = nbformat.read(f, as_version=4)
 
     if transformations is not None:
-        n_subs = transform_notebook(nb, transformations)
+        n_subs = transform_notebook(nb, transformations, verbose=verbose)
     cfg_name = os.path.splitext(os.path.split(config_file)[1])[0]
     
     ep = ExecutePreprocessor(timeout=0)
@@ -94,5 +94,6 @@ if __name__ == '__main__':
         args.output_nb,
         err_file = args.err_file,
         wordir = args.workdir,
+        verbose = args.verbose,
         transformations = transformations,
     )
