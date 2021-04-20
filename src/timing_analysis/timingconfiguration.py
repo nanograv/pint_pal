@@ -390,7 +390,7 @@ class TimingConfiguration:
         if 'bad-toa' in valid_valued:
             selection = np.zeros(len(toas),dtype=bool)
             for bt in self.get_bad_toas():
-                name,chan,subint,reason = bt
+                name,chan,subint = bt
                 name_match = np.array([(n == name) for n in toas.get_flag_value('name')[0]])
                 chan_match = np.array([(ch == chan) for ch in toas.get_flag_value('chan')[0]])
                 subint_match = np.array([(si == subint) for si in toas.get_flag_value('subint')[0]])
