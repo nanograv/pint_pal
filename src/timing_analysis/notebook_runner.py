@@ -71,6 +71,11 @@ def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=os.
         print(f"{cfg_name}: success!", file=log_status_to)
 
 def run_in_subdir(template_nb, config_file, output_dir, global_log, verbose=False, transformations=None):
+    """
+    Given a template notebook and configuration file, create a subdirectory with a name
+    based on the configuration file and run the notebook inside it. Intended for use by
+    the run_batch() function and test_run_notebook.py.
+    """
     cfg_name = os.path.splitext(os.path.split(config_file)[1])[0]
     cfg_dir = os.path.join(output_dir, cfg_name)
     os.makedirs(cfg_dir)
