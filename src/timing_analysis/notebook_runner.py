@@ -7,10 +7,9 @@ from nbconvert.preprocessors import ExecutePreprocessor, CellExecutionError
 import timing_analysis
 from timing_analysis.notebook_templater import transform_notebook
 
-base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 ansi_color = re.compile(r'\x1b\[([0-9]{1,3};)*[0-9]{1,3}m')
 
-def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=base_dir, log_status_to=None, color_err=False, verbose=False, transformations=None):
+def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=os.getcwd(), log_status_to=None, color_err=False, verbose=False, transformations=None):
     """
     Run a template notebook with a set of transformations and save the completed notebook,
     log, and error traceback (if any).
@@ -25,6 +24,7 @@ def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=bas
     color_err:       Whether to keep ANSI color codes in the error traceback.
     transformations: Transformations to apply to the notebook.
     """
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(config_file)))
     default_transformations = {
         'config': f'"{config_file}"',
         'par_directory': f'"{os.path.join(base_dir, "results")}"',
