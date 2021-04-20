@@ -11,6 +11,19 @@ base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 ansi_color = re.compile(r'\x1b\[([0-9]{1,3};)*[0-9]{1,3}m')
 
 def run_notebook(template_nb, output_nb, err_file=None, workdir=base_dir, color_err=False, transformations=None):
+    """
+    Run a template notebook with a set of transformations and save the completed notebook,
+    log, and error traceback (if any).
+    
+    Parameters
+    ----------
+    template_nb: The template notebook to use.
+    output_nb:   Location to write the completed notebook.
+    err_file:    Location to write the error traceback log (if necessary).
+    workdir:     Directory in which to work.
+    color_err:   Whether to keep ANSI color codes in the error traceback.
+    transformations: Transformations to apply to the notebook.
+    """
     with open(template_nb) as f:
         nb = nbformat.read(f, as_version=4)
     if transformations is not None:
@@ -31,8 +44,8 @@ def run_notebook(template_nb, output_nb, err_file=None, workdir=base_dir, color_
             nbformat.write(nb, f)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Run a Jupyter notebook with a set of "
-                                     "substitutions and save the completed notebook, log, "
+    parser = argparse.ArgumentParser(description="Run a template notebook with a set of "
+                                     "transformations and save the completed notebook, log, "
                                      "and error traceback (if any).")
     def parse(s):
         key, value = s.split("=")
