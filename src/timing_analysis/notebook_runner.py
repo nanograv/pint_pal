@@ -3,7 +3,7 @@ import nbformat
 import textwrap
 import re
 from nbconvert.preprocessors import ExecutePreprocessor, CellExecutionError
-from multiprocessing import Pool
+import multiprocessing
 from glob import glob
 
 import timing_analysis
@@ -70,7 +70,25 @@ def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=os.
     if log_status_to is not None:
         print(f"{cfg_name}: success!", file=log_status_to)
 
-def run_batch(template_nb, config_glob=None, config_files=None, processes=4, output_dir=os.getcwd(), color_err=False, verbose=False, transformations=None):
+def run_in_subdir(template_nb, config_file, output_dir, global_log, verbose=False, transformations=None):
+    cfg_name = os.path.splitext(os.path.split(config_file)[1])[0]
+    cfg_dir = os.path.join(output_dir, cfg_name)
+    os.makedirs(cfg_dir)
+    err_file = os.path.join(cfg_dir, f'{cfg_name}.traceback')
+    output_nb = os.path.join(cfg_dir, f'{cfg_name}.ipynb')
+
+    with open(global_log, 'a') as f:
+        run_notebook(
+            template_nb,
+            config_file,
+            output_nb,
+            err_file = err_file,
+            workdir = cfg_dir,
+            verbose = verbose,
+            log_status_to = f,
+        )
+
+def run_batch(template_nb, config_glob=None, config_files=None, processes=4, output_dir=os.getcwd(), verbose=False, transformations=None):
     """
     Run a template notebook for each of several configuration files, storing the results of
     each in a separate subdirectory.
@@ -84,7 +102,6 @@ def run_batch(template_nb, config_glob=None, config_files=None, processes=4, out
     processes:       Number of worker processes to launch.
     output_dir:      Directory for output files. A subdirectory will be created
                      for each configuration file run.
-    color_err:       Whether to keep ANSI color codes in the error traceback.
     verbose:         Whether to describe all situations.
     transformations: Transformations to apply to the notebook.
     """
@@ -95,26 +112,15 @@ def run_batch(template_nb, config_glob=None, config_files=None, processes=4, out
 
     os.makedirs(output_dir, exist_ok=True)
     global_log = os.path.join(output_dir, 'batch-status.log')
+
     results = []
-    with Pool(processes) as p:
-        with open(global_log, 'a') as f:
-            for config_file in config_files:
-                cfg_name = os.path.splitext(os.path.split(config_file)[1])[0]
-                cfg_dir = os.path.join(output_dir, cfg_name)
-                os.makedirs(cfg_dir)
-                err_file = os.path.join(cfg_dir, f'{cfg_name}.traceback')
-                output_nb = os.path.join(cfg_dir, f'{cfg_name}.ipynb')
-                args = (template_nb, config_file, output_nb)
-                kwargs = {
-                    'err_file': err_file,
-                    'workdir': cfg_dir,
-                    'verbose': verbose,
-                    'log_status_to': f,
-                    'transformations': transformations,
-                }
-                results.append(p.apply_async(run_notebook, args, kwargs))
-            for result in results:
-                result.get()
+    with multiprocessing.Pool(processes) as p:
+        for config_file in config_files:
+            args = (template_nb, config_file, output_dir, global_log)
+            kwargs = {'verbose': verbose, 'transformations': transformations}
+            results.append(p.apply_async(run_in_subdir, args, kwargs))
+        for result in results:
+            result.get()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Run a template notebook with a set of "
