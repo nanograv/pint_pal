@@ -108,6 +108,11 @@ class TimingConfiguration:
 
         return m, t
 
+    def manual_cuts(self,toas):
+        """ Apply manual cuts after everything else and warn if redundant """
+        toas = self.apply_ignore(toas,specify_keys=['bad-toa','bad-epoch'])
+        apply_cut_select(toas,reason='manual cuts, specified keys')
+
     def get_bipm(self):
         """ Return the bipm string """
         if "bipm" in self.config.keys():
@@ -393,9 +398,8 @@ class TimingConfiguration:
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
 
-        # INFO?
         missing_valid = set(OPTIONAL_KEYS)-set(EXISTING_KEYS)
-        if len(missing_valid):
+        if len(missing_valid) and not specify_keys:
             log.info(f'Valid TOA excision keys not present: {missing_valid}')
 
         invalid = set(EXISTING_KEYS) - set(OPTIONAL_KEYS)
@@ -403,7 +407,7 @@ class TimingConfiguration:
             log.warning(f'Invalid TOA excision keys present: {invalid}')
 
         valid_null = set(EXISTING_KEYS) - set(VALUED_KEYS) - invalid
-        if len(valid_null):
+        if len(valid_null) and not specify_keys:
             log.info(f'TOA excision keys included, but NOT in use: {valid_null}')
 
         valid_valued = set(VALUED_KEYS) - invalid
@@ -459,7 +463,7 @@ class TimingConfiguration:
             names = np.array([f['name'] for f in to.orig_table['flags']])
             for be in self.get_bad_epochs():
                 epochinds = np.where([be in n for n in names])[0]
-                apply_cut_flag(toas,epochinds,'badepoch')
+                apply_cut_flag(toas,epochinds,'badepoch',warn=True)
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             backends = np.array([f['be'] for f in toas.orig_table['flags']])
@@ -480,6 +484,6 @@ class TimingConfiguration:
                 else:
                     # don't match based on -chan flags, since WB TOAs don't have them
                     btind = np.where((names==name) & (subints==subint))[0]
-                apply_cut_flag(toas,btind,'badtoa')
+                apply_cut_flag(toas,btind,'badtoa',warn=True)
 
         return toas
