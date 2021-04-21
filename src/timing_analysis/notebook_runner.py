@@ -1,4 +1,5 @@
 import os
+import sys
 import nbformat
 import textwrap
 import re
@@ -11,7 +12,7 @@ from timing_analysis.notebook_templater import transform_notebook
 
 ansi_color = re.compile(r'\x1b\[([0-9]{1,3};)*[0-9]{1,3}m')
 
-def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=os.getcwd(), log_status_to=None, color_err=False, verbose=False, transformations=None):
+def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=os.getcwd(), log_status_to=sys.stdout, color_err=False, verbose=False, transformations=None):
     """
     Run a template notebook with a set of transformations and save the completed notebook,
     log, and error traceback (if any).
@@ -25,7 +26,7 @@ def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=os.
     workdir:         Directory in which to work.
     log_status_to:   File-like object (stream) to write status (success/failure) to.
     color_err:       Whether to keep ANSI color codes in the error traceback.
-    verbose:         Whether to describe all situations.
+    verbose:         Print a description of replacements made in the template notebook.
     transformations: Transformations to apply to the notebook.
     """
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(config_file)))
@@ -70,11 +71,20 @@ def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=os.
     if log_status_to is not None:
         print(f"{cfg_name}: success!", file=log_status_to)
 
-def run_in_subdir(template_nb, config_file, output_dir, global_log, verbose=False, transformations=None):
+def run_in_subdir(template_nb, config_file, output_dir=os.getcwd(), global_log='/dev/stdout', verbose=False, transformations=None):
     """
     Given a template notebook and configuration file, create a subdirectory with a name
-    based on the configuration file and run the notebook inside it. Intended for use by
-    the run_batch() function and test_run_notebook.py.
+    based on the configuration file and run the notebook inside it. Used by the run_batch()
+    function and test_run_notebook.py.
+    
+    Parameters
+    ----------
+    template_nb:     Template notebook to use.
+    config_file:     Configuration file to use.
+    output_dir:      Location where the subdirectory will be created.
+    global_log:      File where a line indicating success or failure will be written.
+    verbose:         Print a description of replacements made in the template notebook.
+    transformations: Transformations to apply to the notebook.
     """
     cfg_name = os.path.splitext(os.path.split(config_file)[1])[0]
     cfg_dir = os.path.join(output_dir, cfg_name)
@@ -107,7 +117,7 @@ def run_batch(template_nb, config_glob=None, config_files=None, processes=4, out
     processes:       Number of worker processes to launch.
     output_dir:      Directory for output files. A subdirectory will be created
                      for each configuration file run.
-    verbose:         Whether to describe all situations.
+    verbose:         Print a description of replacements made in the template notebook.
     transformations: Transformations to apply to the notebook.
     """
     if config_glob is not None:
