@@ -446,6 +446,20 @@ def new_changelog_entry(tag, note):
             print(f'  - \'{date} {username} {tag}: {note}\'')
 
 def display_excise_dropdowns(epoch_matches, toa_matches):
+    """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision.
+    
+    Parameters
+    ==========
+    epoch_matches: a list of *.ff files matching bad epochs in YAML
+    toa_matches: lists with *.ff files matching bad toas in YAML, bad subband #, bad subint #
+    
+    Returns (note: these are separate for now for clarity and freedom to use the subint/subband info in bad-toas)
+    =======
+    epoch_dropdowns: list of dropdown widgets containing short file names and file extension dropdowns for bad-epochs
+    pav_epoch_drop: list of dropdown widget objects indicating plot type to be chosen for bad-epochs
+    toa_dropdowns: list of dropdown widget objects containing short file names and extensions for bad-toas
+    pav_toa_drop: list of dropdown widget objects indicating plot type to be chosen for bad-toas
+    """
     ext_list = ['None','.ff','.calib','.zap']
     pav_list = ['None','YFp','GTpd']
     short_epoch_names = [e.split('/')[-1].rpartition('.')[0] for e in epoch_matches]
@@ -468,6 +482,18 @@ def display_excise_dropdowns(epoch_matches, toa_matches):
     return epoch_dropdowns, pav_epoch_drop, toa_dropdowns, pav_toa_drop
 
 def read_excise_dropdowns(select_list, pav_list, matches):
+    """Reads selections for files/plots chosen via dropdown.
+    
+    Parameters
+    ==========
+    select_list: list of dropdown widget objects indicating which (if any) file extension was selected for a given matching file
+    pav_list: list of dropdown widget objects indicating what type of plot was chosen
+    matches: list of full paths to all matching files
+    
+    Returns
+    =======
+    plot_list: lists of full paths to files of interest and plot types chosen
+    """
     plot_list = []
     for i in range(len(select_list)):
         if (select_list[i].value != 'None') and (pav_list[i].value != 'None'):
@@ -482,6 +508,16 @@ def read_excise_dropdowns(select_list, pav_list, matches):
     return plot_list
 
 def make_detective_plots(plot_list):
+    """Makes pypulse plots for selected combinations of file/plot type (pav -YFp or -GTpd style).
+    
+    Parameters
+    ==========
+    plot_list: lists of full paths to files of interest and plot types chosen
+    
+    Returns
+    =======
+    None; displays plots in notebook.
+    """
     for l in plot_list:
         ar = pypulse.Archive(l[0],prepare=True)
         print('Npol: %i, Nchan: %i, Nsubint: %i, Nbin: %i'%(ar.getNpol(), ar.getNchan(), ar.getNsubint(), ar.getNbin()))
