@@ -486,11 +486,8 @@ def make_detective_plots(plot_list):
         ar = pypulse.Archive(l[0],prepare=True)
         print('Npol: %i, Nchan: %i, Nsubint: %i, Nbin: %i'%(ar.getNpol(), ar.getNchan(), ar.getNsubint(), ar.getNbin()))
         if l[1] == 'YFp':
-            if ar.getNsubint() > 1:
-                ar.fscrunch()
-                ar.imshow()
-            elif ar.getNsubint() == 1:
-                print('Support for single-subint imshow not yet available!!!')
+            ar.fscrunch()
+            ar.imshow()
         elif l[1] == 'GTpd':
             ar.tscrunch()
             ar.imshow()      
