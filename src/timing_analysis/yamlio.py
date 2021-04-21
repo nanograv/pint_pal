@@ -170,6 +170,32 @@ def add_dmx_block(yaml_file,overwrite=True,extension='fix',insert_after='noise')
     else:
         log.info(f'{yaml_file} already contains dmx block.')
 
+def add_outlier_block(yaml_file,overwrite=True,extension='fix',insert_after='dmx'):
+    """Adds dmx block to yaml file
+
+    Parameters
+    ==========
+    yaml_file: str, input file
+    overwrite: bool, optional
+        write yaml with same name (true), or add extenion (false)
+    extension: str, optional
+        extention added to output filename if overwrite=False
+    insert_after: str, optional
+        field after which to insert this block in the yaml
+    """
+    config = read_yaml(yaml_file)
+    out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
+
+    if not config.get('outlier'):
+        # outlier block goes after dmx by default (insert_after)
+        insert_ind = list(config).index(insert_after) + 1
+        outlier_block = {'method':'gibbs','n-burn':1000,'n-samples':20000}
+        config.insert(insert_ind,'outlier',outlier_block,'control outlier analysis runs')
+        log.info(f'Adding standard outlier block to {out_yaml}.')
+        write_yaml(config, out_yaml)
+    else:
+        log.info(f'{yaml_file} already contains outlier block.')
+
 def curate_comments(yaml_file,overwrite=True,extension='fix'):
     """Standardizes info comments on specific yaml fields
 
@@ -342,6 +368,12 @@ def main():
         default=False,
         help="add noise block to input yaml file(s)",
     )
+    parser.add_argument(
+        "--addoutlier",
+        action="store_true",
+        default=False,
+        help="add outlier block to input yaml file(s)",
+    )
     args = parser.parse_args()
 
     if args.check:
@@ -360,6 +392,9 @@ def main():
     elif args.addnoise:
         for ff in args.files:
             add_noise_block(ff,overwrite=args.overwrite)
+    elif args.addoutlier:
+        for ff in args.files:
+            add_outlier_block(ff,overwrite=args.overwrite)
 
 if __name__ == "__main__":
     main()
