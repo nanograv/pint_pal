@@ -317,7 +317,8 @@ def calculate_pout(model, toas, tc_object):
     # Re-introduce cut TOAs for writing tim file that includes -cut/-pout flags
     toas.table = toas.orig_table
     fo = tc_object.construct_fitter(toas,model)
-    write_tim(fo,toatype=tc_object.get_toa_type(),outfile=f'{tc_object.get_outfile_basename()}_pout.tim')
+    pout_timfile = f'{results_dir}/{tc_object.get_outfile_basename()}_pout.tim'
+    write_tim(fo,toatype=tc_object.get_toa_type(),outfile=pout_timfile)
 
 def make_pout_cuts(model,toas,tc_object):
     """Apply cut flags to TOAs with outlier probabilities larger than specified threshold.
@@ -362,7 +363,7 @@ def Ftest(chi2_1, dof_1, chi2_2, dof_2):
       ft = False
     return ft
 
-def epochalyptica(model,toas,outfile='epochdrop.txt',ftest_threshold=1.0e-6):
+def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
     """ Test for the presence of remaining bad epochs by removing one at a
         time and examining its impact on the residuals; pre/post reduced
         chi-squared values are assessed using an F-statistic.  
@@ -371,8 +372,7 @@ def epochalyptica(model,toas,outfile='epochdrop.txt',ftest_threshold=1.0e-6):
     ===========
     model: `pint.model.TimingModel` object
     toas: `pint.toa.TOAs` object
-    outfile: string
-        optional, name of output results file
+    tc_object: `timing_analysis.timingconfiguration` object
     ftest_threshold: float
         optional, threshold below which epochs will be dropped
     """
@@ -383,6 +383,8 @@ def epochalyptica(model,toas,outfile='epochdrop.txt',ftest_threshold=1.0e-6):
     redchi2_init = chi2_init / ndof_init
 
     filenames = toas.get_flag_value('name')[0]
+    outdir = f'outlier/{tc_object.get_outfile_basename()}'
+    outfile = '/'.join([outdir,'epochdrop.txt'])
     fout = open(outfile,'w')
     numepochs = len(set(filenames))
     log.info(f'There are {numepochs} epochs (filenames) to analyze.')
@@ -446,12 +448,27 @@ def epochalyptica(model,toas,outfile='epochdrop.txt',ftest_threshold=1.0e-6):
         toas.unselect()
     fout.close()
 
-    # Make the cuts.
+    # Apply cut flags
     names = np.array([f['name'] for f in toas.orig_table['flags']])
     for etd in epochs_to_drop:
         epochdropinds = np.where(names==etd)[0]
         apply_cut_flag(toas,epochdropinds,'epochdrop')
-    apply_cut_select(toas,reason='epoch drop analysis')
+
+    # Make cuts, fix DMX windows if necessary
+    if len(epochs_to_drop):
+        apply_cut_select(toas,reason='epoch drop analysis')
+        toas = setup_dmx(model,toas,frequency_ratio=tc_object.get_fratio(),max_delta_t=tc_object.get_sw_delay())
+    else:
+        log.info('No epochs dropped (epochalyptica).')
+
+    # Re-introduce cut TOAs for writing tim file that includes -cut flags
+    toas.table = toas.orig_table
+    fo = tc_object.construct_fitter(toas,model)
+    excise_timfile = f'{outdir}/{tc_object.get_outfile_basename()}_excise.tim'
+    write_tim(fo,toatype=tc_object.get_toa_type(),outfile=excise_timfile)
+
+    # Need to mask TOAs once again
+    apply_cut_select(toas,reason='resumption after write_tim (excise)')
 
 
 # Add Steve's cleaned-up Gibbs code for testing
