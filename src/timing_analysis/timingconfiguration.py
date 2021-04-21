@@ -150,7 +150,6 @@ class TimingConfiguration:
         fitter_class = getattr(pint.fitter, fitter_name)
         return fitter_class(to, mo)
 
-
     def get_toa_type(self):
         """ Return the toa-type string """
         if "toa-type" in self.config.keys():
@@ -258,6 +257,44 @@ class TimingConfiguration:
             new_changelog_entry('CURATE',f"orphaned receivers ({nepochs_threshold} or fewer epochs): {febe_cut_str}")
 
         return None 
+
+    def check_outlier(self):
+        """Perform simple checks on yaml outlier block and prob-outlier field
+        """
+        REQUIRED_KEYS = ['method','n-burn','n-samples']
+        try:
+            EXISTING_KEYS = self.config['outlier'].keys()
+            VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['outlier'][k] is not None]
+
+            missing_required = set(REQUIRED_KEYS)-set(EXISTING_KEYS)
+            if len(missing_required):
+                log.warning(f'Required outlier keys not present: {missing_required}')
+
+            invalid = set(EXISTING_KEYS) - set(REQUIRED_KEYS)
+            if len(invalid):
+                log.warning(f'Invalid outlier keys present: {invalid}')
+
+            valid_null = set(EXISTING_KEYS) - set(VALUED_KEYS) - invalid
+            if len(valid_null):
+                log.warning(f'Required outlier keys included, but NOT in use: {valid_null}')
+
+            # Does outlier block exist and are basic parameters set? Compare to OUTLIER_SAMPLES.
+            valid_valued = set(VALUED_KEYS) - invalid
+            if len(valid_valued) == len(REQUIRED_KEYS):
+                log.info(f'Outlier analysis ({self.get_outlier_method()}) will run with {self.get_outlier_samples()} ({self.get_outlier_burn()} burn-in).')
+
+        except KeyError:
+            log.warning('outlier block should be added to your config file.')
+            # print an example?
+
+        # Does prob-outlier exist and is it set? Compare to OUTLIER_THRESHOLD.
+        try:
+            if self.get_prob_outlier():
+                log.info(f'TOAs with outlier probabilities higher than {self.get_prob_outlier()} will be cut.')
+            else:
+                log.warning('The prob-outlier field in your ignore block must be set for outlier cuts to be made properly.')
+        except KeyError:
+            log.warning("prob-outlier field should be added to your config file's ignore block.")
 
     def check_for_bad_epochs(self, toas, threshold=0.9, print_all=False):
         """Check the bad-toas entries for epochs where more than a given
