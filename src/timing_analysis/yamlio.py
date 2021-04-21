@@ -115,6 +115,33 @@ def add_niterations(yaml_file,overwrite=True,extension='fix',insert_after='fitte
     else:
         log.info(f'{yaml_file} already contains n-iterations field.')
 
+def add_block_field(yaml_file,block_key,key,value,overwrite=True,extension='fix'):
+    """Add key/value to specified block in the yaml
+
+    Parameters
+    ==========
+    yaml_file: str, input file
+    block_key: str, yaml block to which key/value should be added
+    key: str, yaml field name
+    value: variable type, set value associated with key
+    overwrite: bool, optional
+        write yaml with same name (true), or add extenion (false)
+    extension: str, optional
+        extention added to output filename if overwrite=False
+    """
+    config = read_yaml(yaml_file)
+    out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
+
+    #d.keys().index(k) if we eventually want to add one key after another
+    if key in config[block_key]:
+        config[block_key][key] = value
+        log.info(f'Config {block_key}/{key} already exists in {yaml_file}; setting it to {value}.')
+    else:
+        config[block_key][key] = value
+        log.info(f'Adding {block_key}/{key} to {yaml_file}; setting it to {value}.')
+
+    write_yaml(config, out_yaml)
+
 def add_noise_block(yaml_file,overwrite=True,extension='fix',insert_after='bipm',
         noise_dir=None):
     """Adds noise block to yaml file
@@ -374,6 +401,11 @@ def main():
         default=False,
         help="add outlier block to input yaml file(s)",
     )
+    parser.add_argument(
+        "--bkv",
+        nargs=3,
+        help="add block/key/value (3 items) to instantiate new yaml field",
+    )
     args = parser.parse_args()
 
     if args.check:
@@ -395,6 +427,11 @@ def main():
     elif args.addoutlier:
         for ff in args.files:
             add_outlier_block(ff,overwrite=args.overwrite)
+    
+    if args.bkv:
+        block, key, value = args.bkv
+        for ff in args.files:
+            add_block_field(ff,block,key,value,overwrite=args.overwrite)
 
 if __name__ == "__main__":
     main()
