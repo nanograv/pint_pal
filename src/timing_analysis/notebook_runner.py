@@ -12,7 +12,7 @@ from timing_analysis.notebook_templater import transform_notebook
 
 ansi_color = re.compile(r'\x1b\[([0-9]{1,3};)*[0-9]{1,3}m')
 
-def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=os.getcwd(), log_status_to=sys.stdout, color_err=False, verbose=False, transformations=None):
+def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdir=os.getcwd(), log_status_to=sys.stdout, color_err=False, verbose=False, transformations=None):
     """
     Run a template notebook with a set of transformations and save the completed notebook,
     log, and error traceback (if any).
@@ -66,8 +66,9 @@ def run_notebook(template_nb, config_file, output_nb, err_file=None, workdir=os.
                 print(f"{cfg_name}: failure - {err}", file=log_status_to)
         raise err
     finally:
-        with open(output_nb, 'w', encoding='utf-8') as f:
-            nbformat.write(nb, f)
+        if output_nb is not None:
+            with open(output_nb, 'w', encoding='utf-8') as f:
+                nbformat.write(nb, f)
     if log_status_to is not None:
         print(f"{cfg_name}: success!", file=log_status_to)
 
