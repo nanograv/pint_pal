@@ -12,7 +12,7 @@ from timing_analysis.notebook_templater import transform_notebook
 
 ansi_color = re.compile(r'\x1b\[([0-9]{1,3};)*[0-9]{1,3}m')
 
-def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdir=os.getcwd(), log_status_to=sys.stdout, color_err=False, verbose=False, transformations=None):
+def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdir=None, log_status_to=sys.stdout, color_err=False, verbose=False, transformations=None):
     """
     Run a template notebook with a set of transformations and save the completed notebook,
     log, and error traceback (if any).
@@ -23,13 +23,15 @@ def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdi
     config_file:     Configuration file (YAML).
     output_nb:       Location to write the completed notebook.
     err_file:        Location to write the error traceback log (if necessary).
-    workdir:         Directory in which to work.
+    workdir:         Directory in which to work (default: current working directory).
     log_status_to:   File-like object (stream) to write status (success/failure) to.
     color_err:       Whether to keep ANSI color codes in the error traceback.
     verbose:         Print a description of replacements made in the template notebook.
     transformations: Transformations to apply to the notebook.
     """
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(config_file)))
+    if workdir is None:
+        workdir = os.getcwd()
     default_transformations = {
         'config': f'"{config_file}"',
         'par_directory': f'"{os.path.join(base_dir, "results")}"',
