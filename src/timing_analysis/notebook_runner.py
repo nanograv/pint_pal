@@ -80,8 +80,8 @@ def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdi
 def run_in_subdir(template_nb, config_file, output_dir=None, log_status_to=None, verbose=False, transformations=None):
     """
     Given a template notebook and configuration file, create a subdirectory with a name
-    based on the configuration file and run the notebook inside it. Used by the run_batch()
-    function and test_run_notebook.py.
+    based on the configuration file and run the notebook inside it. This function is
+    called directly by test_run_notebook.py.
     
     Parameters
     ----------
