@@ -64,18 +64,16 @@ def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdi
                 if not color_err:
                     traceback = re.sub(ansi_color, '', err.traceback)
                 print(traceback, file=f)
-        if log_status_to is not None:
-            if hasattr(err, 'ename'):
-                print(f"{cfg_name}: failure - {err.ename}", file=log_status_to)
-            else:
-                print(f"{cfg_name}: failure - {err}", file=log_status_to)
+        if hasattr(err, 'ename'):
+            print(f"{cfg_name}: failure - {err.ename}", file=log_status_to)
+        else:
+            print(f"{cfg_name}: failure - {err}", file=log_status_to)
         raise err
     finally:
         if output_nb is not None:
             with open(output_nb, 'w', encoding='utf-8') as f:
                 nbformat.write(nb, f)
-    if log_status_to is not None:
-        print(f"{cfg_name}: success!", file=log_status_to)
+    print(f"{cfg_name}: success!", file=log_status_to)
 
 def run_in_subdir(template_nb, config_file, output_dir=None, log_status_to=None, verbose=False, transformations=None):
     """
