@@ -77,7 +77,7 @@ def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdi
     if log_status_to is not None:
         print(f"{cfg_name}: success!", file=log_status_to)
 
-def run_in_subdir(template_nb, config_file, output_dir=os.getcwd(), global_log='/dev/stdout', verbose=False, transformations=None):
+def run_in_subdir(template_nb, config_file, output_dir=None, log_status_to=None, verbose=False, transformations=None):
     """
     Given a template notebook and configuration file, create a subdirectory with a name
     based on the configuration file and run the notebook inside it. Used by the run_batch()
@@ -87,24 +87,30 @@ def run_in_subdir(template_nb, config_file, output_dir=os.getcwd(), global_log='
     ----------
     template_nb:     Template notebook to use.
     config_file:     Configuration file to use.
-    output_dir:      Location where the subdirectory will be created.
-    global_log:      File where a line indicating success or failure will be written.
+    output_dir:      Location where the subdirectory will be created
+                     (default: current working directory).
+    log_status_to:   File-like object (stream) to write status (success/failure) to
+                     (default: stdout).
     verbose:         Print a description of replacements made in the template notebook.
     transformations: Transformations to apply to the notebook.
     """
+    if output_dir is None:
+        output_dir = os.getcwd()
+    if log_status_to is None:
+        log_status_to = sys.stdout
+    
     cfg_name = os.path.splitext(os.path.split(config_file)[1])[0]
     cfg_dir = os.path.join(output_dir, cfg_name)
     os.makedirs(cfg_dir)
     err_file = os.path.join(cfg_dir, f'{cfg_name}.traceback')
     output_nb = os.path.join(cfg_dir, f'{cfg_name}.ipynb')
 
-    with open(global_log, 'a') as f:
-        run_notebook(
-            template_nb,
-            config_file,
-            output_nb,
-            err_file = err_file,
-            workdir = cfg_dir,
-            verbose = verbose,
-            log_status_to = f,
-        )
+    run_notebook(
+        template_nb,
+        config_file,
+        output_nb,
+        err_file = err_file,
+        workdir = cfg_dir,
+        verbose = verbose,
+        log_status_to = log_status_to,
+    )
