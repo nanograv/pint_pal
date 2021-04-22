@@ -35,13 +35,10 @@ def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdi
         workdir = os.getcwd()
     if log_status_to is None:
         log_status_to = sys.stdout
+
     default_transformations = {
         'config': f'"{config_file}"',
         'par_directory': f'"{os.path.join(base_dir, "results")}"',
-        'write_prenoise': "True",
-        'write_results': "True",
-        'use_existing_noise_dir': "True",
-        'log_to_file': "True",
     }
     if transformations is None:
         transformations = default_transformations
@@ -51,8 +48,7 @@ def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdi
     with open(template_nb) as f:
         nb = nbformat.read(f, as_version=4)
 
-    if transformations is not None:
-        n_subs = transform_notebook(nb, transformations, verbose=verbose)
+    n_subs = transform_notebook(nb, transformations, verbose=verbose)
     cfg_name = os.path.splitext(os.path.split(config_file)[1])[0]
     
     ep = ExecutePreprocessor(timeout=0)
@@ -78,8 +74,9 @@ def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdi
 def run_in_subdir(template_nb, config_file, output_dir=None, log_status_to=None, verbose=False, transformations=None):
     """
     Given a template notebook and configuration file, create a subdirectory with a name
-    based on the configuration file and run the notebook inside it. This function is
-    called directly by test_run_notebook.py.
+    based on the configuration file and run the notebook inside it. Some transformations
+    (write_prenoise, write_results, use_existing_noise_dir, log_to_file) are turned on
+    by default. This function is called directly by test_run_notebook.py.
     
     Parameters
     ----------
@@ -96,7 +93,18 @@ def run_in_subdir(template_nb, config_file, output_dir=None, log_status_to=None,
         output_dir = os.getcwd()
     if log_status_to is None:
         log_status_to = sys.stdout
-    
+
+    output_transformations = {
+        'write_prenoise': "True",
+        'write_results': "True",
+        'use_existing_noise_dir': "True",
+        'log_to_file': "True",
+    }
+    if transformations is None:
+        transformations = output_transformations
+    else:
+        transformations = {**output_transformations, **transformations}
+
     cfg_name = os.path.splitext(os.path.split(config_file)[1])[0]
     cfg_dir = os.path.join(output_dir, cfg_name)
     os.makedirs(cfg_dir)
@@ -111,4 +119,5 @@ def run_in_subdir(template_nb, config_file, output_dir=None, log_status_to=None,
         workdir = cfg_dir,
         verbose = verbose,
         log_status_to = log_status_to,
+        transformations = transformations,
     )
