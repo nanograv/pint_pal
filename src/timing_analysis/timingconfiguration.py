@@ -16,6 +16,7 @@ import astropy.units as u
 from astropy import log
 import yaml
 from timing_analysis.utils import write_if_changed, apply_cut_flag, apply_cut_select
+from timing_analysis.lite_utils import new_changelog_entry
 from timing_analysis.defaults import *
 
 class TimingConfiguration:
@@ -64,7 +65,7 @@ class TimingConfiguration:
         else:
             return self.config['free-params']
 
-    def get_model_and_toas(self,usepickle=True,print_all_ignores=False):
+    def get_model_and_toas(self,usepickle=True,print_all_ignores=False,apply_initial_cuts=True):
         """Return the PINT model and TOA objects"""
         par_path = os.path.join(self.par_directory,self.config["timing-model"])
         toas = self.config["toas"]
@@ -95,15 +96,22 @@ class TimingConfiguration:
         if self.get_toa_type() == "NB":
             self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
 
-        # Add 'cut' flags to TOAs according to config 'ignore' block.
-        t = self.apply_ignore(t)
-        apply_cut_select(t,reason='configuration ignore block')
+        # Make a clean copy of original TOAs table (to track cut TOAs, flag_values)
+        t.renumber()  # Not entirely sure why this is necessary...
+        t.orig_table = t.table.copy()
 
-        # To facilitate TOA excision, frontend/backend info
-        febe_pairs = set(t.get_flag_value('f')[0])
-        log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
+        # Add 'cut' flags to TOAs according to config 'ignore' block.
+        if apply_initial_cuts:
+            self.check_for_orphaned_recs(t)
+            t = self.apply_ignore(t,specify_keys=['orphaned-rec','mjd-start','mjd-end','snr-cut','bad-range'])
+            apply_cut_select(t,reason='initial cuts, specified keys')
 
         return m, t
+
+    def manual_cuts(self,toas):
+        """ Apply manual cuts after everything else and warn if redundant """
+        toas = self.apply_ignore(toas,specify_keys=['bad-toa','bad-epoch'],warn=True)
+        apply_cut_select(toas,reason='manual cuts, specified keys')
 
     def get_bipm(self):
         """ Return the bipm string """
@@ -142,12 +150,17 @@ class TimingConfiguration:
         fitter_class = getattr(pint.fitter, fitter_name)
         return fitter_class(to, mo)
 
-
     def get_toa_type(self):
         """ Return the toa-type string """
         if "toa-type" in self.config.keys():
             return self.config['toa-type']
         return None
+
+    def get_outfile_basename(self,ext=''):
+        """ Return source.[nw]b basename (e.g. J1234+5678.nb) """
+        basename = f'{self.get_source()}.{self.get_toa_type().lower()}'
+        if ext: basename = '.'.join([basename,ext])
+        return basename
 
     def get_niter(self):
         """ Return an integer of the number of iterations to fit """
@@ -158,14 +171,20 @@ class TimingConfiguration:
     def get_mjd_start(self):
         """Return mjd-start quantity (applies units days)"""
         if 'mjd-start' in self.config['ignore'].keys():
-            return self.config['ignore']['mjd-start']*u.d
+            return self.config['ignore']['mjd-start']
         return None
 
     def get_mjd_end(self):
         """Return mjd-end quantity (applies units days)"""
         if 'mjd-end' in self.config['ignore'].keys():
-            return self.config['ignore']['mjd-end']*u.d
+            return self.config['ignore']['mjd-end']
         return None
+
+    def get_orphaned_rec(self):
+        """Return orphaned receiver(s)"""
+        if 'orphaned-rec' in self.config['ignore'].keys():
+            return self.config['ignore']['orphaned-rec']
+        return None 
 
     def get_snr_cut(self):
         """ Return value of the TOA S/N cut """
@@ -190,6 +209,92 @@ class TimingConfiguration:
         if 'bad-toa' in self.config['ignore'].keys():
             return self.config['ignore']['bad-toa']
         return None
+
+    def check_for_orphaned_recs(self, toas, nepochs_threshold=3):
+        """Check for frontend/backend pairs that arise at or below threshold
+        for number of epochs; also check that the set matches with those listed
+        in the yaml.
+        
+        Parameters
+        ==========
+        toas: `pint.TOAs object`
+        nepochs_threshold: int, optional
+            Number of epochs at/below which a frontend/backend pair is orphaned.
+
+        """
+        febe_pairs = set(toas.get_flag_value('f')[0])
+        log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
+
+        febe_to_cut = []
+        for febe in febe_pairs:
+            f_bool = np.array([f == febe for f in toas.get_flag_value('f')[0]])
+            f_names = toas[f_bool].get_flag_value('name')[0]
+            epochs = set(f_names)
+            n_epochs = len(epochs)
+            if n_epochs > nepochs_threshold:
+                log.info(f'{febe} epochs: {n_epochs}')
+            else:
+                febe_to_cut.append(febe)
+
+        if febe_to_cut and ('orphaned-rec' in self.config['ignore'].keys()):
+            ftc = set(febe_to_cut)
+            if not self.get_orphaned_rec(): orph = set()
+            else: orph = set(self.get_orphaned_rec())
+            # Do sets of receivers to cut and those listed in the yaml match?
+            if not (ftc == orph):
+                # Add/remove from orphaned-rec?
+                if (ftc - orph):
+                    log.warning(f"{nepochs_threshold} or fewer epochs, add to orphaned-rec: {', '.join(ftc-orph)}")
+                elif (orph - ftc):
+                    log.warning(f"Remove from orphaned-rec: {', '.join(orph-ftc)}")
+            else:
+                pass     
+        elif febe_to_cut:  # ...but no orphaned-rec field in the ignore block.
+            febe_cut_str = ', '.join(febe_to_cut)
+            log.warning(f"Add orphaned-rec to the ignore block in {self.filename}.")
+            log.warning(f"{nepochs_threshold} or fewer epochs, add to orphaned-rec: {febe_cut_str}")
+            print(f"Add the following line to {self.filename}...")
+            new_changelog_entry('CURATE',f"orphaned receivers ({nepochs_threshold} or fewer epochs): {febe_cut_str}")
+
+        return None 
+
+    def check_outlier(self):
+        """Perform simple checks on yaml outlier block and prob-outlier field
+        """
+        REQUIRED_KEYS = ['method','n-burn','n-samples']
+        try:
+            EXISTING_KEYS = self.config['outlier'].keys()
+            VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['outlier'][k] is not None]
+
+            missing_required = set(REQUIRED_KEYS)-set(EXISTING_KEYS)
+            if len(missing_required):
+                log.warning(f'Required outlier keys not present: {missing_required}')
+
+            invalid = set(EXISTING_KEYS) - set(REQUIRED_KEYS)
+            if len(invalid):
+                log.warning(f'Invalid outlier keys present: {invalid}')
+
+            valid_null = set(EXISTING_KEYS) - set(VALUED_KEYS) - invalid
+            if len(valid_null):
+                log.warning(f'Required outlier keys included, but NOT in use: {valid_null}')
+
+            # Does outlier block exist and are basic parameters set? Compare to OUTLIER_SAMPLES.
+            valid_valued = set(VALUED_KEYS) - invalid
+            if len(valid_valued) == len(REQUIRED_KEYS):
+                log.info(f'Outlier analysis ({self.get_outlier_method()}) will run with {self.get_outlier_samples()} ({self.get_outlier_burn()} burn-in).')
+
+        except KeyError:
+            log.warning('outlier block should be added to your config file.')
+            # print an example?
+
+        # Does prob-outlier exist and is it set? Compare to OUTLIER_THRESHOLD.
+        try:
+            if self.get_prob_outlier():
+                log.info(f'TOAs with outlier probabilities higher than {self.get_prob_outlier()} will be cut.')
+            else:
+                log.warning('The prob-outlier field in your ignore block must be set for outlier cuts to be made properly.')
+        except KeyError:
+            log.warning("prob-outlier field should be added to your config file's ignore block.")
 
     def check_for_bad_epochs(self, toas, threshold=0.9, print_all=False):
         """Check the bad-toas entries for epochs where more than a given
@@ -305,15 +410,33 @@ class TimingConfiguration:
             return self.config['dmx']['custom-dmx']
         return None
 
-    def apply_ignore(self,toas):
+    def get_outlier_burn(self):
+        """ Return outlier analysis burn-in samples """
+        if 'n-burn' in self.config['outlier'].keys():
+            return self.config['outlier']['n-burn']
+        return None
+
+    def get_outlier_samples(self):
+        """ Return number of samples for outlier analysis """
+        if 'n-samples' in self.config['outlier'].keys():
+            return self.config['outlier']['n-samples']
+        return None
+
+    def get_outlier_method(self):
+        """ Return outlier analysis method """
+        if 'method' in self.config['outlier'].keys():
+            return self.config['outlier']['method']
+        return None
+
+    def apply_ignore(self,toas,specify_keys=None,warn=False):
         """ Basic checks and return TOA excision info. """
-        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-epoch'] # prob-outlier, bad-ff
+        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-epoch',
+                        'orphaned-rec','prob-outlier']  #, bad-ff
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
 
-        # INFO?
         missing_valid = set(OPTIONAL_KEYS)-set(EXISTING_KEYS)
-        if len(missing_valid):
+        if len(missing_valid) and not specify_keys:
             log.info(f'Valid TOA excision keys not present: {missing_valid}')
 
         invalid = set(EXISTING_KEYS) - set(OPTIONAL_KEYS)
@@ -321,59 +444,83 @@ class TimingConfiguration:
             log.warning(f'Invalid TOA excision keys present: {invalid}')
 
         valid_null = set(EXISTING_KEYS) - set(VALUED_KEYS) - invalid
-        if len(valid_null):
+        if len(valid_null) and not specify_keys:
             log.info(f'TOA excision keys included, but NOT in use: {valid_null}')
 
         valid_valued = set(VALUED_KEYS) - invalid
         if len(valid_valued):
-            log.info(f'Valid TOA excision keys in use: {valid_valued}')
-
+            # Provide capability to add -cut flags based on specific ignore fields
+            if specify_keys is not None:
+                valid_valued = valid_valued & set(specify_keys)
+                log.info(f'Specified TOA excision keys: {valid_valued}')
+            else:
+                log.info(f'Valid TOA excision keys in use: {valid_valued}')
+                 
         # All info here about selecting various TOAs.
         # Select TOAs to cut, then use apply_cut_flag.
+        if 'orphaned-rec' in valid_valued:
+            fs = np.array([f['f'] for f in toas.orig_table['flags']])
+            for o in self.get_orphaned_rec():
+                orphinds = np.where(fs==o)[0]
+                apply_cut_flag(toas,orphinds,'orphaned',warn=warn)
         if 'mjd-start' in valid_valued:
-            start_select = (toas.get_mjds() < self.get_mjd_start()) # cut toas before mjd-start
-            apply_cut_flag(toas,start_select,'mjdstart')
+            mjds = np.array([m for m in toas.orig_table['mjd_float']])
+            startinds = np.where(mjds < self.get_mjd_start())[0]
+            apply_cut_flag(toas,startinds,'mjdstart',warn=warn)
         if 'mjd-end' in valid_valued:
-            end_select = (toas.get_mjds() > self.get_mjd_end()) # cut toas after mjd-end
-            apply_cut_flag(toas,end_select,'mjdend')
+            mjds = np.array([m for m in toas.orig_table['mjd_float']])
+            endinds = np.where(mjds > self.get_mjd_end())[0]
+            apply_cut_flag(toas,endinds,'mjdend',warn=warn)
         if 'snr-cut' in valid_valued:
-            snr_select = ((np.array(toas.get_flag_value('snr')) < self.get_snr_cut())[0]) # cut toas below snr-cut
-            apply_cut_flag(toas,snr_select,'snr')
+            snrs = np.array([f['snr'] for f in toas.orig_table['flags']])
+            snrinds = np.where(snrs < self.get_snr_cut())[0]
+            apply_cut_flag(toas,snrinds,'snr',warn=warn)
             if self.get_snr_cut() > 8.0 and self.get_toa_type() == 'NB':
                 log.warning('snr-cut should be set to 8; try excising TOAs using other methods.')
             if self.get_snr_cut() > 25.0 and self.get_toa_type() == 'WB':
                 log.warning('snr-cut should be set to 25; try excising TOAs using other methods.')
         if 'prob-outlier' in valid_valued:
-            pass
+            omethod = self.get_outlier_method().lower()  # accepts Gibbs and HMC, e.g.
+            SUPPORTED_METHODS = ['gibbs','hmc']
+            if omethod in SUPPORTED_METHODS:
+                oflag = f'pout_{omethod}'
+            else:
+                log.warning(f'Outlier analysis method not recognized: {omethod}')
+                oflag = f'pout_{omethod}'  # so that run doesn't crash
+            pouts =  np.zeros(len(toas.orig_table))
+            for i,fs in enumerate(toas.orig_table['flags']):
+                if oflag in fs:
+                    pouts[i] = fs[oflag]
+            poutinds = np.where(pouts > self.get_prob_outlier())[0]
+            oprob_flag = f'outlier{int(self.get_prob_outlier()*100)}'
+            apply_cut_flag(toas,poutinds,oprob_flag,warn=warn)
         if 'bad-ff' in valid_valued:
             pass
         if 'bad-epoch' in valid_valued:
+            names = np.array([f['name'] for f in toas.orig_table['flags']])
             for be in self.get_bad_epochs():
-                be_select = np.array([(be in n) for n in toas.get_flag_value('name')[0]])
-                apply_cut_flag(toas,be_select,'badepoch')
+                epochinds = np.where([be in n for n in names])[0]
+                apply_cut_flag(toas,epochinds,'badepoch',warn=warn)
         if 'bad-range' in valid_valued:
+            mjds = np.array([m for m in toas.orig_table['mjd_float']])
+            backends = np.array([f['be'] for f in toas.orig_table['flags']])
             for br in self.get_bad_ranges():
-                min_crit = (toas.get_mjds() > br[0]*u.d)
-                max_crit = (toas.get_mjds() < br[1]*u.d)
-                br_select = (min_crit & max_crit)
-                # Look for backend (be) flag to further refine selection, if present
                 if len(br) > 2:
-                    be_select = np.array([(be == br[2]) for be in toas.get_flag_value('be')[0]])
-                    br_select *= be_select
-                apply_cut_flag(toas,br_select,'badrange')
+                    rangeinds = np.where((mjds>br[0]) & (mjds<br[1]) & (backends==br[2]))[0]
+                else:
+                    rangeinds = np.where((mjds>br[0]) & (mjds<br[1]))[0]
+                apply_cut_flag(toas,rangeinds,'badrange',warn=warn)
         if 'bad-toa' in valid_valued:
-            selection = np.zeros(len(toas),dtype=bool)
+            names = np.array([f['name'] for f in toas.orig_table['flags']])
+            chans = np.array([f['chan'] for f in toas.orig_table['flags']])
+            subints = np.array([f['subint'] for f in toas.orig_table['flags']])
             for bt in self.get_bad_toas():
                 name,chan,subint = bt
-                name_match = np.array([(n == name) for n in toas.get_flag_value('name')[0]])
-                chan_match = np.array([(ch == chan) for ch in toas.get_flag_value('chan')[0]])
-                subint_match = np.array([(si == subint) for si in toas.get_flag_value('subint')[0]])
                 if self.get_toa_type() == 'NB':
-                    bt_select = (name_match * subint_match * chan_match)
+                    btind = np.where((names==name) & (chans==chan) & (subints==subint))[0]
                 else:
                     # don't match based on -chan flags, since WB TOAs don't have them
-                    bt_select = (name_match * subint_match)
-                selection += bt_select
-            apply_cut_flag(toas,selection,'badtoa')
+                    btind = np.where((names==name) & (subints==subint))[0]
+                apply_cut_flag(toas,btind,'badtoa',warn=warn)
 
         return toas
