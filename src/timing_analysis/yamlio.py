@@ -311,10 +311,32 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
             config['noise']['results-dir'] = value
         elif field == 'ephem' and isinstance(value,str):
             config['ephem'] = value
+        elif field == 'mjd-end' and isinstance(value,float):
+            config['ignore']['mjd-end'] = value
         else:
             log.error(f'Provided field ({field}) is valid, but not yet implemented in set_field(); doing nothing.')
 
     write_yaml(config, out_yaml)
+
+def fix_badepoch(yaml_file):
+    """Suggests bad-epoch replacements (if strings) with one-element lists
+
+    Parameters
+    ==========
+    yaml_file: str, yaml filename
+    """
+    config = read_yaml(yaml_file)
+    try:
+        n_be = len(config['ignore']['bad-epoch'])
+        log.info(f'{yaml_file}: {n_be} bad-epoch entries to fix...')
+        for i in range(n_be):
+            be_field = config['ignore']['bad-epoch'][i]
+            if isinstance(be_field,str):
+                print(f'  - [{be_field}]')
+    except TypeError:
+        log.info(f'{yaml_file}: 0 bad-epoch entries.')
+    except KeyError:
+        log.info(f'{yaml_file}: no bad-epoch field in the ignore block.')
 
 def read_yaml(yaml_file):
     """Reads a yaml file, returns the object
