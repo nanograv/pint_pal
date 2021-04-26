@@ -320,6 +320,9 @@ def calculate_pout(model, toas, tc_object):
     pout_timfile = f'{results_dir}/{tc_object.get_outfile_basename()}_pout.tim'
     write_tim(fo,toatype=tc_object.get_toa_type(),outfile=pout_timfile)
 
+    # Need to mask TOAs once again
+    apply_cut_select(toas,reason='resumption after write_tim (pout)')
+
 def make_pout_cuts(model,toas,tc_object):
     """Apply cut flags to TOAs with outlier probabilities larger than specified threshold.
     Also runs setup_dmx.
@@ -329,9 +332,6 @@ def make_pout_cuts(model,toas,tc_object):
     toas: `pint.toa.TOAs` object
     tc_object: `timing_analysis.timingconfiguration` object
     """
-    # Need to mask TOAs once again
-    apply_cut_select(toas,reason='resumption after write_tim (pout)')
-
     toas = tc_object.apply_ignore(toas,specify_keys=['prob-outlier'])
     apply_cut_select(toas,reason='outlier analysis, specified key')
     toas = setup_dmx(model,toas,frequency_ratio=tc_object.get_fratio(),max_delta_t=tc_object.get_sw_delay())
