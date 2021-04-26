@@ -1,6 +1,6 @@
 source: J0605+3757
 par-directory: results/
-tim-directory: /nanograv/timing/releases/15y/toagen/releases/2021.02.21-b756d85/
+tim-directory: /nanograv/timing/releases/15y/toagen/releases/2021.04.21-9eefb99/
 timing-model: J0605+3757_PINT_20210304.nb.par
 compare-model: archive/J0605+3757.14yrbw.par
 toas:
@@ -24,10 +24,10 @@ dmx:  # control dmx windowing/fixing
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 ignore: # toa excision
   mjd-start:
-  mjd-end:
+  mjd-end: 59072.0
   snr-cut: 8
   bad-toa:
-    - ['guppi_57745_J0605+3757_0004.15y.x.ff',50,1]
+  - [guppi_57745_J0605+3757_0004.15y.x.ff, 50, 1]
   bad-range:
   bad-epoch:
 
