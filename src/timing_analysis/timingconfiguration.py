@@ -97,7 +97,8 @@ class TimingConfiguration:
             self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
 
         # Make a clean copy of original TOAs table (to track cut TOAs, flag_values)
-        t.renumber()  # Not entirely sure why this is necessary...
+        t.renumber(index_order=False)  # Renumber so the index column matches the order of TOAs
+        assert np.all(t.table["index"]==np.arange(len(t)))
         t.orig_table = t.table.copy()
 
         # Add 'cut' flags to TOAs according to config 'ignore' block.
