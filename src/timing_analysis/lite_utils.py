@@ -446,7 +446,7 @@ def new_changelog_entry(tag, note):
             print(f'  - \'{date} {username} {tag}: {note}\'')
 
 def display_excise_dropdowns(epoch_matches, toa_matches):
-    """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision.
+    """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision. This should be run after tc.get_investigation_files(); doing so will display two lists of dropdowns (separated by bad_toa and bad_epoch). The user then chooses whatever combinations of files/plot types they'd like to display, and runs a cell below the dropdowns containing the read_excise_dropdowns function.
     
     Parameters
     ==========
@@ -526,5 +526,4 @@ def make_detective_plots(plot_list):
             ar.imshow()
         elif l[1] == 'GTpd':
             ar.tscrunch()
-            ar.imshow()      
-    return
+            ar.imshow()
