@@ -437,7 +437,7 @@ def main():
             add_niterations(ff,overwrite=args.overwrite)
             add_noise_block(ff,overwrite=args.overwrite)
             add_dmx_block(ff,overwrite=args.overwrite)
-            curate_comments(ff,overwrite=args.overwrite)
+            #curate_comments(ff,overwrite=args.overwrite)
     elif args.roundtrip:
         for ff in args.files:
             config = read_yaml(ff)
