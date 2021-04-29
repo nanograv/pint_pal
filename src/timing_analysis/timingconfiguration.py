@@ -528,12 +528,17 @@ class TimingConfiguration:
             names = np.array([f['name'] for f in toas.orig_table['flags']])
             for be in self.get_bad_epochs():
 <<<<<<< HEAD
+<<<<<<< HEAD
                 be_select = np.array([(be[0] in n) for n in toas.get_flag_value('name')[0]])
                 apply_cut_flag(toas,be_select,'badepoch')
 =======
                 epochinds = np.where([be in n for n in names])[0]
                 apply_cut_flag(toas,epochinds,'badepoch',warn=warn)
 >>>>>>> 15yr
+=======
+                epochinds = np.where([be in n for n in names])[0]
+                apply_cut_flag(toas,epochinds,'badepoch',warn=warn)
+>>>>>>> 8545358022a735913e2b1b5c141b759dd069e6dc
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             backends = np.array([f['be'] for f in toas.orig_table['flags']])
