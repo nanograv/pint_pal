@@ -1055,24 +1055,21 @@ def write_if_changed(filename, contents):
     with open(filename, "w") as f:
         f.write(contents)
 
-def apply_cut_flag(toas, selection, flagvalue, warn=False):
+def apply_cut_flag(toas, orig_inds, flagvalue, warn=False):
     """Apply appropriate cut flag to a selection of toas.
 
     Inputs:
     ----------
     toas [pint.TOA]: PINT TOA object
-    selection [bool]: Boolean array, True designates TOAs to cut
+    orig_inds [list]: toas.orig_table indices to cut
     flagvalue [string]: String to apply to TOA line
     """
-    names = toas.get_flag_value('name')[0]
-    chans = toas.get_flag_value('chan')[0]
-    subints = toas.get_flag_value('subint')[0]
-    cuts = toas.get_flag_value('cut')[0]
-    for i,s in enumerate(selection):
-        if s and (not cuts[i]):
-            toas.table['flags'][i]['cut'] = flagvalue
-        elif cuts[i] is not None and warn:
-            log.warning(f'Skipping TOA {names[i]} (chan {chans[i]}, subint {subints[i]}) already cut: {cuts[i]}.')
+    for i in orig_inds:
+        if 'cut' not in toas.orig_table[i]['flags']:
+            toas.orig_table[i]['flags']['cut'] = flagvalue
+        elif warn:
+            flags = toas.orig_table[i]['flags']
+            log.warning(f"Skipping TOA {flags['name']} (chan {flags['chan']}, subint {flags['subint']}) already cut: {flags['cut']}.")
 
 def apply_cut_select(toas,reason='???'):
     """Apply toa selection based on cut flags present.
@@ -1082,20 +1079,13 @@ def apply_cut_select(toas,reason='???'):
     toas [pint.TOA]: PINT TOA object
     reason [string]: String 
     """
-    cutselect = np.array([(not c) for c in toas.get_flag_value('cut')[0]])
-    if 'ignore' in reason:
-        fout = 'ignore_cut.tim'
-    elif 'ratio' in reason:
-        fout = 'dmx_cut.tim'
+    n_origtoas = len(toas.orig_table)
+    mask = np.array(['cut' not in x for x in toas.orig_table['flags']])
+    if len(toas.table) == n_origtoas:
+        n_remove = n_origtoas - np.sum(mask)
+        log.info(f"Selecting {sum(mask)} TOAs out of {n_origtoas} ({n_remove} removed based on {reason}).")
     else:
-        fout = 'other_cut.tim'
-
-    if sum(cutselect) != toas.ntoas:
-        cut = np.logical_not(cutselect)
-        cut_toas = toas[cut]
-        cut_toas.write_TOA_file(fout, format='tempo2')
-
-        log.info(f"Selecting {sum(cutselect)} TOAs out of {toas.ntoas} ({sum(cut)} removed based on {reason}).")
-        toas.select(cutselect)
-    else:
-        pass
+        n_more = len(toas.table) - np.sum(mask)
+        log.info(f"Selecting {sum(mask)} TOAs out of {n_origtoas} ({n_more} more removed based on {reason}).")
+    toas.table = toas.orig_table[mask]
+    toas.table = toas.table.group_by('obs')  # otherwise table.groups.keys gets clobbered; consider using separate toas object
