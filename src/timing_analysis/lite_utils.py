@@ -1,7 +1,11 @@
+import sys
 import numpy as np
 import astropy.units as u
 from astropy import log
+import logging
 import matplotlib.pyplot as plt
+import time
+import warnings
 from datetime import datetime
 from datetime import date
 import yaml
@@ -43,7 +47,7 @@ def write_par(fitter,toatype='',addext='',outfile=None):
     with open(outfile, 'w') as fout:
         fout.write(fitter.model.as_parfile())
 
-def write_tim(fitter,toatype='',addext='',outfile=None):
+def write_tim(fitter,toatype='',addext='',outfile=None,commentflag='cut'):
     """Writes TOAs to a tim file in the working directory.
 
     Parameters
@@ -55,6 +59,10 @@ def write_tim(fitter,toatype='',addext='',outfile=None):
         if set, adds extension to date
     outfile: str, optional
         if set, overrides default naming convention
+    commentflag: str or None, optional
+        if a string, and that string is a TOA flag,
+        that TOA will be commented in the output file;
+        if None (or non-string), no TOAs will be commented.
     """
     if outfile is None:
         source = fitter.get_allparams()['PSR'].value
@@ -64,36 +72,12 @@ def write_tim(fitter,toatype='',addext='',outfile=None):
         else:
             outfile = f'{source}_PINT_{date_str}{addext}.tim'
 
-    fitter.toas.write_TOA_file(outfile, format='tempo2')
-    add_cut_tims(outfile)
-
-def add_cut_tims(timfile):
-    """Temporary cludge to add cut TOAs back into output tim file (with cut flags).
-
-    Parameters
-    ==========
-    timfile: str
-        tim file to extend with commented TOAs including -cut flags
-    """
-    from glob import glob
-    import subprocess
-
-    cut_tims = glob('*cut.tim')
-    commented_lines = []
-    for ct in cut_tims:
-        with open(ct,'r') as f: commented_lines.extend(f.readlines())
     
-    commented_lines = [cl for cl in commented_lines if '-cut' in cl]  # remove unnecessary FORMAT lines
-
-    with open(timfile,'a+') as f:
-        for line in commented_lines:
-            f.write(f'C {line}')
-
-    for f in cut_tims:
-        subprocess.run(['rm',f])
+    fitter.toas.write_TOA_file(outfile, format='tempo2',commentflag=commentflag)
 
 def write_include_tim(source,tim_file_list):
     """Writes file listing tim files to load as one PINT toa object (using INCLUDE).
+       DEPRECATED...?
 
     Parameters
     ==========
@@ -445,85 +429,60 @@ def new_changelog_entry(tag, note):
             date = now.strftime('%Y-%m-%d')
             print(f'  - \'{date} {username} {tag}: {note}\'')
 
-def display_excise_dropdowns(epoch_matches, toa_matches):
-    """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision. This should be run after tc.get_investigation_files(); doing so will display two lists of dropdowns (separated by bad_toa and bad_epoch). The user then chooses whatever combinations of files/plot types they'd like to display, and runs a cell below the dropdowns containing the read_excise_dropdowns function.
-    
-    Parameters
-    ==========
-    epoch_matches: a list of *.ff files matching bad epochs in YAML
-    toa_matches: lists with *.ff files matching bad toas in YAML, bad subband #, bad subint #
-    
-    Returns (note: these are separate for now for clarity and freedom to use the subint/subband info in bad-toas)
-    =======
-    epoch_dropdowns: list of dropdown widgets containing short file names and file extension dropdowns for bad-epochs
-    pav_epoch_drop: list of dropdown widget objects indicating plot type to be chosen for bad-epochs
-    toa_dropdowns: list of dropdown widget objects containing short file names and extensions for bad-toas
-    pav_toa_drop: list of dropdown widget objects indicating plot type to be chosen for bad-toas
-    """
-    ext_list = ['None','.ff','.calib','.zap']
-    pav_list = ['None','YFp','GTpd']
-    short_epoch_names = [e.split('/')[-1].rpartition('.')[0] for e in epoch_matches]
-    short_toa_names = [t[0].split('/')[-1].rpartition('.')[0] for t in toa_matches]
-    epoch_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
-                                  options=ext_list, layout={'width': 'max-content'}) for s in short_epoch_names]
-    toa_dropdowns = []
-    for s in range(len(short_toa_names)):
-        toa_dropdowns.append(widgets.Dropdown(description='%s [%i, %i]'%(short_toa_names[s], toa_matches[s][1], toa_matches[s]                                     [2]), style={'description_width': 'initial'}, options=ext_list, layout={'width': 'max-content'}))
-    pav_epoch_drop = [widgets.Dropdown(options=pav_list) for s in short_epoch_names]
-    pav_toa_drop = [widgets.Dropdown(options=pav_list) for s in short_toa_names]
-    epoch_output = widgets.HBox([widgets.VBox(children=epoch_dropdowns),widgets.VBox(children=pav_epoch_drop)])
-    toa_output = widgets.HBox([widgets.VBox(children=toa_dropdowns),widgets.VBox(children=pav_toa_drop)])
-    if len(epoch_matches) != 0:
-        print('Bad-epochs in YAML:')
-        display(epoch_output)
-    if len(toa_matches) != 0:
-        print('Bad-toas in YAML:')
-        display(toa_output)
-    return epoch_dropdowns, pav_epoch_drop, toa_dropdowns, pav_toa_drop
+def log_notebook_to_file(source, toa_type, base_dir="."):
+    """Activate logging to an autogenerated file name.
 
-def read_excise_dropdowns(select_list, pav_list, matches):
-    """Reads selections for files/plots chosen via dropdown.
-    
-    Parameters
-    ==========
-    select_list: list of dropdown widget objects indicating which (if any) file extension was selected for a given matching file
-    pav_list: list of dropdown widget objects indicating what type of plot was chosen
-    matches: list of full paths to all matching files
-    
-    Returns
-    =======
-    plot_list: lists of full paths to files of interest and plot types chosen
+    This removes all but the first log handler, so it may behave surprisingly 
+    if run multiple times not from a notebook.
     """
-    plot_list = []
-    for i in range(len(select_list)):
-        if (select_list[i].value != 'None') and (pav_list[i].value != 'None'):
-            if isinstance(matches[i],list): # toa entries
-                plot_list.append([matches[i][0].rpartition('/')[0] + '/' + select_list[i].description.split(' ')[0] + 
-                                  select_list[i].value, pav_list[i].value, matches[i][2], matches[i][2]])
-            else: # epoch entries
-                plot_list.append([matches[i].rpartition('/')[0] + '/' + select_list[i].description + 
-                                  select_list[i].value,pav_list[i].value])
-        elif (select_list[i].value == 'None') != (pav_list[i].value == 'None'):
-            print('%s: You must select both an extension and plot type!' %(select_list[i].description))
-    return plot_list
 
-def make_detective_plots(plot_list):
-    """Makes pypulse plots for selected combinations of file/plot type (pav -YFp or -GTpd style).
-    
-    Parameters
-    ==========
-    plot_list: lists of full paths to files of interest and plot types chosen
-    
-    Returns
-    =======
-    None; displays plots in notebook.
+    if len(log.handlers)>1:
+        # log.handlers[0] is the notebook output
+        for h in log.handlers[1:]:
+            log.removeHandler(h)
+        # Start a new log file every time you reload the yaml
+    log_file_name = os.path.join(
+            base_dir, 
+            f"{source}.{toa_type.lower()}.{time.strftime('%Y-%m-%d_%H:%M:%S')}.log")
+    fh = logging.FileHandler(log_file_name)
+    fh.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
+    log.addHandler(fh)
+
+
+_showwarning_orig = None
+def _showwarning(*args, **kwargs):
+    warning = args[0]
+    message = str(args[0])
+    mod_path = args[2]
+    # Now that we have the module's path, we look through sys.modules to
+    # find the module object and thus the fully-package-specified module
+    # name.  The module.__file__ is the original source file name.
+    mod_name = None
+    mod_path, ext = os.path.splitext(mod_path)
+    for name, mod in list(sys.modules.items()):
+        try:
+            # Believe it or not this can fail in some cases:
+            # https://github.com/astropy/astropy/issues/2671
+            path = os.path.splitext(getattr(mod, '__file__', ''))[0]
+        except Exception:
+            continue
+        if path == mod_path:
+            mod_name = mod.__name__
+            break
+    if mod_name is not None:
+        log.warning(message, extra={'origin': mod_name})
+    else:
+        log.warning(message)
+
+
+
+def log_warnings():
+    """Route warnings through the Astropy log mechanism.
+
+    Astropy claims to do this but only for warnings that are subclasses of AstropyUserWarning.
+    See https://github.com/astropy/astropy/issues/11500 ; if resolved there this can be simpler.
     """
-    for l in plot_list:
-        ar = pypulse.Archive(l[0],prepare=True)
-        print('Npol: %i, Nchan: %i, Nsubint: %i, Nbin: %i'%(ar.getNpol(), ar.getNchan(), ar.getNsubint(), ar.getNbin()))
-        if l[1] == 'YFp':
-            ar.fscrunch()
-            ar.imshow()
-        elif l[1] == 'GTpd':
-            ar.tscrunch()
-            ar.imshow()
+    global _showwarning_orig
+    if _showwarning_orig is None:
+        _showwarning_orig = warnings.showwarning
+        warnings.showwarning = _showwarning
