@@ -13,6 +13,7 @@ from timing_analysis.utils import apply_cut_flag, apply_cut_select
 from timing_analysis.lite_utils import write_tim
 from timing_analysis.dmx_utils import *
 from enterprise_extensions.outlier.gibbs_outlier import OutlierGibbs
+from enterprise_extensions.outlier.outlier_analysis import run_outlier
 
 def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     """Necessary set-up to run gibbs sampler, and run it. Return pout.
@@ -96,7 +97,8 @@ def calculate_pout(model, toas, tc_object):
 
     if method == 'hmc':
         epp = get_entPintPulsar(model, toas, drop_pintpsr=False)
-        # Some sorting will be needed here so pout refers to toas order
+        run_outlier(epp, outdir=results_dir, Nsamples=Nsamples, Nburnin=Nburnin)
+        # Some sorting will be needed here so pout refers to toas order?
     elif method == 'gibbs':
         epp = get_entPintPulsar(model, toas)
         pout = gibbs_run(epp,results_dir=results_dir,Nsamples=Nsamples)
