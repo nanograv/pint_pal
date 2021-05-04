@@ -21,6 +21,8 @@ setup(
         "enterprise-extensions",
         "pytest",
         "nbconvert",
-    ],
+        "ipywidgets>=7.6.3",
+        "pypulse>=0.0.1"
+],
     python_requires='>=3.6'
 )
