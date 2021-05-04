@@ -550,7 +550,7 @@ def read_excise_dropdowns(select_list, pav_list, matches):
             print('%s: You must select both an extension and plot type!' %(select_list[i].description))
     return plot_list
 
-def make_detective_plots(plot_list):
+def make_detective_plots(plot_list, match_list):
     """Makes pypulse plots for selected combinations of file/plot type (pav -YFp or -GTpd style).
     
     Parameters
@@ -561,12 +561,19 @@ def make_detective_plots(plot_list):
     =======
     None; displays plots in notebook.
     """
-    for l in plot_list:
-        ar = pypulse.Archive(l[0],prepare=True)
+    for l in range(len(plot_list)):
+        # print subbands/subints of interest for bad-toas
+        if len(plot_list[l]) > 2: # toa entries
+            print('\nNOTE: subbands, subints of interest for the following plot:')
+            for ll in range(len(match_list)):
+                if plot_list[l][0].rsplit('.',1)[0] in match_list[ll][0]:
+                    print('[%i, %i]'%(match_list[ll][1],match_list[ll][2]))
+        # now make the plots
+        ar = pypulse.Archive(plot_list[l][0],prepare=True)
         print('Npol: %i, Nchan: %i, Nsubint: %i, Nbin: %i'%(ar.getNpol(), ar.getNchan(), ar.getNsubint(), ar.getNbin()))
-        if l[1] == 'YFp':
+        if plot_list[l][1] == 'YFp':
             ar.fscrunch()
             ar.imshow()
-        elif l[1] == 'GTpd':
+        elif plot_list[l][1] == 'GTpd':
             ar.tscrunch()
             ar.imshow()
