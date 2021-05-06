@@ -1,12 +1,13 @@
 """ This is a set of utilities which check par files for completeness """
 
+import os, sys
 import re
-from astropy import log
 import copy
+from astropy import log
+import astropy.units as u
+sys.path.append("/home/jovyan/work/timing_analysis/src/")
+from timing_analysis.defaults import *
 
-# Latest versions of bipm/ephem tracked here; update as necessary.
-LATEST_BIPM = "BIPM2019"
-LATEST_EPHEM = "DE438"
 
 def check_if_fit(model, *param):
     """
@@ -29,6 +30,51 @@ def check_if_fit(model, *param):
             raise ValueError("%s parameter is not present in par file."%p)
         if getattr(model, p).frozen:
             raise ValueError("%s parameter is frozen."%p)
+        if not getattr(model, p).frozen:
+            print("Good: %s parameter is fit."%p)
+    return
+
+                  
+def check_if_fit_WIP(model, *param):
+    """
+    Check if a parameter or set of parameters
+    exists and are fit
+
+    Parameters
+    ==========
+    model: PINT model object
+    param: parameter string(s)
+
+    Raises
+    ======
+    ValueError
+        If (any) parameter is frozen,
+        the parameter is not present
+    """
+    
+    FB_pars = {'FB1','FB2','FB3','FB4','FB5','FB6'}
+    
+    
+    for p in param:
+        print(p)
+        globals()
+        p = globals()["thing"]
+        print(p)
+        print(globals()[f"model.{thing}.value"])
+        #globals()[f"print(model.{thing}.value"]
+    
+    #print(model.param[0].value)
+    
+    for p in param:
+        if hasattr(model, p):
+            print(p.value)
+            #if (model.PB.value is not None)
+        if not hasattr(model, p):
+            raise ValueError("%s parameter is not present in par file."%p)
+        if getattr(model, p).frozen:
+            raise ValueError("%s parameter is frozen."%p)
+        else:
+            print("Good: %s parameter is fit."%p)
     return
 
 
@@ -48,6 +94,7 @@ def has_and_check_if_fit(model, *param):
     param: parameter string(s)
     """
     for p in param:
+        print(p)
         if hasattr(model, p):
             check_if_fit(model, p)
 
@@ -142,15 +189,11 @@ def check_binary(model):
         return
 
     name = getattr(model, 'binary_model_name')
-    print("Binary model used: %s" % name)
-
+    
     if name == "ELL1":
-
-        formalismFB = False
-        
         # Check base models, including either PB or FB formulations
+        # This block of the script correctly determines formalismFB
         check_if_fit(model, "A1", "TASC", "EPS1", "EPS2")
-
         if (model.PB.value is not None) and (model.FB0.value is None):
             formalismFB = False
             check_if_fit(model, "PB")
@@ -163,80 +206,71 @@ def check_binary(model):
             raise ValueError("Both PB and FB0 are defined")
         else:
             raise ValueError("Either PB or FB0 are required in the ELL1 model.")
-        """
-        if hasattr(model, "PB") and hasattr(model, "FB0"):
-            #print(model.PB.value)
-            #print(type(model.PB.value))
-            #if type(model.PB.value) is 'NoneType':
-            #    print('yes')
-            #if type(model.PB.value) == 'NoneType':
-            #    print('no')
-            #if model.FB0.value is not None:
-            #    print('FB0 is not None')
-            #print(model.FB0.value)
-            #print(type(model.FB0.value))
-            #if (model.PB.value >= 0.0) and (not model.FB0.value):
-            #    continue
-            #elif (model.FB0.value >= 0.0) and (not model.PB.value):
-            #    continue
-            if (model.PB.value is None) and (model.FB0.value is None):
-            #if (not model.PB.value) and (not model.FB0.value):
-                raise ValueError("Neither PB nor FB0 are set to a value")
-            elif (model.PB.value is not None) and (model.FB0.value is not None):   
-            #elif (type(model.PB.value) not 'NoneType') and (type(model.FB0.value) not 'NoneType'):
-            #else:
-                #if model.PB.value is not None
-            #elif float(model.PB.value) >= 0.0 and float(model.FB0.value) >= 0.0:
-                raise ValueError("Both PB and FB0 are defined")
-            #else:
-            #    raise ValueError("There is some problem with PB and/or FB0")
-        elif hasattr(model, "PB"):
-            formalismFB = False
-            check_if_fit(model, "PB")
-        elif hasattr(model, "FB0"):
-            formalismFB = True
-            check_if_fit(model, "FB0")
         
-        else:
-            raise ValueError("Either PB or FB0 are required in the ELL1 model.")
-        """
-        
-        ### Need to include further checks here for higher-order FB terms,
-        ### and to make sure they are sequentially fit for
+        # Check for higher-order FB terms, making sure they are fit for sequentially
         if formalismFB:
             # We know FB0 is fit because of the above, so just check FB1 and up
-            # Start with highest-order FB derivative
-            # Should we start higher than FB6?
+            # Start with highest-order FB derivative. Should we start higher than FB6?
             if hasattr(model, "FB6"):
+                print("model has FB6")
                 check_if_fit(model, "FB6", "FB5", "FB4", "FB3", "FB2", "FB1")
-            elif hasattr(model, "FB5"):
+            elif hasattr(model, "FB5") and not hasattr(model, "FB6"):
+                print("model has FB5 but not FB6")
                 check_if_fit(model, "FB5", "FB4", "FB3", "FB2", "FB1")
-            elif hasattr(model, "FB4"):
+            elif hasattr(model, "FB4") and not hasattr(model, "FB6") and not hasattr(model, "FB5"):
+                print("model has FB4 but not FB5 or FB6")
                 check_if_fit(model, "FB4", "FB3", "FB2", "FB1")
-            elif hasattr(model, "FB3"):
+            elif hasattr(model, "FB3") and not hasattr(model, "FB6") and not hasattr(model, "FB5") and not hasattr(model, "FB4"):
+                print("model has FB3 but not FB4, FB5, or FB6")
                 check_if_fit(model, "FB3", "FB2", "FB1")
-            elif hasattr(model, "FB2"):
+            elif hasattr(model, "FB2") and not hasattr(model, "FB6") and not hasattr(model, "FB5") and not hasattr(model, "FB4") and not hasattr(model, "FB3"):
+                print("model has FB2 but not FB3, FB4, FB5, or FB6")
                 check_if_fit(model, "FB2", "FB1")
-            elif hasattr(model, "FB1"):
+            elif hasattr(model, "FB1") and not hasattr(model, "FB6") and not hasattr(model, "FB5") and not hasattr(model, "FB4") and not hasattr(model, "FB3") and not hasattr("FB2"):
+                print("model has FB1 but not FB2, FB3, FB4, FB5, or FB6")
                 check_if_fit(model, "FB1")
+            else:
+                raise ValueError("The options given were not sufficient to describe the presence/absence of FB1 through FB6.")
+            
 
         if not formalismFB:
-            has_and_check_if_fit(model, "PBDOT")
-            if hasattr(model, "SINI") and hasattr(model, "M2"):
-                check_if_fit(model, "SINI", "M2")
-            elif hasattr(model, "SINI") or hasattr(model, "M2"):
+            if model.PBDOT.value is not None:
+                check_if_fit(model, "PBDOT")
+            else:
+                print("PBDOT is not included in the model.")
+                
+            if (model.SINI.value is not None) and (model.M2.value is not None):
+                check_if_fit(model, "M2", "SINI")
+            elif (model.SINI.value is not None) and (model.M2.value is None):
                 raise ValueError("Both SINI and M2 are required when fitting for companion mass.")
-
-        has_and_check_if_fit(model, "XDOT")
-        if hasattr(model, "EPS1DOT") and hasattr(model, "EPS2DOT"):
-            check_if_fit(model, "EPS1DOT", "EPS2DOT")
-        elif hasattr(model, "EPS1DOT") or hasattr(model, "EPS2DOT"):
+            elif (model.SINI.value is None) and (model.M2.value is not None):
+                raise ValueError("Both SINI and M2 are required when fitting for companion mass.")
+            elif (model.SINI.value is None) and (model.M2.value is None):
+                print("M2 and SINI are not included in the model.")
+            else:
+                raise ValueError("Please check: there is a problem with the inclusion and/or exclusion of M2 and/or SINI in the model.")
+                
+        if model.A1DOT.value is not None:
+            check_if_fit(model, "A1DOT")
+        else:
+            print("A1DOT is not included in the model.")
+            
+        if (model.EPS1DOT.value is not None) and (model.EPS2DOT.value is not None):
+            check_if_fit(model, "EPS1DOT", "EPS1DOT")
+        elif (model.EPS1DOT.value is not None) and (model.EPS2DOT.value is None):
             raise ValueError("Both EPS1DOT and EPS2DOT are required when fitting for eccentricity derivatives.")
+        elif (model.EPS1DOT.value is None) and (model.EPS2DOT.value is not None):
+            raise ValueError("Both EPS1DOT and EPS2DOT are required when fitting for eccentricity derivatives.")
+        elif (model.EPS1DOT.value is None) and (model.EPS2DOT.value is None):
+            print("EPS1DOT and EPS2DOT are not included in the model.")
+        else:
+            #raise ValueError("There is an oddity with the inclusion/exclusion in the model of EPS1DOT and/or EPS2DOT.")
+            raise ValueError("Please check: there is a problem with the inclusion and/or exclusion of EPS1DOT and/or EPS2DOT in the model.")
+                
 
-
-
+    """
     elif name == "ELL1H":
-        check_if_fit(model, "A1", "PB", "TASC", "EPS1", "EPS2", "H3") #H3 is rquired for ELL1H?
+        check_if_fit(model, "A1", "PB", "TASC", "EPS1", "EPS2", "H3") #H3 is required for ELL1H?
         has_and_check_if_fit(model, "PBDOT", "XDOT", "H4")
 
         if hasattr(model, "EPS1DOT") and hasattr(model, "EPS2DOT"):
@@ -263,14 +297,16 @@ def check_binary(model):
         #elif hasattr(model, "SINI") or hasattr(model, "M2"):
     elif name == "T2":
 
-        ### Are there plans for PINT to support the T2 model?
+        ### Are there plans for PINT to support the T2 and/or DDK model?
 
         check_if_fit(model, "A1", "ECC", "T0", "PB", "OM", "M2", "KOM", "KIN")
         # maybe check if SINI = KIN?
     else:
         raise ValueError("Atypical binary model used")
+    """
 
-def check_jumps(model,receivers,fitter_type=None):
+
+def check_jumps(model,receivers,toa_type=None):
     """Checks for correct type/number of JUMP/DMJUMPs in the par file
 
     Parameters
@@ -309,7 +345,7 @@ def check_jumps(model,receivers,fitter_type=None):
         raise ValueError("All receivers have JUMPs, one must be removed")
 
     # Check DMJUMPS for wideband models
-    if fitter_type == 'WidebandTOAFitter':
+    if toa_type == 'WB':
         dmjumps = []
         rcvrs = copy.copy(receivers)
 
@@ -396,3 +432,120 @@ def check_ecliptic(model):
         msg = "Neither AstrometryEcliptic nor AstrometryEquatorial in model components."
         log.warning(msg)
     return
+
+def check_troposphere(model):
+    """Check that the model will (or will not) correct for the troposphere.
+
+    Parameters
+    =========
+    model: PINT toa object
+
+    Warnings
+    ========
+    UserWarning
+        If CORRECT_TROPOSPHERE is not set to the default boolean and/or if the component is not in the model.
+    """
+    if 'TroposphereDelay' not in model.components.keys():
+        from pint.models.timing_model import Component
+        troposphere_delay = Component.component_types["TroposphereDelay"]
+        model.add_component(troposphere_delay())
+        msg = "Added TroposphereDelay to model components."
+        log.warning(msg)
+    tropo = model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.value
+    if tropo != CORRECT_TROPOSPHERE:
+        model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.set( \
+                CORRECT_TROPOSPHERE)
+        msg = "Switching CORRECT_TROPOSPHERE setting."
+        log.warning(msg)
+    tropo = model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.value
+    msg = f"CORRECT_TROPOSPHERE is set to {tropo}."
+    log.info(msg)
+    return
+
+def check_planet_shapiro(model):
+    """Check that the model will (or will not) correct for the planets' Shapiro delays.
+
+    Parameters
+    =========
+    model: PINT toa object
+
+    Warnings
+    ========
+    UserWarning
+        If PLANET_SHAPIRO is not set to the default boolean and/or if the component is not in the model.
+    """
+    if 'SolarSystemShapiro' not in model.components.keys():
+        from pint.models.timing_model import Component
+        sss_delay = Component.component_types["SolarSystemShapiro"]
+        model.add_component(sss_delay())
+        msg = "Added SolarSystemShapiro to model components."
+        log.warning(msg)
+    sss = model.components['SolarSystemShapiro'].PLANET_SHAPIRO.value
+    if sss != PLANET_SHAPIRO:
+        model.components['SolarSystemShapiro'].PLANET_SHAPIRO.set( \
+                PLANET_SHAPIRO)
+        msg = "Switching PLANET_SHAPIRO setting."
+        log.warning(msg)
+    sss = model.components['SolarSystemShapiro'].PLANET_SHAPIRO.value
+    msg = f"PLANET_SHAPIRO is set to {sss}."
+    log.info(msg)
+    return
+
+def check_settings(model, toas, check_these=['name', 'ephem', 'bipm',
+    'ecliptic', 'troposphere', 'planet_shapiro', 'bad_lo_range','toa_release']):
+    """Umbrella function to run numerous check_ functions."""
+    requires_model = {'name', 'ecliptic', 'troposphere', 'planet_shapiro'}
+    requires_toas = {'ephem', 'bipm', 'bad_lo_range', 'toa_release'}
+    requires_both = {}
+    for thing in check_these:
+        if thing in requires_model:
+            globals()[f"check_{thing}"](model)
+        elif thing in requires_toas:
+            globals()[f"check_{thing}"](toas)
+        elif thing in requires_both:
+            globals()[f"check_{thing}"](model,toas)
+        else:
+            log.warning(f"check_{thing} not executed.")
+    return
+
+def check_bad_lo_range(toas):
+    """Check: no Arecibo TOAs exist in MJD range affected by bad LO (57984-58447)
+
+    15-yr specific mitigation strategy for excising affected data. Will raise
+    log.warning if Arecibo TOAs exist in this range.
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    """
+    bad_lo_start = (toas.get_mjds() > 57984.0*u.d)
+    bad_lo_end = (toas.get_mjds() < 58447.0*u.d)
+    lo_check = (bad_lo_start & bad_lo_end)
+    ao_check = (toas.get_obss() == 'arecibo')
+
+    if any(ao_check & lo_check):
+        log.warning('Data affected by Arecibo bad LO should be excised (add bad-range to .yaml).')
+        print('''
+Add the following line(s) to the ignore block of your .yaml file...
+
+  bad-range:
+  - [57984,58447,"PUPPI"]
+        ''')
+    elif any(ao_check):
+        log.info('Arecibo data affected by bad LO (MJD 57984-58447) has been ignored.')
+
+def check_toa_release(toas):
+    """Check: TOAs being used are from the most recent release
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    """
+    release_flags = toas.get_flag_value('ver')[0]
+    if len(set(release_flags)) > 1:
+        log.error(f'TOAs from multiple releases should not be combined: {set(release_flags)}')
+    else:
+        if release_flags[0] == LATEST_TOA_RELEASE:
+            log.info(f'All TOAs are from the latest release ({LATEST_TOA_RELEASE}).')
+        else:
+            log.warning(f'TOAs in use are from an old release {release_flags[0]}, not {LATEST_TOA_RELEASE}; update tim-directory in the .yaml accordingly.')
