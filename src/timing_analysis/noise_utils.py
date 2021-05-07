@@ -32,6 +32,14 @@ import types
 from enterprise.signals import utils
 from enterprise.signals import gp_priors as gpp
 
+def channelized_backends(backend_flags):
+    """Selection function to split by channelized backend flags only. For ECORR"""
+    flagvals = np.unique(backend_flags)
+    ch_b = ['ASP', 'GASP', 'GUPPI', 'PUPPI', 'CHIME']
+    flagvals = filter(lambda x: any(map(lambda y: y in x, ch_b)), flagvals)
+    return {flagval: backend_flags == flagval for flagval in flagvals}
+
+
 def white_noise_block(vary=False, inc_ecorr=False, gp_ecorr=False,
                       efac1=False, select='backend', name=None, is_wideband = False, wb_efac_sigma = 0.25):
     """
@@ -60,6 +68,9 @@ def white_noise_block(vary=False, inc_ecorr=False, gp_ecorr=False,
         backend = selections.Selection(selections.by_backend)
         # define selection by nanograv backends
         backend_ng = selections.Selection(selections.nanograv_backends)
+        #define CHIME selection plus ng backends
+        backend_ch = selections.Selection(channelized_backends)
+        
     else:
         # define no selection
         backend = selections.Selection(selections.no_selection)
@@ -90,16 +101,23 @@ def white_noise_block(vary=False, inc_ecorr=False, gp_ecorr=False,
     if inc_ecorr:
         if gp_ecorr:
             if name is None:
-                ec = gp_signals.EcorrBasisModel(log10_ecorr=ecorr,
-                                                selection=backend_ng)
-            else:
-                ec = gp_signals.EcorrBasisModel(log10_ecorr=ecorr,
-                                                selection=backend_ng, name=name)
-
+                #ec = gp_signals.EcorrBasisModel(log10_ecorr=ecorr,
+                #                                selection=backend_ng)
+                
+            #else:
+            #    ec = gp_signals.EcorrBasisModel(log10_ecorr=ecorr,
+            #                                    selection=backend_ng, name=name)
+                name = ''
+                
+            ec = gp_signals.EcorrBasisModel(log10_ecorr=ecorr,
+                                selection=backend_ch)
+            
         else:
+            #ec = white_signals.EcorrKernelNoise(log10_ecorr=ecorr,
+            #                                    selection=backend_ng,
+            #                                    name=name)
             ec = white_signals.EcorrKernelNoise(log10_ecorr=ecorr,
-                                                selection=backend_ng,
-                                                name=name)
+                                    selection=backend_ch)
 
     # combine signals
     if inc_ecorr:
@@ -311,7 +329,7 @@ def model_singlepsr_noise(psr, tm_var=False, tm_linear=False,
         s += extra_sigs
         
     # adding white-noise, and acting on psr objects
-    if 'NANOGrav' in psr.flags['pta'] and not is_wideband:
+    if ('NANOGrav' in psr.flags['pta'] or 'CHIME' in psr.flags['f']) and not is_wideband:
         s2 = s + white_noise_block(vary=white_vary, inc_ecorr=True,
                 select=select, is_wideband = False, wb_efac_sigma = wb_efac_sigma)
         model = s2(psr)
@@ -359,14 +377,13 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
         corner.corner(chain[burn:, :-4], labels = pars)
 
         if '_wb' in chaindir:
-            figname = f"./{psr_name}_noise_corner_wb.pdf"
+            figname = f"./{psr_name}_noise_corner.wb.pdf"
         elif '_nb' in chaindir:
-            figname = f"./{psr_name}_noise_corner_nb.pdf"
+            figname = f"./{psr_name}_noise_corner.nb.pdf"
         else:
             figname = f"./{psr_name}_noise_corner.pdf"
 
         pl.savefig(figname)
-        pl.savefig(figname.replace(".pdf",".png"), dpi=300)
 
         pl.show()
 
