@@ -115,6 +115,33 @@ def add_niterations(yaml_file,overwrite=True,extension='fix',insert_after='fitte
     else:
         log.info(f'{yaml_file} already contains n-iterations field.')
 
+def add_block_field(yaml_file,block_key,key,value,overwrite=True,extension='fix'):
+    """Add key/value to specified block in the yaml
+
+    Parameters
+    ==========
+    yaml_file: str, input file
+    block_key: str, yaml block to which key/value should be added
+    key: str, yaml field name
+    value: variable type, set value associated with key
+    overwrite: bool, optional
+        write yaml with same name (true), or add extenion (false)
+    extension: str, optional
+        extention added to output filename if overwrite=False
+    """
+    config = read_yaml(yaml_file)
+    out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
+
+    #d.keys().index(k) if we eventually want to add one key after another
+    if key in config[block_key]:
+        config[block_key][key] = value
+        log.info(f'Config {block_key}/{key} already exists in {yaml_file}; setting it to {value}.')
+    else:
+        config[block_key][key] = value
+        log.info(f'Adding {block_key}/{key} to {yaml_file}; setting it to {value}.')
+
+    write_yaml(config, out_yaml)
+
 def add_noise_block(yaml_file,overwrite=True,extension='fix',insert_after='bipm',
         noise_dir=None):
     """Adds noise block to yaml file
@@ -169,6 +196,32 @@ def add_dmx_block(yaml_file,overwrite=True,extension='fix',insert_after='noise')
         write_yaml(config, out_yaml)
     else:
         log.info(f'{yaml_file} already contains dmx block.')
+
+def add_outlier_block(yaml_file,overwrite=True,extension='fix',insert_after='dmx'):
+    """Adds dmx block to yaml file
+
+    Parameters
+    ==========
+    yaml_file: str, input file
+    overwrite: bool, optional
+        write yaml with same name (true), or add extenion (false)
+    extension: str, optional
+        extention added to output filename if overwrite=False
+    insert_after: str, optional
+        field after which to insert this block in the yaml
+    """
+    config = read_yaml(yaml_file)
+    out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
+
+    if not config.get('outlier'):
+        # outlier block goes after dmx by default (insert_after)
+        insert_ind = list(config).index(insert_after) + 1
+        outlier_block = {'method':'gibbs','n-burn':1000,'n-samples':20000}
+        config.insert(insert_ind,'outlier',outlier_block,'control outlier analysis runs')
+        log.info(f'Adding standard outlier block to {out_yaml}.')
+        write_yaml(config, out_yaml)
+    else:
+        log.info(f'{yaml_file} already contains outlier block.')
 
 def curate_comments(yaml_file,overwrite=True,extension='fix'):
     """Standardizes info comments on specific yaml fields
@@ -258,10 +311,32 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
             config['noise']['results-dir'] = value
         elif field == 'ephem' and isinstance(value,str):
             config['ephem'] = value
+        elif field == 'mjd-end' and isinstance(value,float):
+            config['ignore']['mjd-end'] = value
         else:
             log.error(f'Provided field ({field}) is valid, but not yet implemented in set_field(); doing nothing.')
 
     write_yaml(config, out_yaml)
+
+def fix_badepoch(yaml_file):
+    """Suggests bad-epoch replacements (if strings) with one-element lists
+
+    Parameters
+    ==========
+    yaml_file: str, yaml filename
+    """
+    config = read_yaml(yaml_file)
+    try:
+        n_be = len(config['ignore']['bad-epoch'])
+        log.info(f'{yaml_file}: {n_be} bad-epoch entries to fix...')
+        for i in range(n_be):
+            be_field = config['ignore']['bad-epoch'][i]
+            if isinstance(be_field,str):
+                print(f'  - [{be_field}]')
+    except TypeError:
+        log.info(f'{yaml_file}: 0 bad-epoch entries.')
+    except KeyError:
+        log.info(f'{yaml_file}: no bad-epoch field in the ignore block.')
 
 def read_yaml(yaml_file):
     """Reads a yaml file, returns the object
@@ -342,6 +417,17 @@ def main():
         default=False,
         help="add noise block to input yaml file(s)",
     )
+    parser.add_argument(
+        "--addoutlier",
+        action="store_true",
+        default=False,
+        help="add outlier block to input yaml file(s)",
+    )
+    parser.add_argument(
+        "--bkv",
+        nargs=3,
+        help="add block/key/value (3 items) to instantiate new yaml field",
+    )
     args = parser.parse_args()
 
     if args.check:
@@ -351,7 +437,7 @@ def main():
             add_niterations(ff,overwrite=args.overwrite)
             add_noise_block(ff,overwrite=args.overwrite)
             add_dmx_block(ff,overwrite=args.overwrite)
-            curate_comments(ff,overwrite=args.overwrite)
+            #curate_comments(ff,overwrite=args.overwrite)
     elif args.roundtrip:
         for ff in args.files:
             config = read_yaml(ff)
@@ -360,6 +446,14 @@ def main():
     elif args.addnoise:
         for ff in args.files:
             add_noise_block(ff,overwrite=args.overwrite)
+    elif args.addoutlier:
+        for ff in args.files:
+            add_outlier_block(ff,overwrite=args.overwrite)
+    
+    if args.bkv:
+        block, key, value = args.bkv
+        for ff in args.files:
+            add_block_field(ff,block,key,value,overwrite=args.overwrite)
 
 if __name__ == "__main__":
     main()
