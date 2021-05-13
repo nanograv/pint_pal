@@ -65,7 +65,7 @@ class TimingConfiguration:
         else:
             return self.config['free-params']
 
-    def get_model_and_toas(self,usepickle=True,print_all_ignores=False,apply_initial_cuts=True):
+    def get_model_and_toas(self,usepickle=True,print_all_ignores=False,apply_initial_cuts=True, excised=False):
         """Return the PINT model and TOA objects"""
         par_path = os.path.join(self.par_directory,self.config["timing-model"])
         toas = self.config["toas"]
@@ -100,6 +100,11 @@ class TimingConfiguration:
         t.renumber(index_order=False)  # Renumber so the index column matches the order of TOAs
         assert np.all(t.table["index"]==np.arange(len(t)))
         t.orig_table = t.table.copy()
+
+        # If reading an intermediate (excised) tim file, can simply apply cuts
+        if excised:
+            apply_initial_cuts = False
+            apply_cut_select(t,reason='existing cuts, pre-excised')
 
         # Add 'cut' flags to TOAs according to config 'ignore' block.
         if apply_initial_cuts:

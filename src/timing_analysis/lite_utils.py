@@ -73,6 +73,46 @@ def write_tim(fitter,toatype='',addext='',outfile=None,commentflag='cut'):
     
     fitter.toas.write_TOA_file(outfile, format='tempo2',commentflag=commentflag)
 
+def find_excise_file(outfile_basename,intermediate_results='/nanograv/share/15yr/timing/intermediate/'):
+    """Writes TOAs to a tim file in the working directory.
+
+    Parameters
+    ==========
+    outfile_basename: str
+        e.g. J1234+5678.nb, use tc.get_outfile_basename()
+    intermediate_results: str, optional
+        base directory where intermediate results are stored
+    """
+    outlier_dir = os.path.join(intermediate_results,'outlier',outfile_basename)
+    excise_file_only = f'{outfile_basename}_excise.tim'
+    excise_file = os.path.join(outlier_dir,excise_file_only)
+    noc_file = excise_file_only.replace('.tim','-noC.tim')
+
+    # Check for existence of excise file, return filename (else, None)
+    if os.path.exists(excise_file):
+        # Check for 'C ' instances
+        with open(excise_file,'r') as fi:
+            timlines = fi.readlines()
+            Ncut = 0
+            for i in range(len(timlines)):
+                if timlines[i].startswith('C '):
+                    timlines[i] = timlines[i].lstrip('C ')
+                    Ncut += 1
+
+        # If any, remove them and write noc_file to read, else read the existing file
+        if Ncut:
+            log.info(f"Removing {Ncut} instances of 'C ', writing {noc_file}.")
+            with open(noc_file,'w') as fo:
+                fo.writelines(timlines)
+            excise_file = noc_file
+        else:
+            pass
+
+        return excise_file
+
+    else:
+        return None 
+
 def write_include_tim(source,tim_file_list):
     """Writes file listing tim files to load as one PINT toa object (using INCLUDE).
        DEPRECATED...?
