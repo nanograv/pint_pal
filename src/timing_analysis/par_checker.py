@@ -5,6 +5,7 @@ import copy
 from astropy import log
 import astropy.units as u
 from timing_analysis.defaults import *
+from pint.modelutils import model_equatorial_to_ecliptic
 
 def check_if_fit(model, *param):
     """
