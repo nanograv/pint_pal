@@ -1069,7 +1069,10 @@ def apply_cut_flag(toas, orig_inds, flagvalue, warn=False):
             toas.orig_table[i]['flags']['cut'] = flagvalue
         elif warn:
             flags = toas.orig_table[i]['flags']
-            log.warning(f"Skipping TOA {flags['name']} (chan {flags['chan']}, subint {flags['subint']}) already cut: {flags['cut']}.")
+            if 'chan' in flags:
+                log.warning(f"Skipping TOA {flags['name']} (chan {flags['chan']}, subint {flags['subint']}) already cut: {flags['cut']}.")
+            else:  # wb TOAs do not have a chan flag
+                log.warning(f"Skipping TOA {flags['name']} (subint {flags['subint']}) already cut: {flags['cut']}.")
 
 def apply_cut_select(toas,reason='???'):
     """Apply toa selection based on cut flags present.
