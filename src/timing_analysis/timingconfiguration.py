@@ -109,9 +109,9 @@ class TimingConfiguration:
 
         return m, t
 
-    def manual_cuts(self,toas):
+    def manual_cuts(self,toas,warn=True):
         """ Apply manual cuts after everything else and warn if redundant """
-        toas = self.apply_ignore(toas,specify_keys=['bad-toa','bad-epoch'],warn=True)
+        toas = self.apply_ignore(toas,specify_keys=['bad-toa','bad-epoch'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
 
     def get_bipm(self):
@@ -513,8 +513,8 @@ class TimingConfiguration:
                 apply_cut_flag(toas,rangeinds,'badrange',warn=warn)
         if 'bad-toa' in valid_valued:
             names = np.array([f['name'] for f in toas.orig_table['flags']])
-            chans = np.array([f['chan'] for f in toas.orig_table['flags']])
             subints = np.array([f['subint'] for f in toas.orig_table['flags']])
+            if self.get_toa_type() == 'NB': chans = np.array([f['chan'] for f in toas.orig_table['flags']])
             for bt in self.get_bad_toas():
                 name,chan,subint = bt
                 if self.get_toa_type() == 'NB':
