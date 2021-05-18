@@ -111,6 +111,7 @@ def find_excise_file(outfile_basename,intermediate_results='/nanograv/share/15yr
         return excise_file
 
     else:
+        log.warning(f'Excise file does not exist: {excise_file}')
         return None 
 
 def write_include_tim(source,tim_file_list):
