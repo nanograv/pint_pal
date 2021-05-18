@@ -525,3 +525,41 @@ def log_warnings():
     if _showwarning_orig is None:
         _showwarning_orig = warnings.showwarning
         warnings.showwarning = _showwarning
+
+def cut_summary(toas,print_summary=True,pie=True):
+    """Basic summary of cut TOAs, associated reasons
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    print_summary: bool, optional
+        Print reasons for cuts and respective nTOA/percentages
+    pie: bool, optional
+        Make a partial pie chart showing reasons/percentages for cuts (good TOAs excluded)
+
+    Returns
+    =======
+    cuts_dict: dict
+        Cut flags and number of instances for input TOAs
+    """
+    toa_cut_flags = [t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table]
+    nTOA = len(toa_cut_flags)
+    cuts_present = set(toa_cut_flags)
+    cuts_dict = {}
+    for c in cuts_present:
+        ncut = toa_cut_flags.count(c)
+        if c: cuts_dict[c] = ncut # No cut flags for remaining, good TOAs
+        if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')
+
+    if pie:
+        nTOAcut = np.array(list(cuts_dict.values()))
+        sizes = nTOAcut/nTOA
+        labels = cuts_dict.keys()
+        log.info(f"Slices represent {100*np.sum(sizes):.1f}% of TOAs, which have been cut.")
+
+        fig1, ax1 = plt.subplots()
+        ax1.pie(sizes, labels=labels, pctdistance=0.8, autopct='%1.1f%%', normalize=False)
+        ax1.axis('equal')
+        fig1.suptitle('Summary of TOA cuts')
+
+    return cuts_dict
