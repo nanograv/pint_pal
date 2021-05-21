@@ -525,3 +525,62 @@ def log_warnings():
     if _showwarning_orig is None:
         _showwarning_orig = warnings.showwarning
         warnings.showwarning = _showwarning
+
+def cut_summary(toas,print_summary=False,donut=True,legend=True):
+    """Basic summary of cut TOAs, associated reasons
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    print_summary: bool, optional
+        Print reasons for cuts and respective nTOA/percentages
+    donut: bool, optional
+        Make a donut chart showing reasons/percentages for cuts
+    legend: bool, optional
+        Include a legend rather than labeling slices
+
+    Returns
+    =======
+    cuts_dict: dict
+        Cut flags and number of instances for input TOAs
+    """
+    import seaborn as sns
+    palette = sns.color_palette("pastel",7)
+    color_dict = {'dmx':palette[0],
+                  'snr':palette[1],
+                  'good':palette[2],
+                  'badrange':palette[3],
+                  'outlier10':palette[4],
+                  'epochdrop':palette[5],
+                  'orphaned':palette[6],
+                 }
+    # kwarg that makes it possible to break this down by telescope/backend...?
+    toa_cut_flags = [t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table]
+    nTOA = len(toa_cut_flags)
+    cuts_present = set(toa_cut_flags)
+    cuts_dict = {}
+    for c in cuts_present:
+        ncut = toa_cut_flags.count(c)
+        if c: cuts_dict[c] = ncut
+        else:
+            c = 'good'
+            cuts_dict[c] = ncut
+        if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')
+
+    if donut:
+        nTOAcut = np.array(list(cuts_dict.values()))
+        sizes = nTOAcut/nTOA
+        labels = [f"{cdk} ({cuts_dict[cdk]})" for cdk in cuts_dict.keys()]
+        colors = [color_dict[cdk] for cdk in cuts_dict.keys()]
+
+        fig1, ax1 = plt.subplots()
+        ax1.axis('equal')
+        if legend:
+            ax1.pie(sizes, colors=colors, autopct='%1.1f%%', pctdistance=0.8, normalize=True)
+            ax1.legend(labels,bbox_to_anchor=(0.8, 0.8))
+        else:
+            ax1.pie(sizes, autopct='%1.1f%%', labels=labels, pctdistance=0.8, colors=colors, normalize=True)
+
+        donut_hole=plt.Circle( (0,0), 0.6, color='white')
+        p=plt.gcf()
+        p.gca().add_artist(donut_hole)
