@@ -23,7 +23,7 @@ dmx:  # control dmx windowing/fixing
   max-sw-delay: 0.1 # finer binning when solar wind delay > threshold (us)
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 outlier: # control outlier analysis runs
-  method: gibbs
+  method: hmc
   n-burn: 1000
   n-samples: 20000
 ignore: # toa excision
