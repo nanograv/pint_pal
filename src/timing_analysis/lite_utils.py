@@ -45,7 +45,7 @@ def write_par(fitter,toatype='',addext='',outfile=None):
     with open(outfile, 'w') as fout:
         fout.write(fitter.model.as_parfile())
 
-def write_tim(fitter,toatype='',addext='',outfile=None,commentflag='cut'):
+def write_tim(fitter,toatype='',addext='',outfile=None,commentflag=None):
     """Writes TOAs to a tim file in the working directory.
 
     Parameters
