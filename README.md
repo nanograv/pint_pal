@@ -38,6 +38,10 @@ pip install --user -e .
 ```
 If it is already installed, then `cd` into `timing_analysis`, run `git pull`. When you install with `-e` as above, the installation is basically a link to the source directory so you can update the code (e.g. with `git pull`) and it will be used immediately, without the need to run pip install again.
 
+Installing elsewhere
+--------------------
+
+Although `timing_analysis` does try to specify its dependencies, it can be cumbersome to get everything working. If it is easier to install a Singularity container, we have [instructions on how to do that](https://gitlab.nanograv.org/nano-time/timing_analysis/-/wikis/Containerized-installation-of-timing-tools).
 
 Timing workflow
 ---------------
