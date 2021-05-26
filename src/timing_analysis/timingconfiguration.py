@@ -129,7 +129,7 @@ class TimingConfiguration:
                     dropinds = nameinds[np.array(no_cuts)]
                     apply_cut_flag(toas,dropinds,'maxout')
 
-        apply_cut_select(toas,reason=f">= {nout_threshold} outliers per file; maxout.")
+        apply_cut_select(toas,reason=f">= {nout_threshold} outliers per file; maxout")
 
     def manual_cuts(self,toas,warn=False):
         """ Apply manual cuts after everything else and warn if redundant """
@@ -531,6 +531,14 @@ class TimingConfiguration:
                 name_matches = set(names[epochinds])
                 if len(name_matches) > 1:  # Help with fixing epoch -> file disambiguation
                     log.warning(f"Check {be} (matches multiple files): {name_matches}")
+                    # Automatically and quickly explore matching files to see if any are immediately redundant.
+                    # ...basically identical to the outer loop.
+                    for nm in name_matches:
+                        matchinds = np.where([nm in n for n in names])[0]
+                        remaining = np.array([not cut for cut in cuts[matchinds]])
+                        alreadycut = np.invert(remaining)
+                        if np.all(alreadycut):
+                            log.warning(f"All TOAs from {nm} already cut: {set(cuts[matchinds][alreadycut])}")
                 # Check bad-epoch entry is not redundant
                 remaining = np.array([not cut for cut in cuts[epochinds]])
                 alreadycut = np.invert(remaining)
