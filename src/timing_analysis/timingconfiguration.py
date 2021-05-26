@@ -114,9 +114,32 @@ class TimingConfiguration:
 
         return m, t
 
+    def check_file_outliers(self,toas,nout_threshold=5):
+        """ Check for files where Noutliers > nout_threshold, cut files where True """
+        names = np.array([f['name'] for f in toas.orig_table['flags']])
+        cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
+        for name in set(names):
+            nameinds = np.where([name == n for n in names])[0]
+            file_cutlist = list(cuts[nameinds])
+            outlier_cuts = ['outlier' in fc if fc else False for fc in file_cutlist]
+            #epochdrop_cuts = ['epochdrop' in fc if fc else False for fc in file_cutlist]
+            no_cuts = [not fc for fc in file_cutlist]
+            if np.sum(outlier_cuts) > nout_threshold:
+                log.warning(f"{name}: {np.sum(outlier_cuts)} outliers, apply epochdrop")
+                if np.any(no_cuts):
+                    dropinds = nameinds[np.array(no_cuts)]
+                    apply_cut_flag(toas,dropinds,'epochdrop')
+                # Also want to replace outlier10 flags in this case?
+
+        apply_cut_select(toas,reason=f"> {nout_threshold} outliers per file")
+
     def manual_cuts(self,toas,warn=True):
         """ Apply manual cuts after everything else and warn if redundant """
-        toas = self.apply_ignore(toas,specify_keys=['bad-toa','bad-epoch'],warn=warn)
+        #toas = self.apply_ignore(toas,specify_keys=['bad-toa','bad-epoch'],warn=warn)
+        toas = self.apply_ignore(toas,specify_keys=['bad-toa'],warn=warn)
+        apply_cut_select(toas,reason='manual cuts, specified keys')
+
+        toas = self.apply_ignore(toas,specify_keys=['bad-epoch'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
 
     def get_bipm(self):
@@ -305,8 +328,8 @@ class TimingConfiguration:
     def check_for_bad_epochs(self, toas, threshold=0.9, print_all=False):
         """Check the bad-toas entries for epochs where more than a given
         percentange of TOAs have been flagged. Make appropriate suggestions
-        for the user to update the `bad-epoch` entires, and optionally
-        supply the revised `bad-toa` entires.
+        for the user to update the `bad-epoch` entries, and optionally
+        supply the revised `bad-toa` entries.
 
         Parameters
         ----------
@@ -378,8 +401,6 @@ class TimingConfiguration:
                 log.info("The `bad-toa` list in your config file can be reduced to:")
                 for t in new_bad_toa_list:
                     print(f"    - ['{t[0]}',{t[1]},{t[2]}]")
-
-
 
     def get_prob_outlier(self):
         if "prob-outlier" in self.config['ignore'].keys():
@@ -504,8 +525,19 @@ class TimingConfiguration:
             pass
         if 'bad-epoch' in valid_valued:
             names = np.array([f['name'] for f in toas.orig_table['flags']])
+            fes = np.array([f['fe'] for f in toas.orig_table['flags']])
+            cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
             for be in self.get_bad_epochs():
                 epochinds = np.where([be in n for n in names])[0]
+                # Check bad-epoch entry only matches one file
+                name_matches = set(names[epochinds])
+                if len(name_matches) > 1:  # Help with fixing epoch -> file disambiguation
+                    log.warning(f"Check {be} (matches multiple files): {name_matches}")
+                # Check bad-epoch entry is not redundant
+                remaining = np.array([not cut for cut in cuts[epochinds]])
+                alreadycut = np.invert(remaining)
+                if np.all(alreadycut):
+                    log.warning(f"All TOAs from {be} already cut: {set(cuts[epochinds][alreadycut])}")
                 apply_cut_flag(toas,epochinds,'badepoch',warn=warn)
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
@@ -520,13 +552,29 @@ class TimingConfiguration:
             names = np.array([f['name'] for f in toas.orig_table['flags']])
             subints = np.array([f['subint'] for f in toas.orig_table['flags']])
             if self.get_toa_type() == 'NB': chans = np.array([f['chan'] for f in toas.orig_table['flags']])
+            btinds = []
             for bt in self.get_bad_toas():
                 name,chan,subint = bt
                 if self.get_toa_type() == 'NB':
-                    btind = np.where((names==name) & (chans==chan) & (subints==subint))[0]
+                    btinds.append(np.where((names==name) & (chans==chan) & (subints==subint))[0][0])
                 else:
                     # don't match based on -chan flags, since WB TOAs don't have them
-                    btind = np.where((names==name) & (subints==subint))[0]
-                apply_cut_flag(toas,btind,'badtoa',warn=warn)
+                    btinds.append(np.where((names==name) & (subints==subint))[0][0])
+            btinds = np.array(btinds)
+
+            # Check for pre-existing cut flags:
+            #cuts = np.array([t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table])
+            cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
+            remaining = np.array([not cut for cut in cuts[btinds]])
+            alreadycut = np.invert(remaining)
+
+            if np.any(alreadycut):
+                log.info(f"{np.sum(alreadycut)} bad-toa entries already cut: {set(cuts[btinds][alreadycut])}")
+                log.info(f"bad-toa list can be reduced to {np.sum(remaining)} entries...")
+                for i in btinds[remaining]:
+                    if self.get_toa_type() == 'NB': print(f"  - [{names[i]},{chans[i]},{subints[i]}]")
+                    else: print(f"  - [{names[i]},None,{subints[i]}]")
+
+            apply_cut_flag(toas,np.array(btinds),'badtoa',warn=warn)
 
         return toas
