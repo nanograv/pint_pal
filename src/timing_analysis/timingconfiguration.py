@@ -122,18 +122,16 @@ class TimingConfiguration:
             nameinds = np.where([name == n for n in names])[0]
             file_cutlist = list(cuts[nameinds])
             outlier_cuts = ['outlier' in fc if fc else False for fc in file_cutlist]
-            #epochdrop_cuts = ['epochdrop' in fc if fc else False for fc in file_cutlist]
             no_cuts = [not fc for fc in file_cutlist]
-            if np.sum(outlier_cuts) > nout_threshold:
-                log.warning(f"{name}: {np.sum(outlier_cuts)} outliers, apply epochdrop")
+            if np.sum(outlier_cuts) >= nout_threshold:
+                log.warning(f"{name}: {np.sum(outlier_cuts)} outliers, applying maxout cuts.")
                 if np.any(no_cuts):
                     dropinds = nameinds[np.array(no_cuts)]
-                    apply_cut_flag(toas,dropinds,'epochdrop')
-                # Also want to replace outlier10 flags in this case?
+                    apply_cut_flag(toas,dropinds,'maxout')
 
-        apply_cut_select(toas,reason=f"> {nout_threshold} outliers per file")
+        apply_cut_select(toas,reason=f">= {nout_threshold} outliers per file; maxout.")
 
-    def manual_cuts(self,toas,warn=True):
+    def manual_cuts(self,toas,warn=False):
         """ Apply manual cuts after everything else and warn if redundant """
         #toas = self.apply_ignore(toas,specify_keys=['bad-toa','bad-epoch'],warn=warn)
         toas = self.apply_ignore(toas,specify_keys=['bad-toa'],warn=warn)
