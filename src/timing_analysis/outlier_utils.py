@@ -134,7 +134,7 @@ def make_pout_cuts(model,toas,tc_object,outpct_threshold=8.0):
     toas = setup_dmx(model,toas,frequency_ratio=tc_object.get_fratio(),max_delta_t=tc_object.get_sw_delay())
 
     # Now cut files if X% or more TOAs/file are flagged as outliers
-    tc.check_file_outliers(to,outpct_threshold=outpct_threshold)
+    tc_object.check_file_outliers(toas,outpct_threshold=outpct_threshold)
     toas = setup_dmx(model,toas,frequency_ratio=tc_object.get_fratio(),max_delta_t=tc_object.get_sw_delay())
 
 def Ftest(chi2_1, dof_1, chi2_2, dof_2):
