@@ -114,22 +114,31 @@ class TimingConfiguration:
 
         return m, t
 
-    def check_file_outliers(self,toas,nout_threshold=5):
-        """ Check for files where Noutliers > nout_threshold, cut files where True """
+    def check_file_outliers(self,toas,outpct_threshold=8.0):
+        """ Check for files where Noutliers > nout_threshold, cut files where True 
+
+        Parameters
+        ==========
+        toas: pint toas object
+        outpct_threshold: float, optional
+            cut file's remaining TOAs (maxout) if X% were flagged as outliers (default set by 5/64=8%)
+        """
         names = np.array([f['name'] for f in toas.orig_table['flags']])
         cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
         for name in set(names):
             nameinds = np.where([name == n for n in names])[0]
+            ntoas_file = len(nameinds)
+            nout_threshold = round(ntoas_file * outpct_threshold/100.0)
             file_cutlist = list(cuts[nameinds])
             outlier_cuts = ['outlier' in fc if fc else False for fc in file_cutlist]
             no_cuts = [not fc for fc in file_cutlist]
-            if np.sum(outlier_cuts) >= nout_threshold:
-                log.warning(f"{name}: {np.sum(outlier_cuts)} outliers, applying maxout cuts.")
+            if np.sum(outlier_cuts) > nout_threshold:
+                log.warning(f"{name}: {outpct_threshold}% outlier threshold exceeded ({np.sum(outlier_cuts)}/{ntoas_file}), applying maxout cuts.")
                 if np.any(no_cuts):
                     dropinds = nameinds[np.array(no_cuts)]
                     apply_cut_flag(toas,dropinds,'maxout')
 
-        apply_cut_select(toas,reason=f">= {nout_threshold} outliers per file; maxout")
+        apply_cut_select(toas,reason=f"> {outpct_threshold}% outliers in file; maxout")
 
     def manual_cuts(self,toas,warn=False):
         """ Apply manual cuts after everything else and warn if redundant """
