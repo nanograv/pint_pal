@@ -539,12 +539,15 @@ class TimingConfiguration:
                         alreadycut = np.invert(remaining)
                         if np.all(alreadycut):
                             log.warning(f"All TOAs from {nm} already cut: {set(cuts[matchinds][alreadycut])}")
-                # Check bad-epoch entry is not redundant
-                remaining = np.array([not cut for cut in cuts[epochinds]])
-                alreadycut = np.invert(remaining)
-                if np.all(alreadycut):
-                    log.warning(f"All TOAs from {be} already cut: {set(cuts[epochinds][alreadycut])}")
-                apply_cut_flag(toas,epochinds,'badepoch',warn=warn)
+                elif len(name_matches) == 1:
+                    # Check bad-epoch entry is not redundant
+                    remaining = np.array([not cut for cut in cuts[epochinds]])
+                    alreadycut = np.invert(remaining)
+                    if np.all(alreadycut):
+                        log.warning(f"All TOAs from {be} already cut: {set(cuts[epochinds][alreadycut])}")
+                    apply_cut_flag(toas,epochinds,'badepoch',warn=warn)
+                else:
+                    log.warning(f"bad-epoch entry does not match any TOAs: {be}")
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             backends = np.array([f['be'] for f in toas.orig_table['flags']])
@@ -562,7 +565,9 @@ class TimingConfiguration:
             for bt in self.get_bad_toas():
                 name,chan,subint = bt
                 if self.get_toa_type() == 'NB':
-                    btinds.append(np.where((names==name) & (chans==chan) & (subints==subint))[0][0])
+                    bt_match = np.where((names==name) & (chans==chan) & (subints==subint))[0]
+                    if len(bt_match): btinds.append(np.where((names==name) & (chans==chan) & (subints==subint))[0][0])
+                    else: log.warning(f"Listed bad TOA not matched: [{name}, {chan}, {subint}]")
                 else:
                     # don't match based on -chan flags, since WB TOAs don't have them
                     btinds.append(np.where((names==name) & (subints==subint))[0][0])
