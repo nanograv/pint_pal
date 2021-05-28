@@ -98,6 +98,7 @@ def calculate_pout(model, toas, tc_object):
     if method == 'hmc':
         epp = get_entPintPulsar(model, toas, drop_pintpsr=False)
         pout = OutlierHMC(epp, outdir=results_dir, Nsamples=Nsamples, Nburnin=Nburnin)
+        print('') # Progress bar doesn't print a newline
         # Some sorting will be needed here so pout refers to toas order?
     elif method == 'gibbs':
         epp = get_entPintPulsar(model, toas)
@@ -116,7 +117,7 @@ def calculate_pout(model, toas, tc_object):
     write_tim(fo,toatype=tc_object.get_toa_type(),outfile=pout_timfile)
 
     # Need to mask TOAs once again
-    apply_cut_select(toas,reason='resumption after write_tim (pout)')
+    apply_cut_select(toas,reason='resumption after write_tim, pout')
 
 def make_pout_cuts(model,toas,tc_object,outpct_threshold=8.0):
     """Apply cut flags to TOAs with outlier probabilities larger than specified threshold.

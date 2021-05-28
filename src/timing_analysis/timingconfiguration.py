@@ -125,6 +125,7 @@ class TimingConfiguration:
         """
         names = np.array([f['name'] for f in toas.orig_table['flags']])
         cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
+        maxout_applied = False
         for name in set(names):
             nameinds = np.where([name == n for n in names])[0]
             ntoas_file = len(nameinds)
@@ -133,12 +134,13 @@ class TimingConfiguration:
             outlier_cuts = ['outlier' in fc if fc else False for fc in file_cutlist]
             no_cuts = [not fc for fc in file_cutlist]
             if np.sum(outlier_cuts) > nout_threshold:
-                log.warning(f"{name}: {outpct_threshold}% outlier threshold exceeded ({np.sum(outlier_cuts)}/{ntoas_file}), applying maxout cuts.")
                 if np.any(no_cuts):
+                    log.warning(f"{name}: {outpct_threshold}% outlier threshold exceeded ({np.sum(outlier_cuts)}/{ntoas_file}), applying maxout cuts.")
                     dropinds = nameinds[np.array(no_cuts)]
                     apply_cut_flag(toas,dropinds,'maxout')
+                    maxout_applied = True
 
-        apply_cut_select(toas,reason=f"> {outpct_threshold}% outliers in file; maxout")
+        if maxout_applied: apply_cut_select(toas,reason=f"> {outpct_threshold}% outliers in file; maxout")
 
     def manual_cuts(self,toas,warn=False):
         """ Apply manual cuts after everything else and warn if redundant """
