@@ -585,13 +585,15 @@ def cut_summary(toas,print_summary=False,donut=True,legend=True):
         p=plt.gcf()
         p.gca().add_artist(donut_hole)
         
-def display_excise_dropdowns(epoch_matches, toa_matches):
+def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd=False):
     """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision. This should be run after tc.get_investigation_files(); doing so will display two lists of dropdowns (separated by bad_toa and bad_epoch). The user then chooses whatever combinations of files/plot types they'd like to display, and runs a cell below the dropdowns containing the read_excise_dropdowns function.
     
     Parameters
     ==========
     epoch_matches: a list of *.ff files matching bad epochs in YAML
     toa_matches: lists with *.ff files matching bad toas in YAML, bad subband #, bad subint #
+    all_YFp (optional, default False): if True, defaults all plots to YFp
+    all_GTpd (optional, default False): if True, defaults all plots to GTpd
     
     Returns (note: these are separate for now for clarity and freedom to use the subint/subband info in bad-toas)
     =======
@@ -600,19 +602,20 @@ def display_excise_dropdowns(epoch_matches, toa_matches):
     toa_dropdowns: list of dropdown widget objects containing short file names and extensions for bad-toas
     pav_toa_drop: list of dropdown widget objects indicating plot type to be chosen for bad-toas
     """
-    ext_list = ['None','.ff','.calib','.zap']
-    pav_list = ['None','YFp','GTpd']
+    ext_list = ['.ff','None','.calib','.zap']
+    if all_YFp:
+        pav_list = ['YFp','GTpd','None']
+    elif all_GTpd:
+        pav_list = ['GTpd','YFp','None']
+    else:
+        pav_list = ['None','YFp','GTpd']
     short_epoch_names = [e.split('/')[-1].rpartition('.')[0] for e in epoch_matches]
     short_toa_names = [t[0].split('/')[-1].rpartition('.')[0] for t in toa_matches]
     epoch_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
                                   options=ext_list, layout={'width': 'max-content'}) for s in short_epoch_names]
     toa_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
                                   options=ext_list, layout={'width': 'max-content'}) for s in np.unique(short_toa_names)]
-#    toa_dropdowns = []    
-#    for s in range(len(short_toa_names)):
-#        toa_dropdowns.append(widgets.Dropdown(description='%s [%i, %i]'%(short_toa_names[s], toa_matches[s][1], toa_matches[s]                                     [2]), style={'description_width': 'initial'}, options=ext_list, layout={'width': 'max-content'}))
     pav_epoch_drop = [widgets.Dropdown(options=pav_list) for s in short_epoch_names]
-#    pav_toa_drop = [widgets.Dropdown(options=pav_list) for s in short_toa_names]
     pav_toa_drop = [widgets.Dropdown(options=pav_list) for s in np.unique(short_toa_names)]
     epoch_output = widgets.HBox([widgets.VBox(children=epoch_dropdowns),widgets.VBox(children=pav_epoch_drop)])
     toa_output = widgets.HBox([widgets.VBox(children=toa_dropdowns),widgets.VBox(children=pav_toa_drop)])
@@ -646,8 +649,9 @@ def read_excise_dropdowns(select_list, pav_list, matches):
             else: # epoch entries
                 plot_list.append([matches[i].rpartition('/')[0] + '/' + select_list[i].description + 
                                   select_list[i].value,pav_list[i].value])
-        elif (select_list[i].value == 'None') != (pav_list[i].value == 'None'):
-            print('%s: You must select both an extension and plot type!' %(select_list[i].description))
+        # temporarily muting this warning since we're defaulting to .ff:
+        #elif (select_list[i].value == 'None') != (pav_list[i].value == 'None'):
+        #    log.warning(f'{select_list[i].description} You must select both an extension and plot type!')
     return plot_list
 
 def make_detective_plots(plot_list, match_list):
@@ -662,14 +666,14 @@ def make_detective_plots(plot_list, match_list):
     None; displays plots in notebook.
     """
     for l in range(len(plot_list)):
+        ar = pypulse.Archive(plot_list[l][0],prepare=True)
         # print subbands/subints of interest for bad-toas
         if len(plot_list[l]) > 2: # toa entries
             print('\nNOTE: subbands, subints of interest for the following plot:')
             for ll in range(len(match_list)):
                 if plot_list[l][0].rsplit('.',1)[0] in match_list[ll][0]:
-                    print('[%i, %i]'%(match_list[ll][1],match_list[ll][2]))
-        # now make the plots
-        ar = pypulse.Archive(plot_list[l][0],prepare=True)
+                    hl_chan, hl_subint = match_list[ll][1], match_list[ll][2]
+                    print('[%i, %i]'%(hl_chan, hl_subint))
         print('Npol: %i, Nchan: %i, Nsubint: %i, Nbin: %i'%(ar.getNpol(), ar.getNchan(), ar.getNsubint(), ar.getNbin()))
         if plot_list[l][1] == 'YFp':
             ar.fscrunch()
