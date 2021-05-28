@@ -211,19 +211,6 @@ class TimingConfiguration:
             return self.config['ignore']['bad-range']
         return None
 
-    #def get_bad_toas(self):
-    #    """ Return list of bad TOAs (lists: [filename, channel, subint]) """
-    #    bad_toa_list = []
-    #    if 'bad-toa' in self.config['ignore'].keys() and self.config['ignore']['bad-toa'] != None:
-    #        for i in self.config['ignore']['bad-toa']:
-    #            if len(i) == 4: # i.e. reason is provided
-    #                bad_toa_list.append(i[:-1])
-    #            elif len(i) == 3: # no reason provided
-    #                bad_toa_list.append(i)
-    #        return bad_toa_list
-    #    else:
-    #        return None
-
     def get_bad_toas(self):
         """ Return list of bad TOAs (lists: [filename, channel, subint]) """
         if 'bad-toa' in self.config['ignore'].keys():
@@ -234,14 +221,18 @@ class TimingConfiguration:
         """ Makes a list from which the timer can choose which epochs they'd like to manually inspect"""
         ff_list = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
         match_epochs, match_toas = [], []
+        # Note that you need the following check since this doesn't go through apply_ignore:
         if 'bad-epoch' in self.config['ignore'].keys() and self.config['ignore']['bad-epoch'] != None:
-            for be in self.get_bad_epochs():       
-                match_epochs.append([filenm for filenm in ff_list if be[0] in filenm])
+            for be in self.get_bad_epochs():
+                if isinstance(be, list):
+                    match_epochs.append([filenm for filenm in ff_list if be[0] in filenm])
+                else: # bad-epoch entry is in the "old" style (just a string)
+                    match_epochs.append([filenm for filenm in ff_list if be in filenm])
         if 'bad-toa' in self.config['ignore'].keys() and self.config['ignore']['bad-toa'] != None:
             for bt in self.get_bad_toas():
                 match_toas.append([[filenm, bt[1], bt[2]] for filenm in ff_list if bt[0] in filenm])
         return sum(match_epochs,[]), sum(match_toas,[])
-
+    
     def check_for_orphaned_recs(self, toas, nepochs_threshold=3):
         """Check for frontend/backend pairs that arise at or below threshold
         for number of epochs; also check that the set matches with those listed
