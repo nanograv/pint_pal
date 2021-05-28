@@ -577,11 +577,11 @@ class TimingConfiguration:
                 name,chan,subint = bt
                 if self.get_toa_type() == 'NB':
                     bt_match = np.where((names==name) & (chans==chan) & (subints==subint))[0]
-                    if len(bt_match): btinds.append(np.where((names==name) & (chans==chan) & (subints==subint))[0][0])
-                    else: log.warning(f"Listed bad TOA not matched: [{name}, {chan}, {subint}]")
                 else:
                     # don't match based on -chan flags, since WB TOAs don't have them
-                    btinds.append(np.where((names==name) & (subints==subint))[0][0])
+                    bt_match = np.where((names==name) & (subints==subint))[0]
+                if len(bt_match): btinds.append(bt_match[0])
+                else: log.warning(f"Listed bad TOA not matched: [{name}, {chan}, {subint}]")
             btinds = np.array(btinds)
 
             # Check for pre-existing cut flags:
