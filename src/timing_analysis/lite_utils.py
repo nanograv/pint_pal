@@ -562,7 +562,7 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
     tel = [t[5] for t in toas.table]
     settel = set(tel)
 
-    fe = [t[6]['fe'] for t in toas.table]
+    fe = [str(t[6]['fe']) for t in toas.table]
     setfe = set(fe)
 
     mashtel = ''.join(settel)
