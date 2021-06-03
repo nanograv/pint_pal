@@ -526,18 +526,21 @@ def log_warnings():
         _showwarning_orig = warnings.showwarning
         warnings.showwarning = _showwarning
 
-def cut_summary(toas,print_summary=False,donut=True,legend=True):
+def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
     """Basic summary of cut TOAs, associated reasons
 
     Parameters
     ==========
     toas: `pint.toa.TOAs` object
+    tc: `timing_analysis.timingconfiguration.TimingConfiguration` object
     print_summary: bool, optional
         Print reasons for cuts and respective nTOA/percentages
     donut: bool, optional
         Make a donut chart showing reasons/percentages for cuts
     legend: bool, optional
         Include a legend rather than labeling slices
+    save: bool, optional
+        Save a png of the resulting plot.
 
     Returns
     =======
@@ -555,33 +558,47 @@ def cut_summary(toas,print_summary=False,donut=True,legend=True):
                   'orphaned':palette[6],
                   'maxout':palette[7],
                  }
+    # gather info for title (may also be useful for other features in the future)
+    tel = [t[5] for t in toas.table]
+    settel = set(tel)
+
+    fe = [t[6]['fe'] for t in toas.table]
+    setfe = set(fe)
+
+    mashtel = ''.join(settel)
+    flavor = f"{tc.get_outfile_basename()} ({mashtel}; {', '.join(setfe)})"
+
     # kwarg that makes it possible to break this down by telescope/backend...?
     toa_cut_flags = [t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table]
     nTOA = len(toa_cut_flags)
     cuts_present = set(toa_cut_flags)
     cuts_dict = {}
-    for c in cuts_present:
+    for c in cuts_present: 
         ncut = toa_cut_flags.count(c)
         if c: cuts_dict[c] = ncut
-        else:
-            c = 'good'
-            cuts_dict[c] = ncut
+        else: cuts_dict['good'] = ncut
         if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')
 
+    nTOAcut = np.array(list(cuts_dict.values()))
+    sizes = nTOAcut/nTOA
+    labels = [f"{cdk} ({cuts_dict[cdk]})" for cdk in cuts_dict.keys()]
+    colors = [color_dict[cdk] for cdk in cuts_dict.keys()]
+
+    fig1, ax1 = plt.subplots()
+    ax1.axis('equal')
+    if legend:
+        ax1.pie(sizes, colors=colors, autopct='%1.1f%%', pctdistance=0.8, normalize=True)
+        ax1.legend(labels,bbox_to_anchor=(0., -0.2, 1., 0.2), loc='lower left',
+           ncol=3, mode="expand", borderaxespad=0.)
+        #ax1.legend(labels,bbox_to_anchor=(0.8, 0.8))
+    else:
+        ax1.pie(sizes, autopct='%1.1f%%', labels=labels, pctdistance=0.8, colors=colors, normalize=True)
+
     if donut:
-        nTOAcut = np.array(list(cuts_dict.values()))
-        sizes = nTOAcut/nTOA
-        labels = [f"{cdk} ({cuts_dict[cdk]})" for cdk in cuts_dict.keys()]
-        colors = [color_dict[cdk] for cdk in cuts_dict.keys()]
-
-        fig1, ax1 = plt.subplots()
-        ax1.axis('equal')
-        if legend:
-            ax1.pie(sizes, colors=colors, autopct='%1.1f%%', pctdistance=0.8, normalize=True)
-            ax1.legend(labels,bbox_to_anchor=(0.8, 0.8))
-        else:
-            ax1.pie(sizes, autopct='%1.1f%%', labels=labels, pctdistance=0.8, colors=colors, normalize=True)
-
         donut_hole=plt.Circle( (0,0), 0.6, color='white')
         p=plt.gcf()
         p.gca().add_artist(donut_hole)
+
+    fig1.suptitle(flavor)
+    if save: plt.savefig(f"{mashtel}_{tc.get_outfile_basename()}_donut.png",bbox_inches='tight')
+
