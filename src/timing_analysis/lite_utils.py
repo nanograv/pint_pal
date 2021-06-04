@@ -586,19 +586,18 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
 
     fig1, ax1 = plt.subplots()
     ax1.axis('equal')
+    fig1.suptitle(flavor)
     if legend:
         ax1.pie(sizes, colors=colors, autopct='%1.1f%%', pctdistance=0.8, normalize=True)
         ax1.legend(labels,bbox_to_anchor=(0., -0.2, 1., 0.2), loc='lower left',
            ncol=3, mode="expand", borderaxespad=0.)
-        #ax1.legend(labels,bbox_to_anchor=(0.8, 0.8))
     else:
         ax1.pie(sizes, autopct='%1.1f%%', labels=labels, pctdistance=0.8, colors=colors, normalize=True)
-
     if donut:
         donut_hole=plt.Circle( (0,0), 0.6, color='white')
         p=plt.gcf()
         p.gca().add_artist(donut_hole)
-
-    fig1.suptitle(flavor)
-    if save: plt.savefig(f"{mashtel}_{tc.get_outfile_basename()}_donut.png",bbox_inches='tight')
-
+    if save:
+        plt.savefig(f"{mashtel}_{tc.get_outfile_basename()}_donut.png",bbox_inches='tight')
+        plt.close()
+    return cuts_dict
