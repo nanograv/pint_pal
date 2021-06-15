@@ -604,11 +604,11 @@ def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd
     """
     ext_list = ['.ff','None','.calib','.zap']
     if all_YFp:
-        pav_list = ['YFp','GTpd','None']
+        pav_list = ['YFp (time vs. phase)','GTpd (frequency vs. phase)','Profile (intensity vs. phase)','None']
     elif all_GTpd:
-        pav_list = ['GTpd','YFp','None']
+        pav_list = ['GTpd (frequency vs. phase)','YFp (time vs. phase)','Profile (intensity vs. phase)','None']
     else:
-        pav_list = ['None','YFp','GTpd']
+        pav_list = ['None','YFp (time vs. phase)','GTpd (frequency vs. phase)','Profile (intensity vs. phase)']    
     short_epoch_names = [e.split('/')[-1].rpartition('.')[0] for e in epoch_matches]
     short_toa_names = [t[0].split('/')[-1].rpartition('.')[0] for t in toa_matches]
     epoch_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
@@ -616,7 +616,7 @@ def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd
     toa_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
                                   options=ext_list, layout={'width': 'max-content'}) for s in np.unique(short_toa_names)]
     pav_epoch_drop = [widgets.Dropdown(options=pav_list) for s in short_epoch_names]
-    pav_toa_drop = [widgets.Dropdown(options=pav_list) for s in np.unique(short_toa_names)]
+    pav_toa_drop = [widgets.Dropdown(options=pav_list) for s in np.unique(short_toa_names)] 
     epoch_output = widgets.HBox([widgets.VBox(children=epoch_dropdowns),widgets.VBox(children=pav_epoch_drop)])
     toa_output = widgets.HBox([widgets.VBox(children=toa_dropdowns),widgets.VBox(children=pav_toa_drop)])
     if len(epoch_matches) != 0:
@@ -649,9 +649,6 @@ def read_excise_dropdowns(select_list, pav_list, matches):
             else: # epoch entries
                 plot_list.append([matches[i].rpartition('/')[0] + '/' + select_list[i].description + 
                                   select_list[i].value,pav_list[i].value])
-        # temporarily muting this warning since we're defaulting to .ff:
-        #elif (select_list[i].value == 'None') != (pav_list[i].value == 'None'):
-        #    log.warning(f'{select_list[i].description} You must select both an extension and plot type!')
     return plot_list
 
 def make_detective_plots(plot_list, match_list):
@@ -675,9 +672,13 @@ def make_detective_plots(plot_list, match_list):
                     hl_chan, hl_subint = match_list[ll][1], match_list[ll][2]
                     print('[%i, %i]'%(hl_chan, hl_subint))
         print('Npol: %i, Nchan: %i, Nsubint: %i, Nbin: %i'%(ar.getNpol(), ar.getNchan(), ar.getNsubint(), ar.getNbin()))
-        if plot_list[l][1] == 'YFp':
+        if plot_list[l][1] == 'YFp (time vs. phase)':
             ar.fscrunch()
             ar.imshow()
-        elif plot_list[l][1] == 'GTpd':
+        elif plot_list[l][1] == 'GTpd (frequency vs. phase)':
             ar.tscrunch()
             ar.imshow()
+        elif plot_list[l][1] == 'Profile (intensity vs. phase)':
+            ar.fscrunch()
+            ar.tscrunch()
+            ar.plot()

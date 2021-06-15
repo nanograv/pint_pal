@@ -517,15 +517,18 @@ class TimingConfiguration:
         if 'bad-ff' in valid_valued:
             pass
         if 'bad-epoch' in valid_valued:
+            logwarnepoch = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
             for be in self.get_bad_epochs():
                 if isinstance(be, list): # either it's just a list, or a list with a reason
                     if len(be) == 1: # i.e. no reason given
-                        log.warning(f'Please include a reason for the bad-epoch entry {be} in the config file!')
+                        logwarnepoch = True
                     epochinds = np.where([be[0] in n for n in names])[0]
-                elif isinstance(be, str): # still in old format
+                elif isinstance(be, str): # still in old format             
+                    logwarnepoch = True
                     epochinds = np.where([be in n for n in names])[0]
-                    log.warning(f'Please include a reason for the bad-epoch entry [\'{be}\'] in the config file!')
+            if logwarnepoch:
+                log.warning(f'One or more bad-epochs in the config file lack \'reason\' entries to explain their excision! Please add them.')
                 apply_cut_flag(toas,epochinds,'badepoch',warn=warn)
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
@@ -537,12 +540,13 @@ class TimingConfiguration:
                     rangeinds = np.where((mjds>br[0]) & (mjds<br[1]))[0]
                 apply_cut_flag(toas,rangeinds,'badrange',warn=warn)
         if 'bad-toa' in valid_valued:
+            logwarntoa = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
             subints = np.array([f['subint'] for f in toas.orig_table['flags']])
             if self.get_toa_type() == 'NB': chans = np.array([f['chan'] for f in toas.orig_table['flags']])
             for bt in self.get_bad_toas():
                 if len(bt) == 3:
-                    log.warning(f'Please include a reason for the bad-toa entry {bt} in the config file!')
+                    logwarntoa = True
                 name,chan,subint = bt[:3]
                 if self.get_toa_type() == 'NB':
                     btind = np.where((names==name) & (chans==chan) & (subints==subint))[0]
@@ -550,5 +554,6 @@ class TimingConfiguration:
                     # don't match based on -chan flags, since WB TOAs don't have them
                     btind = np.where((names==name) & (subints==subint))[0]
                 apply_cut_flag(toas,btind,'badtoa',warn=warn)
-
+            if logwarntoa:
+                log.warning(f'One or more bad-toas in the config file lack \'reason\' entries to explain their excision! Please add them.')
         return toas
