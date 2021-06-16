@@ -585,7 +585,7 @@ def cut_summary(toas,print_summary=False,donut=True,legend=True):
         p=plt.gcf()
         p.gca().add_artist(donut_hole)
         
-def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd=False):
+def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):
     """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision. This should be run after tc.get_investigation_files(); doing so will display two lists of dropdowns (separated by bad_toa and bad_epoch). The user then chooses whatever combinations of files/plot types they'd like to display, and runs a cell below the dropdowns containing the read_excise_dropdowns function.
     
     Parameters
@@ -594,6 +594,7 @@ def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd
     toa_matches: lists with *.ff files matching bad toas in YAML, bad subband #, bad subint #
     all_YFp (optional, default False): if True, defaults all plots to YFp
     all_GTpd (optional, default False): if True, defaults all plots to GTpd
+    all_profile (optional, default False): if True, defaults all plots to profile vs. phase
     
     Returns (note: these are separate for now for clarity and freedom to use the subint/subband info in bad-toas)
     =======
@@ -602,26 +603,35 @@ def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd
     toa_dropdowns: list of dropdown widget objects containing short file names and extensions for bad-toas
     pav_toa_drop: list of dropdown widget objects indicating plot type to be chosen for bad-toas
     """
+    
     ext_list = ['.ff','None','.calib','.zap']
     if all_YFp:
         pav_list = ['YFp (time vs. phase)','GTpd (frequency vs. phase)','Profile (intensity vs. phase)','None']
     elif all_GTpd:
         pav_list = ['GTpd (frequency vs. phase)','YFp (time vs. phase)','Profile (intensity vs. phase)','None']
+    elif all_profile:
+        pav_list = ['Profile (intensity vs. phase)','YFp (time vs. phase)','GTpd (frequency vs. phase)','None']
     else:
         pav_list = ['None','YFp (time vs. phase)','GTpd (frequency vs. phase)','Profile (intensity vs. phase)']    
+   
+    # Epochs: easy
     short_epoch_names = [e.split('/')[-1].rpartition('.')[0] for e in epoch_matches]
-    short_toa_names = [t[0].split('/')[-1].rpartition('.')[0] for t in toa_matches]
     epoch_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
-                                  options=ext_list, layout={'width': 'max-content'}) for s in short_epoch_names]
-    toa_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
-                                  options=ext_list, layout={'width': 'max-content'}) for s in np.unique(short_toa_names)]
+                                  options=ext_list, layout={'width': 'max-content'}) for s in short_epoch_names]    
     pav_epoch_drop = [widgets.Dropdown(options=pav_list) for s in short_epoch_names]
-    pav_toa_drop = [widgets.Dropdown(options=pav_list) for s in np.unique(short_toa_names)] 
     epoch_output = widgets.HBox([widgets.VBox(children=epoch_dropdowns),widgets.VBox(children=pav_epoch_drop)])
-    toa_output = widgets.HBox([widgets.VBox(children=toa_dropdowns),widgets.VBox(children=pav_toa_drop)])
     if len(epoch_matches) != 0:
         print('Bad-epochs in YAML:')
         display(epoch_output)
+    
+    # TOAs: difficult, annoying, need to worry about uniqueness
+    short_toa_names = [t[0].split('/')[-1].rpartition('.')[0] for t in toa_matches]
+    toa_inds = np.unique(short_toa_names, return_index=True)[1] # because np.unique sorts it
+    short_toa_unique = [short_toa_names[index] for index in sorted(toa_inds)] # unique
+    toa_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
+                                  options=ext_list, layout={'width': 'max-content'}) for s in short_toa_unique]
+    pav_toa_drop = [widgets.Dropdown(options=pav_list) for s in short_toa_unique] 
+    toa_output = widgets.HBox([widgets.VBox(children=toa_dropdowns),widgets.VBox(children=pav_toa_drop)])
     if len(toa_matches) != 0:
         print('Bad-toas in YAML:')
         display(toa_output)
@@ -639,13 +649,24 @@ def read_excise_dropdowns(select_list, pav_list, matches):
     Returns
     =======
     plot_list: lists of full paths to files of interest and plot types chosen
-    """
+    """   
+    if isinstance(matches[0],list): # toa entries
+        toa_nm = []
+        toa_subband = []
+        toa_subint = []
+        for i in range(len(matches)):
+            toa_nm.append(matches[i][0])
+            toa_subband.append(matches[i][1])
+            toa_subint.append(matches[i][2])
+        toa_unique_ind = np.unique(toa_nm, return_index=True)[1]
+        toa_nm_unique = [toa_nm[index] for index in sorted(toa_unique_ind)]
+        toa_subband_unique = [toa_subband[index] for index in sorted(toa_unique_ind)]
+        toa_subint_unique = [toa_subint[index] for index in sorted(toa_unique_ind)]        
     plot_list = []
     for i in range(len(select_list)):
         if (select_list[i].value != 'None') and (pav_list[i].value != 'None'):
-            if isinstance(matches[i],list): # toa entries
-                plot_list.append([matches[i][0].rpartition('/')[0] + '/' + select_list[i].description.split(' ')[0] + 
-                                  select_list[i].value, pav_list[i].value, matches[i][2], matches[i][2]])
+            if isinstance(matches[0], list): # toa entries
+                plot_list.append([toa_nm_unique[i].rpartition('/')[0] + '/' + select_list[i].description.split(' ')[0] + select_list[i].value, pav_list[i].value, toa_subband_unique[i], toa_subint_unique[i]])                
             else: # epoch entries
                 plot_list.append([matches[i].rpartition('/')[0] + '/' + select_list[i].description + 
                                   select_list[i].value,pav_list[i].value])
@@ -657,6 +678,7 @@ def make_detective_plots(plot_list, match_list):
     Parameters
     ==========
     plot_list: lists of full paths to files of interest and plot types chosen
+    match_list: list of full paths to all matching files
     
     Returns
     =======
@@ -664,14 +686,12 @@ def make_detective_plots(plot_list, match_list):
     """
     for l in range(len(plot_list)):
         ar = pypulse.Archive(plot_list[l][0],prepare=True)
-        # print subbands/subints of interest for bad-toas
+        # print subbands/subints of interest for bad-toas       
         if len(plot_list[l]) > 2: # toa entries
             print('\nNOTE: subbands, subints of interest for the following plot:')
-            for ll in range(len(match_list)):
-                if plot_list[l][0].rsplit('.',1)[0] in match_list[ll][0]:
-                    hl_chan, hl_subint = match_list[ll][1], match_list[ll][2]
-                    print('[%i, %i]'%(hl_chan, hl_subint))
-        print('Npol: %i, Nchan: %i, Nsubint: %i, Nbin: %i'%(ar.getNpol(), ar.getNchan(), ar.getNsubint(), ar.getNbin()))
+            for m in range(len(match_list)):                
+                if plot_list[l][0].rpartition('.')[0] in match_list[m][0]:
+                    print('[%i, %i]'%(match_list[m][1],match_list[m][2]))
         if plot_list[l][1] == 'YFp (time vs. phase)':
             ar.fscrunch()
             ar.imshow()
