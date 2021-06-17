@@ -98,6 +98,7 @@ def calculate_pout(model, toas, tc_object):
     if method == 'hmc':
         epp = get_entPintPulsar(model, toas, drop_pintpsr=False)
         pout = OutlierHMC(epp, outdir=results_dir, Nsamples=Nsamples, Nburnin=Nburnin)
+        print('') # Progress bar doesn't print a newline
         # Some sorting will be needed here so pout refers to toas order?
     elif method == 'gibbs':
         epp = get_entPintPulsar(model, toas)
@@ -116,9 +117,9 @@ def calculate_pout(model, toas, tc_object):
     write_tim(fo,toatype=tc_object.get_toa_type(),outfile=pout_timfile)
 
     # Need to mask TOAs once again
-    apply_cut_select(toas,reason='resumption after write_tim (pout)')
+    apply_cut_select(toas,reason='resumption after write_tim, pout')
 
-def make_pout_cuts(model,toas,tc_object):
+def make_pout_cuts(model,toas,tc_object,outpct_threshold=8.0):
     """Apply cut flags to TOAs with outlier probabilities larger than specified threshold.
     Also runs setup_dmx.
 
@@ -126,10 +127,19 @@ def make_pout_cuts(model,toas,tc_object):
     ==========
     toas: `pint.toa.TOAs` object
     tc_object: `timing_analysis.timingconfiguration` object
+    outpct_threshold: float, optional
+       cut file's remaining TOAs (maxout) if X% were flagged as outliers (default set by 5/64=8%) 
     """
     toas = tc_object.apply_ignore(toas,specify_keys=['prob-outlier'])
     apply_cut_select(toas,reason='outlier analysis, specified key')
     toas = setup_dmx(model,toas,frequency_ratio=tc_object.get_fratio(),max_delta_t=tc_object.get_sw_delay())
+
+    # Now cut files if X% or more TOAs/file are flagged as outliers
+    if tc_object.get_toa_type() == 'NB':
+        tc_object.check_file_outliers(toas,outpct_threshold=outpct_threshold)
+        toas = setup_dmx(model,toas,frequency_ratio=tc_object.get_fratio(),max_delta_t=tc_object.get_sw_delay())
+    else:
+        log.info('Skipping maxout cuts (wideband).')
 
 def Ftest(chi2_1, dof_1, chi2_2, dof_2):
     """

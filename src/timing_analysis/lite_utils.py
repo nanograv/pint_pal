@@ -545,7 +545,7 @@ def cut_summary(toas,print_summary=False,donut=True,legend=True):
         Cut flags and number of instances for input TOAs
     """
     import seaborn as sns
-    palette = sns.color_palette("pastel",7)
+    palette = sns.color_palette("pastel",8)
     color_dict = {'dmx':palette[0],
                   'snr':palette[1],
                   'good':palette[2],
@@ -553,6 +553,7 @@ def cut_summary(toas,print_summary=False,donut=True,legend=True):
                   'outlier10':palette[4],
                   'epochdrop':palette[5],
                   'orphaned':palette[6],
+                  'maxout':palette[7],
                  }
     # kwarg that makes it possible to break this down by telescope/backend...?
     toa_cut_flags = [t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table]
