@@ -15,6 +15,7 @@ import numpy as np
 import astropy.units as u
 from astropy import log
 import yaml
+import glob
 from timing_analysis.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from timing_analysis.lite_utils import new_changelog_entry
 from timing_analysis.defaults import *
@@ -229,13 +230,13 @@ class TimingConfiguration:
         if "snr-cut" in self.config['ignore'].keys():
             return self.config['ignore']['snr-cut']
         return None #return some default value instead?
-
+     
     def get_bad_epochs(self):
         """ Return list of bad epochs (basenames: [backend]_[mjd]_[source]) """
         if 'bad-epoch' in self.config['ignore'].keys():
             return self.config['ignore']['bad-epoch']
         return None
-
+    
     def get_bad_ranges(self):
         """ Return list of bad epoch ranges by MJD ([MJD1,MJD2])"""
         if 'bad-range' in self.config['ignore'].keys():
@@ -248,6 +249,22 @@ class TimingConfiguration:
             return self.config['ignore']['bad-toa']
         return None
 
+    def get_investigation_files(self):
+        """ Makes a list from which the timer can choose which epochs they'd like to manually inspect"""
+        ff_list = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
+        match_epochs, match_toas = [], []
+        # Note that you need the following check since this doesn't go through apply_ignore:
+        if 'bad-epoch' in self.config['ignore'].keys() and self.config['ignore']['bad-epoch'] != None:
+            for be in self.get_bad_epochs():
+                if isinstance(be, list):
+                    match_epochs.append([filenm for filenm in ff_list if be[0] in filenm])
+                else: # bad-epoch entry is in the "old" style (just a string)
+                    match_epochs.append([filenm for filenm in ff_list if be in filenm])
+        if 'bad-toa' in self.config['ignore'].keys() and self.config['ignore']['bad-toa'] != None:
+            for bt in self.get_bad_toas():
+                match_toas.append([[filenm, bt[1], bt[2]] for filenm in ff_list if bt[0] in filenm])
+        return sum(match_epochs,[]), sum(match_toas,[])
+    
     def check_for_orphaned_recs(self, toas, nepochs_threshold=3):
         """Check for frontend/backend pairs that arise at or below threshold
         for number of epochs; also check that the set matches with those listed
@@ -357,10 +374,9 @@ class TimingConfiguration:
         """
         # get the list of bad-toas already in the config file
         # only continue if that list has entries
-        provided_bad_toas = self.get_bad_toas()
+        provided_bad_toas = [t[:3] for t in self.get_bad_toas()] # ignores the 'reason' entry if present
         if isinstance(provided_bad_toas, list):
             bad_toa_epochs = np.asarray(provided_bad_toas)[:, 0]
-
             # how many bad TOAs per epoch?
             unique, counts = np.unique(bad_toa_epochs, return_counts=True)
             bad_toa_epoch_counts = dict(zip(unique, counts))
