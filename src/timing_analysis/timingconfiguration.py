@@ -535,7 +535,6 @@ class TimingConfiguration:
         if 'bad-epoch' in valid_valued:
             logwarnepoch = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
-            fes = np.array([f['fe'] for f in toas.orig_table['flags']])
             cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
             for be in self.get_bad_epochs():
                 if isinstance(be, list): # either it's just a list, or a list with a reason
@@ -550,8 +549,7 @@ class TimingConfiguration:
                 name_matches = set(names[epochinds])
                 if len(name_matches) > 1:  # Help with fixing epoch -> file disambiguation
                     log.warning(f"Check {be} (matches multiple files): {name_matches}")
-                    # Automatically and quickly explore matching files to see if any are immediately redundant.
-                    # ...basically identical to the outer loop.
+                    # Automatically explore matching files to see if any are immediately redundant.
                     for nm in name_matches:
                         matchinds = np.where([nm in n for n in names])[0]
                         remaining = np.array([not cut for cut in cuts[matchinds]])
@@ -567,8 +565,9 @@ class TimingConfiguration:
                     apply_cut_flag(toas,epochinds,'badepoch',warn=warn)
                 else:
                     log.warning(f"bad-epoch entry does not match any TOAs: {be}")
+
                 if logwarnepoch:
-                log.warning(f'One or more bad-epochs in the config file lack \'reason\' entries to explain their excision! Please add them.')
+                    log.warning(f'One or more bad-epoch entries lack reasons for excision; please add them.')
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             backends = np.array([f['be'] for f in toas.orig_table['flags']])
@@ -579,12 +578,14 @@ class TimingConfiguration:
                     rangeinds = np.where((mjds>br[0]) & (mjds<br[1]))[0]
                 apply_cut_flag(toas,rangeinds,'badrange',warn=warn)
         if 'bad-toa' in valid_valued:
+            logwarntoa = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
             subints = np.array([f['subint'] for f in toas.orig_table['flags']])
             if self.get_toa_type() == 'NB': chans = np.array([f['chan'] for f in toas.orig_table['flags']])
             btinds = []
             for bt in self.get_bad_toas():
-                name,chan,subint = bt
+                if len(bt) < 4: logwarntoa = True
+                name,chan,subint = bt[:3]
                 if self.get_toa_type() == 'NB':
                     bt_match = np.where((names==name) & (chans==chan) & (subints==subint))[0]
                 else:
@@ -595,7 +596,6 @@ class TimingConfiguration:
             btinds = np.array(btinds)
 
             # Check for pre-existing cut flags:
-            #cuts = np.array([t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table])
             cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
             remaining = np.array([not cut for cut in cuts[btinds]])
             alreadycut = np.invert(remaining)
@@ -606,6 +606,9 @@ class TimingConfiguration:
                 for i in btinds[remaining]:
                     if self.get_toa_type() == 'NB': print(f"  - [{names[i]},{chans[i]},{subints[i]}]")
                     else: print(f"  - [{names[i]},None,{subints[i]}]")
+
+            if logwarntoa:
+                log.warning(f'One or more bad-toa entries lack reasons for excision; please add them.')
 
             apply_cut_flag(toas,np.array(btinds),'badtoa',warn=warn)
 
