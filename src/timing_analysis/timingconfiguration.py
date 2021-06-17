@@ -533,10 +533,18 @@ class TimingConfiguration:
         if 'bad-ff' in valid_valued:
             pass
         if 'bad-epoch' in valid_valued:
+            logwarnepoch = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
             fes = np.array([f['fe'] for f in toas.orig_table['flags']])
             cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
             for be in self.get_bad_epochs():
+                if isinstance(be, list): # either it's just a list, or a list with a reason
+                    if len(be) == 1: # i.e. no reason given
+                        logwarnepoch = True
+                    be = be[0]
+                elif isinstance(be, str): # still in old format
+                    logwarnepoch = True
+
                 epochinds = np.where([be in n for n in names])[0]
                 # Check bad-epoch entry only matches one file
                 name_matches = set(names[epochinds])
@@ -559,6 +567,8 @@ class TimingConfiguration:
                     apply_cut_flag(toas,epochinds,'badepoch',warn=warn)
                 else:
                     log.warning(f"bad-epoch entry does not match any TOAs: {be}")
+                if logwarnepoch:
+                log.warning(f'One or more bad-epochs in the config file lack \'reason\' entries to explain their excision! Please add them.')
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             backends = np.array([f['be'] for f in toas.orig_table['flags']])
