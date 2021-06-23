@@ -15,6 +15,7 @@ import numpy as np
 import astropy.units as u
 from astropy import log
 import yaml
+import glob
 from timing_analysis.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from timing_analysis.lite_utils import new_changelog_entry
 from timing_analysis.defaults import *
@@ -109,7 +110,7 @@ class TimingConfiguration:
         # Add 'cut' flags to TOAs according to config 'ignore' block.
         if apply_initial_cuts:
             self.check_for_orphaned_recs(t)
-            t = self.apply_ignore(t,specify_keys=['orphaned-rec','mjd-start','mjd-end','snr-cut','bad-range'])
+            t = self.apply_ignore(t,specify_keys=['orphaned-rec','mjd-start','mjd-end','bad-range','snr-cut'])
             apply_cut_select(t,reason='initial cuts, specified keys')
 
         return m, t
@@ -229,13 +230,13 @@ class TimingConfiguration:
         if "snr-cut" in self.config['ignore'].keys():
             return self.config['ignore']['snr-cut']
         return None #return some default value instead?
-
+     
     def get_bad_epochs(self):
         """ Return list of bad epochs (basenames: [backend]_[mjd]_[source]) """
         if 'bad-epoch' in self.config['ignore'].keys():
             return self.config['ignore']['bad-epoch']
         return None
-
+    
     def get_bad_ranges(self):
         """ Return list of bad epoch ranges by MJD ([MJD1,MJD2])"""
         if 'bad-range' in self.config['ignore'].keys():
@@ -248,6 +249,22 @@ class TimingConfiguration:
             return self.config['ignore']['bad-toa']
         return None
 
+    def get_investigation_files(self):
+        """ Makes a list from which the timer can choose which epochs they'd like to manually inspect"""
+        ff_list = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
+        match_epochs, match_toas = [], []
+        # Note that you need the following check since this doesn't go through apply_ignore:
+        if 'bad-epoch' in self.config['ignore'].keys() and self.config['ignore']['bad-epoch'] != None:
+            for be in self.get_bad_epochs():
+                if isinstance(be, list):
+                    match_epochs.append([filenm for filenm in ff_list if be[0] in filenm])
+                else: # bad-epoch entry is in the "old" style (just a string)
+                    match_epochs.append([filenm for filenm in ff_list if be in filenm])
+        if 'bad-toa' in self.config['ignore'].keys() and self.config['ignore']['bad-toa'] != None:
+            for bt in self.get_bad_toas():
+                match_toas.append([[filenm, bt[1], bt[2]] for filenm in ff_list if bt[0] in filenm])
+        return sum(match_epochs,[]), sum(match_toas,[])
+    
     def check_for_orphaned_recs(self, toas, nepochs_threshold=3):
         """Check for frontend/backend pairs that arise at or below threshold
         for number of epochs; also check that the set matches with those listed
@@ -357,10 +374,9 @@ class TimingConfiguration:
         """
         # get the list of bad-toas already in the config file
         # only continue if that list has entries
-        provided_bad_toas = self.get_bad_toas()
+        provided_bad_toas = [t[:3] for t in self.get_bad_toas()] # ignores the 'reason' entry if present
         if isinstance(provided_bad_toas, list):
             bad_toa_epochs = np.asarray(provided_bad_toas)[:, 0]
-
             # how many bad TOAs per epoch?
             unique, counts = np.unique(bad_toa_epochs, return_counts=True)
             bad_toa_epoch_counts = dict(zip(unique, counts))
@@ -533,17 +549,23 @@ class TimingConfiguration:
         if 'bad-ff' in valid_valued:
             pass
         if 'bad-epoch' in valid_valued:
+            logwarnepoch = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
-            fes = np.array([f['fe'] for f in toas.orig_table['flags']])
             cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
             for be in self.get_bad_epochs():
+                if isinstance(be, list): # either it's just a list, or a list with a reason
+                    if len(be) == 1: # i.e. no reason given
+                        logwarnepoch = True
+                    be = be[0]
+                elif isinstance(be, str): # still in old format
+                    logwarnepoch = True
+
                 epochinds = np.where([be in n for n in names])[0]
                 # Check bad-epoch entry only matches one file
                 name_matches = set(names[epochinds])
                 if len(name_matches) > 1:  # Help with fixing epoch -> file disambiguation
                     log.warning(f"Check {be} (matches multiple files): {name_matches}")
-                    # Automatically and quickly explore matching files to see if any are immediately redundant.
-                    # ...basically identical to the outer loop.
+                    # Automatically explore matching files to see if any are immediately redundant.
                     for nm in name_matches:
                         matchinds = np.where([nm in n for n in names])[0]
                         remaining = np.array([not cut for cut in cuts[matchinds]])
@@ -559,6 +581,9 @@ class TimingConfiguration:
                     apply_cut_flag(toas,epochinds,'badepoch',warn=warn)
                 else:
                     log.warning(f"bad-epoch entry does not match any TOAs: {be}")
+
+                if logwarnepoch:
+                    log.warning(f'One or more bad-epoch entries lack reasons for excision; please add them.')
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             backends = np.array([f['be'] for f in toas.orig_table['flags']])
@@ -569,12 +594,14 @@ class TimingConfiguration:
                     rangeinds = np.where((mjds>br[0]) & (mjds<br[1]))[0]
                 apply_cut_flag(toas,rangeinds,'badrange',warn=warn)
         if 'bad-toa' in valid_valued:
+            logwarntoa = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
             subints = np.array([f['subint'] for f in toas.orig_table['flags']])
             if self.get_toa_type() == 'NB': chans = np.array([f['chan'] for f in toas.orig_table['flags']])
             btinds = []
             for bt in self.get_bad_toas():
-                name,chan,subint = bt
+                if len(bt) < 4: logwarntoa = True
+                name,chan,subint = bt[:3]
                 if self.get_toa_type() == 'NB':
                     bt_match = np.where((names==name) & (chans==chan) & (subints==subint))[0]
                 else:
@@ -585,7 +612,6 @@ class TimingConfiguration:
             btinds = np.array(btinds)
 
             # Check for pre-existing cut flags:
-            #cuts = np.array([t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table])
             cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
             remaining = np.array([not cut for cut in cuts[btinds]])
             alreadycut = np.invert(remaining)
@@ -596,6 +622,9 @@ class TimingConfiguration:
                 for i in btinds[remaining]:
                     if self.get_toa_type() == 'NB': print(f"  - [{names[i]},{chans[i]},{subints[i]}]")
                     else: print(f"  - [{names[i]},None,{subints[i]}]")
+
+            if logwarntoa:
+                log.warning(f'One or more bad-toa entries lack reasons for excision; please add them.')
 
             apply_cut_flag(toas,np.array(btinds),'badtoa',warn=warn)
 
