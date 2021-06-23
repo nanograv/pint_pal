@@ -597,6 +597,11 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
         donut_hole=plt.Circle( (0,0), 0.6, color='white')
         p=plt.gcf()
         p.gca().add_artist(donut_hole)
+    if save:
+        plt.savefig(f"{mashtel}_{tc.get_outfile_basename()}_donut.png",bbox_inches='tight')
+        plt.close()
+    return cuts_dict
+
         
 def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):
     """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision. This should be run after tc.get_investigation_files(); doing so will display two lists of dropdowns (separated by bad_toa and bad_epoch). The user then chooses whatever combinations of files/plot types they'd like to display, and runs a cell below the dropdowns containing the read_excise_dropdowns function.
