@@ -582,8 +582,8 @@ class TimingConfiguration:
                 else:
                     log.warning(f"bad-epoch entry does not match any TOAs: {be}")
 
-                if logwarnepoch:
-                    log.warning(f'One or more bad-epoch entries lack reasons for excision; please add them.')
+            if logwarnepoch:
+                log.warning(f'One or more bad-epoch entries lack reasons for excision; please add them.')
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             backends = np.array([f['be'] for f in toas.orig_table['flags']])
