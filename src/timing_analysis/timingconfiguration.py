@@ -374,7 +374,7 @@ class TimingConfiguration:
         """
         # get the list of bad-toas already in the config file
         # only continue if that list has entries
-	gotten_bad_toas = self.get_bad_toas()
+        gotten_bad_toas = self.get_bad_toas()
         if gotten_bad_toas is not None:
             provided_bad_toas = [t[:3] for t in gotten_bad_toas] # ignores the 'reason' entry if present
         if isinstance(provided_bad_toas, list):
