@@ -94,8 +94,8 @@ class TimingConfiguration:
 
         # if we're dealing with wideband TOAs, each epoch has a single TOA, 
         # so don't bother checking to see if we can reduce entries
-        if self.get_toa_type() == "NB":
-            self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
+        #if self.get_toa_type() == "NB":
+        #    self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
 
         # Make a clean copy of original TOAs table (to track cut TOAs, flag_values)
         t.renumber(index_order=False)  # Renumber so the index column matches the order of TOAs
@@ -419,7 +419,8 @@ class TimingConfiguration:
         """
         # get the list of bad-toas already in the config file
         # only continue if that list has entries
-        provided_bad_toas = [t[:3] for t in self.get_bad_toas()] # ignores the 'reason' entry if present
+        if tc.get_bad_toas() is not None: # only proceed if field is populated
+            provided_bad_toas = [t[:3] for t in self.get_bad_toas()] # ignores the 'reason' entry if present
         if isinstance(provided_bad_toas, list):
             bad_toa_epochs = np.asarray(provided_bad_toas)[:, 0]
             # how many bad TOAs per epoch?
