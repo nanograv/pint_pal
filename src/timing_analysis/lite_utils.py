@@ -548,7 +548,7 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
         Cut flags and number of instances for input TOAs
     """
     import seaborn as sns
-    palette = sns.color_palette("pastel",8)
+    palette = sns.color_palette("pastel",9)
     color_dict = {'dmx':palette[0],
                   'snr':palette[1],
                   'good':palette[2],
@@ -557,6 +557,7 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
                   'epochdrop':palette[5],
                   'orphaned':palette[6],
                   'maxout':palette[7],
+                  'simul':palette[8],
                  }
     # gather info for title (may also be useful for other features in the future)
     tel = [t[5] for t in toas.table]
