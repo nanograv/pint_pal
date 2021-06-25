@@ -139,7 +139,6 @@ class TimingConfiguration:
         backend1 [string]: backend to keep if simultaneous (e.g. PUPPI)
         backend2 [string]: backend to cut if simultaneous (e.g. ASP)
         """
-        # need to specially account for wb?
         cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
         toaflags = toas.orig_table['flags']
         toamjds = toas.orig_table['mjd_float']
