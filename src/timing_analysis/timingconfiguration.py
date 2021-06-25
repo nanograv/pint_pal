@@ -158,8 +158,9 @@ class TimingConfiguration:
                         toas.orig_table[i2]['flags']['simul'] = 2
                         simul_cut_inds.append(i2)
     
-        apply_cut_flag(toas,np.array(simul_cut_inds),'simul',warn=warn)
-        apply_cut_select(toas,f"simultaneous {backend1}/{backend2} observations")
+        if simul_cut_inds:
+            apply_cut_flag(toas,np.array(simul_cut_inds),'simul',warn=warn)
+            apply_cut_select(toas,f"simultaneous {backend1}/{backend2} observations")
 
     def check_file_outliers(self,toas,outpct_threshold=8.0):
         """ Check for files where Noutliers > nout_threshold, cut files where True (maxout)
