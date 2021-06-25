@@ -374,8 +374,9 @@ class TimingConfiguration:
         """
         # get the list of bad-toas already in the config file
         # only continue if that list has entries
-        provided_bad_toas = [t[:3] for t in self.get_bad_toas()] # ignores the 'reason' entry if present
-        if isinstance(provided_bad_toas, list):
+        gotten_bad_toas = self.get_bad_toas()
+        if isinstance(gotten_bad_toas, list):
+            provided_bad_toas = [t[:3] for t in gotten_bad_toas] # ignores the 'reason' entry if present
             bad_toa_epochs = np.asarray(provided_bad_toas)[:, 0]
             # how many bad TOAs per epoch?
             unique, counts = np.unique(bad_toa_epochs, return_counts=True)
