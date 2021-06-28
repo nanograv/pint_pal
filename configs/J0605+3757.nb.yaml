@@ -7,7 +7,7 @@ toas:
 - J0605+3757.Rcvr1_2.GUPPI.15y.x.nb.tim
 - J0605+3757.Rcvr_800.GUPPI.15y.x.nb.tim
 
-free-params: [ELONG, ELAT, PMELONG, PMELAT, PX, F0, F1, A1, PB, T0, E, OM, JUMP1]  # parameters not included here will be frozen
+free-params: [ELONG, ELAT, PMELONG, PMELAT, PX, F0, F1, A1, PB, T0, E, OM, JUMP1]
 free-dmx: Yes
 toa-type: NB
 fitter: DownhillGLSFitter
@@ -26,12 +26,12 @@ outlier: # control outlier analysis runs
   method: hmc
   n-burn: 1000
   n-samples: 20000
+
 ignore: # toa excision
   mjd-start:
   mjd-end: 59072.0
   snr-cut: 8
   bad-toa:
-  - [guppi_57745_J0605+3757_0004.15y.x.ff, 50, 1]
   bad-range:
   bad-epoch:
   prob-outlier: 0.1
