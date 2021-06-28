@@ -94,13 +94,15 @@ class TimingConfiguration:
 
         # if we're dealing with wideband TOAs, each epoch has a single TOA, 
         # so don't bother checking to see if we can reduce entries
-        if self.get_toa_type() == "NB":
-            self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
+        #if self.get_toa_type() == "NB":
+        #    self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
 
         # Make a clean copy of original TOAs table (to track cut TOAs, flag_values)
         t.renumber(index_order=False)  # Renumber so the index column matches the order of TOAs
         assert np.all(t.table["index"]==np.arange(len(t)))
         t.orig_table = t.table.copy()
+
+        self.backendset = set([f['be'] for f in t.orig_table['flags']])
 
         # If reading an intermediate (excised) tim file, can simply apply cuts
         if excised:
@@ -110,13 +112,57 @@ class TimingConfiguration:
         # Add 'cut' flags to TOAs according to config 'ignore' block.
         if apply_initial_cuts:
             self.check_for_orphaned_recs(t)
+
+            # Apply simul flags/cuts if appropriate
+            if 'ASP' in self.backendset:
+                self.check_simultaneous(t,'PUPPI','ASP')
+            if 'GASP' in self.backendset:
+                self.check_simultaneous(t,'GUPPI','GASP')
+
             t = self.apply_ignore(t,specify_keys=['orphaned-rec','mjd-start','mjd-end','bad-range','snr-cut'])
             apply_cut_select(t,reason='initial cuts, specified keys')
 
         return m, t
 
+    def check_simultaneous(self,toas,backend1,backend2,warn=False):
+        """Cut overlapped TOAs from the specified backends (simul)
+    
+        Assumes TOAs overlap if they are taken on the same day with the
+        same receiver, should be fine for nanograv but could be made
+        more picky to catch all cases. be1 is the backend to keep
+        and be2 will be commented (e.g. PUPPI/ASP respectively). Also
+        both toas will be marked with -simul flags.
+    
+        Parameters:
+        ===========
+        toas [pint.TOA]: PINT TOA object
+        backend1 [string]: backend to keep if simultaneous (e.g. PUPPI)
+        backend2 [string]: backend to cut if simultaneous (e.g. ASP)
+        """
+        cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
+        toaflags = toas.orig_table['flags']
+        toamjds = toas.orig_table['mjd_float']
+    
+        idx1 = np.where([f['be']==backend1 for f in toas.orig_table['flags']])[0]
+        idx2 = np.where([f['be']==backend2 for f in toas.orig_table['flags']])[0]
+        simul_cut_inds = []
+        for i1 in idx1:
+            for i2 in idx2:
+                if cuts[i2]: continue # Already cut
+                if (toaflags[i1]['fe']==toaflags[i2]['fe']) and int(toamjds[i1])==int(toamjds[i2]):
+                    if not freqs_overlap(toas.orig_table[i1],toas.orig_table[i2]): continue
+                    if 'simul' not in toaflags[i1].keys(): # label and keep
+                        toas.orig_table[i1]['flags']['simul'] = 1
+                    if 'simul' not in toaflags[i2].keys(): # label and cut
+                        toas.orig_table[i2]['flags']['simul'] = 2
+                        simul_cut_inds.append(i2)
+    
+        if simul_cut_inds:
+            apply_cut_flag(toas,np.array(simul_cut_inds),'simul',warn=warn)
+            apply_cut_select(toas,f"simultaneous {backend1}/{backend2} observations")
+
     def check_file_outliers(self,toas,outpct_threshold=8.0):
-        """ Check for files where Noutliers > nout_threshold, cut files where True 
+        """ Check for files where Noutliers > nout_threshold, cut files where True (maxout)
 
         Parameters
         ==========
@@ -145,7 +191,6 @@ class TimingConfiguration:
 
     def manual_cuts(self,toas,warn=False):
         """ Apply manual cuts after everything else and warn if redundant """
-        #toas = self.apply_ignore(toas,specify_keys=['bad-toa','bad-epoch'],warn=warn)
         toas = self.apply_ignore(toas,specify_keys=['bad-toa'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
 
@@ -484,7 +529,7 @@ class TimingConfiguration:
     def apply_ignore(self,toas,specify_keys=None,warn=False):
         """ Basic checks and return TOA excision info. """
         OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-epoch',
-                        'orphaned-rec','prob-outlier']  #, bad-ff
+                        'orphaned-rec','prob-outlier']
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
 
@@ -547,8 +592,6 @@ class TimingConfiguration:
             poutinds = np.where(pouts > self.get_prob_outlier())[0]
             oprob_flag = f'outlier{int(self.get_prob_outlier()*100)}'
             apply_cut_flag(toas,poutinds,oprob_flag,warn=warn)
-        if 'bad-ff' in valid_valued:
-            pass
         if 'bad-epoch' in valid_valued:
             logwarnepoch = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
@@ -583,8 +626,8 @@ class TimingConfiguration:
                 else:
                     log.warning(f"bad-epoch entry does not match any TOAs: {be}")
 
-                if logwarnepoch:
-                    log.warning(f'One or more bad-epoch entries lack reasons for excision; please add them.')
+            if logwarnepoch:
+                log.warning(f'One or more bad-epoch entries lack reasons for excision; please add them.')
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             backends = np.array([f['be'] for f in toas.orig_table['flags']])
@@ -630,3 +673,21 @@ class TimingConfiguration:
             apply_cut_flag(toas,np.array(btinds),'badtoa',warn=warn)
 
         return toas
+
+def freqs_overlap(toa1,toa2):
+    """Returns true if TOAs from different backends overlap
+    
+    See check_simultaneous in TimingConfiguration
+    
+    Parameters:
+    ===========
+    toa1 [pint.TOA.table]: PINT TOA.table element
+    toa2 [pint.TOA.table]: PINT TOA.table element
+    """
+    try: bw1 = float(toa1['flags']['bw'])
+    except: bw1 = 0.0
+    try: bw2 = float(toa2['flags']['bw'])
+    except: bw2 = 0.0
+    if toa1['freq']+bw1/2.0 < toa2['freq']-bw2/2.0: return False
+    if toa2['freq']+bw2/2.0 < toa1['freq']-bw1/2.0: return False
+    return True
