@@ -465,8 +465,10 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
     # Get plot preferences
     if 'fmt' in kwargs.keys():
         mkr = kwargs['fmt']
+        msize = 4
     else:
         mkr = 's'
+        msize = 4
         if compare:
             mkr_nb = 'o'
     if 'color' in kwargs.keys():
@@ -481,22 +483,22 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
         alpha = 1.0
     # Not actually plot
     if NB and not compare:
-        ax1.errorbar(DMX_center_Year, DMXs*10**3, yerr=DMX_vErrs*10**3, fmt='.', c = clr, marker = mkr, \
+        ax1.errorbar(DMX_center_Year, DMXs*10**3, yerr=DMX_vErrs*10**3, fmt='.', c = clr, marker = mkr, markersize=4, \
                          label="Narrowband")
     elif not NB and not compare:
-        ax1.errorbar(DMX_center_Year, DMXs*10**3, yerr=DMX_vErrs*10**3, fmt='.', c = clr, marker = mkr, \
+        ax1.errorbar(DMX_center_Year, DMXs*10**3, yerr=DMX_vErrs*10**3, fmt='.', c = clr, marker = mkr, markersize=4, \
                          label="Wideband")
     elif compare:
         if NB:
             ax1.errorbar(DMX_center_Year, DMXs*10**3, yerr=DMX_vErrs*10**3, fmt='.', c = clr, marker = mkr, \
-                         label="Narrowband")
+                         markersize=4, label="Narrowband")
             ax1.errorbar(dmx_mid_yr, nb_dmx*10**3, yerr = nb_dmx_var*10**3, fmt = '.', color = clr_nb, marker = mkr_nb, \
-                     label='Wideband')
+                         markersize=4, label='Wideband')
         else:
             ax1.errorbar(DMX_center_Year, DMXs*10**3, yerr=DMX_vErrs*10**3, fmt='.', c = clr, marker = mkr, \
-                         label="Wideband")
+                         markersize=4, label="Wideband")
             ax1.errorbar(dmx_mid_yr, nb_dmx*10**3, yerr = nb_dmx_var*10**3, fmt = '.', color = clr_nb, marker = mkr_nb, \
-                     label='Narrowband')
+                     markersize=4, label='Narrowband')
 
     # Set second axis
     ax1.set_xlabel(r'Year')
@@ -544,7 +546,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
             d = np.sqrt(((xdata - xclick)/1000.0)**2 + (ydata - yclick)**2)
             ind_close = np.where(np.min(d) == d)[0]
             # highlight clicked point
-            ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 's', c = stamp_color)
+            ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 's', markersize=msize, c = stamp_color)
             # Print point info
             text.set_position((xdata[ind_close], ydata[ind_close]))
             text.set_text("DMX Params:\n MJD: %s \n DMX: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
