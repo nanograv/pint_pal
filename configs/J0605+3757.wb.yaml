@@ -33,7 +33,7 @@ ignore: # toa excision
   snr-cut: 25
   bad-toa:
   bad-range:
-  bad-epoch:
+  bad-file:
   prob-outlier: 0.1
 
 changelog:

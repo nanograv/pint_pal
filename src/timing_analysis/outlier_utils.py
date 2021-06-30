@@ -169,7 +169,7 @@ def Ftest(chi2_1, dof_1, chi2_2, dof_2):
     return ft
 
 def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
-    """ Test for the presence of remaining bad epochs by removing one at a
+    """ Test for the presence of remaining bad epochs (files) by removing one at a
         time and examining its impact on the residuals; pre/post reduced
         chi-squared values are assessed using an F-statistic.  
 
@@ -179,7 +179,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
     toas: `pint.toa.TOAs` object
     tc_object: `timing_analysis.timingconfiguration` object
     ftest_threshold: float
-        optional, threshold below which epochs will be dropped
+        optional, threshold below which files will be dropped
     """
     f = pint.fitter.GLSFitter(toas,model)
     chi2_init = f.fit_toas()
@@ -189,11 +189,11 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
 
     filenames = toas.get_flag_value('name')[0]
     outdir = f'outlier/{tc_object.get_outfile_basename()}'
-    outfile = '/'.join([outdir,'epochdrop.txt'])
+    outfile = '/'.join([outdir,'filedrop.txt'])
     fout = open(outfile,'w')
-    numepochs = len(set(filenames))
-    log.info(f'There are {numepochs} epochs (filenames) to analyze.')
-    epochs_to_drop = []
+    numfiles = len(set(filenames))
+    log.info(f'There are {numfiles} files to analyze.')
+    files_to_drop = []
     for filename in set(filenames):
         maskarray = np.ones(len(filenames),dtype=bool)
         receiver = None
@@ -246,7 +246,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
         redchi2 = chi2 / ndof
         if ndof_init != ndof:
             ftest = Ftest(float(chi2_init),int(ndof_init),float(chi2),int(ndof))
-            if ftest < ftest_threshold: epochs_to_drop.append(filename)
+            if ftest < ftest_threshold: files_to_drop.append(filename)
         else:
             ftest = False
         fout.write(f"{filename} {receiver} {mjd:d} {(ntoas_init - ntoas):d} {ftest:e} {1.0/np.sqrt(sum)}\n")
@@ -255,16 +255,16 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
 
     # Apply cut flags
     names = np.array([f['name'] for f in toas.orig_table['flags']])
-    for etd in epochs_to_drop:
-        epochdropinds = np.where(names==etd)[0]
-        apply_cut_flag(toas,epochdropinds,'epochdrop')
+    for etd in files_to_drop:
+        filedropinds = np.where(names==etd)[0]
+        apply_cut_flag(toas,filedropinds,'filedrop')
 
     # Make cuts, fix DMX windows if necessary
-    if len(epochs_to_drop):
-        apply_cut_select(toas,reason='epoch drop analysis')
+    if len(files_to_drop):
+        apply_cut_select(toas,reason='file drop analysis')
         toas = setup_dmx(model,toas,frequency_ratio=tc_object.get_fratio(),max_delta_t=tc_object.get_sw_delay())
     else:
-        log.info('No epochs dropped (epochalyptica).')
+        log.info('No files dropped (epochalyptica).')
 
     # Re-introduce cut TOAs for writing tim file that includes -cut flags
     toas.table = toas.orig_table
