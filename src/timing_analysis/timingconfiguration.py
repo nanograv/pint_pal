@@ -277,7 +277,7 @@ class TimingConfiguration:
         return None #return some default value instead?
      
     def get_bad_files(self):
-        """ Return list of bad files (basenames: [backend]_[mjd]_[source]) """
+        """ Return list of bad files """
         if 'bad-file' in self.config['ignore'].keys():
             return self.config['ignore']['bad-file']
         return None

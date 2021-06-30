@@ -554,7 +554,7 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
                   'good':palette[2],
                   'badrange':palette[3],
                   'outlier10':palette[4],
-                  'filedrop':palette[5],
+                  'epochdrop':palette[5],
                   'orphaned':palette[6],
                   'maxout':palette[7],
                   'simul':palette[8],
@@ -578,10 +578,8 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
         ncut = toa_cut_flags.count(c)
         if c: cuts_dict[c] = ncut
         else: cuts_dict['good'] = ncut
-        if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')
-    cuts_dict = { k.replace('epochdrop', 'filedrop'): v for k, v in cuts_dict.items() }
-    
-            
+        if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')    
+
     nTOAcut = np.array(list(cuts_dict.values()))
     sizes = nTOAcut/nTOA
     labels = [f"{cdk} ({cuts_dict[cdk]})" for cdk in cuts_dict.keys()]
@@ -604,7 +602,6 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
         plt.savefig(f"{mashtel}_{tc.get_outfile_basename()}_donut.png",bbox_inches='tight')
         plt.close()
     return cuts_dict
-
         
 def display_excise_dropdowns(file_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):
     """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision. This should be run after tc.get_investigation_files(); doing so will display two lists of dropdowns (separated by bad_toa and bad_file). The user then chooses whatever combinations of files/plot types they'd like to display, and runs a cell below the dropdowns containing the read_excise_dropdowns function.

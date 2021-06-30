@@ -189,7 +189,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
 
     filenames = toas.get_flag_value('name')[0]
     outdir = f'outlier/{tc_object.get_outfile_basename()}'
-    outfile = '/'.join([outdir,'filedrop.txt'])
+    outfile = '/'.join([outdir,'epochdrop.txt'])
     fout = open(outfile,'w')
     numfiles = len(set(filenames))
     log.info(f'There are {numfiles} files to analyze.')
@@ -255,13 +255,13 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
 
     # Apply cut flags
     names = np.array([f['name'] for f in toas.orig_table['flags']])
-    for etd in files_to_drop:
-        filedropinds = np.where(names==etd)[0]
-        apply_cut_flag(toas,filedropinds,'filedrop')
+    for ftd in files_to_drop:
+        filedropinds = np.where(names==ftd)[0]
+        apply_cut_flag(toas,filedropinds,'epochdrop')
 
     # Make cuts, fix DMX windows if necessary
     if len(files_to_drop):
-        apply_cut_select(toas,reason='file drop analysis')
+        apply_cut_select(toas,reason='epoch drop analysis')
         toas = setup_dmx(model,toas,frequency_ratio=tc_object.get_fratio(),max_delta_t=tc_object.get_sw_delay())
     else:
         log.info('No files dropped (epochalyptica).')
