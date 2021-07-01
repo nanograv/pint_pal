@@ -267,16 +267,16 @@ def curate_comments(yaml_file,overwrite=True,extension='fix'):
         else:
             log.warning('bad-range field does not exist.')
 
-    if config.get('ignore').get('bad-epoch'):
+    if config.get('ignore').get('bad-file'):
         try:
-            config['ignore'].yaml_add_eol_comment("designated by basename string {backend}_{mjd}_{source}",'bad-epoch')
+            config['ignore'].yaml_add_eol_comment("designated by basename string {backend}_{mjd}_{source}",'bad-file')
         except:
             pass
     else:
-        if 'bad-epoch' in ignore_keys:
-            log.info('bad-epoch field exists, is not set.')
+        if 'bad-file' in ignore_keys:
+            log.info('bad-file field exists, is not set.')
         else:
-            log.warning('bad-epoch field does not exist.')
+            log.warning('bad-file field does not exist.')
 
     config['dmx'].yaml_add_eol_comment("finer binning when solar wind delay > threshold (us)",'max-sw-delay')
     config['dmx'].yaml_add_eol_comment("designated by [mjd_low,mjd_hi,binsize]",'custom-dmx')
@@ -302,7 +302,7 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
             'compare-model','toas','free-params','free-dmx','toa-type','fitter',
             'n-iterations','ephem','bipm','noise','results-dir','dmx','ignore-dmx',
             'fratio','max-sw-delay','custom-dmx','ignore','mjd-start','mjd-end',
-            'snr-cut','bad-toa','bad-range','bad-epoch','changelog']
+            'snr-cut','bad-toa','bad-range','bad-file','changelog']
 
     if field not in valid_keys:
         log.warning(f'Provided field ({field}) not valid.')
@@ -318,8 +318,8 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
 
     write_yaml(config, out_yaml)
 
-def fix_badepoch(yaml_file):
-    """Suggests bad-epoch replacements (if strings) with one-element lists
+def fix_badfile(yaml_file):
+    """Suggests bad-file replacements (if strings) with one-element lists
 
     Parameters
     ==========
@@ -327,16 +327,16 @@ def fix_badepoch(yaml_file):
     """
     config = read_yaml(yaml_file)
     try:
-        n_be = len(config['ignore']['bad-epoch'])
-        log.info(f'{yaml_file}: {n_be} bad-epoch entries to fix...')
+        n_be = len(config['ignore']['bad-file'])
+        log.info(f'{yaml_file}: {n_be} bad-file entries to fix...')
         for i in range(n_be):
-            be_field = config['ignore']['bad-epoch'][i]
+            be_field = config['ignore']['bad-file'][i]
             if isinstance(be_field,str):
                 print(f'  - [{be_field}]')
     except TypeError:
-        log.info(f'{yaml_file}: 0 bad-epoch entries.')
+        log.info(f'{yaml_file}: 0 bad-file entries.')
     except KeyError:
-        log.info(f'{yaml_file}: no bad-epoch field in the ignore block.')
+        log.info(f'{yaml_file}: no bad-file field in the ignore block.')
 
 def read_yaml(yaml_file):
     """Reads a yaml file, returns the object

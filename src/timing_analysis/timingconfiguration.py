@@ -95,7 +95,7 @@ class TimingConfiguration:
         # if we're dealing with wideband TOAs, each epoch has a single TOA, 
         # so don't bother checking to see if we can reduce entries
         #if self.get_toa_type() == "NB":
-        #    self.check_for_bad_epochs(t, threshold=0.9, print_all=print_all_ignores)
+        #    self.check_for_bad_files(t, threshold=0.9, print_all=print_all_ignores)
 
         # Make a clean copy of original TOAs table (to track cut TOAs, flag_values)
         t.renumber(index_order=False)  # Renumber so the index column matches the order of TOAs
@@ -194,7 +194,7 @@ class TimingConfiguration:
         toas = self.apply_ignore(toas,specify_keys=['bad-toa'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
 
-        toas = self.apply_ignore(toas,specify_keys=['bad-epoch'],warn=warn)
+        toas = self.apply_ignore(toas,specify_keys=['bad-file'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
 
     def get_bipm(self):
@@ -276,14 +276,14 @@ class TimingConfiguration:
             return self.config['ignore']['snr-cut']
         return None #return some default value instead?
      
-    def get_bad_epochs(self):
-        """ Return list of bad epochs (basenames: [backend]_[mjd]_[source]) """
-        if 'bad-epoch' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-epoch']
+    def get_bad_files(self):
+        """ Return list of bad files """
+        if 'bad-file' in self.config['ignore'].keys():
+            return self.config['ignore']['bad-file']
         return None
     
     def get_bad_ranges(self):
-        """ Return list of bad epoch ranges by MJD ([MJD1,MJD2])"""
+        """ Return list of bad file ranges by MJD ([MJD1,MJD2])"""
         if 'bad-range' in self.config['ignore'].keys():
             return self.config['ignore']['bad-range']
         return None
@@ -295,31 +295,31 @@ class TimingConfiguration:
         return None
 
     def get_investigation_files(self):
-        """ Makes a list from which the timer can choose which epochs they'd like to manually inspect"""
+        """ Makes a list from which the timer can choose which files they'd like to manually inspect"""
         ff_list = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
-        match_epochs, match_toas = [], []
+        match_files, match_toas = [], []
         # Note that you need the following check since this doesn't go through apply_ignore:
-        if 'bad-epoch' in self.config['ignore'].keys() and self.config['ignore']['bad-epoch'] != None:
-            for be in self.get_bad_epochs():
+        if 'bad-file' in self.config['ignore'].keys() and self.config['ignore']['bad-file'] != None:
+            for be in self.get_bad_files():
                 if isinstance(be, list):
-                    match_epochs.append([filenm for filenm in ff_list if be[0] in filenm])
-                else: # bad-epoch entry is in the "old" style (just a string)
-                    match_epochs.append([filenm for filenm in ff_list if be in filenm])
+                    match_files.append([filenm for filenm in ff_list if be[0] in filenm])
+                else: # bad-file entry is in the "old" style (just a string)
+                    match_files.append([filenm for filenm in ff_list if be in filenm])
         if 'bad-toa' in self.config['ignore'].keys() and self.config['ignore']['bad-toa'] != None:
             for bt in self.get_bad_toas():
                 match_toas.append([[filenm, bt[1], bt[2]] for filenm in ff_list if bt[0] in filenm])
-        return sum(match_epochs,[]), sum(match_toas,[])
+        return sum(match_files,[]), sum(match_toas,[])
     
-    def check_for_orphaned_recs(self, toas, nepochs_threshold=3):
+    def check_for_orphaned_recs(self, toas, nfiles_threshold=3):
         """Check for frontend/backend pairs that arise at or below threshold
-        for number of epochs; also check that the set matches with those listed
+        for number of files; also check that the set matches with those listed
         in the yaml.
         
         Parameters
         ==========
         toas: `pint.TOAs object`
-        nepochs_threshold: int, optional
-            Number of epochs at/below which a frontend/backend pair is orphaned.
+        nfiles_threshold: int, optional
+            Number of files at/below which a frontend/backend pair is orphaned.
 
         """
         febe_pairs = set(toas.get_flag_value('f')[0])
@@ -329,10 +329,10 @@ class TimingConfiguration:
         for febe in febe_pairs:
             f_bool = np.array([f == febe for f in toas.get_flag_value('f')[0]])
             f_names = toas[f_bool].get_flag_value('name')[0]
-            epochs = set(f_names)
-            n_epochs = len(epochs)
-            if n_epochs > nepochs_threshold:
-                log.info(f'{febe} epochs: {n_epochs}')
+            files = set(f_names)
+            n_files = len(files)
+            if n_files > nfiles_threshold:
+                log.info(f'{febe} files: {n_files}')
             else:
                 febe_to_cut.append(febe)
 
@@ -344,7 +344,7 @@ class TimingConfiguration:
             if not (ftc == orph):
                 # Add/remove from orphaned-rec?
                 if (ftc - orph):
-                    log.warning(f"{nepochs_threshold} or fewer epochs, add to orphaned-rec: {', '.join(ftc-orph)}")
+                    log.warning(f"{nfiles_threshold} or fewer files, add to orphaned-rec: {', '.join(ftc-orph)}")
                 elif (orph - ftc):
                     log.warning(f"Remove from orphaned-rec: {', '.join(orph-ftc)}")
             else:
@@ -352,9 +352,9 @@ class TimingConfiguration:
         elif febe_to_cut:  # ...but no orphaned-rec field in the ignore block.
             febe_cut_str = ', '.join(febe_to_cut)
             log.warning(f"Add orphaned-rec to the ignore block in {self.filename}.")
-            log.warning(f"{nepochs_threshold} or fewer epochs, add to orphaned-rec: {febe_cut_str}")
+            log.warning(f"{nfiles_threshold} or fewer files, add to orphaned-rec: {febe_cut_str}")
             print(f"Add the following line to {self.filename}...")
-            new_changelog_entry('CURATE',f"orphaned receivers ({nepochs_threshold} or fewer epochs): {febe_cut_str}")
+            new_changelog_entry('CURATE',f"orphaned receivers ({nfiles_threshold} or fewer files): {febe_cut_str}")
 
         return None 
 
@@ -396,10 +396,10 @@ class TimingConfiguration:
         except KeyError:
             log.warning("prob-outlier field should be added to your config file's ignore block.")
 
-    def check_for_bad_epochs(self, toas, threshold=0.9, print_all=False):
-        """Check the bad-toas entries for epochs where more than a given
+    def check_for_bad_files(self, toas, threshold=0.9, print_all=False):
+        """Check the bad-toas entries for files where more than a given
         percentange of TOAs have been flagged. Make appropriate suggestions
-        for the user to update the `bad-epoch` entries, and optionally
+        for the user to update the `bad-file` entries, and optionally
         supply the revised `bad-toa` entries.
 
         Parameters
@@ -409,64 +409,64 @@ class TimingConfiguration:
 
         threshold: float
             A threshold fraction used to determine whether to suggest adding
-            a bad-epoch line to the config file. Should be in the range [0, 1].
+            a bad-file line to the config file. Should be in the range [0, 1].
             Default is 0.9.
 
         print_all: bool
-            If True, print both the suggested bad-epoch lines AND the revised
+            If True, print both the suggested bad-file lines AND the revised
             bad-toa lines, where the new bad-toa lines now have entries from
-            the suggested bad-epochs removed. Default is False.
+            the suggested bad-files removed. Default is False.
         """
         # get the list of bad-toas already in the config file
         # only continue if that list has entries
         gotten_bad_toas = self.get_bad_toas()
         if isinstance(gotten_bad_toas, list):
             provided_bad_toas = [t[:3] for t in gotten_bad_toas] # ignores the 'reason' entry if present
-            bad_toa_epochs = np.asarray(provided_bad_toas)[:, 0]
-            # how many bad TOAs per epoch?
-            unique, counts = np.unique(bad_toa_epochs, return_counts=True)
-            bad_toa_epoch_counts = dict(zip(unique, counts))
+            bad_toa_files = np.asarray(provided_bad_toas)[:, 0]
+            # how many bad TOAs per file?
+            unique, counts = np.unique(bad_toa_files, return_counts=True)
+            bad_toa_file_counts = dict(zip(unique, counts))
 
-            # how many raw TOAs per epoch?
-            toa_epochs = toas.get_flag_value("name")[0]
-            unique, counts = np.unique(toa_epochs, return_counts=True)
-            toa_epoch_counts = dict(zip(unique, counts))
+            # how many raw TOAs per file?
+            toa_files = toas.get_flag_value("name")[0]
+            unique, counts = np.unique(toa_files, return_counts=True)
+            toa_file_counts = dict(zip(unique, counts))
 
-            # get the list of bad-epochs already in the config
-            provided_bad_epochs = self.get_bad_epochs()
-            if not isinstance(provided_bad_epochs, list):
-                provided_bad_epochs = []
+            # get the list of bad-files already in the config
+            provided_bad_files = self.get_bad_files()
+            if not isinstance(provided_bad_files, list):
+                provided_bad_files = []
 
-            # are there any epochs that have too many bad TOAs?
-            new_bad_epochs = []
-            for k in bad_toa_epoch_counts:
+            # are there any files that have too many bad TOAs?
+            new_bad_files = []
+            for k in bad_toa_file_counts:
                 # at this point, TOAs could have already been removed,
                 # so check that the key exists first
-                if k in toa_epoch_counts.keys():
-                    n_toas = toa_epoch_counts[k]
-                    n_bad = bad_toa_epoch_counts[k]
+                if k in toa_file_counts.keys():
+                    n_toas = toa_file_counts[k]
+                    n_bad = bad_toa_file_counts[k]
                     bad_frac = float(n_bad) / n_toas
                     # check that the bad fraction exceeds the threshold
-                    # AND that the current epoch isn't already listed
-                    if bad_frac >= threshold and k not in provided_bad_epochs:
-                        new_bad_epochs.append(k)
+                    # AND that the current file isn't already listed
+                    if bad_frac >= threshold and k not in provided_bad_files:
+                        new_bad_files.append(k)
 
             # only bother printing anything if there's a suggestion
-            if len(new_bad_epochs) > 0:
+            if len(new_bad_files) > 0:
                 log.warn(
-                    f"More than {threshold * 100}% of TOAs have been excised for some epochs"
+                    f"More than {threshold * 100}% of TOAs have been excised for some files"
                 )
-                log.info("Consider adding the following to `bad-epoch` in your config file:")
-                for e in new_bad_epochs:
+                log.info("Consider adding the following to `bad-file` in your config file:")
+                for e in new_bad_files:
                     print(f"    - '{e}'")
 
             # if requested to update the bad-toa lines, figure out which
             # entries need to be removed
             if print_all:
-                all_bad_epochs = np.concatenate((new_bad_epochs, provided_bad_epochs))
+                all_bad_files = np.concatenate((new_bad_files, provided_bad_files))
                 bad_toas_to_del = []
-                for e in all_bad_epochs:
-                    _idx = np.where(bad_toa_epochs == e)[0]
+                for e in all_bad_files:
+                    _idx = np.where(bad_toa_files == e)[0]
                     bad_toas_to_del.extend(_idx)
                 new_bad_toa_list = np.delete(np.asarray(provided_bad_toas), bad_toas_to_del, 0)
                 log.info("The `bad-toa` list in your config file can be reduced to:")
@@ -528,7 +528,7 @@ class TimingConfiguration:
 
     def apply_ignore(self,toas,specify_keys=None,warn=False):
         """ Basic checks and return TOA excision info. """
-        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-epoch',
+        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-file',
                         'orphaned-rec','prob-outlier']
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
@@ -592,22 +592,22 @@ class TimingConfiguration:
             poutinds = np.where(pouts > self.get_prob_outlier())[0]
             oprob_flag = f'outlier{int(self.get_prob_outlier()*100)}'
             apply_cut_flag(toas,poutinds,oprob_flag,warn=warn)
-        if 'bad-epoch' in valid_valued:
-            logwarnepoch = False
+        if 'bad-file' in valid_valued:
+            logwarnfile = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
             cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
-            for be in self.get_bad_epochs():
+            for be in self.get_bad_files():
                 if isinstance(be, list): # either it's just a list, or a list with a reason
                     if len(be) == 1: # i.e. no reason given
-                        logwarnepoch = True
+                        logwarnfile = True
                     be = be[0]
                 elif isinstance(be, str): # still in old format
-                    logwarnepoch = True
+                    logwarnfile = True
 
-                epochinds = np.where([be in n for n in names])[0]
-                # Check bad-epoch entry only matches one file
-                name_matches = set(names[epochinds])
-                if len(name_matches) > 1:  # Help with fixing epoch -> file disambiguation
+                fileinds = np.where([be in n for n in names])[0]
+                # Check bad-file entry only matches one file
+                name_matches = set(names[fileinds])
+                if len(name_matches) > 1:
                     log.warning(f"Check {be} (matches multiple files): {name_matches}")
                     # Automatically explore matching files to see if any are immediately redundant.
                     for nm in name_matches:
@@ -617,17 +617,17 @@ class TimingConfiguration:
                         if np.all(alreadycut):
                             log.warning(f"All TOAs from {nm} already cut: {set(cuts[matchinds][alreadycut])}")
                 elif len(name_matches) == 1:
-                    # Check bad-epoch entry is not redundant
-                    remaining = np.array([not cut for cut in cuts[epochinds]])
+                    # Check bad-file entry is not redundant
+                    remaining = np.array([not cut for cut in cuts[fileinds]])
                     alreadycut = np.invert(remaining)
                     if np.all(alreadycut):
-                        log.warning(f"All TOAs from {be} already cut: {set(cuts[epochinds][alreadycut])}")
-                    apply_cut_flag(toas,epochinds,'badepoch',warn=warn)
+                        log.warning(f"All TOAs from {be} already cut: {set(cuts[fileinds][alreadycut])}")
+                    apply_cut_flag(toas,fileinds,'badfile',warn=warn)
                 else:
-                    log.warning(f"bad-epoch entry does not match any TOAs: {be}")
+                    log.warning(f"bad-file entry does not match any TOAs: {be}")
 
-            if logwarnepoch:
-                log.warning(f'One or more bad-epoch entries lack reasons for excision; please add them.')
+            if logwarnfile:
+                log.warning(f'One or more bad-file entries lack reasons for excision; please add them.')
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             backends = np.array([f['be'] for f in toas.orig_table['flags']])

@@ -578,7 +578,7 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
         ncut = toa_cut_flags.count(c)
         if c: cuts_dict[c] = ncut
         else: cuts_dict['good'] = ncut
-        if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')
+        if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')    
 
     nTOAcut = np.array(list(cuts_dict.values()))
     sizes = nTOAcut/nTOA
@@ -602,14 +602,13 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
         plt.savefig(f"{mashtel}_{tc.get_outfile_basename()}_donut.png",bbox_inches='tight')
         plt.close()
     return cuts_dict
-
         
-def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):
-    """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision. This should be run after tc.get_investigation_files(); doing so will display two lists of dropdowns (separated by bad_toa and bad_epoch). The user then chooses whatever combinations of files/plot types they'd like to display, and runs a cell below the dropdowns containing the read_excise_dropdowns function.
+def display_excise_dropdowns(file_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):
+    """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision. This should be run after tc.get_investigation_files(); doing so will display two lists of dropdowns (separated by bad_toa and bad_file). The user then chooses whatever combinations of files/plot types they'd like to display, and runs a cell below the dropdowns containing the read_excise_dropdowns function.
     
     Parameters
     ==========
-    epoch_matches: a list of *.ff files matching bad epochs in YAML
+    file_matches: a list of *.ff files matching bad files in YAML
     toa_matches: lists with *.ff files matching bad toas in YAML, bad subband #, bad subint #
     all_YFp (optional, default False): if True, defaults all plots to YFp
     all_GTpd (optional, default False): if True, defaults all plots to GTpd
@@ -617,8 +616,8 @@ def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd
     
     Returns (note: these are separate for now for clarity and freedom to use the subint/subband info in bad-toas)
     =======
-    epoch_dropdowns: list of dropdown widgets containing short file names and file extension dropdowns for bad-epochs
-    pav_epoch_drop: list of dropdown widget objects indicating plot type to be chosen for bad-epochs
+    file_dropdowns: list of dropdown widgets containing short file names and file extension dropdowns for bad-files
+    pav_file_drop: list of dropdown widget objects indicating plot type to be chosen for bad-files
     toa_dropdowns: list of dropdown widget objects containing short file names and extensions for bad-toas
     pav_toa_drop: list of dropdown widget objects indicating plot type to be chosen for bad-toas
     """
@@ -633,15 +632,15 @@ def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd
     else:
         pav_list = ['None','YFp (time vs. phase)','GTpd (frequency vs. phase)','Profile (intensity vs. phase)']    
    
-    # Epochs: easy
-    short_epoch_names = [e.split('/')[-1].rpartition('.')[0] for e in epoch_matches]
-    epoch_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
-                                  options=ext_list, layout={'width': 'max-content'}) for s in short_epoch_names]    
-    pav_epoch_drop = [widgets.Dropdown(options=pav_list) for s in short_epoch_names]
-    epoch_output = widgets.HBox([widgets.VBox(children=epoch_dropdowns),widgets.VBox(children=pav_epoch_drop)])
-    if len(epoch_matches) != 0:
-        print('Bad-epochs in YAML:')
-        display(epoch_output)
+    # Files: easy
+    short_file_names = [e.split('/')[-1].rpartition('.')[0] for e in file_matches]
+    file_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
+                                  options=ext_list, layout={'width': 'max-content'}) for s in short_file_names]    
+    pav_file_drop = [widgets.Dropdown(options=pav_list) for s in short_file_names]
+    file_output = widgets.HBox([widgets.VBox(children=file_dropdowns),widgets.VBox(children=pav_file_drop)])
+    if len(file_matches) != 0:
+        print('Bad-files in YAML:')
+        display(file_output)
     
     # TOAs: difficult, annoying, need to worry about uniqueness
     short_toa_names = [t[0].split('/')[-1].rpartition('.')[0] for t in toa_matches]
@@ -654,7 +653,7 @@ def display_excise_dropdowns(epoch_matches, toa_matches, all_YFp=False, all_GTpd
     if len(toa_matches) != 0:
         print('Bad-toas in YAML:')
         display(toa_output)
-    return epoch_dropdowns, pav_epoch_drop, toa_dropdowns, pav_toa_drop
+    return file_dropdowns, pav_file_drop, toa_dropdowns, pav_toa_drop
 
 def read_excise_dropdowns(select_list, pav_list, matches):
     """Reads selections for files/plots chosen via dropdown.
@@ -669,7 +668,7 @@ def read_excise_dropdowns(select_list, pav_list, matches):
     =======
     plot_list: lists of full paths to files of interest and plot types chosen
     """   
-    if isinstance(matches[0],list): # toa entries
+    if len(matches) != 0 and isinstance(matches[0],list): # toa entries
         toa_nm = []
         toa_subband = []
         toa_subint = []
@@ -686,7 +685,7 @@ def read_excise_dropdowns(select_list, pav_list, matches):
         if (select_list[i].value != 'None') and (pav_list[i].value != 'None'):
             if isinstance(matches[0], list): # toa entries
                 plot_list.append([toa_nm_unique[i].rpartition('/')[0] + '/' + select_list[i].description.split(' ')[0] + select_list[i].value, pav_list[i].value, toa_subband_unique[i], toa_subint_unique[i]])                
-            else: # epoch entries
+            else: # bad-file entries
                 plot_list.append([matches[i].rpartition('/')[0] + '/' + select_list[i].description + 
                                   select_list[i].value,pav_list[i].value])
     return plot_list
