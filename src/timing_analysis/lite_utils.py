@@ -720,3 +720,57 @@ def make_detective_plots(plot_list, match_list):
             ar.fscrunch()
             ar.tscrunch()
             ar.plot()
+
+def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True):
+    """ Plot residuals vs. time, highlight specified cuts (default: badtoa/badfile) 
+    
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object 
+    model: `pint.model.TimingModel` object 
+    tc_object: `timing_analysis.timingconfiguration` object
+    cuts: list, optional
+        cuts to highlight in residuals plot (default: manual cuts)
+    ylim_good: bool, optional
+        set ylim to that of uncut TOAs (default: True)
+    """
+    toas.table = toas.orig_table
+    fo = tc_object.construct_fitter(toas,model)
+
+    # get resids/errors/mjds
+    time_resids = fo.resids_init.time_resids.to_value(u.us)
+    errs = fo.toas.get_errors().to(u.us).value
+    mjds = fo.toas.get_mjds().value
+
+    figsize = (12,3)
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111)
+    
+    # find appropriate indices & plot remaining TOAs
+    toa_cut_flags = np.array([t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table])
+    uncut_inds = np.where(toa_cut_flags==None)[0]
+    ax.errorbar(mjds[uncut_inds],time_resids[uncut_inds],yerr=errs[uncut_inds],fmt='x',alpha=0.5,color='gray')
+    uncut_ylim = ax.get_ylim() # ylim for plot with good TOAs only
+
+    import seaborn as sns
+    valid_cuts = ['snr','simul','orphaned','maxout','outlier10','dmx','epochdrop','badfile','badtoa','badrange']
+    sns.color_palette()
+    for c in cuts:
+        if c in valid_cuts:
+            cut_inds = np.where(toa_cut_flags==c)[0]
+            plt.errorbar(mjds[cut_inds],time_resids[cut_inds],yerr=errs[cut_inds],fmt='x',label=c)
+        else:
+            log.warning(f"Unrecognized cut: {c}")
+
+    if ylim_good:
+        ax.set_ylim(uncut_ylim)
+
+    ax.grid(True)
+    ax.legend(loc='upper center', bbox_to_anchor= (0.5, 1.2), ncol=len(cuts))
+    plt.title(f'{model.PSR.value} highlighted cuts',y=1.2)
+    ax.set_xlabel('MJD')
+    ax.set_ylabel('Residual ($\mu$s)')
+    
+    # reset cuts for additional processing
+    from timing_analysis.utils import apply_cut_select
+    apply_cut_select(toas,reason='resumption after highlighting cuts')
