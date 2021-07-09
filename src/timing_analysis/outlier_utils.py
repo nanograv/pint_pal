@@ -181,7 +181,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
     ftest_threshold: float
         optional, threshold below which files will be dropped
     """
-    f = pint.fitter.GLSFitter(toas,model)
+    f = tc_object.construct_fitter(toas,model)
     chi2_init = f.fit_toas()
     ndof_init = pint.residuals.Residuals(toas,model).dof
     ntoas_init = toas.ntoas
@@ -190,6 +190,11 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
     filenames = toas.get_flag_value('name')[0]
     outdir = f'outlier/{tc_object.get_outfile_basename()}'
     outfile = '/'.join([outdir,'epochdrop.txt'])
+
+    # Check for existence of path and make directories if they don't exist
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
     fout = open(outfile,'w')
     numfiles = len(set(filenames))
     log.info(f'There are {numfiles} files to analyze.')
