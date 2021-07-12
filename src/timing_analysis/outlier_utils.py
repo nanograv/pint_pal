@@ -244,7 +244,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
             newmodel.components['DispersionDMX'].remove_param(f'DMXR1_{dmxindex}')
             newmodel.components['DispersionDMX'].remove_param(f'DMXR2_{dmxindex}')
             newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
-        f = pint.fitter.GLSFitter(toas,newmodel)
+        f = tc_object.construct_fitter(toas,newmodel)
         chi2 = f.fit_toas()
         ndof = pint.residuals.Residuals(toas,newmodel).dof
         ntoas = toas.ntoas
