@@ -183,12 +183,16 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
     """
     from pint.fitter import WidebandTOAFitter, GLSFitter
     using_wideband = tc_object.get_toa_type() == 'WB'
-    if using_wideband: f = WidebandTOAFitter(toas,model)
-    else: f = GLSFitter(toas,model)
-    #f = tc_object.construct_fitter(toas,model)
-    chi2_init = f.fit_toas()
-    if using_wideband: ndof_init = pint.residuals.WidebandDMResiduals(toas,model).dof
-    else: ndof_init = pint.residuals.Residuals(toas,model).dof
+    f = tc_object.construct_fitter(toas,model)
+    xxx = f.fit_toas()  # get chi2 from residuals
+    #if using_wideband:
+    #    ndof_init = pint.residuals.WidebandDMResiduals(toas,f.model).dof
+    #    chi2_init = pint.residuals.WidebandTOAResiduals(toas,f.model).chi2
+    #else:
+    #    ndof_init = pint.residuals.Residuals(toas,f.model).dof
+    #    chi2_init = pint.residuals.Residuals(toas,f.model).chi2
+
+    ndof_init, chi2_init = f.resids.dof, f.resids.chi2
     ntoas_init = toas.ntoas  # How does this change for wb?
     redchi2_init = chi2_init / ndof_init
 
@@ -249,17 +253,23 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
             newmodel.components['DispersionDMX'].remove_param(f'DMXR1_{dmxindex}')
             newmodel.components['DispersionDMX'].remove_param(f'DMXR2_{dmxindex}')
             newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
-        #f = tc_object.construct_fitter(toas,newmodel)
-        if using_wideband: f = WidebandTOAFitter(toas,newmodel)
-        else: f = GLSFitter(toas,newmodel)
-        chi2 = f.fit_toas()
-        if using_wideband: ndof = pint.residuals.WidebandDMResiduals(toas,newmodel).dof
-        else: ndof = pint.residuals.Residuals(toas,newmodel).dof
+        f = tc_object.construct_fitter(toas,newmodel)
+        xxx = f.fit_toas()  # get chi2 from residuals
+        #if using_wideband:
+        #    ndof = pint.residuals.WidebandTOAResiduals(toas,f.model).dof
+        #    chi2 = pint.residuals.WidebandTOAResiduals(toas,f.model).chi2
+        #else:
+        #    ndof = pint.residuals.Residuals(toas,f.model).dof
+        #    chi2 = pint.residuals.Residuals(toas,f.model).chi2
+        ndof, chi2 = f.resids.dof, f.resids.chi2
         ntoas = toas.ntoas
         redchi2 = chi2 / ndof
+        print(f"After masking TOA(s) from {filename}...")
+        print(f"ndof init: {ndof_init}, ndof trial: {ndof}; chi2 init: {chi2_init}, chi2 trial: {chi2}")
         if ndof_init != ndof:
             ftest = Ftest(float(chi2_init),int(ndof_init),float(chi2),int(ndof))
             if ftest < ftest_threshold: files_to_drop.append(filename)
+            print(f"ftest: {ftest}")
         else:
             ftest = False
         fout.write(f"{filename} {receiver} {mjd:d} {(ntoas_init - ntoas):d} {ftest:e} {1.0/np.sqrt(sum)}\n")
