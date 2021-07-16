@@ -774,3 +774,24 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_goo
     # reset cuts for additional processing
     from timing_analysis.utils import apply_cut_select
     apply_cut_select(toas,reason='resumption after highlighting cuts')
+
+def check_toa_version(toas):
+    """ Throws a warning if TOA version does not match the version of PINT in use
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    """
+    if pint.__version__ != toas.pintversion:
+        log.warning(f"TOA pickle object created with an earlier version of PINT; this may cause problems.")
+
+def check_tobs(toas,required_tobs_yrs=2.0):
+    """ Throws a warning if observation timespan is insufficient
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    """
+    timespan = (toas.last_MJD-toas.first_MJD).to_value('yr')
+    if timespan < required_tobs_yrs:
+        log.warning(f"Observation timespan ({timespan:.2f} yrs) does not meet requirements for inclusion")

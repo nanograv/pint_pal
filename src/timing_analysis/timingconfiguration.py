@@ -18,6 +18,7 @@ import yaml
 import glob
 from timing_analysis.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from timing_analysis.lite_utils import new_changelog_entry
+from timing_analysis.lite_utils import check_toa_version, check_tobs
 from timing_analysis.defaults import *
 
 class TimingConfiguration:
@@ -121,6 +122,9 @@ class TimingConfiguration:
 
             t = self.apply_ignore(t,specify_keys=['orphaned-rec','mjd-start','mjd-end','bad-range','snr-cut'])
             apply_cut_select(t,reason='initial cuts, specified keys')
+
+        check_toa_version(t)
+        check_tobs(t)
 
         return m, t
 
