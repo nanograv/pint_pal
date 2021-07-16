@@ -740,16 +740,29 @@ def display_cal_dropdowns(file_matches, toa_matches):
     #short_cal_names = [c.split('/')[-1].rpartition('.')[0] for c in cal_matches_unique]
     cal_stem = [c.partition('.')[0] for c in cal_matches_unique]
     full_cal_files = []
-    # this isn't elegant, but you have to grab the cal file, which has 'scan number n - 1' in the name:
+    # this isn't elegant, but you have to grab the cal file (dependent on backend), which has 'scan number n - 1' in the name:
     for c,s in zip(cal_matches_unique,cal_stem):
-        if len(str(int(c.partition('.')[0].rpartition('_')[-1])-1)) == 3:
-            full_cal_files.append(s.rpartition('_')[0] + '_0' + str(int(c.partition('.')[0].rpartition('_')[-1])-1) + '_cal_0001.15y.cf')
-        elif len(str(int(c.partition('.')[0].rpartition('_')[-1])-1)) == 2:
-            full_cal_files.append(s.rpartition('_')[0] + '_00' + str(int(c.partition('.')[0].rpartition('_')[-1])-1) + '_cal_0001.15y.cf')
-        elif len(str(int(c.partition('.')[0].rpartition('_')[-1])-1)) == 1:
-            full_cal_files.append(s.rpartition('_')[0] + '_000' + str(int(c.partition('.')[0].rpartition('_')[-1])-1) + '_cal_0001.15y.cf')
-        else:
-            full_cal_files.append(s.rpartition('_')[0] + '_' + str(int(c.partition('.')[0].rpartition('_')[-1])-1) + '_cal_0001.15y.cf')
+        if ('puppi' or 'guppi') in s: # puppi or guppi format
+            if len(str(int(c.partition('.')[0].rpartition('_')[-1])-1)) == 3:
+                zs = '_0'
+            elif len(str(int(c.partition('.')[0].rpartition('_')[-1])-1)) == 2:
+                zs = '_00'
+            elif len(str(int(c.partition('.')[0].rpartition('_')[-1])-1)) == 1:
+                zs = '_000'
+            else:
+                zs = '_'
+            full_cal_files.append(s.rpartition('_')[0] + zs + str(int(c.partition('.')[0].rpartition('_')[-1])-1) + '_cal_0001.15y.cf')
+        elif 'yuppi' in s: # yuppi, inconsistent file names. Need to fix!
+            log.warning('yuppi cal files cannot be inspected in this notebook. Sadly, you need to find them yourself.')
+        elif ('asp' or 'gasp') in s: # asp or gasp format
+            cal_int = str(int(c.split('.')[1])-1)
+            if len(cal_int) == 1:
+                zs = '.00000'
+            elif len(cal_int) == 2:
+                zs = '.0000'
+            elif len(cal_int) == 3:
+                zs = '.000'
+            full_cal_files.append(s + zs + cal_int + '.' + c.rpartition('/')[2].partition('.')[2].rpartition('.')[0].partition('.')[2][:-1] + 'cf')
     cal_plot_types = ['None','Amplitude vs. freq.','Single-axis cal sol\'n vs. freq. (pacv)','On-pulse Stokes vs. freq. (pacv -csu)']
     cal_dropdowns = [widgets.Dropdown(description=c.rpartition('/')[-1], style={'description_width': 'initial'}, options=cal_plot_types, layout={'width': 'max-content'}) for c in cal_matches_unique]
     cal_output = widgets.HBox([widgets.VBox(children=cal_dropdowns)])
@@ -770,15 +783,19 @@ def read_plot_cal_dropdowns(cal_select_list, full_cal_files):
     """   
     for c,f in zip(cal_select_list,full_cal_files):
         if c.value != 'None':
-            cal_archive = pypulse.Archive(f)
-            cal = cal_archive.getPulsarCalibrator()
-            if c.value == 'Amplitude vs. freq.':
-                cal.plot("AB")
-            elif c.value == 'Single-axis cal sol\'n vs. freq. (pacv)':
-                cal.pacv()
-            elif c.value == 'On-pulse Stokes vs. freq. (pacv -csu)':
-                cal.pacv_csu()
-    
+            if os.path.isfile(f):
+                cal_archive = pypulse.Archive(f)
+                cal = cal_archive.getPulsarCalibrator()
+                if c.value == 'Amplitude vs. freq.':
+                    cal.plot("AB")
+                elif c.value == 'Single-axis cal sol\'n vs. freq. (pacv)':
+                    cal.pacv()
+                elif c.value == 'On-pulse Stokes vs. freq. (pacv -csu)':
+                    cal.pacv_csu()
+            else:
+                warn = f.rpartition('/')[-1]
+                log.warning(f'{warn}: This .cf file doesn\'t seem to exist!')
+            
 def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True):
     """ Plot residuals vs. time, highlight specified cuts (default: badtoa/badfile) 
     
