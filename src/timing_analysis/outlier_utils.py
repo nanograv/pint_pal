@@ -168,6 +168,59 @@ def Ftest(chi2_1, dof_1, chi2_2, dof_2):
       ft = False
     return ft
 
+def test_one_epoch(model,toas,filename,tc_object):
+    """Test chi2 for removal of one epoch (filename).  Used internally
+    by epochalyptica()."""
+
+    maskarray = np.ones(toas.ntoas,dtype=bool)
+    receiver = None
+    mjd = None
+    toaval = None
+    dmxindex = None
+    dmxlower = None
+    dmxupper = None
+    esum = 0.0
+    # Note, t[1]: mjd, t[2]: mjd (d), t[3]: error (us), t[6]: flags dict
+    for index,t in enumerate(toas.table):
+        if t[6]['name'] == filename:
+            if receiver == None:
+                receiver = t[6]['f']
+            if mjd == None:
+                mjd = int(t[1].value)
+            if toaval == None:
+                toaval = t[2]
+                i = 1
+                while dmxindex == None:
+                    DMXval = f"DMXR1_{i:04d}"
+                    lowerbound = getattr(model.components['DispersionDMX'],DMXval).value
+                    DMXval = f"DMXR2_{i:04d}"
+                    upperbound = getattr(model.components['DispersionDMX'],DMXval).value
+                    if toaval > lowerbound and toaval < upperbound:
+                        dmxindex = f"{i:04d}"
+                        dmxlower = lowerbound
+                        dmxupper = upperbound
+                    i += 1
+            esum = esum + 1.0 / (float(t[3])**2.0)
+            maskarray[index] = False
+
+    toas.select(maskarray)
+    numtoas_in_dmxrange = 0
+    for toa in toas.table:
+        if toa[2] > dmxlower and toa[2] < dmxupper:
+            numtoas_in_dmxrange += 1
+    newmodel = model
+    if numtoas_in_dmxrange == 0:
+        log.debug(f"Removing DMX range {dmxindex}")
+        newmodel = copy.deepcopy(model)
+        newmodel.components['DispersionDMX'].remove_param(f'DMXR1_{dmxindex}')
+        newmodel.components['DispersionDMX'].remove_param(f'DMXR2_{dmxindex}')
+        newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
+    f = tc_object.construct_fitter(toas,newmodel)
+    xxx = f.fit_toas()  # get chi2 from residuals
+    ndof, chi2 = f.resids.dof, f.resids.chi2
+    ntoas = toas.ntoas
+    return receiver, mjd, chi2, ndof, ntoas, esum
+
 def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
     """ Test for the presence of remaining bad epochs (files) by removing one at a
         time and examining its impact on the residuals; pre/post reduced
@@ -202,53 +255,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
     log.info(f'There are {numfiles} files to analyze.')
     files_to_drop = []
     for filename in set(filenames):
-        maskarray = np.ones(len(filenames),dtype=bool)
-        receiver = None
-        mjd = None
-        toaval = None
-        dmxindex = None
-        dmxlower = None
-        dmxupper = None
-        sum = 0.0
-        # Note, t[1]: mjd, t[2]: mjd (d), t[3]: error (us), t[6]: flags dict
-        for index,t in enumerate(toas.table):
-            if t[6]['name'] == filename:
-                if receiver == None:
-                    receiver = t[6]['f']
-                if mjd == None:
-                    mjd = int(t[1].value)
-                if toaval == None:
-                    toaval = t[2]
-                    i = 1
-                    while dmxindex == None:
-                        DMXval = f"DMXR1_{i:04d}"
-                        lowerbound = getattr(model.components['DispersionDMX'],DMXval).value
-                        DMXval = f"DMXR2_{i:04d}"
-                        upperbound = getattr(model.components['DispersionDMX'],DMXval).value
-                        if toaval > lowerbound and toaval < upperbound:
-                            dmxindex = f"{i:04d}"
-                            dmxlower = lowerbound
-                            dmxupper = upperbound
-                        i += 1
-                sum = sum + 1.0 / (float(t[3])**2.0)
-                maskarray[index] = False
-    
-        toas.select(maskarray)
-        numtoas_in_dmxrange = 0
-        for toa in toas.table:
-            if toa[2] > dmxlower and toa[2] < dmxupper:
-                numtoas_in_dmxrange += 1
-        newmodel = f_init.model
-        if numtoas_in_dmxrange == 0:
-            log.debug(f"Removing DMX range {dmxindex}")
-            newmodel = copy.deepcopy(f_init.model)
-            newmodel.components['DispersionDMX'].remove_param(f'DMXR1_{dmxindex}')
-            newmodel.components['DispersionDMX'].remove_param(f'DMXR2_{dmxindex}')
-            newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
-        f = tc_object.construct_fitter(toas,newmodel)
-        xxx = f.fit_toas()  # get chi2 from residuals
-        ndof, chi2 = f.resids.dof, f.resids.chi2
-        ntoas = toas.ntoas
+        receiver, mjd, chi2, ndof, ntoas, esum = test_one_epoch(f_init.model, toas, filename, tc_object)
         redchi2 = chi2 / ndof
         log.debug(f"After masking TOA(s) from {filename}...")
         log.debug(f"ndof init: {ndof_init}, ndof trial: {ndof}; chi2 init: {chi2_init}, chi2 trial: {chi2}")
@@ -258,7 +265,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
             log.debug(f"ftest: {ftest}")
         else:
             ftest = False
-        fout.write(f"{filename} {receiver} {mjd:d} {(ntoas_init - ntoas):d} {ftest:e} {1.0/np.sqrt(sum)}\n")
+        fout.write(f"{filename} {receiver} {mjd:d} {(ntoas_init - ntoas):d} {ftest:e} {1.0/np.sqrt(esum)}\n")
         toas.unselect()
     fout.close()
 
