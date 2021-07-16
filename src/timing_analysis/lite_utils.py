@@ -736,9 +736,11 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_goo
     """
     toas.table = toas.orig_table
     fo = tc_object.construct_fitter(toas,model)
+    using_wideband = tc_object.get_toa_type() == 'WB'
 
     # get resids/errors/mjds
-    time_resids = fo.resids_init.time_resids.to_value(u.us)
+    if using_wideband: time_resids = fo.resids_init.residual_objs['toa'].time_resids.to_value(u.us)
+    else: time_resids = fo.resids_init.time_resids.to_value(u.us)
     errs = fo.toas.get_errors().to(u.us).value
     mjds = fo.toas.get_mjds().value
 

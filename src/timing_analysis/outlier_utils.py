@@ -181,15 +181,22 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
     ftest_threshold: float
         optional, threshold below which files will be dropped
     """
-    f = pint.fitter.GLSFitter(toas,model)
-    chi2_init = f.fit_toas()
-    ndof_init = pint.residuals.Residuals(toas,model).dof
-    ntoas_init = toas.ntoas
+    from pint.fitter import WidebandTOAFitter, GLSFitter
+    f_init = tc_object.construct_fitter(toas,model)
+    xxx = f_init.fit_toas()  # get chi2 from residuals
+
+    ndof_init, chi2_init = f_init.resids.dof, f_init.resids.chi2
+    ntoas_init = toas.ntoas  # How does this change for wb?
     redchi2_init = chi2_init / ndof_init
 
     filenames = toas.get_flag_value('name')[0]
     outdir = f'outlier/{tc_object.get_outfile_basename()}'
     outfile = '/'.join([outdir,'epochdrop.txt'])
+
+    # Check for existence of path and make directories if they don't exist
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
     fout = open(outfile,'w')
     numfiles = len(set(filenames))
     log.info(f'There are {numfiles} files to analyze.')
@@ -227,26 +234,28 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
                 maskarray[index] = False
     
         toas.select(maskarray)
-        f.reset_model()
         numtoas_in_dmxrange = 0
         for toa in toas.table:
             if toa[2] > dmxlower and toa[2] < dmxupper:
                 numtoas_in_dmxrange += 1
-        newmodel = model
+        newmodel = f_init.model
         if numtoas_in_dmxrange == 0:
             log.debug(f"Removing DMX range {dmxindex}")
-            newmodel = copy.deepcopy(model)
+            newmodel = copy.deepcopy(f_init.model)
             newmodel.components['DispersionDMX'].remove_param(f'DMXR1_{dmxindex}')
             newmodel.components['DispersionDMX'].remove_param(f'DMXR2_{dmxindex}')
             newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
-        f = pint.fitter.GLSFitter(toas,newmodel)
-        chi2 = f.fit_toas()
-        ndof = pint.residuals.Residuals(toas,newmodel).dof
+        f = tc_object.construct_fitter(toas,newmodel)
+        xxx = f.fit_toas()  # get chi2 from residuals
+        ndof, chi2 = f.resids.dof, f.resids.chi2
         ntoas = toas.ntoas
         redchi2 = chi2 / ndof
+        log.debug(f"After masking TOA(s) from {filename}...")
+        log.debug(f"ndof init: {ndof_init}, ndof trial: {ndof}; chi2 init: {chi2_init}, chi2 trial: {chi2}")
         if ndof_init != ndof:
             ftest = Ftest(float(chi2_init),int(ndof_init),float(chi2),int(ndof))
             if ftest < ftest_threshold: files_to_drop.append(filename)
+            log.debug(f"ftest: {ftest}")
         else:
             ftest = False
         fout.write(f"{filename} {receiver} {mjd:d} {(ntoas_init - ntoas):d} {ftest:e} {1.0/np.sqrt(sum)}\n")
