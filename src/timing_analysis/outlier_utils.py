@@ -182,10 +182,10 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
         optional, threshold below which files will be dropped
     """
     from pint.fitter import WidebandTOAFitter, GLSFitter
-    f = tc_object.construct_fitter(toas,model)
-    xxx = f.fit_toas()  # get chi2 from residuals
+    f_init = tc_object.construct_fitter(toas,model)
+    xxx = f_init.fit_toas()  # get chi2 from residuals
 
-    ndof_init, chi2_init = f.resids.dof, f.resids.chi2
+    ndof_init, chi2_init = f_init.resids.dof, f_init.resids.chi2
     ntoas_init = toas.ntoas  # How does this change for wb?
     redchi2_init = chi2_init / ndof_init
 
@@ -234,15 +234,14 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
                 maskarray[index] = False
     
         toas.select(maskarray)
-        f.reset_model()
         numtoas_in_dmxrange = 0
         for toa in toas.table:
             if toa[2] > dmxlower and toa[2] < dmxupper:
                 numtoas_in_dmxrange += 1
-        newmodel = model
+        newmodel = f_init.model
         if numtoas_in_dmxrange == 0:
             log.debug(f"Removing DMX range {dmxindex}")
-            newmodel = copy.deepcopy(model)
+            newmodel = copy.deepcopy(f_init.model)
             newmodel.components['DispersionDMX'].remove_param(f'DMXR1_{dmxindex}')
             newmodel.components['DispersionDMX'].remove_param(f'DMXR2_{dmxindex}')
             newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
