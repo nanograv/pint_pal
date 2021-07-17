@@ -3,6 +3,7 @@ import os, sys
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy import log
+from multiprocessing import Pool
 
 # Outlier/Epochalyptica imports
 import pint.fitter
@@ -168,9 +169,35 @@ def Ftest(chi2_1, dof_1, chi2_2, dof_2):
       ft = False
     return ft
 
-def test_one_epoch(model,toas,filename,tc_object):
+# This global var allows the (unpickleable) PINT model object
+# to be passed to the multiprocessing workers in epochalyptica.
+_epoch_args = None
+
+def _set_epoch_args(model, toas, tc_object):
+    """Sets arguments for test_one_epoch() into a global variable 
+    for use in multiprocessing."""
+    global _epoch_args
+    _epoch_args = (model, toas, tc_object)
+
+def _test_one_epoch_args(filename):
+    """Single-argument wrapper function for test_one_epoch() for use with
+    multiprocessing."""
+    return test_one_epoch(*_epoch_args, filename)
+
+def test_one_epoch(model, toas, tc_object, filename):
     """Test chi2 for removal of one epoch (filename).  Used internally
-    by epochalyptica()."""
+    by epochalyptica().
+
+    Returns:
+      receiver - receiver name of the removed file
+      mjd - MJD of the removed file
+      chi2 - post-fit chi2 after removing the file
+      ndof - post-fit NDOF after removing the file
+      ntoas - number of TOAs remaining after removal
+      esum - weighted sum of removed TOA uncertainties
+    """
+
+    log.info(f"Testing removal of {filename} ntoas={toas.ntoas}")
 
     maskarray = np.ones(toas.ntoas,dtype=bool)
     receiver = None
@@ -219,9 +246,11 @@ def test_one_epoch(model,toas,filename,tc_object):
     xxx = f.fit_toas()  # get chi2 from residuals
     ndof, chi2 = f.resids.dof, f.resids.chi2
     ntoas = toas.ntoas
+    esum = 1.0 / np.sqrt(esum)
+    toas.unselect()
     return receiver, mjd, chi2, ndof, ntoas, esum
 
-def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
+def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6,nproc=1):
     """ Test for the presence of remaining bad epochs (files) by removing one at a
         time and examining its impact on the residuals; pre/post reduced
         chi-squared values are assessed using an F-statistic.  
@@ -233,6 +262,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
     tc_object: `timing_analysis.timingconfiguration` object
     ftest_threshold: float
         optional, threshold below which files will be dropped
+    nproc: number of parallel processes to use for tests
     """
     from pint.fitter import WidebandTOAFitter, GLSFitter
     f_init = tc_object.construct_fitter(toas,model)
@@ -242,7 +272,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
     ntoas_init = toas.ntoas  # How does this change for wb?
     redchi2_init = chi2_init / ndof_init
 
-    filenames = toas.get_flag_value('name')[0]
+    filenames = sorted(set(toas.get_flag_value('name')[0]))
     outdir = f'outlier/{tc_object.get_outfile_basename()}'
     outfile = '/'.join([outdir,'epochdrop.txt'])
 
@@ -251,11 +281,21 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
         os.makedirs(outdir)
 
     fout = open(outfile,'w')
-    numfiles = len(set(filenames))
+    numfiles = len(filenames)
     log.info(f'There are {numfiles} files to analyze.')
     files_to_drop = []
-    for filename in set(filenames):
-        receiver, mjd, chi2, ndof, ntoas, esum = test_one_epoch(f_init.model, toas, filename, tc_object)
+
+    # Run tests in parallel
+    results = None
+    if nproc > 1:
+        with Pool(nproc, _set_epoch_args, (f_init.model, toas, tc_object)) as p:
+            results = p.map(_test_one_epoch_args, filenames)
+
+    for i, filename in enumerate(filenames):
+        if results is not None:
+            receiver, mjd, chi2, ndof, ntoas, esum = results[i]
+        else: 
+            receiver, mjd, chi2, ndof, ntoas, esum = test_one_epoch(f_init.model, toas, tc_object, filename)
         redchi2 = chi2 / ndof
         log.debug(f"After masking TOA(s) from {filename}...")
         log.debug(f"ndof init: {ndof_init}, ndof trial: {ndof}; chi2 init: {chi2_init}, chi2 trial: {chi2}")
@@ -265,8 +305,8 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6):
             log.debug(f"ftest: {ftest}")
         else:
             ftest = False
-        fout.write(f"{filename} {receiver} {mjd:d} {(ntoas_init - ntoas):d} {ftest:e} {1.0/np.sqrt(esum)}\n")
-        toas.unselect()
+        fout.write(f"{filename} {receiver} {mjd:d} {(ntoas_init - ntoas):d} {ftest:e} {esum}\n")
+        fout.flush()
     fout.close()
 
     # Apply cut flags
