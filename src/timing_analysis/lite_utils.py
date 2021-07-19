@@ -2,6 +2,7 @@ import sys
 import numpy as np
 import astropy.units as u
 from astropy import log
+from astropy.io import fits
 import logging
 import matplotlib.pyplot as plt
 import time
@@ -703,13 +704,16 @@ def make_detective_plots(plot_list, match_list):
     None; displays plots in notebook.
     """
     for l in range(len(plot_list)):
-        ar = pypulse.Archive(plot_list[l][0],prepare=True)
-        # print subbands/subints of interest for bad-toas       
+        ar = pypulse.Archive(plot_list[l][0],prepare=True)        
+        # dealing with bad-toa entries:     
         if len(plot_list[l]) > 2: # toa entries
             print('\nNOTE: subbands, subints of interest for the following plot:')
             for m in range(len(match_list)):                
                 if plot_list[l][0].rpartition('.')[0] in match_list[m][0]:
                     print('[%i, %i]'%(match_list[m][1],match_list[m][2]))
+                    if plot_list[l][1] == 'Profile (intensity vs. phase)':
+                        print('\nPlotting profile for this subint/subband combination')
+                        ar.plot(chan=match_list[m][1], subint=match_list[m][2], pol=0)
         if plot_list[l][1] == 'YFp (time vs. phase)':
             ar.fscrunch()
             ar.imshow()
@@ -717,10 +721,65 @@ def make_detective_plots(plot_list, match_list):
             ar.tscrunch()
             ar.imshow()
         elif plot_list[l][1] == 'Profile (intensity vs. phase)':
+            print('\nNOTE: Plotting integrated intensity (not single-channel or single-subint)')
             ar.fscrunch()
             ar.tscrunch()
             ar.plot()
 
+def display_cal_dropdowns(file_matches, toa_matches):
+    """ Display dropdowns for all cal files that are associated with either bad_file or bad_toa entries
+    
+    Parameters
+    ==========
+    file_matches: a list of *.ff files matching bad files in YAML
+    toa_matches: lists with *.ff files matching bad toas in YAML, bad subband #, bad subint #
+    """
+    toa_cal_list = [i[0] for i in toa_matches]
+    cal_matches = file_matches + toa_cal_list
+    cal_matches_inds = np.unique(cal_matches, return_index=True)[1] # because np.unique sorts it
+    cal_matches_unique = [cal_matches[index] for index in sorted(cal_matches_inds)] # unique
+    cal_stem = [c.rpartition('/')[0] for c in cal_matches_unique]
+    full_cal_files = []
+    for c,s in zip(cal_matches_unique,cal_stem):
+        hdu = fits.open(c)
+        data = hdu[1].data
+        hdu.close()
+        calfile = data['CAL_FILE']
+        full_cal_files.append(s + '/' + calfile[-1].split(' ')[-1])
+    cal_plot_types = ['None','Amplitude vs. freq.','Single-axis cal sol\'n vs. freq. (pacv)','On-pulse Stokes vs. freq. (pacv -csu)']
+    cal_dropdowns = [widgets.Dropdown(description=c.rpartition('/')[-1], style={'description_width': 'initial'}, options=cal_plot_types, layout={'width': 'max-content'}) for c in cal_matches_unique]
+    cal_output = widgets.HBox([widgets.VBox(children=cal_dropdowns)])
+    display(cal_output)
+    return cal_dropdowns, full_cal_files
+    
+def read_plot_cal_dropdowns(cal_select_list, full_cal_files):
+    """Reads selections for files/plots chosen via dropdown.
+    
+    Parameters
+    ==========
+    cal_select_list: list of dropdown widget objects indicating which (if any) cal was selected
+    full_cal_files: list of all full paths to cal files
+    
+    Returns
+    =======
+    None; displays plots in notebook
+    """   
+    for c,f in zip(cal_select_list,full_cal_files):
+        if c.value != 'None':
+            if os.path.isfile(f):
+                log.info(f'Making cal plot corresponding to {c.description}')
+                cal_archive = pypulse.Archive(f)
+                cal = cal_archive.getPulsarCalibrator()
+                if c.value == 'Amplitude vs. freq.':
+                    cal.plot("AB")
+                elif c.value == 'Single-axis cal sol\'n vs. freq. (pacv)':
+                    cal.pacv()
+                elif c.value == 'On-pulse Stokes vs. freq. (pacv -csu)':
+                    cal.pacv_csu()
+            else:
+                warn = f.rpartition('/')[-1]
+                log.warning(f'{warn}: This .cf file doesn\'t seem to exist!')
+            
 def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True):
     """ Plot residuals vs. time, highlight specified cuts (default: badtoa/badfile) 
     
