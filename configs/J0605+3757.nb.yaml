@@ -27,6 +27,9 @@ outlier: # control outlier analysis runs
   n-burn: 1000
   n-samples: 20000
 
+intermediate-results: # use results from previous runs
+  noise-dir: /nanograv/share/15yr/timing/intermediate/noise-chains/
+  excised-tim: /nanograv/share/15yr/timing/intermediate/excised-tims/J0605+3757.nb_excise.tim
 ignore: # toa excision
   mjd-start:
   mjd-end: 59072.0
