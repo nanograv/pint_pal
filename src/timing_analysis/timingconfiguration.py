@@ -204,8 +204,9 @@ class TimingConfiguration:
 
     def manual_cuts(self,toas,warn=False):
         """ Apply manual cuts after everything else and warn if redundant """
-        toas = self.apply_ignore(toas,specify_keys=['bad-toa'],warn=warn)
-        apply_cut_select(toas,reason='manual cuts, specified keys')
+        if self.get_toa_type().lower() == 'nb':
+            toas = self.apply_ignore(toas,specify_keys=['bad-toa'],warn=warn)
+            apply_cut_select(toas,reason='manual cuts, specified keys')
 
         toas = self.apply_ignore(toas,specify_keys=['bad-file'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
