@@ -72,6 +72,15 @@ class TimingConfiguration:
         par_path = os.path.join(self.par_directory,self.config["timing-model"])
         toas = self.config["toas"]
 
+        # configure settings appropriately if using excise.tim file
+        if excised:
+            if self.get_excised():
+                toas = self.get_excised()
+                self.tim_directory = ''
+            else: # unset or file does not exist... 
+                log.warning(f"excised-tim is unset or file does not exist")
+                return None, None
+
         # Individual tim file
         if isinstance(toas, str):
             toas = [toas]
@@ -255,6 +264,13 @@ class TimingConfiguration:
         if "n-iterations" in self.config.keys():
             return int(self.config['n-iterations'])
         return 1
+
+    def get_excised(self):
+        """ Return excised-tim file if set and exists"""
+        if 'excised-tim' in self.config['intermediate-results'].keys():
+            if os.path.exists(self.config['intermediate-results']['excised-tim']):
+                return self.config['intermediate-results']['excised-tim']
+        return None
 
     def get_mjd_start(self):
         """Return mjd-start quantity (applies units days)"""
