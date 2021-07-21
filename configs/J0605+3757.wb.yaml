@@ -24,6 +24,9 @@ dmx:  # control dmx windowing/fixing
   max-sw-delay: 0.1 # finer binning when solar wind delay > threshold (us)
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 
+intermediate-results: # use results from previous runs
+  noise-dir: /nanograv/share/15yr/timing/intermediate/noise-chains/
+  excised-tim: /nanograv/share/15yr/timing/intermediate/excised-tims/J0605+3757.wb_excise.tim
 ignore: # toa excision
   mjd-start:
   mjd-end: 59072.0

@@ -9,6 +9,7 @@ import glob
 from astropy import log
 import numpy as np
 from timing_analysis.defaults import *
+import os
 
 yaml = YAML()
 RELEASE = f'/nanograv/timing/releases/15y/toagen/releases/{LATEST_TOA_RELEASE}/' 
@@ -223,6 +224,48 @@ def add_outlier_block(yaml_file,overwrite=True,extension='fix',insert_after='dmx
     else:
         log.info(f'{yaml_file} already contains outlier block.')
 
+def add_results_block(yaml_file,overwrite=True,extension='fix',insert_before='ignore',
+        set_to_current=True):
+    """Adds noise block to yaml file
+
+    Parameters
+    ==========
+    yaml_file: str, input file
+    overwrite: bool, optional
+        write yaml with same name (true), or add extenion (false)
+    extension: str, optional
+        extention added to output filename if overwrite=False
+    insert_before: str, optional
+        field before which to insert this block in the yaml
+    set_to_current: bool, optional
+        set noise-dir and excised-tim approrpiately for current results available
+    """
+    config = read_yaml(yaml_file)
+    out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
+
+    # current settings
+    if set_to_current:
+        noise_dir = f"/nanograv/share/15yr/timing/intermediate/noise-chains/"
+        excised_timfile = f"{config.get('source')}.{config.get('toa-type').lower()}_excise.tim"
+        excised_timpath = f"/nanograv/share/15yr/timing/intermediate/excised-tims/"
+        excised_tim = os.path.join(excised_timpath,excised_timfile)
+        if not os.path.exists(excised_tim):
+            log.warning(f"Excised tim file does not yet exist: {excised_timfile}")
+            #excised_tim = None # meh, add it anyway
+    else:
+        noise_dir = None
+        excised_tim = None
+
+    if not config.get('intermediate-results'):
+        # results block goes before ignore by default (insert_before)
+        insert_ind = list(config).index(insert_before) 
+        results_block = {'noise-dir':noise_dir,'excised-tim':excised_tim}
+        config.insert(insert_ind,'intermediate-results',results_block,'use results from previous runs')
+        log.info(f'Adding intermediate results block to {out_yaml}.')
+        write_yaml(config, out_yaml)
+    else:
+        log.info(f'{yaml_file} already contains noise block.')
+
 def curate_comments(yaml_file,overwrite=True,extension='fix'):
     """Standardizes info comments on specific yaml fields
 
@@ -301,8 +344,9 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
     valid_keys = ['source','par-directory','tim-directory','timing-model',
             'compare-model','toas','free-params','free-dmx','toa-type','fitter',
             'n-iterations','ephem','bipm','noise','results-dir','dmx','ignore-dmx',
-            'fratio','max-sw-delay','custom-dmx','ignore','mjd-start','mjd-end',
-            'snr-cut','bad-toa','bad-range','bad-file','changelog']
+            'fratio','max-sw-delay','custom-dmx','intermediate-results','noise-dir',
+            'excised-tim','ignore','mjd-start','mjd-end','snr-cut','bad-toa',
+            'bad-range','bad-file','changelog']
 
     if field not in valid_keys:
         log.warning(f'Provided field ({field}) not valid.')
@@ -424,6 +468,12 @@ def main():
         help="add outlier block to input yaml file(s)",
     )
     parser.add_argument(
+        "--addresults",
+        action="store_true",
+        default=False,
+        help="add results block to input yaml file(s)",
+    )
+    parser.add_argument(
         "--bkv",
         nargs=3,
         help="add block/key/value (3 items) to instantiate new yaml field",
@@ -449,7 +499,9 @@ def main():
     elif args.addoutlier:
         for ff in args.files:
             add_outlier_block(ff,overwrite=args.overwrite)
-    
+    elif args.addresults:
+        for ff in args.files:
+            add_results_block(ff,overwrite=args.overwrite)
     if args.bkv:
         block, key, value = args.bkv
         for ff in args.files:
