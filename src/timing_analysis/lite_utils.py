@@ -703,29 +703,43 @@ def make_detective_plots(plot_list, match_list):
     =======
     None; displays plots in notebook.
     """
-    for l in range(len(plot_list)):
-        ar = pypulse.Archive(plot_list[l][0],prepare=True)        
-        # dealing with bad-toa entries:     
-        if len(plot_list[l]) > 2: # toa entries
-            print('\nNOTE: subbands, subints of interest for the following plot:')
+    for l in range(len(plot_list)):                
+        if len(plot_list[l]) <= 2: # bad file entries
+            if plot_list[l][1] == 'YFp (time vs. phase)':
+                ar = pypulse.Archive(plot_list[l][0],prepare=True)
+                ar.fscrunch()
+                ar.imshow()
+            elif plot_list[l][1] == 'GTpd (frequency vs. phase)':
+                ar = pypulse.Archive(plot_list[l][0],prepare=True)
+                ar.tscrunch()
+                ar.imshow()
+            elif plot_list[l][1] == 'Profile (intensity vs. phase)':
+                ar = pypulse.Archive(plot_list[l][0],prepare=True)
+                ar.fscrunch()
+                ar.tscrunch()
+                ar.plot()               
+        elif len(plot_list[l]) > 2: # toa entries
             for m in range(len(match_list)):                
                 if plot_list[l][0].rpartition('.')[0] in match_list[m][0]:
-                    print('[%i, %i]'%(match_list[m][1],match_list[m][2]))
+                    log.info(f'[Subband, subint] from bad-toa entry: [{match_list[m][1]},{match_list[m][2]}]')                    
                     if plot_list[l][1] == 'Profile (intensity vs. phase)':
-                        print('\nPlotting profile for this subint/subband combination')
-                        ar.plot(chan=match_list[m][1], subint=match_list[m][2], pol=0)
-        if plot_list[l][1] == 'YFp (time vs. phase)':
-            ar.fscrunch()
-            ar.imshow()
-        elif plot_list[l][1] == 'GTpd (frequency vs. phase)':
-            ar.tscrunch()
-            ar.imshow()
-        elif plot_list[l][1] == 'Profile (intensity vs. phase)':
-            print('\nNOTE: Plotting integrated intensity (not single-channel or single-subint)')
-            ar.fscrunch()
-            ar.tscrunch()
-            ar.plot()
-
+                        #ar.plot(chan=match_list[m][1], subint=match_list[m][2], pol=0)
+                        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,7))
+                        ar = pypulse.Archive(plot_list[l][0], prepare=True)
+                        ar.plot(subint=match_list[m][2], pol=0, chan=match_list[m][1], ax=ax1, show=False)
+                        ar.fscrunch()
+                        ar.plot(subint=0, pol=0, chan=0, ax=ax2, show=False)
+                        plt.show()
+                    elif plot_list[l][1] == 'GTpd (frequency vs. phase)':
+                        ar = pypulse.Archive(plot_list[l][0],prepare=True)
+                        ar.tscrunch()
+                        ar.imshow()
+                    elif plot_list[l][1] == 'YFp (time vs. phase)':
+                        ar = pypulse.Archive(plot_list[l][0],prepare=True)
+                        ar.fscrunch()
+                        ar.imshow()
+        
+        
 def display_cal_dropdowns(file_matches, toa_matches):
     """ Display dropdowns for all cal files that are associated with either bad_file or bad_toa entries
     
