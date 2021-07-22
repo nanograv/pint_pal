@@ -279,7 +279,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6,nproc=1):
 
     filenames = sorted(set(toas.get_flag_value('name')[0]))
     outdir = f'outlier/{tc_object.get_outfile_basename()}'
-    outfile = '/'.join([outdir,'epochdrop.txt'])
+    outfile = os.path.join(outdir,'epochdrop.txt')
 
     # Check for existence of path and make directories if they don't exist
     if not os.path.exists(outdir):
