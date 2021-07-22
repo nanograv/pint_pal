@@ -244,8 +244,8 @@ def test_one_epoch(model, toas, tc_object, filename):
         newmodel.components['DispersionDMX'].remove_param(f'DMXR2_{dmxindex}')
         newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
     #f = tc_object.construct_fitter(toas,newmodel)
-    if using_wideband: f = WidebandTOAFitter(toas,model)
-    else: f = GLSFitter(toas,model)
+    if using_wideband: f = WidebandTOAFitter(toas,newmodel)
+    else: f = GLSFitter(toas,newmodel)
     xxx = f.fit_toas() #maxiter=tc_object.get_niter())
     ndof, chi2 = f.resids.dof, f.resids.chi2
     ntoas = toas.ntoas
