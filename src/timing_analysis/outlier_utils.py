@@ -246,7 +246,7 @@ def test_one_epoch(model, toas, tc_object, filename):
     #f = tc_object.construct_fitter(toas,newmodel)
     if using_wideband: f = WidebandTOAFitter(toas,model)
     else: f = GLSFitter(toas,model)
-    xxx = f.fit_toas(maxiter=tc_object.get_niter())  # get chi2 from residuals
+    xxx = f.fit_toas() #maxiter=tc_object.get_niter())
     ndof, chi2 = f.resids.dof, f.resids.chi2
     ntoas = toas.ntoas
     esum = 1.0 / np.sqrt(esum)
@@ -271,7 +271,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6,nproc=1):
     #f_init = tc_object.construct_fitter(toas,model)
     if using_wideband: f_init = WidebandTOAFitter(toas,model)
     else: f_init = GLSFitter(toas,model)
-    xxx = f_init.fit_toas(maxiter=tc_object.get_niter())  # get chi2 from residuals
+    xxx = f_init.fit_toas()  # maxiter=tc_object.get_niter())
 
     ndof_init, chi2_init = f_init.resids.dof, f_init.resids.chi2
     ntoas_init = toas.ntoas  # How does this change for wb?
