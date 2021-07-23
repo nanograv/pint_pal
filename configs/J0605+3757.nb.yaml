@@ -15,8 +15,6 @@ n-iterations: 20
 ephem: DE440
 bipm: BIPM2019
 
-noise: # control noise runs, apply results
-  results-dir: /nanograv/share/15yr/timing/intermediate/noise-chains/
 dmx:  # control dmx windowing/fixing
   ignore-dmx: false
   fratio: 1.1
