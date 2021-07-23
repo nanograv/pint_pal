@@ -204,12 +204,23 @@ class TimingConfiguration:
 
     def manual_cuts(self,toas,warn=False):
         """ Apply manual cuts after everything else and warn if redundant """
-        if self.get_toa_type().lower() == 'nb':
-            toas = self.apply_ignore(toas,specify_keys=['bad-toa'],warn=warn)
-            apply_cut_select(toas,reason='manual cuts, specified keys')
+        toas = self.apply_ignore(toas,specify_keys=['bad-toa'],warn=warn)
+        apply_cut_select(toas,reason='manual cuts, specified keys')
 
         toas = self.apply_ignore(toas,specify_keys=['bad-file'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
+
+    def count_bad_files(self):
+        """ Return number of bad file entries """
+        if "bad-file" in self.config['ignore'].keys():
+            return len(self.config['ignore']['bad-file'])
+        return None
+
+    def count_bad_toas(self):
+        """ Return number of bad toa entries """
+        if "bad-toa" in self.config['ignore'].keys():
+            return len(self.config['ignore']['bad-toa'])
+        return None
 
     def get_bipm(self):
         """ Return the bipm string """
