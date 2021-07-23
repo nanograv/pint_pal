@@ -6,9 +6,7 @@ from astropy import log
 from multiprocessing import Pool
 
 # Outlier/Epochalyptica imports
-#import pint.fitter
-#from pint.residuals import Residuals
-from pint.fitter import WidebandTOAFitter, GLSFitter
+from pint.fitter import ConvergenceFailure
 import copy
 from scipy.special import fdtr
 from timing_analysis.utils import apply_cut_flag, apply_cut_select
@@ -243,10 +241,11 @@ def test_one_epoch(model, toas, tc_object, filename):
         newmodel.components['DispersionDMX'].remove_param(f'DMXR1_{dmxindex}')
         newmodel.components['DispersionDMX'].remove_param(f'DMXR2_{dmxindex}')
         newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
-    #f = tc_object.construct_fitter(toas,newmodel)
-    if using_wideband: f = WidebandTOAFitter(toas,newmodel)
-    else: f = GLSFitter(toas,newmodel)
-    xxx = f.fit_toas() #maxiter=tc_object.get_niter())
+    f = tc_object.construct_fitter(toas,newmodel)
+    try:
+        f.fit_toas(maxiter=tc_object.get_niter())
+    except ConvergenceFailure:
+        log.info('Failed to converge; moving on with best result.')
     ndof, chi2 = f.resids.dof, f.resids.chi2
     ntoas = toas.ntoas
     esum = 1.0 / np.sqrt(esum)
@@ -268,11 +267,11 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6,nproc=1):
     nproc: number of parallel processes to use for tests
     """
     using_wideband = tc_object.get_toa_type() == 'WB'
-    #f_init = tc_object.construct_fitter(toas,model)
-    if using_wideband: f_init = WidebandTOAFitter(toas,model)
-    else: f_init = GLSFitter(toas,model)
-    xxx = f_init.fit_toas()  # maxiter=tc_object.get_niter())
-
+    f_init = tc_object.construct_fitter(toas,model)
+    try:
+        f_init.fit_toas(maxiter=tc_object.get_niter())
+    except ConvergenceFailure:
+        log.info('Failed to converge; moving on with best result.')
     ndof_init, chi2_init = f_init.resids.dof, f_init.resids.chi2
     ntoas_init = toas.ntoas  # How does this change for wb?
     redchi2_init = chi2_init / ndof_init
