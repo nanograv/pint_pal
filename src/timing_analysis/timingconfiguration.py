@@ -722,10 +722,31 @@ class TimingConfiguration:
 
     def badtoa_info(self,badtoa,toas):
         """ Return notable information for bad-toa entry """
-        toa = toas.orig_table[self.badtoa_index(badtoa,toas)]
-        # Might want a dictionary with useful values
-        print(f"bad-toa entry {badtoa}; snr: {toa['flags']['snr']}, flux: {toa['flags']['flux']}, etc.")
-        # Design warnings for things like snr just above threshold, flux far from median or large error, etc.
+        index = self.badtoa_index(badtoa,toas)
+        toa = toas.orig_table[index]
+        good_fluxes = np.array([t['flags']['flux'] for t in toas.table]) # note: good toas only here
+        med_flux = np.median(good_fluxes)
+        # Might want a dictionary with useful values?
+
+        # Some checks
+        extreme_flux = (toa['flags']['flux'] < np.percentile(good_fluxes,5.)) or (toa['flags']['flux'] > np.percentile(good_fluxes,95.))
+        close_to_snrcut = (toa['flags']['snr'] - self.get_snr_cut()) < 1.0
+
+        # Should handle flux by frequency somehow in the check above and add something like:
+        # Median flux value at XXX MHz is YYY based on ZZZ measurements (and possibly add percentiles)
+        flux_err = f"{toa['flags']['flux']} +/- {toa['flags']['fluxe']}"
+        print(f"Info for bad-toa entry {badtoa}...")
+        print(f"    index: {index}")
+        print(f"    error: {toa['error']} us")
+        print(f"    snr:   {toa['flags']['snr']}")
+        print(f"    flux:  {flux_err} mJy")
+
+        if extreme_flux:
+            log.warning(f"Flux value ({flux_err} mJy) is far from the median ({med_flux}).")
+        if close_to_snrcut:
+            log.warning(f"Signal-to-noise ({toa['flags']['snr']}) is close to snr-cut ({self.get_snr_cut()}).")
+        if toa['error'] > 50.0: # microseconds
+            log.warning(f"Very large TOA uncertainty ({toa['error']} us).")
 
 def freqs_overlap(toa1,toa2):
     """Returns true if TOAs from different backends overlap
