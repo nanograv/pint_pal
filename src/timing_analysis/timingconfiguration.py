@@ -706,6 +706,27 @@ class TimingConfiguration:
 
         return toas
 
+    def badtoa_index(self,badtoa,toas):
+        """ Return index associated with bad-toa entry """
+        name,chan,subint = badtoa[:3]
+        names = np.array([f['name'] for f in toas.orig_table['flags']])
+        subints = np.array([f['subint'] for f in toas.orig_table['flags']])
+        if self.get_toa_type() == 'NB':
+            chans = np.array([f['chan'] for f in toas.orig_table['flags']])
+            bt_match = np.where((names==name) & (chans==chan) & (subints==subint))[0]
+        else:
+            # don't match based on -chan flags, since WB TOAs don't have them
+            bt_match = np.where((names==name) & (subints==subint))[0]
+        if len(bt_match): return bt_match[0]
+        return None
+
+    def badtoa_info(self,badtoa,toas):
+        """ Return notable information for bad-toa entry """
+        toa = toas.orig_table[self.badtoa_index(badtoa,toas)]
+        # Might want a dictionary with useful values
+        print(f"bad-toa entry {badtoa}; snr: {toa['flags']['snr']}, flux: {toa['flags']['flux']}, etc.")
+        # Design warnings for things like snr just above threshold, flux far from median or large error, etc.
+
 def freqs_overlap(toa1,toa2):
     """Returns true if TOAs from different backends overlap
     
