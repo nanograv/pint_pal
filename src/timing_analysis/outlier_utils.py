@@ -6,8 +6,7 @@ from astropy import log
 from multiprocessing import Pool
 
 # Outlier/Epochalyptica imports
-import pint.fitter
-from pint.residuals import Residuals
+from pint.fitter import ConvergenceFailure
 import copy
 from scipy.special import fdtr
 from timing_analysis.utils import apply_cut_flag, apply_cut_select
@@ -196,7 +195,7 @@ def test_one_epoch(model, toas, tc_object, filename):
       ntoas - number of TOAs remaining after removal
       esum - weighted sum of removed TOA uncertainties
     """
-
+    using_wideband = tc_object.get_toa_type() == 'WB'
     log.info(f"Testing removal of {filename} ntoas={toas.ntoas}")
 
     maskarray = np.ones(toas.ntoas,dtype=bool)
@@ -243,7 +242,10 @@ def test_one_epoch(model, toas, tc_object, filename):
         newmodel.components['DispersionDMX'].remove_param(f'DMXR2_{dmxindex}')
         newmodel.components['DispersionDMX'].remove_param(f'DMX_{dmxindex}')
     f = tc_object.construct_fitter(toas,newmodel)
-    xxx = f.fit_toas(maxiter=tc_object.get_niter())  # get chi2 from residuals
+    try:
+        f.fit_toas(maxiter=tc_object.get_niter())
+    except ConvergenceFailure:
+        log.info('Failed to converge; moving on with best result.')
     ndof, chi2 = f.resids.dof, f.resids.chi2
     ntoas = toas.ntoas
     esum = 1.0 / np.sqrt(esum)
@@ -264,17 +266,19 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6,nproc=1):
         optional, threshold below which files will be dropped
     nproc: number of parallel processes to use for tests
     """
-    from pint.fitter import WidebandTOAFitter, GLSFitter
+    using_wideband = tc_object.get_toa_type() == 'WB'
     f_init = tc_object.construct_fitter(toas,model)
-    xxx = f_init.fit_toas(maxiter=tc_object.get_niter())  # get chi2 from residuals
-
+    try:
+        f_init.fit_toas(maxiter=tc_object.get_niter())
+    except ConvergenceFailure:
+        log.info('Failed to converge; moving on with best result.')
     ndof_init, chi2_init = f_init.resids.dof, f_init.resids.chi2
     ntoas_init = toas.ntoas  # How does this change for wb?
     redchi2_init = chi2_init / ndof_init
 
     filenames = sorted(set(toas.get_flag_value('name')[0]))
     outdir = f'outlier/{tc_object.get_outfile_basename()}'
-    outfile = '/'.join([outdir,'epochdrop.txt'])
+    outfile = os.path.join(outdir,'epochdrop.txt')
 
     # Check for existence of path and make directories if they don't exist
     if not os.path.exists(outdir):
