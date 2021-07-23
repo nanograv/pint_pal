@@ -501,8 +501,8 @@ class TimingConfiguration:
 
     def get_noise_dir(self):
         """ Return base directory for noise results """
-        if 'results-dir' in self.config['noise'].keys():
-            return self.config['noise']['results-dir']
+        if 'noise-dir' in self.config['intermediate-results'].keys():
+            return self.config['intermediate-results']['noise-dir']
         return None
 
     def get_ignore_dmx(self):
