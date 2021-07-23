@@ -714,8 +714,8 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
         adjust_old_dmx = False
 
     # Set up DMX model
-    if 'gbt' in toas.observatories: bin_width = 6.5  # day
-    else: bin_width = 0.5  # day
+    if toas.observatories == set(['arecibo']): bin_width = 0.5  # day
+    else: bin_width = 6.5  #day
     # Calculate GASP-era ranges, if applicable
     dmx_ranges = get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0,
             pad=0.05, check=False)
