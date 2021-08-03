@@ -364,7 +364,7 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
         name = names[ibad]
         chan = chans[ibad]
         subint = subints[ibad]
-        if print_bad: print(f"    - ['{name}',{chan},{subint}]")
+        if print_bad: print(f"  - [{name}, {chan}, {subint}]")
     mask = ~c
     log.info(f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(c)} removed) based on large_residual() criteria.')
     return fo.toas[mask]
