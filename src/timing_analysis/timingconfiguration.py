@@ -707,7 +707,15 @@ class TimingConfiguration:
         return toas
 
     def badtoa_index(self,badtoa,toas):
-        """ Return index associated with bad-toa entry """
+        """ Return index associated with bad-toa entry
+        
+        Parameters
+        ==========
+        badtoa: list, e.g. [filename,chan,subint,(reason)]
+            Individual bad-toa entry; note that 'reason' is optional and not used;
+            also wideband TOAs have chan=None.
+        toas: `pint.TOAs object`
+        """
         name,chan,subint = badtoa[:3]
         names = np.array([f['name'] for f in toas.orig_table['flags']])
         subints = np.array([f['subint'] for f in toas.orig_table['flags']])
@@ -730,9 +738,8 @@ class TimingConfiguration:
         Parameters
         ==========
         badtoa: list, e.g. [filename,chan,subint,(reason)]
-            Individual bad-toa entry used to find TOA index and additional info. Note
-            that bad-toa reasons are optional and not used here; also wideband TOAs have 
-            chan=None. 
+            Individual bad-toa entry; note that 'reason' is optional and not used;
+            also wideband TOAs have chan=None.
         toas: `pint.TOAs object`
         """
         index = self.badtoa_index(badtoa,toas)
