@@ -721,7 +721,20 @@ class TimingConfiguration:
         return None
 
     def badtoa_info(self,badtoa,toas):
-        """ Return notable information for bad-toa entry """
+        """ Return notable information for bad-toa entry
+
+        For formatting purposes, it is recommended this function is used in conjunction
+        with others here, e.g. self.get_bad_toas(), though some guidance is provided
+        below in case badtoa is entered manually.
+
+        Parameters
+        ==========
+        badtoa: list, e.g. [filename,chan,subint,(reason)]
+            Individual bad-toa entry used to find TOA index and additional info. Note
+            that bad-toa reasons are optional and not used here; also wideband TOAs have 
+            chan=None. 
+        toas: `pint.TOAs object`
+        """
         index = self.badtoa_index(badtoa,toas)
         toa = toas.orig_table[index]
         good_fluxes = np.array([t['flags']['flux'] for t in toas.table]) # note: good toas only here
