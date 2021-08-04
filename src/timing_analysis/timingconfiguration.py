@@ -204,12 +204,23 @@ class TimingConfiguration:
 
     def manual_cuts(self,toas,warn=False):
         """ Apply manual cuts after everything else and warn if redundant """
-        if self.get_toa_type().lower() == 'nb':
-            toas = self.apply_ignore(toas,specify_keys=['bad-toa'],warn=warn)
-            apply_cut_select(toas,reason='manual cuts, specified keys')
+        toas = self.apply_ignore(toas,specify_keys=['bad-toa'],warn=warn)
+        apply_cut_select(toas,reason='manual cuts, specified keys')
 
         toas = self.apply_ignore(toas,specify_keys=['bad-file'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
+
+    def count_bad_files(self):
+        """ Return number of bad file entries """
+        if "bad-file" in self.config['ignore'].keys():
+            return len(self.config['ignore']['bad-file'])
+        return None
+
+    def count_bad_toas(self):
+        """ Return number of bad toa entries """
+        if "bad-toa" in self.config['ignore'].keys():
+            return len(self.config['ignore']['bad-toa'])
+        return None
 
     def get_bipm(self):
         """ Return the bipm string """
@@ -694,6 +705,68 @@ class TimingConfiguration:
             apply_cut_flag(toas,np.array(btinds),'badtoa',warn=warn)
 
         return toas
+
+    def badtoa_index(self,badtoa,toas):
+        """ Return index associated with bad-toa entry
+        
+        Parameters
+        ==========
+        badtoa: list, e.g. [filename,chan,subint,(reason)]
+            Individual bad-toa entry; note that 'reason' is optional and not used;
+            also wideband TOAs have chan=None.
+        toas: `pint.TOAs object`
+        """
+        name,chan,subint = badtoa[:3]
+        names = np.array([f['name'] for f in toas.orig_table['flags']])
+        subints = np.array([f['subint'] for f in toas.orig_table['flags']])
+        if self.get_toa_type() == 'NB':
+            chans = np.array([f['chan'] for f in toas.orig_table['flags']])
+            bt_match = np.where((names==name) & (chans==chan) & (subints==subint))[0]
+        else:
+            # don't match based on -chan flags, since WB TOAs don't have them
+            bt_match = np.where((names==name) & (subints==subint))[0]
+        if len(bt_match): return bt_match[0]
+        return None
+
+    def badtoa_info(self,badtoa,toas):
+        """ Return notable information for bad-toa entry
+
+        For formatting purposes, it is recommended this function is used in conjunction
+        with others here, e.g. self.get_bad_toas(), though some guidance is provided
+        below in case badtoa is entered manually.
+
+        Parameters
+        ==========
+        badtoa: list, e.g. [filename,chan,subint,(reason)]
+            Individual bad-toa entry; note that 'reason' is optional and not used;
+            also wideband TOAs have chan=None.
+        toas: `pint.TOAs object`
+        """
+        index = self.badtoa_index(badtoa,toas)
+        toa = toas.orig_table[index]
+        good_fluxes = np.array([t['flags']['flux'] for t in toas.table]) # note: good toas only here
+        med_flux = np.median(good_fluxes)
+        # Might want a dictionary with useful values?
+
+        # Some checks
+        extreme_flux = (toa['flags']['flux'] < np.percentile(good_fluxes,5.)) or (toa['flags']['flux'] > np.percentile(good_fluxes,95.))
+        close_to_snrcut = (toa['flags']['snr'] - self.get_snr_cut()) < 1.0
+
+        # Should handle flux by frequency somehow in the check above and add something like:
+        # Median flux value at XXX MHz is YYY based on ZZZ measurements (and possibly add percentiles)
+        flux_err = f"{toa['flags']['flux']} +/- {toa['flags']['fluxe']}"
+        print(f"Info for bad-toa entry {badtoa}...")
+        print(f"    index: {index}")
+        print(f"    error: {toa['error']} us")
+        print(f"    snr:   {toa['flags']['snr']}")
+        print(f"    flux:  {flux_err} mJy")
+
+        if extreme_flux:
+            log.warning(f"Flux value ({flux_err} mJy) is far from the median ({med_flux}).")
+        if close_to_snrcut:
+            log.warning(f"Signal-to-noise ({toa['flags']['snr']}) is close to snr-cut ({self.get_snr_cut()}).")
+        if toa['error'] > 50.0: # microseconds
+            log.warning(f"Very large TOA uncertainty ({toa['error']} us).")
 
 def freqs_overlap(toa1,toa2):
     """Returns true if TOAs from different backends overlap

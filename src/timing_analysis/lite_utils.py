@@ -870,3 +870,15 @@ def check_tobs(toas,required_tobs_yrs=2.0):
     timespan = (toas.last_MJD-toas.first_MJD).to_value('yr')
     if timespan < required_tobs_yrs:
         log.warning(f"Observation timespan ({timespan:.2f} yrs) does not meet requirements for inclusion")
+
+def get_cut_files(toas,cut_flag):
+    """ Returns set of files where cut flag is present
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    """
+    toa_cut_flags = np.array([t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table])
+    cut_inds = np.where(toa_cut_flags==cut_flag)[0]
+    filenames = np.array([t['flags']['name'] for t in toas.orig_table])
+    return set(filenames[cut_inds])
