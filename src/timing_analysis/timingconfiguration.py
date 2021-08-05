@@ -672,8 +672,8 @@ class TimingConfiguration:
         if 'bad-toa' in valid_valued:
             logwarntoa = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
-            subints = np.array([f['subint'] for f in toas.orig_table['flags']])
-            if self.get_toa_type() == 'NB': chans = np.array([f['chan'] for f in toas.orig_table['flags']])
+            subints = np.array([int(f['subint']) for f in toas.orig_table['flags']])
+            if self.get_toa_type() == 'NB': chans = np.array([int(f['chan']) for f in toas.orig_table['flags']])
             btinds = []
             for bt in self.get_bad_toas():
                 if len(bt) < 4: logwarntoa = True
@@ -687,7 +687,7 @@ class TimingConfiguration:
                 else: log.warning(f"Listed bad TOA not matched: [{name}, {chan}, {subint}]")
             btinds = np.array(btinds)
 
-            # Check for pre-existing cut flags:
+            # Check for pre-existing cut flags if there are bad toas matched:
             cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
             remaining = np.array([not cut for cut in cuts[btinds]])
             alreadycut = np.invert(remaining)
