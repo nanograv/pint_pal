@@ -40,3 +40,5 @@ core.*
 /*.tim
 *.pickle.gz
 /*.out
+
+outlier/*
