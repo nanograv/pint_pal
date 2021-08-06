@@ -1,11 +1,13 @@
 """ This is a set of utilities which check par files for completeness """
 
+import os, sys
 import re
 import copy
 from astropy import log
 import astropy.units as u
+sys.path.append("/home/jovyan/work/timing_analysis/src/")
 from timing_analysis.defaults import *
-from pint.modelutils import model_equatorial_to_ecliptic
+
 
 def check_if_fit(model, *param):
     """
@@ -28,6 +30,54 @@ def check_if_fit(model, *param):
             raise ValueError("%s parameter is not present in par file."%p)
         if getattr(model, p).frozen:
             raise ValueError("%s parameter is frozen."%p)
+        if not getattr(model, p).frozen:
+            print("Good: %s parameter is fit."%p)
+    return
+
+#def check_if_wrongly_included(model, *param):
+#    for p in param:
+
+                  
+def check_if_fit_WIP(model, *param):
+    """
+    Check if a parameter or set of parameters
+    exists and are fit
+
+    Parameters
+    ==========
+    model: PINT model object
+    param: parameter string(s)
+
+    Raises
+    ======
+    ValueError
+        If (any) parameter is frozen,
+        the parameter is not present
+    """
+    
+    FB_pars = {'FB1','FB2','FB3','FB4','FB5','FB6'}
+    
+    
+    for p in param:
+        print(p)
+        globals()
+        p = globals()["thing"]
+        print(p)
+        print(globals()[f"model.{thing}.value"])
+        #globals()[f"print(model.{thing}.value"]
+    
+    #print(model.param[0].value)
+    
+    for p in param:
+        if hasattr(model, p):
+            print(p.value)
+            #if (model.PB.value is not None)
+        if not hasattr(model, p):
+            raise ValueError("%s parameter is not present in par file."%p)
+        if getattr(model, p).frozen:
+            raise ValueError("%s parameter is frozen."%p)
+        else:
+            print("Good: %s parameter is fit."%p)
     return
 
 
@@ -47,6 +97,7 @@ def has_and_check_if_fit(model, *param):
     param: parameter string(s)
     """
     for p in param:
+        print(p)
         if hasattr(model, p):
             check_if_fit(model, p)
 
@@ -141,74 +192,271 @@ def check_binary(model):
         return
 
     name = getattr(model, 'binary_model_name')
+    
+    #######################
+    #### Start of ELL1 ####
+    #######################
 
     if name == "ELL1":
         # Check base models, including either PB or FB formulations
+        # This block of the script correctly determines formalismFB
         check_if_fit(model, "A1", "TASC", "EPS1", "EPS2")
-        if hasattr(model, "PB") and hasattr(model, "FB0"):
-            raise ValueError("Both PB and FB0 are defined")
-        elif hasattr(model, "PB"):
+        if (model.PB.value is not None) and (model.FB0.value is None):
             formalismFB = False
             check_if_fit(model, "PB")
-        elif hasattr(model, "FB0"):
+        elif (model.PB.value is None) and (model.FB0.value is not None):
             formalismFB = True
             check_if_fit(model, "FB0")
+        elif (model.PB.value is None) and (model.FB0.value is None):
+            raise ValueError("Neither PB nor FB0 are set to a value")
+        elif (model.PB.value is not None) and (model.FB0.value is not None):
+            raise ValueError("Both PB and FB0 are defined")
         else:
             raise ValueError("Either PB or FB0 are required in the ELL1 model.")
-
-        ### Need to include further checks here for higher-order FB terms,
-        ### and to make sure they are sequentially fit for
-
-
+        
+        # Check for higher-order FB terms, making sure they are fit for sequentially
+        if formalismFB:
+            # We know FB0 is fit because of the above, so just check FB1 and up
+            # Start with highest-order FB derivative. Should we start higher than FB5?
+            if hasattr(model, "FB6"):
+                print("model has FB6")
+                check_if_fit(model, "FB6", "FB5", "FB4", "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB5") and not hasattr(model, "FB6"):
+                print("model has FB5 but not FB6")
+                check_if_fit(model, "FB5", "FB4", "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB4") and not hasattr(model, "FB6") and not hasattr(model, "FB5"):
+                print("model has FB4 but not FB5 or FB6")
+                check_if_fit(model, "FB4", "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB3") and not hasattr(model, "FB6") and not hasattr(model, "FB5") and not hasattr(model, "FB4"):
+                print("model has FB3 but not FB4, FB5, or FB6")
+                check_if_fit(model, "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB2") and not hasattr(model, "FB6") and not hasattr(model, "FB5") and not hasattr(model, "FB4") and not hasattr(model, "FB3"):
+                print("model has FB2 but not FB3, FB4, FB5, or FB6")
+                check_if_fit(model, "FB2", "FB1")
+            elif hasattr(model, "FB1") and not hasattr(model, "FB6") and not hasattr(model, "FB5") and not hasattr(model, "FB4") and not hasattr(model, "FB3") and not hasattr("FB2"):
+                print("model has FB1 but not FB2, FB3, FB4, FB5, or FB6")
+                check_if_fit(model, "FB1")
+            else:
+                raise ValueError("The options given were not sufficient to describe the presence/absence of FB1 through FB6.")
+        
+        # We already know if PB is in the fit so don't check again
         if not formalismFB:
-            has_and_check_if_fit(model, "PBDOT")
-            if hasattr(model, "SINI") and hasattr(model, "M2"):
-                check_if_fit(model, "SINI", "M2")
-            elif hasattr(model, "SINI") or hasattr(model, "M2"):
-                raise ValueError("Both SINI and M2 are required when fitting for companion mass.")
-
-        has_and_check_if_fit(model, "XDOT")
-        if hasattr(model, "EPS1DOT") and hasattr(model, "EPS2DOT"):
-            check_if_fit(model, "EPS1DOT", "EPS2DOT")
-        elif hasattr(model, "EPS1DOT") or hasattr(model, "EPS2DOT"):
+            if model.PBDOT.value is not None:
+                check_if_fit(model, "PBDOT")
+            else:
+                print("PBDOT is not included in the model.")
+                
+        # Check for M2 and SINI
+        if (model.SINI.value is not None) and (model.M2.value is not None):
+            check_if_fit(model, "M2", "SINI")
+        elif (model.SINI.value is not None) and (model.M2.value is None):
+            raise ValueError("Both SINI and M2 are required when fitting for companion mass.")
+        elif (model.SINI.value is None) and (model.M2.value is not None):
+            raise ValueError("Both SINI and M2 are required when fitting for companion mass.")
+        elif (model.SINI.value is None) and (model.M2.value is None):
+            print("M2 and SINI are not included in the model.")
+        else:
+            raise ValueError("Please check: there is a problem with the inclusion and/or exclusion of M2 and/or SINI in the model.")
+               
+        # Check for A1DOT (XDOT)
+        if model.A1DOT.value is not None:
+            check_if_fit(model, "A1DOT")
+        else:
+            print("A1DOT is not included in the model.")
+            
+        # Check for eccentricity parameter derivatives
+        if (model.EPS1DOT.value is not None) and (model.EPS2DOT.value is not None):
+            check_if_fit(model, "EPS1DOT", "EPS1DOT")
+        elif (model.EPS1DOT.value is not None) and (model.EPS2DOT.value is None):
             raise ValueError("Both EPS1DOT and EPS2DOT are required when fitting for eccentricity derivatives.")
+        elif (model.EPS1DOT.value is None) and (model.EPS2DOT.value is not None):
+            raise ValueError("Both EPS1DOT and EPS2DOT are required when fitting for eccentricity derivatives.")
+        elif (model.EPS1DOT.value is None) and (model.EPS2DOT.value is None):
+            print("EPS1DOT and EPS2DOT are not included in the model.")
+        else:
+            #raise ValueError("There is an oddity with the inclusion/exclusion in the model of EPS1DOT and/or EPS2DOT.")
+            raise ValueError("Please check: there is a problem with the inclusion and/or exclusion of EPS1DOT and/or EPS2DOT in the model.")
+                
+        # Check if H3 or H4 are in the model
+        if model.H3.value is not None:
+            print("H3 is present in this parfile. Either remove H3 or change the binary model to ELL1H.")
+        if model.H4.value is not None:
+            print("H4 is present in this parfile. Either remove H4 or change the binary model to ELL1H.")
+    
 
-
+    ######################
+    ### Start of ELL1H ###
+    ######################
 
     elif name == "ELL1H":
-        check_if_fit(model, "A1", "PB", "TASC", "EPS1", "EPS2", "H3") #H3 is rquired for ELL1H?
-        has_and_check_if_fit(model, "PBDOT", "XDOT", "H4")
+        check_if_fit(model, "A1", "PB", "TASC", "EPS1", "EPS2", "H3")
 
-        if hasattr(model, "EPS1DOT") and hasattr(model, "EPS2DOT"):
-            check_if_fit(model, "EPS1DOT", "EPS2DOT")
-        elif hasattr(model, "EPS1DOT") or hasattr(model, "EPS2DOT"):
+        # Determine formalismFB
+        if (model.PB.value is not None) and (model.FB0.value is None):
+            formalismFB = False
+            check_if_fit(model, "PB")
+        elif (model.PB.value is None) and (model.FB0.value is not None):
+            formalismFB = True
+            check_if_fit(model, "FB0")
+        elif (model.PB.value is None) and (model.FB0.value is None):
+            raise ValueError("Neither PB nor FB0 are set to a value")
+        elif (model.PB.value is not None) and (model.FB0.value is not None):
+            raise ValueError("Both PB and FB0 are defined")
+        else:
+            raise ValueError("Either PB or FB0 are required in the ELL1H model.")
+        
+        # Check for higher-order FB terms, making sure they are fit for sequentially
+        if formalismFB:
+            # We know FB0 is fit because of the above, so just check FB1 and up
+            # Start with highest-order FB derivative. Should we start higher than FB5?
+            if hasattr(model, "FB6"):
+                print("model has FB6")
+                check_if_fit(model, "FB6", "FB5", "FB4", "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB5") and not hasattr(model, "FB6"):
+                print("model has FB5 but not FB6")
+                check_if_fit(model, "FB5", "FB4", "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB4") and not hasattr(model, "FB6") and not hasattr(model, "FB5"):
+                print("model has FB4 but not FB5 or FB6")
+                check_if_fit(model, "FB4", "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB3") and not hasattr(model, "FB6") and not hasattr(model, "FB5") and not hasattr(model, "FB4"):
+                print("model has FB3 but not FB4, FB5, or FB6")
+                check_if_fit(model, "FB3", "FB2", "FB1")
+            elif hasattr(model, "FB2") and not hasattr(model, "FB6") and not hasattr(model, "FB5") and not hasattr(model, "FB4") and not hasattr(model, "FB3"):
+                print("model has FB2 but not FB3, FB4, FB5, or FB6")
+                check_if_fit(model, "FB2", "FB1")
+            elif hasattr(model, "FB1") and not hasattr(model, "FB6") and not hasattr(model, "FB5") and not hasattr(model, "FB4") and not hasattr(model, "FB3") and not hasattr("FB2"):
+                print("model has FB1 but not FB2, FB3, FB4, FB5, or FB6")
+                check_if_fit(model, "FB1")
+            else:
+                raise ValueError("The options given were not sufficient to describe the presence/absence of FB1 through FB6.")
+            
+        if not formalismFB:
+            if model.PBDOT.value is not None:
+                check_if_fit(model, "PBDOT")
+            else:
+                print("PBDOT is not included in the model.")
+                
+        if (model.SINI.value is not None) and (model.M2.value is not None):
+            check_if_fit(model, "M2", "SINI")
+        elif (model.SINI.value is not None) and (model.M2.value is None):
+            raise ValueError("Both SINI and M2 are required when fitting for companion mass.")
+        elif (model.SINI.value is None) and (model.M2.value is not None):
+            raise ValueError("Both SINI and M2 are required when fitting for companion mass.")
+        elif (model.SINI.value is None) and (model.M2.value is None):
+            print("M2 and SINI are not included in the model.")
+        else:
+            raise ValueError("Please check: there is a problem with the inclusion and/or exclusion of M2 and/or SINI in the model.")
+                
+        if model.A1DOT.value is not None:
+            check_if_fit(model, "A1DOT")
+        else:
+            print("A1DOT is not included in the model.")
+            
+        if (model.EPS1DOT.value is not None) and (model.EPS2DOT.value is not None):
+            check_if_fit(model, "EPS1DOT", "EPS1DOT")
+        elif (model.EPS1DOT.value is not None) and (model.EPS2DOT.value is None):
             raise ValueError("Both EPS1DOT and EPS2DOT are required when fitting for eccentricity derivatives.")
+        elif (model.EPS1DOT.value is None) and (model.EPS2DOT.value is not None):
+            raise ValueError("Both EPS1DOT and EPS2DOT are required when fitting for eccentricity derivatives.")
+        elif (model.EPS1DOT.value is None) and (model.EPS2DOT.value is None):
+            print("EPS1DOT and EPS2DOT are not included in the model.")
+        else:
+            #raise ValueError("There is an oddity with the inclusion/exclusion in the model of EPS1DOT and/or EPS2DOT.")
+            raise ValueError("Please check: there is a problem with the inclusion and/or exclusion of EPS1DOT and/or EPS2DOT in the model.")
+
+        if (model.H4.value is not None):
+            check_if_fit(model, "H4")
+        else:
+            print("H4 is not included in the model")
 
 
+    ###################
+    ### Start of DD ###
+    ###################
 
     elif name == "DD":
         check_if_fit(model, "A1" "E", "T0", "PB", "OM")
-        has_and_check_if_fit(model, "PBDOT", "XDOT", "OMDOT", "EDOT")
-
-        if hasattr(model, "SINI") and hasattr(model, "M2"):
-            check_if_fit(model, "SINI", "M2")
-        elif hasattr(model, "SINI") or hasattr(model, "M2"):
+ 
+        if (model.SINI.value is not None) and (model.M2.value is not None):
+            check_if_fit(model, "M2", "SINI")
+        elif (model.SINI.value is not None) and (model.M2.value is None):
             raise ValueError("Both SINI and M2 are required when fitting for companion mass.")
-    elif name == "DDK":
-        check_if_fit(model, "A1", "E", "T0", "PB", "OM", "M2", "K96", "KOM", "KIN")
-        has_and_check_if_fit(model, "PBDOT", "XDOT", "OMDOT", "EDOT")
+        elif (model.SINI.value is None) and (model.M2.value is not None):
+            raise ValueError("Both SINI and M2 are required when fitting for companion mass.")
+        elif (model.SINI.value is None) and (model.M2.value is None):
+            print("M2 and SINI are not included in the model.")
+        else:
+            raise ValueError("Please check: there is a problem with the inclusion and/or exclusion of M2 and/or SINI in the model.")
+                
+        if model.A1DOT.value is not None:
+            check_if_fit(model, "A1DOT")
+        else:
+            print("A1DOT is not included in the model.")
 
-        if hasattr(model, "SINI") and hasattr(model, "M2"):
-            check_if_fit(model, "SINI", "M2")
-        #elif hasattr(model, "SINI") or hasattr(model, "M2"):
+        if model.PBDOT.value is not None:
+            check_if_fit(model, "PBDOT")
+        else:
+            print("PBDOT is not included in the model.")
+
+        if model.EDOT is not None:
+            check_if_fit(model, "EDOT")
+        else:
+            print("EDOT is not included in the model.")
+
+        if model.OMDOT is not None:
+            check_if_fit(model, "OMDOT")
+        else:
+            print("OMDOT is not included in the model.")
+
+        if model.GAMMA is not None:
+            check_if_fit(model,"GAMMA")
+        else:
+            print("GAMMA is not included in the model.")
+
+        # Include DTHETA check? #
+
+
+    ####################
+    ### Start of DDK ###
+    ####################
+
+    elif name == "DDK":
+        check_if_fit(model, "A1", "ECC", "T0", "PB", "OM", "M2", "K96", "KOM", "KIN")
+ 
+        if model.A1DOT.value is not None:
+            print("Please remove A1DOT from this DDK parfile.")
+
+        if model.OMDOT.value is not None:
+            print("Please remove OMDOT from this DDK parfile.")
+
+        if model.PBDOT.value is not None:
+            check_if_fit(model, "PBDOT")
+        else:
+            print("PBDOT is not included in the model.")
+
+        if model.EDOT is not None:
+            check_if_fit(model, "EDOT")
+        else:
+            print("EDOT is not included in the model.")
+
+        if model.GAMMA is not None:
+            check_if_fit(model,"GAMMA")
+        else:
+            print("GAMMA is not included in the model.")
+
+
+
+    """
     elif name == "T2":
 
-        ### Are there plans for PINT to support the T2 model?
+        ### Are there plans for PINT to support the T2 and/or DDK model?
 
         check_if_fit(model, "A1", "ECC", "T0", "PB", "OM", "M2", "KOM", "KIN")
         # maybe check if SINI = KIN?
     else:
         raise ValueError("Atypical binary model used")
+    """
+
 
 def check_jumps(model,receivers,toa_type=None):
     """Checks for correct type/number of JUMP/DMJUMPs in the par file
@@ -453,3 +701,5 @@ def check_toa_release(toas):
             log.info(f'All TOAs are from the latest release ({LATEST_TOA_RELEASE}).')
         else:
             log.warning(f'TOAs in use are from an old release {release_flags[0]}, not {LATEST_TOA_RELEASE}; update tim-directory in the .yaml accordingly.')
+
+
