@@ -755,18 +755,25 @@ class TimingConfiguration:
         # Should handle flux by frequency somehow in the check above and add something like:
         # Median flux value at XXX MHz is YYY based on ZZZ measurements (and possibly add percentiles)
         flux_err = f"{toa['flags']['flux']} +/- {toa['flags']['fluxe']}"
+        error_line = f"    error: {toa['error']} us"
+        snr_line = f"    snr:   {toa['flags']['snr']}"
+        flux_line = f"    flux:  {flux_err} mJy"
+
+        # Warnings added in a different color (bcolors.FAIL; see example below)
+        # https://stackoverflow.com/questions/287871/how-to-print-colored-text-to-the-terminal
+        if extreme_flux:
+            flux_line = f"{flux_line}  \033[91m ** far from median ({med_flux}) ** \033[0m"
+        if close_to_snrcut:
+            snr_line = f"{snr_line}  \033[91m ** close to snr-cut ({self.get_snr_cut()}) ** \033[0m"
+        if toa['error'] > 50.0: # microseconds
+            error_line = f"{error_line} \033[91m ** very large TOA uncertainty ** \033[0m"
+
         print(f"Info for bad-toa entry {badtoa}...")
         print(f"    index: {index}")
-        print(f"    error: {toa['error']} us")
-        print(f"    snr:   {toa['flags']['snr']}")
-        print(f"    flux:  {flux_err} mJy")
-
-        if extreme_flux:
-            log.warning(f"Flux value ({flux_err} mJy) is far from the median ({med_flux}).")
-        if close_to_snrcut:
-            log.warning(f"Signal-to-noise ({toa['flags']['snr']}) is close to snr-cut ({self.get_snr_cut()}).")
-        if toa['error'] > 50.0: # microseconds
-            log.warning(f"Very large TOA uncertainty ({toa['error']} us).")
+        print(error_line)
+        print(snr_line)
+        print(flux_line)
+        print()
 
 def freqs_overlap(toa1,toa2):
     """Returns true if TOAs from different backends overlap
