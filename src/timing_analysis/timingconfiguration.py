@@ -602,7 +602,7 @@ class TimingConfiguration:
             endinds = np.where(mjds > self.get_mjd_end())[0]
             apply_cut_flag(toas,endinds,'mjdend',warn=warn)
         if 'snr-cut' in valid_valued:
-            snrs = np.array([f['snr'] for f in toas.orig_table['flags']])
+            snrs = np.array([float(f['snr']) for f in toas.orig_table['flags']])
             snrinds = np.where(snrs < self.get_snr_cut())[0]
             apply_cut_flag(toas,snrinds,'snr',warn=warn)
             if self.get_snr_cut() > 8.0 and self.get_toa_type() == 'NB':
@@ -620,7 +620,7 @@ class TimingConfiguration:
             pouts =  np.zeros(len(toas.orig_table))
             for i,fs in enumerate(toas.orig_table['flags']):
                 if oflag in fs:
-                    pouts[i] = fs[oflag]
+                    pouts[i] = float(fs[oflag])
             poutinds = np.where(pouts > self.get_prob_outlier())[0]
             oprob_flag = f'outlier{int(self.get_prob_outlier()*100)}'
             apply_cut_flag(toas,poutinds,oprob_flag,warn=warn)
@@ -672,8 +672,8 @@ class TimingConfiguration:
         if 'bad-toa' in valid_valued:
             logwarntoa = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
-            subints = np.array([f['subint'] for f in toas.orig_table['flags']])
-            if self.get_toa_type() == 'NB': chans = np.array([f['chan'] for f in toas.orig_table['flags']])
+            subints = np.array([int(f['subint']) for f in toas.orig_table['flags']])
+            if self.get_toa_type() == 'NB': chans = np.array([int(f['chan']) for f in toas.orig_table['flags']])
             btinds = []
             for bt in self.get_bad_toas():
                 if len(bt) < 4: logwarntoa = True
@@ -687,7 +687,7 @@ class TimingConfiguration:
                 else: log.warning(f"Listed bad TOA not matched: [{name}, {chan}, {subint}]")
             btinds = np.array(btinds)
 
-            # Check for pre-existing cut flags:
+            # Check for pre-existing cut flags if there are bad toas matched:
             cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
             remaining = np.array([not cut for cut in cuts[btinds]])
             alreadycut = np.invert(remaining)
@@ -718,9 +718,9 @@ class TimingConfiguration:
         """
         name,chan,subint = badtoa[:3]
         names = np.array([f['name'] for f in toas.orig_table['flags']])
-        subints = np.array([f['subint'] for f in toas.orig_table['flags']])
+        subints = np.array([int(f['subint']) for f in toas.orig_table['flags']])
         if self.get_toa_type() == 'NB':
-            chans = np.array([f['chan'] for f in toas.orig_table['flags']])
+            chans = np.array([int(f['chan']) for f in toas.orig_table['flags']])
             bt_match = np.where((names==name) & (chans==chan) & (subints==subint))[0]
         else:
             # don't match based on -chan flags, since WB TOAs don't have them
@@ -744,13 +744,13 @@ class TimingConfiguration:
         """
         index = self.badtoa_index(badtoa,toas)
         toa = toas.orig_table[index]
-        good_fluxes = np.array([t['flags']['flux'] for t in toas.table]) # note: good toas only here
+        good_fluxes = np.array([float(t['flags']['flux']) for t in toas.table]) # note: good toas only here
         med_flux = np.median(good_fluxes)
         # Might want a dictionary with useful values?
 
         # Some checks
-        extreme_flux = (toa['flags']['flux'] < np.percentile(good_fluxes,5.)) or (toa['flags']['flux'] > np.percentile(good_fluxes,95.))
-        close_to_snrcut = (toa['flags']['snr'] - self.get_snr_cut()) < 1.0
+        extreme_flux = (float(toa['flags']['flux']) < np.percentile(good_fluxes,5.)) or (float(toa['flags']['flux']) > np.percentile(good_fluxes,95.))
+        close_to_snrcut = (float(toa['flags']['snr']) - self.get_snr_cut()) < 1.0
 
         # Should handle flux by frequency somehow in the check above and add something like:
         # Median flux value at XXX MHz is YYY based on ZZZ measurements (and possibly add percentiles)
