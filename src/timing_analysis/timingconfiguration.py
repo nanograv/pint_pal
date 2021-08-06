@@ -744,29 +744,49 @@ class TimingConfiguration:
         """
         index = self.badtoa_index(badtoa,toas)
         toa = toas.orig_table[index]
+        fe = toa['flags']['fe']
         good_fluxes = np.array([float(t['flags']['flux']) for t in toas.table]) # note: good toas only here
-        med_flux = np.median(good_fluxes)
+        fe_flags = np.array([t['flags']['fe'] for t in toas.table])
+        fe_match = np.where(fe_flags==fe)[0]
+        n_fe = len(fe_match)
+
+        fe_fluxes = good_fluxes[fe_match]
+        med_flux = np.median(fe_fluxes)
         # Might want a dictionary with useful values?
 
         # Some checks
-        extreme_flux = (float(toa['flags']['flux']) < np.percentile(good_fluxes,5.)) or (float(toa['flags']['flux']) > np.percentile(good_fluxes,95.))
+        flo = np.percentile(fe_fluxes,5.)
+        fhi = np.percentile(fe_fluxes,95.)
+        extreme_flux = (float(toa['flags']['flux']) < flo) or (float(toa['flags']['flux']) > fhi)
         close_to_snrcut = (float(toa['flags']['snr']) - self.get_snr_cut()) < 1.0
+        large_uncertainty = (toa['error'] > 50.0)  # microseconds
 
         # Should handle flux by frequency somehow in the check above and add something like:
         # Median flux value at XXX MHz is YYY based on ZZZ measurements (and possibly add percentiles)
         flux_err = f"{toa['flags']['flux']} +/- {toa['flags']['fluxe']}"
-        print(f"Info for bad-toa entry {badtoa}...")
-        print(f"    index: {index}")
-        print(f"    error: {toa['error']} us")
-        print(f"    snr:   {toa['flags']['snr']}")
-        print(f"    flux:  {flux_err} mJy")
+        index_line = f"    index: {index}"
+        fe_line =    f"       fe: {fe}"
+        error_line = f"    error: {toa['error']} us"
+        snr_line =   f"      snr: {toa['flags']['snr']}"
+        flux_line =  f"     flux: {flux_err} mJy (90% of {n_fe} {fe} TOAs in {flo:.2f}-{fhi:.2f} mJy range)"
 
+        # Warnings added in a different color (bcolors.FAIL; see example below)
+        # https://stackoverflow.com/questions/287871/how-to-print-colored-text-to-the-terminal
         if extreme_flux:
-            log.warning(f"Flux value ({flux_err} mJy) is far from the median ({med_flux}).")
+            flux_line = f"     flux: {flux_err} mJy"
+            flux_line = f"{flux_line}  \033[91m ** far from median ({med_flux}) ** \033[0m"
         if close_to_snrcut:
-            log.warning(f"Signal-to-noise ({toa['flags']['snr']}) is close to snr-cut ({self.get_snr_cut()}).")
-        if toa['error'] > 50.0: # microseconds
-            log.warning(f"Very large TOA uncertainty ({toa['error']} us).")
+            snr_line = f"{snr_line}  \033[91m ** close to snr-cut ({self.get_snr_cut()}) ** \033[0m"
+        if large_uncertainty: 
+            error_line = f"{error_line} \033[91m ** very large TOA uncertainty ** \033[0m"
+
+        print(f"Info for bad-toa entry {badtoa}...")
+        print(index_line)
+        print(fe_line)
+        print(error_line)
+        print(snr_line)
+        print(flux_line)
+        print()
 
 def freqs_overlap(toa1,toa2):
     """Returns true if TOAs from different backends overlap
