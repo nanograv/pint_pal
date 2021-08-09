@@ -41,4 +41,5 @@ core.*
 *.pickle.gz
 /*.out
 
-outlier/*
+outliers/*
+batch_scripts/*.*b.pbs*
