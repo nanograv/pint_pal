@@ -456,8 +456,9 @@ def get_dmx_freqs(toas, allow_wideband=True):
         fratios = np.array(fratios[0])
         bws = toas[iwb].get_flag_value('bw')  # bandwidth [MHz] / WB TOA
         bws = np.array(bws[0])
-        low_freqs = bws / (fratios - 1)
-        high_freqs = bws + low_freqs
+        print(fratios)
+        low_freqs = bws.astype('float32') / (fratios.astype('float32') - 1)
+        high_freqs = bws.astype('float32') + low_freqs
 
     for itoa in range(len(toas)):
         if itoa in iwb and allow_wideband:
