@@ -549,7 +549,7 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
         Cut flags and number of instances for input TOAs
     """
     import seaborn as sns
-    palette = sns.color_palette("pastel",9)
+    palette = sns.color_palette("pastel",10)
     color_dict = {'dmx':palette[0],
                   'snr':palette[1],
                   'good':palette[2],
@@ -559,6 +559,7 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
                   'orphaned':palette[6],
                   'maxout':palette[7],
                   'simul':palette[8],
+                  'poorfebe':palette[9]
                  }
     # gather info for title (may also be useful for other features in the future)
     tel = [t[5] for t in toas.table]
@@ -828,7 +829,7 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_goo
     uncut_ylim = ax.get_ylim() # ylim for plot with good TOAs only
 
     import seaborn as sns
-    valid_cuts = ['snr','simul','orphaned','maxout','outlier10','dmx','epochdrop','badfile','badtoa','badrange']
+    valid_cuts = ['snr','simul','orphaned','maxout','outlier10','dmx','epochdrop','badfile','badtoa','badrange','poorfebe']
     sns.color_palette()
     for c in cuts:
         if c in valid_cuts:
