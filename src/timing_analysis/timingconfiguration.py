@@ -129,7 +129,8 @@ class TimingConfiguration:
             if 'GASP' in self.backendset:
                 self.check_simultaneous(t,'GUPPI','GASP')
 
-            t = self.apply_ignore(t,specify_keys=['orphaned-rec','mjd-start','mjd-end','bad-range','snr-cut'])
+            t = self.apply_ignore(t,specify_keys=['orphaned-rec','mjd-start','mjd-end','bad-range',
+                'snr-cut','poor-febe'])
             apply_cut_select(t,reason='initial cuts, specified keys')
 
         check_toa_version(t)
@@ -165,9 +166,9 @@ class TimingConfiguration:
                 if (toaflags[i1]['fe']==toaflags[i2]['fe']) and int(toamjds[i1])==int(toamjds[i2]):
                     if not freqs_overlap(toas.orig_table[i1],toas.orig_table[i2]): continue
                     if 'simul' not in toaflags[i1].keys(): # label and keep
-                        toas.orig_table[i1]['flags']['simul'] = 1
+                        toas.orig_table[i1]['flags']['simul'] = '1'
                     if 'simul' not in toaflags[i2].keys(): # label and cut
-                        toas.orig_table[i2]['flags']['simul'] = 2
+                        toas.orig_table[i2]['flags']['simul'] = '2'
                         simul_cut_inds.append(i2)
     
         if simul_cut_inds:
@@ -301,6 +302,12 @@ class TimingConfiguration:
         if 'orphaned-rec' in self.config['ignore'].keys():
             return self.config['ignore']['orphaned-rec']
         return None 
+    
+    def get_poor_febes(self):
+        """Return poor frontend/backend combinations for removal"""
+        if 'poor-febe' in self.config['ignore'].keys():
+            return self.config['ignore']['poor-febe']
+        return None
 
     def get_snr_cut(self):
         """ Return value of the TOA S/N cut """
@@ -561,7 +568,7 @@ class TimingConfiguration:
     def apply_ignore(self,toas,specify_keys=None,warn=False):
         """ Basic checks and return TOA excision info. """
         OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-file',
-                        'orphaned-rec','prob-outlier']
+                        'orphaned-rec','prob-outlier','poor-febe']
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
 
@@ -609,6 +616,11 @@ class TimingConfiguration:
                 log.warning('snr-cut should be set to 8; try excising TOAs using other methods.')
             if self.get_snr_cut() > 25.0 and self.get_toa_type() == 'WB':
                 log.warning('snr-cut should be set to 25; try excising TOAs using other methods.')
+        if 'poor-febe' in valid_valued:
+            fs = np.array([f['f'] for f in toas.orig_table['flags']])
+            for febe in self.get_poor_febes():
+                febeinds = np.where(fs==febe)[0]
+                apply_cut_flag(toas,febeinds,'poorfebe',warn=warn)
         if 'prob-outlier' in valid_valued:
             omethod = self.get_outlier_method().lower()  # accepts Gibbs and HMC, e.g.
             SUPPORTED_METHODS = ['gibbs','hmc']
