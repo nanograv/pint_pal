@@ -108,7 +108,7 @@ def calculate_pout(model, toas, tc_object):
 
     # Apply pout flags, cuts
     for i,oi in enumerate(toas.table['index']):
-        toas.orig_table[oi]['flags'][f'pout_{method}'] = pout[i]
+        toas.orig_table[oi]['flags'][f'pout_{method}'] = str(pout[i])
 
     # Re-introduce cut TOAs for writing tim file that includes -cut/-pout flags
     toas.table = toas.orig_table
