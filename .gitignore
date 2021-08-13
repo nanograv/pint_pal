@@ -44,6 +44,6 @@ core.*
 outliers/*
 batch_scripts/*.*b.pbs*
 batch_scripts/*/*.*b.pbs*
-wb/*
-nb/*
+wb*
+nb*
 batch_scripts/202*
