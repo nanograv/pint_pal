@@ -604,6 +604,64 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
         plt.savefig(f"{mashtel}_{tc.get_outfile_basename()}_donut.png",bbox_inches='tight')
         plt.close()
     return cuts_dict
+
+def plot_cuts_by_backend(toas, backend, marker='.', marker_size=10, legend_loc=None):
+    """Plot TOAs in the frequency-time plane, colored by reason for excision (if any)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    backend: str
+        Backend for which to make the plot
+    marker: str, optional
+        Marker to use in scatterplot
+    marker_size: int, optional
+        Size of markers in scatterplot
+    legend_loc: str, optional
+        Location of legend in plot
+
+    Returns
+    =======
+    fig: `matplotlib.figure.Figure` object
+    ax: `matplotlib.axes._subplots.AxesSubplot` object
+        Figure and axes -- can be used to modify plot
+    """
+    import seaborn as sns
+    palette = sns.color_palette("pastel",10)
+    color_dict = {
+        'good':palette[2],
+        'dmx':palette[0],
+        'snr':palette[1],
+        'badrange':palette[3],
+        'outlier10':palette[4],
+        'epochdrop':palette[5],
+        'orphaned':palette[6],
+        'maxout':palette[7],
+        'simul':palette[8],
+        'poorfebe':palette[9]
+    }
+
+    def matches(t, backend, cut_type):
+        matches_be = t['flags']['be'] == backend
+        if cut_type == 'good':
+            matches_cut_type = 'cut' not in t['flags']
+        else:
+            matches_cut_type = 'cut' in t['flags'] and t['flags']['cut'] == cut_type
+        return matches_be and matches_cut_type
+    
+    fig, ax = plt.subplots(figsize=(9.6, 4.8))
+
+    for cut_type, color in color_dict.items():
+        pairs = np.array([(t['tdbld'], t['freq']) for t in toas.orig_table if matches(t, backend, cut_type)])
+        if pairs.size > 0:
+            mjd, freq = pairs.T
+            ax.scatter(mjd, freq, marker=marker, color=color, s=marker_size, label=cut_type)
+    ax.set_xlabel('MJD')
+    ax.set_ylabel('Frequency (MHz)')
+    ax.set_title(backend)
+    ax.legend(loc=legend_loc)
+    plt.tight_layout()
+    return fig, ax
         
 def display_excise_dropdowns(file_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):
     """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision. This should be run after tc.get_investigation_files(); doing so will display two lists of dropdowns (separated by bad_toa and bad_file). The user then chooses whatever combinations of files/plot types they'd like to display, and runs a cell below the dropdowns containing the read_excise_dropdowns function.
