@@ -33,6 +33,7 @@ ignore: # toa excision
   mjd-end: 59072.0
   snr-cut: 8
   bad-toa:
+  - ['guppi_57745_J0605+3757_0004.15y.x.ff',50,1]
   bad-range:
   bad-file:
   prob-outlier: 0.1
