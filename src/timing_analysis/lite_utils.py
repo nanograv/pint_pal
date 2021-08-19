@@ -657,7 +657,7 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pas
             matches_cut_type = 'cut' in t['flags'] and t['flags']['cut'] == cut_type
         return matches_be and matches_cut_type
     
-    fig, ax = plt.subplots(figsize=(9.6, 4.8))
+    fig, ax = plt.subplots(figsize=(9.6, 4.8), constrained_layout=True)
 
     for cut_type, color in color_dict.items():
         pairs = np.array([(t['tdbld'], t['freq']) for t in toas.orig_table if matches(t, backend, cut_type)])
@@ -667,8 +667,7 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pas
     ax.set_xlabel('MJD')
     ax.set_ylabel('Frequency (MHz)')
     ax.set_title(backend)
-    ax.legend()
-    plt.tight_layout()
+    ax.legend(loc='center left', bbox_to_anchor=(1.01, 0.5))
     if save:
         plt.savefig(f'{psr}-{backend}-excision.png', dpi=150)
     return fig, ax
