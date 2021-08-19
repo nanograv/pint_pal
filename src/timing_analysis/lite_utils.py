@@ -1,12 +1,19 @@
+import sys
 import numpy as np
 import astropy.units as u
 from astropy import log
+from astropy.io import fits
+import logging
 import matplotlib.pyplot as plt
+import time
+import warnings
 from datetime import datetime
 from datetime import date
 import yaml
 import os
 import timing_analysis.par_checker as pc
+from ipywidgets import widgets
+import pypulse
 
 # Read tim/par files
 import pint.toa as toa
@@ -41,7 +48,7 @@ def write_par(fitter,toatype='',addext='',outfile=None):
     with open(outfile, 'w') as fout:
         fout.write(fitter.model.as_parfile())
 
-def write_tim(fitter,toatype='',addext='',outfile=None):
+def write_tim(fitter,toatype='',addext='',outfile=None,commentflag=None):
     """Writes TOAs to a tim file in the working directory.
 
     Parameters
@@ -53,6 +60,10 @@ def write_tim(fitter,toatype='',addext='',outfile=None):
         if set, adds extension to date
     outfile: str, optional
         if set, overrides default naming convention
+    commentflag: str or None, optional
+        if a string, and that string is a TOA flag,
+        that TOA will be commented in the output file;
+        if None (or non-string), no TOAs will be commented.
     """
     if outfile is None:
         source = fitter.get_allparams()['PSR'].value
@@ -62,36 +73,53 @@ def write_tim(fitter,toatype='',addext='',outfile=None):
         else:
             outfile = f'{source}_PINT_{date_str}{addext}.tim'
 
-    fitter.toas.write_TOA_file(outfile, format='tempo2')
-    add_cut_tims(outfile)
+    
+    fitter.toas.write_TOA_file(outfile, format='tempo2',commentflag=commentflag)
 
-def add_cut_tims(timfile):
-    """Temporary cludge to add cut TOAs back into output tim file (with cut flags).
+def find_excise_file(outfile_basename,intermediate_results='/nanograv/share/15yr/timing/intermediate/'):
+    """Writes TOAs to a tim file in the working directory.
 
     Parameters
     ==========
-    timfile: str
-        tim file to extend with commented TOAs including -cut flags
+    outfile_basename: str
+        e.g. J1234+5678.nb, use tc.get_outfile_basename()
+    intermediate_results: str, optional
+        base directory where intermediate results are stored
     """
-    from glob import glob
-    import subprocess
+    outlier_dir = os.path.join(intermediate_results,'outlier',outfile_basename)
+    excise_file_only = f'{outfile_basename}_excise.tim'
+    excise_file = os.path.join(outlier_dir,excise_file_only)
+    noc_file = excise_file_only.replace('.tim','-noC.tim')
 
-    cut_tims = glob('*cut.tim')
-    commented_lines = []
-    for ct in cut_tims:
-        with open(ct,'r') as f: commented_lines.extend(f.readlines())
-    
-    commented_lines = [cl for cl in commented_lines if '-cut' in cl]  # remove unnecessary FORMAT lines
+    # Check for existence of excise file, return filename (else, None)
+    if os.path.exists(excise_file):
+        # Check for 'C ' instances
+        with open(excise_file,'r') as fi:
+            timlines = fi.readlines()
+            Ncut = 0
+            for i in range(len(timlines)):
+                if timlines[i].startswith('C '):
+                    timlines[i] = timlines[i].lstrip('C ')
+                    Ncut += 1
 
-    with open(timfile,'a+') as f:
-        for line in commented_lines:
-            f.write(f'C {line}')
+        # If any, remove them and write noc_file to read, else read the existing file
+        if Ncut:
+            log.info(f"Removing {Ncut} instances of 'C ', writing {noc_file}.")
+            with open(noc_file,'w') as fo:
+                fo.writelines(timlines)
+            excise_file = noc_file
+        else:
+            pass
 
-    for f in cut_tims:
-        subprocess.run(['rm',f])
+        return excise_file
+
+    else:
+        log.warning(f'Excise file does not exist: {excise_file}')
+        return None 
 
 def write_include_tim(source,tim_file_list):
     """Writes file listing tim files to load as one PINT toa object (using INCLUDE).
+       DEPRECATED...?
 
     Parameters
     ==========
@@ -138,6 +166,9 @@ def center_epochs(model,toas):
         model.POSEPOCH.quantity = midmjd
     else:
         model.change_posepoch(midmjd)
+
+    if hasattr(model, "TASC") or hasattr(model, "T0"):
+        model.change_binary_epoch(midmjd)
 
     return model
 
@@ -333,7 +364,7 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
         name = names[ibad]
         chan = chans[ibad]
         subint = subints[ibad]
-        if print_bad: print(f"    - ['{name}',{chan},{subint}]")
+        if print_bad: print(f"  - [{name}, {chan}, {subint}]")
     mask = ~c
     log.info(f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(c)} removed) based on large_residual() criteria.')
     return fo.toas[mask]
@@ -415,6 +446,7 @@ def new_changelog_entry(tag, note):
 
     Valid tags:
       - INIT: creation of the .yaml file
+      - READY_FOR: indicate state of completion for release version
       - ADD or REMOVE: adding or removing a parameter
       - BINARY: change in the binary model (e.g. ELL1 -> DD)
       - NOISE: changes in noise parameters, unusual values of note
@@ -422,7 +454,7 @@ def new_changelog_entry(tag, note):
       - NOTE: for anything else
       - TEST: for testing!
     """
-    VALID_TAGS = ['INIT','ADD','REMOVE','BINARY','NOISE','CURATE','NOTE','TEST']
+    VALID_TAGS = ['INIT','READY_FOR','ADD','REMOVE','BINARY','NOISE','CURATE','NOTE','TEST']
     vtstr = ', '.join(VALID_TAGS)
     if tag not in VALID_TAGS:
         log.error(f'{tag} is not a valid tag; valid tags are: {vtstr}.')
@@ -438,3 +470,506 @@ def new_changelog_entry(tag, note):
             now = datetime.now()
             date = now.strftime('%Y-%m-%d')
             print(f'  - \'{date} {username} {tag}: {note}\'')
+
+def log_notebook_to_file(source, toa_type, base_dir="."):
+    """Activate logging to an autogenerated file name.
+
+    This removes all but the first log handler, so it may behave surprisingly 
+    if run multiple times not from a notebook.
+    """
+
+    if len(log.handlers)>1:
+        # log.handlers[0] is the notebook output
+        for h in log.handlers[1:]:
+            log.removeHandler(h)
+        # Start a new log file every time you reload the yaml
+    log_file_name = os.path.join(
+            base_dir, 
+            f"{source}.{toa_type.lower()}.{time.strftime('%Y-%m-%d_%H:%M:%S')}.log")
+    fh = logging.FileHandler(log_file_name)
+    fh.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
+    log.addHandler(fh)
+    
+
+_showwarning_orig = None
+def _showwarning(*args, **kwargs):
+    warning = args[0]
+    message = str(args[0])
+    mod_path = args[2]
+    # Now that we have the module's path, we look through sys.modules to
+    # find the module object and thus the fully-package-specified module
+    # name.  The module.__file__ is the original source file name.
+    mod_name = None
+    mod_path, ext = os.path.splitext(mod_path)
+    for name, mod in list(sys.modules.items()):
+        try:
+            # Believe it or not this can fail in some cases:
+            # https://github.com/astropy/astropy/issues/2671
+            path = os.path.splitext(getattr(mod, '__file__', ''))[0]
+        except Exception:
+            continue
+        if path == mod_path:
+            mod_name = mod.__name__
+            break
+    if mod_name is not None:
+        log.warning(message, extra={'origin': mod_name})
+    else:
+        log.warning(message)
+
+def log_warnings():
+    """Route warnings through the Astropy log mechanism.
+
+    Astropy claims to do this but only for warnings that are subclasses of AstropyUserWarning.
+    See https://github.com/astropy/astropy/issues/11500 ; if resolved there this can be simpler.
+    """
+    global _showwarning_orig
+    if _showwarning_orig is None:
+        _showwarning_orig = warnings.showwarning
+        warnings.showwarning = _showwarning
+
+def get_cut_colors(palette='pastel'):
+    """Get dictionary mapping cut flags to colors
+    
+    Parameters
+    ==========
+    palette: str
+        Seaborn color palette name (default "pastel")
+    
+    Returns
+    =======
+    color_dict: dict
+        Dictionary mapping cut flags to colors in the specified palette
+    """
+    import seaborn as sns
+    palette = sns.color_palette(palette, 10)
+    color_dict = {
+        'good':palette[2],
+        'dmx':palette[0],
+        'snr':palette[1],
+        'badrange':palette[3],
+        'outlier10':palette[4],
+        'epochdrop':palette[5],
+        'orphaned':palette[6],
+        'maxout':palette[7],
+        'simul':palette[8],
+        'poorfebe':palette[9]
+    }
+    return color_dict
+
+def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=False):
+    """Basic summary of cut TOAs, associated reasons
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    tc: `timing_analysis.timingconfiguration.TimingConfiguration` object
+    print_summary: bool, optional
+        Print reasons for cuts and respective nTOA/percentages
+    donut: bool, optional
+        Make a donut chart showing reasons/percentages for cuts
+    legend: bool, optional
+        Include a legend rather than labeling slices
+    save: bool, optional
+        Save a png of the resulting plot.
+
+    Returns
+    =======
+    cuts_dict: dict
+        Cut flags and number of instances for input TOAs
+    """
+    color_dict = get_cut_colors()
+
+    # gather info for title (may also be useful for other features in the future)
+    tel = [t[5] for t in toas.table]
+    settel = set(tel)
+
+    fe = [str(t[6]['fe']) for t in toas.table]
+    setfe = set(fe)
+
+    mashtel = ''.join(settel)
+    flavor = f"{tc.get_outfile_basename()} ({mashtel}; {', '.join(setfe)})"
+
+    # kwarg that makes it possible to break this down by telescope/backend...?
+    toa_cut_flags = [t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table]
+    nTOA = len(toa_cut_flags)
+    cuts_present = set(toa_cut_flags)
+    cuts_dict = {}
+    for c in cuts_present: 
+        ncut = toa_cut_flags.count(c)
+        if c: cuts_dict[c] = ncut
+        else: cuts_dict['good'] = ncut
+        if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')    
+
+    nTOAcut = np.array(list(cuts_dict.values()))
+    sizes = nTOAcut/nTOA
+    labels = [f"{cdk} ({cuts_dict[cdk]})" for cdk in cuts_dict.keys()]
+    colors = [color_dict[cdk] for cdk in cuts_dict.keys()]
+
+    fig1, ax1 = plt.subplots()
+    ax1.axis('equal')
+    fig1.suptitle(flavor)
+    if legend:
+        ax1.pie(sizes, colors=colors, autopct='%1.1f%%', pctdistance=0.8, normalize=True)
+        ax1.legend(labels,bbox_to_anchor=(0., -0.2, 1., 0.2), loc='lower left',
+           ncol=3, mode="expand", borderaxespad=0.)
+    else:
+        ax1.pie(sizes, autopct='%1.1f%%', labels=labels, pctdistance=0.8, colors=colors, normalize=True)
+    if donut:
+        donut_hole=plt.Circle( (0,0), 0.6, color='white')
+        p=plt.gcf()
+        p.gca().add_artist(donut_hole)
+    if save:
+        plt.savefig(f"{mashtel}_{tc.get_outfile_basename()}_donut.png",bbox_inches='tight')
+        plt.close()
+    return cuts_dict
+
+def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pastel', save=False):
+    """Plot TOAs for a single backend in the frequency-time plane, colored by reason for excision (if any)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    backend: str
+        Backend for which to make the plot
+    marker: str, optional
+        Marker to use in scatterplot
+    marker_size: int, optional
+        Size of markers in scatterplot
+    palette: str, optional
+        Seaborn color palette name
+    save: bool, optional
+        Save a png of the plot
+
+    Returns
+    =======
+    fig: `matplotlib.figure.Figure` object
+    ax: `matplotlib.axes._subplots.AxesSubplot` object
+        Figure and axes -- can be used to modify plot
+    """
+    psr = toas.table[0]['flags']['tmplt'].split('.')[0]
+    color_dict = get_cut_colors(palette)
+
+    ntoas_total = sum(1 for t in toas.orig_table if t['flags']['be'] == backend)
+    ntoas_cut = sum(1 for t in toas.orig_table if t['flags']['be'] == backend and 'cut' in t['flags'])
+
+    def matches(t, backend, cut_type):
+        matches_be = t['flags']['be'] == backend
+        if cut_type == 'good':
+            matches_cut_type = 'cut' not in t['flags']
+        else:
+            matches_cut_type = 'cut' in t['flags'] and t['flags']['cut'] == cut_type
+        return matches_be and matches_cut_type
+    
+    fig, ax = plt.subplots(figsize=(9.6, 4.8), constrained_layout=True)
+
+    for cut_type, color in color_dict.items():
+        pairs = np.array([(t['tdbld'], t['freq']) for t in toas.orig_table if matches(t, backend, cut_type)])
+        if pairs.size > 0:
+            mjd, freq = pairs.T
+            ax.scatter(mjd, freq, marker=marker, color=color, s=marker_size, label=cut_type)
+    ax.set_xlabel('MJD')
+    ax.set_ylabel('Frequency (MHz)')
+    ax.set_title(f'{backend} ({ntoas_total} total TOAs, {ntoas_cut} cut)')
+    ax.legend(loc='center left', bbox_to_anchor=(1.01, 0.5))
+    if save:
+        plt.savefig(f'{psr}-{backend}-excision.png', dpi=150)
+    return fig, ax
+
+def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', save=False):
+    """Plot TOAs for each backend in the frequency-time plane, colored by reason for excision (if any)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    marker: str, optional
+        Marker to use in scatterplots
+    marker_size: int, optional
+        Size of markers in scatterplots
+    palette: str, optional
+        Seaborn color palette name
+    save: bool, optional
+        Save a png of each plot
+    """
+    backends = set(t['flags']['be'] for t in toas.orig_table)
+    for backend in backends:
+        plot_cuts_by_backend(toas, backend, marker, marker_size, palette, save)
+    plt.show()
+       
+def display_excise_dropdowns(file_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):
+    """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision. This should be run after tc.get_investigation_files(); doing so will display two lists of dropdowns (separated by bad_toa and bad_file). The user then chooses whatever combinations of files/plot types they'd like to display, and runs a cell below the dropdowns containing the read_excise_dropdowns function.
+    
+    Parameters
+    ==========
+    file_matches: a list of *.ff files matching bad files in YAML
+    toa_matches: lists with *.ff files matching bad toas in YAML, bad subband #, bad subint #
+    all_YFp (optional, default False): if True, defaults all plots to YFp
+    all_GTpd (optional, default False): if True, defaults all plots to GTpd
+    all_profile (optional, default False): if True, defaults all plots to profile vs. phase
+    
+    Returns (note: these are separate for now for clarity and freedom to use the subint/subband info in bad-toas)
+    =======
+    file_dropdowns: list of dropdown widgets containing short file names and file extension dropdowns for bad-files
+    pav_file_drop: list of dropdown widget objects indicating plot type to be chosen for bad-files
+    toa_dropdowns: list of dropdown widget objects containing short file names and extensions for bad-toas
+    pav_toa_drop: list of dropdown widget objects indicating plot type to be chosen for bad-toas
+    """
+    
+    ext_list = ['.ff','None','.calib','.zap']
+    if all_YFp:
+        pav_list = ['YFp (time vs. phase)','GTpd (frequency vs. phase)','Profile (intensity vs. phase)','None']
+    elif all_GTpd:
+        pav_list = ['GTpd (frequency vs. phase)','YFp (time vs. phase)','Profile (intensity vs. phase)','None']
+    elif all_profile:
+        pav_list = ['Profile (intensity vs. phase)','YFp (time vs. phase)','GTpd (frequency vs. phase)','None']
+    else:
+        pav_list = ['None','YFp (time vs. phase)','GTpd (frequency vs. phase)','Profile (intensity vs. phase)']    
+   
+    # Files: easy
+    short_file_names = [e.split('/')[-1].rpartition('.')[0] for e in file_matches]
+    file_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
+                                  options=ext_list, layout={'width': 'max-content'}) for s in short_file_names]    
+    pav_file_drop = [widgets.Dropdown(options=pav_list) for s in short_file_names]
+    file_output = widgets.HBox([widgets.VBox(children=file_dropdowns),widgets.VBox(children=pav_file_drop)])
+    if len(file_matches) != 0:
+        print('Bad-files in YAML:')
+        display(file_output)
+    
+    # TOAs: difficult, annoying, need to worry about uniqueness
+    short_toa_names = [t[0].split('/')[-1].rpartition('.')[0] for t in toa_matches]
+    toa_inds = np.unique(short_toa_names, return_index=True)[1] # because np.unique sorts it
+    short_toa_unique = [short_toa_names[index] for index in sorted(toa_inds)] # unique
+    toa_dropdowns = [widgets.Dropdown(description=s, style={'description_width': 'initial'},
+                                  options=ext_list, layout={'width': 'max-content'}) for s in short_toa_unique]
+    pav_toa_drop = [widgets.Dropdown(options=pav_list) for s in short_toa_unique] 
+    toa_output = widgets.HBox([widgets.VBox(children=toa_dropdowns),widgets.VBox(children=pav_toa_drop)])
+    if len(toa_matches) != 0:
+        print('Bad-toas in YAML:')
+        display(toa_output)
+    return file_dropdowns, pav_file_drop, toa_dropdowns, pav_toa_drop
+
+def read_excise_dropdowns(select_list, pav_list, matches):
+    """Reads selections for files/plots chosen via dropdown.
+    
+    Parameters
+    ==========
+    select_list: list of dropdown widget objects indicating which (if any) file extension was selected for a given matching file
+    pav_list: list of dropdown widget objects indicating what type of plot was chosen
+    matches: list of full paths to all matching files
+    
+    Returns
+    =======
+    plot_list: lists of full paths to files of interest and plot types chosen
+    """   
+    if len(matches) != 0 and isinstance(matches[0],list): # toa entries
+        toa_nm = []
+        toa_subband = []
+        toa_subint = []
+        for i in range(len(matches)):
+            toa_nm.append(matches[i][0])
+            toa_subband.append(matches[i][1])
+            toa_subint.append(matches[i][2])
+        toa_unique_ind = np.unique(toa_nm, return_index=True)[1]
+        toa_nm_unique = [toa_nm[index] for index in sorted(toa_unique_ind)]
+        toa_subband_unique = [toa_subband[index] for index in sorted(toa_unique_ind)]
+        toa_subint_unique = [toa_subint[index] for index in sorted(toa_unique_ind)]        
+    plot_list = []
+    for i in range(len(select_list)):
+        if (select_list[i].value != 'None') and (pav_list[i].value != 'None'):
+            if isinstance(matches[0], list): # toa entries
+                plot_list.append([toa_nm_unique[i].rpartition('/')[0] + '/' + select_list[i].description.split(' ')[0] + select_list[i].value, pav_list[i].value, toa_subband_unique[i], toa_subint_unique[i]])                
+            else: # bad-file entries
+                plot_list.append([matches[i].rpartition('/')[0] + '/' + select_list[i].description + 
+                                  select_list[i].value,pav_list[i].value])
+    return plot_list
+
+def make_detective_plots(plot_list, match_list):
+    """Makes pypulse plots for selected combinations of file/plot type (pav -YFp or -GTpd style).
+    
+    Parameters
+    ==========
+    plot_list: lists of full paths to files of interest and plot types chosen
+    match_list: list of full paths to all matching files
+    
+    Returns
+    =======
+    None; displays plots in notebook.
+    """
+    for l in range(len(plot_list)):                
+        if len(plot_list[l]) <= 2: # bad file entries
+            if plot_list[l][1] == 'YFp (time vs. phase)':
+                ar = pypulse.Archive(plot_list[l][0],prepare=True)
+                ar.fscrunch()
+                ar.imshow()
+            elif plot_list[l][1] == 'GTpd (frequency vs. phase)':
+                ar = pypulse.Archive(plot_list[l][0],prepare=True)
+                ar.tscrunch()
+                ar.imshow()
+            elif plot_list[l][1] == 'Profile (intensity vs. phase)':
+                ar = pypulse.Archive(plot_list[l][0],prepare=True)
+                ar.fscrunch()
+                ar.tscrunch()
+                ar.plot()               
+        elif len(plot_list[l]) > 2: # toa entries
+            for m in range(len(match_list)):                
+                if plot_list[l][0].rpartition('.')[0] in match_list[m][0]:
+                    log.info(f'[Subband, subint] from bad-toa entry: [{match_list[m][1]},{match_list[m][2]}]')                    
+                    if plot_list[l][1] == 'Profile (intensity vs. phase)':
+                        #ar.plot(chan=match_list[m][1], subint=match_list[m][2], pol=0)
+                        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,7))
+                        ar = pypulse.Archive(plot_list[l][0], prepare=True)
+                        ar.plot(subint=match_list[m][2], pol=0, chan=match_list[m][1], ax=ax1, show=False)
+                        ar.fscrunch()
+                        ar.plot(subint=0, pol=0, chan=0, ax=ax2, show=False)
+                        plt.show()
+                    elif plot_list[l][1] == 'GTpd (frequency vs. phase)':
+                        ar = pypulse.Archive(plot_list[l][0],prepare=True)
+                        ar.tscrunch()
+                        ar.imshow()
+                    elif plot_list[l][1] == 'YFp (time vs. phase)':
+                        ar = pypulse.Archive(plot_list[l][0],prepare=True)
+                        ar.fscrunch()
+                        ar.imshow()
+        
+        
+def display_cal_dropdowns(file_matches, toa_matches):
+    """ Display dropdowns for all cal files that are associated with either bad_file or bad_toa entries
+    
+    Parameters
+    ==========
+    file_matches: a list of *.ff files matching bad files in YAML
+    toa_matches: lists with *.ff files matching bad toas in YAML, bad subband #, bad subint #
+    """
+    toa_cal_list = [i[0] for i in toa_matches]
+    cal_matches = file_matches + toa_cal_list
+    cal_matches_inds = np.unique(cal_matches, return_index=True)[1] # because np.unique sorts it
+    cal_matches_unique = [cal_matches[index] for index in sorted(cal_matches_inds)] # unique
+    cal_stem = [c.rpartition('/')[0] for c in cal_matches_unique]
+    full_cal_files = []
+    for c,s in zip(cal_matches_unique,cal_stem):
+        hdu = fits.open(c)
+        data = hdu[1].data
+        hdu.close()
+        calfile = data['CAL_FILE']
+        full_cal_files.append(s + '/' + calfile[-1].split(' ')[-1])
+    cal_plot_types = ['None','Amplitude vs. freq.','Single-axis cal sol\'n vs. freq. (pacv)','On-pulse Stokes vs. freq. (pacv -csu)']
+    cal_dropdowns = [widgets.Dropdown(description=c.rpartition('/')[-1], style={'description_width': 'initial'}, options=cal_plot_types, layout={'width': 'max-content'}) for c in cal_matches_unique]
+    cal_output = widgets.HBox([widgets.VBox(children=cal_dropdowns)])
+    display(cal_output)
+    return cal_dropdowns, full_cal_files
+    
+def read_plot_cal_dropdowns(cal_select_list, full_cal_files):
+    """Reads selections for files/plots chosen via dropdown.
+    
+    Parameters
+    ==========
+    cal_select_list: list of dropdown widget objects indicating which (if any) cal was selected
+    full_cal_files: list of all full paths to cal files
+    
+    Returns
+    =======
+    None; displays plots in notebook
+    """   
+    for c,f in zip(cal_select_list,full_cal_files):
+        if c.value != 'None':
+            if os.path.isfile(f):
+                log.info(f'Making cal plot corresponding to {c.description}')
+                cal_archive = pypulse.Archive(f)
+                cal = cal_archive.getPulsarCalibrator()
+                if c.value == 'Amplitude vs. freq.':
+                    cal.plot("AB")
+                elif c.value == 'Single-axis cal sol\'n vs. freq. (pacv)':
+                    cal.pacv()
+                elif c.value == 'On-pulse Stokes vs. freq. (pacv -csu)':
+                    cal.pacv_csu()
+            else:
+                warn = f.rpartition('/')[-1]
+                log.warning(f'{warn}: This .cf file doesn\'t seem to exist!')
+            
+def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True):
+    """ Plot residuals vs. time, highlight specified cuts (default: badtoa/badfile) 
+    
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object 
+    model: `pint.model.TimingModel` object 
+    tc_object: `timing_analysis.timingconfiguration` object
+    cuts: list, optional
+        cuts to highlight in residuals plot (default: manual cuts)
+    ylim_good: bool, optional
+        set ylim to that of uncut TOAs (default: True)
+    """
+    toas.table = toas.orig_table
+    fo = tc_object.construct_fitter(toas,model)
+    using_wideband = tc_object.get_toa_type() == 'WB'
+
+    # get resids/errors/mjds
+    if using_wideband: time_resids = fo.resids_init.residual_objs['toa'].time_resids.to_value(u.us)
+    else: time_resids = fo.resids_init.time_resids.to_value(u.us)
+    errs = fo.toas.get_errors().to(u.us).value
+    mjds = fo.toas.get_mjds().value
+
+    figsize = (12,3)
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111)
+    
+    # find appropriate indices & plot remaining TOAs
+    toa_cut_flags = np.array([t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table])
+    uncut_inds = np.where(toa_cut_flags==None)[0]
+    ax.errorbar(mjds[uncut_inds],time_resids[uncut_inds],yerr=errs[uncut_inds],fmt='x',alpha=0.5,color='gray')
+    uncut_ylim = ax.get_ylim() # ylim for plot with good TOAs only
+
+    import seaborn as sns
+    valid_cuts = ['snr','simul','orphaned','maxout','outlier10','dmx','epochdrop','badfile','badtoa','badrange','poorfebe']
+    sns.color_palette()
+    for c in cuts:
+        if c in valid_cuts:
+            cut_inds = np.where(toa_cut_flags==c)[0]
+            plt.errorbar(mjds[cut_inds],time_resids[cut_inds],yerr=errs[cut_inds],fmt='x',label=c)
+        else:
+            log.warning(f"Unrecognized cut: {c}")
+
+    if ylim_good:
+        ax.set_ylim(uncut_ylim)
+
+    ax.grid(True)
+    ax.legend(loc='upper center', bbox_to_anchor= (0.5, 1.2), ncol=len(cuts))
+    plt.title(f'{model.PSR.value} highlighted cuts',y=1.2)
+    ax.set_xlabel('MJD')
+    ax.set_ylabel('Residual ($\mu$s)')
+    
+    # reset cuts for additional processing
+    from timing_analysis.utils import apply_cut_select
+    apply_cut_select(toas,reason='resumption after highlighting cuts')
+
+def check_toa_version(toas):
+    """ Throws a warning if TOA version does not match the version of PINT in use
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    """
+    if pint.__version__ != toas.pintversion:
+        log.warning(f"TOA pickle object created with an earlier version of PINT; this may cause problems.")
+
+def check_tobs(toas,required_tobs_yrs=2.0):
+    """ Throws a warning if observation timespan is insufficient
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    """
+    timespan = (toas.last_MJD-toas.first_MJD).to_value('yr')
+    if timespan < required_tobs_yrs:
+        log.warning(f"Observation timespan ({timespan:.2f} yrs) does not meet requirements for inclusion")
+
+def get_cut_files(toas,cut_flag):
+    """ Returns set of files where cut flag is present
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    """
+    toa_cut_flags = np.array([t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table])
+    cut_inds = np.where(toa_cut_flags==cut_flag)[0]
+    filenames = np.array([t['flags']['name'] for t in toas.orig_table])
+    return set(filenames[cut_inds])

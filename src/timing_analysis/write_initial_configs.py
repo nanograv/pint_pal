@@ -62,14 +62,14 @@ for psr in psrs:
                 dmjump_params = [p for p in model.params if p.startswith("DMJUMP")]  # these were fixed in the 12.5-year analysis
                 free_params += dmjump_params
             free_params_str = yaml.dump(free_params, default_flow_style=True).replace(" ", "").strip()
-        epochs = ["_".join(ff.split("_")[:3]) for ff in bad_files if ff.find(psr) > 0]
-        if epochs:
-            bad_epoch_str = yaml.dump({"bad-epoch": epochs})
+        files = ["_".join(ff.split("_")[:3]) for ff in bad_files if ff.find(psr) > 0]
+        if files:
+            bad_file_str = yaml.dump({"bad-file": files})
             # Fix the indentation
-            bad_epoch_str = bad_epoch_str.replace("- gu", "    - gu")
-            bad_epoch_str = bad_epoch_str.replace("- pu", "    - pu")
+            bad_file_str = bad_file_str.replace("- gu", "    - gu")
+            bad_file_str = bad_file_str.replace("- pu", "    - pu")
         else:
-            bad_epoch_str = 'bad-epoch: ~'
+            bad_file_str = 'bad-file: ~'
         # currently we are not using the following
         #dropfile = open(old_timing+"working/"+psr+"/"+psr+".epochdrop")
         #bad_toas = [line for line in dropfile.readlines() if not line.startswith("#")]
@@ -100,7 +100,7 @@ ignore:
   bad-range: ~
   # Following are designated by a basename string to take away all
   # TOAs with that basename (can have multiple)
-  {bad_epoch_str}
+  {bad_file_str}
 
 # End
 '''

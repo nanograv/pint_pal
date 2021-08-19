@@ -14,6 +14,15 @@ setup(
     long_description_content_type="text/markdown",
     package_dir = {'': 'src'},
     packages = find_packages('src'),
-    install_requires=['ruamel.yaml'],
+    install_requires=[
+        'ruamel.yaml', 
+        "pint_pulsar",
+        "enterprise-pulsar",
+        "enterprise-extensions",
+        "pytest",
+        "nbconvert",
+        "ipywidgets>=7.6.3",
+        "pypulse>=0.0.1"
+],
     python_requires='>=3.6'
 )
