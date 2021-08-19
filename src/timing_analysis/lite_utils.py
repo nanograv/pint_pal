@@ -527,7 +527,35 @@ def log_warnings():
         _showwarning_orig = warnings.showwarning
         warnings.showwarning = _showwarning
 
-def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
+def get_cut_colors(palette='pastel'):
+    """Get dictionary mapping cut flags to colors
+    
+    Parameters
+    ==========
+    palette: str
+        Seaborn color palette name (default "pastel")
+    
+    Returns
+    =======
+    color_dict: dict
+        Dictionary mapping cut flags to colors in the specified palette
+    """
+    import seaborn as sns
+    palette = sns.color_palette(palette, 10)
+    color_dict = {
+        'good':palette[2],
+        'dmx':palette[0],
+        'snr':palette[1],
+        'badrange':palette[3],
+        'outlier10':palette[4],
+        'epochdrop':palette[5],
+        'orphaned':palette[6],
+        'maxout':palette[7],
+        'simul':palette[8],
+        'poorfebe':palette[9]
+    }
+
+def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=False):
     """Basic summary of cut TOAs, associated reasons
 
     Parameters
@@ -548,19 +576,8 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
     cuts_dict: dict
         Cut flags and number of instances for input TOAs
     """
-    import seaborn as sns
-    palette = sns.color_palette("pastel",10)
-    color_dict = {'dmx':palette[0],
-                  'snr':palette[1],
-                  'good':palette[2],
-                  'badrange':palette[3],
-                  'outlier10':palette[4],
-                  'epochdrop':palette[5],
-                  'orphaned':palette[6],
-                  'maxout':palette[7],
-                  'simul':palette[8],
-                  'poorfebe':palette[9]
-                 }
+    color_dict = get_cut_colors()
+
     # gather info for title (may also be useful for other features in the future)
     tel = [t[5] for t in toas.table]
     settel = set(tel)
@@ -605,7 +622,7 @@ def cut_summary(toas,tc,print_summary=False,donut=True,legend=True,save=False):
         plt.close()
     return cuts_dict
 
-def plot_cuts_by_backend(toas, backend, marker='.', marker_size=10, legend_loc=None):
+def plot_cuts_by_backend(toas, backend, marker='.', marker_size=10, legend_loc=None, palette='pastel'):
     """Plot TOAs in the frequency-time plane, colored by reason for excision (if any)
 
     Parameters
@@ -626,20 +643,7 @@ def plot_cuts_by_backend(toas, backend, marker='.', marker_size=10, legend_loc=N
     ax: `matplotlib.axes._subplots.AxesSubplot` object
         Figure and axes -- can be used to modify plot
     """
-    import seaborn as sns
-    palette = sns.color_palette("pastel",10)
-    color_dict = {
-        'good':palette[2],
-        'dmx':palette[0],
-        'snr':palette[1],
-        'badrange':palette[3],
-        'outlier10':palette[4],
-        'epochdrop':palette[5],
-        'orphaned':palette[6],
-        'maxout':palette[7],
-        'simul':palette[8],
-        'poorfebe':palette[9]
-    }
+    color_dict = get_cut_colors(palette)
 
     def matches(t, backend, cut_type):
         matches_be = t['flags']['be'] == backend
