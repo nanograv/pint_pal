@@ -622,8 +622,8 @@ def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=Fal
         plt.close()
     return cuts_dict
 
-def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, legend_loc=None, palette='pastel'):
-    """Plot TOAs in the frequency-time plane, colored by reason for excision (if any)
+def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pastel', save=False):
+    """Plot TOAs for a single backend in the frequency-time plane, colored by reason for excision (if any)
 
     Parameters
     ==========
@@ -634,8 +634,10 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, legend_loc=N
         Marker to use in scatterplot
     marker_size: int, optional
         Size of markers in scatterplot
-    legend_loc: str, optional
-        Location of legend in plot
+    palette: str, optional
+        Seaborn color palette name
+    save: bool, optional
+        Save a png of the plot
 
     Returns
     =======
@@ -643,6 +645,7 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, legend_loc=N
     ax: `matplotlib.axes._subplots.AxesSubplot` object
         Figure and axes -- can be used to modify plot
     """
+    psr = toas.table[0]['flags']['tmplt'].split('.')[0]
     color_dict = get_cut_colors(palette)
 
     def matches(t, backend, cut_type):
@@ -663,10 +666,32 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, legend_loc=N
     ax.set_xlabel('MJD')
     ax.set_ylabel('Frequency (MHz)')
     ax.set_title(backend)
-    ax.legend(loc=legend_loc)
+    ax.legend()
     plt.tight_layout()
+    if save:
+        plt.savefig(f'{psr}-{backend}-excision.png', dpi=150)
     return fig, ax
-        
+
+def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', save=False):
+    """Plot TOAs for each backend in the frequency-time plane, colored by reason for excision (if any)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    marker: str, optional
+        Marker to use in scatterplots
+    marker_size: int, optional
+        Size of markers in scatterplots
+    palette: str, optional
+        Seaborn color palette name
+    save: bool, optional
+        Save a png of each plot
+    """
+    backends = set(t['flags']['be'] for t in toas.orig_table)
+    for backend in backends:
+        plot_cuts_by_backend(to, backend, marker, marker_size, palette, save)
+    plt.show()
+       
 def display_excise_dropdowns(file_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):
     """Displays dropdown boxes from which the files/plot types of interest can be chosen during manual excision. This should be run after tc.get_investigation_files(); doing so will display two lists of dropdowns (separated by bad_toa and bad_file). The user then chooses whatever combinations of files/plot types they'd like to display, and runs a cell below the dropdowns containing the read_excise_dropdowns function.
     
