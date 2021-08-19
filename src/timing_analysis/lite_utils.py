@@ -622,7 +622,7 @@ def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=Fal
         plt.close()
     return cuts_dict
 
-def plot_cuts_by_backend(toas, backend, marker='.', marker_size=10, legend_loc=None, palette='pastel'):
+def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, legend_loc=None, palette='pastel'):
     """Plot TOAs in the frequency-time plane, colored by reason for excision (if any)
 
     Parameters
