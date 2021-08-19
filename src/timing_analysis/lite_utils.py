@@ -554,6 +554,7 @@ def get_cut_colors(palette='pastel'):
         'simul':palette[8],
         'poorfebe':palette[9]
     }
+    return color_dict
 
 def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=False):
     """Basic summary of cut TOAs, associated reasons
