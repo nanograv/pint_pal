@@ -690,7 +690,7 @@ def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', s
     """
     backends = set(t['flags']['be'] for t in toas.orig_table)
     for backend in backends:
-        plot_cuts_by_backend(to, backend, marker, marker_size, palette, save)
+        plot_cuts_by_backend(toas, backend, marker, marker_size, palette, save)
     plt.show()
        
 def display_excise_dropdowns(file_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):
