@@ -835,7 +835,7 @@ def display_auto_ex(tc, mo, cutkeys=['epochdrop', 'outlier10'], plot_type='profi
             log.info(f'Cut flag for this TOA: {plot_list[p][0]}')
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,7))
             ar = pypulse.Archive(plot_list[p][2], prepare=True)
-            ar.plot(subint=plot_list[p][4], pol=0, chan=plot_list[p][3], ax=ax1, show=False)
+            ar.plot(subint=int(plot_list[p][4]), pol=0, chan=int(plot_list[p][3]), ax=ax1, show=False)
             ar.fscrunch()
             ar.plot(subint=0, pol=0, chan=0, ax=ax2, show=False)
             plt.show()
