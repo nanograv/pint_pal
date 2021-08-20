@@ -14,6 +14,7 @@ import os
 import timing_analysis.par_checker as pc
 from ipywidgets import widgets
 import pypulse
+import glob
 
 # Read tim/par files
 import pint.toa as toa
@@ -884,7 +885,63 @@ def read_plot_cal_dropdowns(cal_select_list, full_cal_files):
             else:
                 warn = f.rpartition('/')[-1]
                 log.warning(f'{warn}: This .cf file doesn\'t seem to exist!')
-            
+
+def display_auto_ex(tc, mo, cutkeys=['epochdrop', 'outlier10'], plot_type='profile'):
+    """Displays profiles, freq vs. phase, or time vs. phase for TOAs with cut flags.
+    
+    Parameters
+    ==========
+    tc: `timing_analysis.timingconfiguration.TimingConfiguration` object
+    mo: `pint.model.TimingModel` object
+    cutkeys: any valid -cut keys (default = ['epochdrop', 'outlier10'])
+    plot_type: str specifying plot type (profile [default], GTpd, or YFp)
+    
+    Returns
+    =======
+    None; displays plots in notebook
+    """   
+    # Want to start from the excise file to assure all cuts are found regardless of notebook settings
+    t = pint.toa.get_TOAs(tc.get_excised(), model=mo)
+    log.info(f'Displaying plots for the following cut flags: {cutkeys}')            
+    ff_list = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
+    cuts = t.get_flag_value('cut')
+    files = t.get_flag_value('name')
+    chans = t.get_flag_value('chan')
+    subints = t.get_flag_value('subint')
+    match_inds = []
+    for c in cutkeys:
+        match_inds.append(np.where(np.array(cuts[0]) == c)[0])
+    merge_matches = []
+    for i in range(len(match_inds)):
+        for ii in match_inds[i]:
+            merge_matches.append(ii)
+    plot_list = []
+    for i in merge_matches:
+        match = [m for m in ff_list if files[0][i] in m]
+        plot_list.append([cuts[0][i], files[0][i], match[0], chans[0][i], subints[0][i]])   
+    if plot_type == 'profile':
+        for p in plot_list:
+            log.info(f'Plotting profile for [chan, subint] = [{p[3]}, {p[4]}]')
+            log.info(f'Cut flag for this TOA: {p[0]}')
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,7))
+            ar = pypulse.Archive(p[2], prepare=True)
+            ar.plot(subint=int(p[4]), pol=0, chan=int(p[3]), ax=ax1, show=False)
+            ar.fscrunch()
+            ar.plot(subint=0, pol=0, chan=0, ax=ax2, show=False)
+            plt.show()
+    else:
+        set_matches = set([p[2] for p in plot_list])
+        for m in set_matches:
+            ar = pypulse.Archive(m,prepare=True)
+            if plot_type == 'GTpd':
+                ar.tscrunch()
+                ar.imshow()
+            elif plot_type == 'YFp':
+                ar.fscrunch()
+                ar.imshow()
+
+    return plot_list
+
 def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True):
     """ Plot residuals vs. time, highlight specified cuts (default: badtoa/badfile) 
     
