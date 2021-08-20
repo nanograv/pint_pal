@@ -829,24 +829,28 @@ def display_auto_ex(tc, mo, cutkeys=['epochdrop', 'outlier10'], plot_type='profi
     for i in merge_matches:
         match = [m for m in ff_list if files[0][i] in m]
         plot_list.append([cuts[0][i], files[0][i], match[0], chans[0][i], subints[0][i]])   
-    for p in range(len(plot_list)):                
-        if plot_type == 'profile':
-            log.info(f'Plotting profile for [chan, subint] = [{plot_list[p][3]}, {plot_list[p][4]}]')
-            log.info(f'Cut flag for this TOA: {plot_list[p][0]}')
+    if plot_type == 'profile':
+        for p in plot_list:
+            log.info(f'Plotting profile for [chan, subint] = [{p[3]}, {p[4]}]')
+            log.info(f'Cut flag for this TOA: {p[0]}')
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,7))
-            ar = pypulse.Archive(plot_list[p][2], prepare=True)
-            ar.plot(subint=int(plot_list[p][4]), pol=0, chan=int(plot_list[p][3]), ax=ax1, show=False)
+            ar = pypulse.Archive(p[2], prepare=True)
+            ar.plot(subint=int(p[4]), pol=0, chan=int(p[3]), ax=ax1, show=False)
             ar.fscrunch()
             ar.plot(subint=0, pol=0, chan=0, ax=ax2, show=False)
             plt.show()
-        elif plot_type == 'GTpd':
-            ar = pypulse.Archive(plot_list[p][2],prepare=True)
-            ar.tscrunch()
-            ar.imshow()
-        elif plot_type == 'YFp':
-            ar = pypulse.Archive(plot_list[p][2],prepare=True)
-            ar.fscrunch()
-            ar.imshow()
+    else:
+        set_matches = set([p[2] for p in plot_list])
+        for m in set_matches:
+            ar = pypulse.Archive(m,prepare=True)
+            if plot_type == 'GTpd':
+                ar.tscrunch()
+                ar.imshow()
+            elif plot_type == 'YFp':
+                ar.fscrunch()
+                ar.imshow()
+
+    return plot_list
 
 def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True):
     """ Plot residuals vs. time, highlight specified cuts (default: badtoa/badfile) 
