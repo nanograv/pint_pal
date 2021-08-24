@@ -196,7 +196,7 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
     fd_remove = []
     fd_remove_ft = []
     for fk in Ftest_dict.keys():
-        if 'FB' in fk:
+        if 'FB' in fk and Ftest_dict[fk] is not None:
             try:
                 fbmax = (int(max(Ftest_dict[fk].keys())[-1]))
             except IndexError:
@@ -208,46 +208,54 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
             for i in range(1,len(fblist)):
                 p = [fbp[j] for j in range(i,len(fbp))]
                 ffk = 'FB%s+'%i
-                if Ftest_dict[fk][ffk]['ft'] > alpha and Ftest_dict[fk][ffk]['ft']:
-                    remove_params.append(ffk)
+                if Ftest_dict[fk][ffk]['ft'] is not None:
+                    if Ftest_dict[fk][ffk]['ft'] > alpha and Ftest_dict[fk][ffk]['ft']:
+                        remove_params.append(ffk)
             # Adding FB parameters
             for i in range(len(fblist),fbmax+1):
                 p = ["FB%d" % (j) for j in range(len(fblist),i+1)]
                 ffk = 'FB%s'%i
-                if Ftest_dict[fk][ffk]['ft'] <= alpha and Ftest_dict[fk][ffk]['ft']:
-                    add_params.append(ffk)
+                if Ftest_dict[fk][ffk]['ft'] is not None:
+                    if Ftest_dict[fk][ffk]['ft'] <= alpha and Ftest_dict[fk][ffk]['ft']:
+                        add_params.append(ffk)
         # Check which parameters should be removed
         elif "Remove" in fk:
             for ffk in Ftest_dict[fk].keys():
                 if ffk == 'Binary':
                     for fffk in Ftest_dict[fk][ffk].keys():
-                        if Ftest_dict[fk][ffk][fffk]['ft'] > alpha and Ftest_dict[fk][ffk][fffk]['ft']:
-                            remove_params.append(fffk)
+                        if Ftest_dict[fk][ffk][fffk] is not None:
+                            if Ftest_dict[fk][ffk][fffk]['ft'] > alpha and Ftest_dict[fk][ffk][fffk]['ft']:
+                                remove_params.append(fffk)
                 elif ffk == 'FD':
                     for fffk in Ftest_dict[fk][ffk].keys():
-                        if Ftest_dict[fk][ffk][fffk]['ft'] > alpha and Ftest_dict[fk][ffk][fffk]['ft']:
-                            fd_remove.append(fffk)
-                            fd_remove_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
+                        if Ftest_dict[fk][ffk][fffk] is not None:
+                            if Ftest_dict[fk][ffk][fffk]['ft'] > alpha and Ftest_dict[fk][ffk][fffk]['ft']:
+                                fd_remove.append(fffk)
+                                fd_remove_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
                 else:
-                    if Ftest_dict[fk][ffk]['ft'] > alpha and Ftest_dict[fk][ffk]['ft']:
-                        # Policy is never to remove parallax
-                        if ffk != 'PX':
-                            remove_params.append(ffk)
+                    if Ftest_dict[fk][ffk]['ft'] is not None:
+                        if Ftest_dict[fk][ffk]['ft'] > alpha and Ftest_dict[fk][ffk]['ft']:
+                            # Policy is never to remove parallax
+                            if ffk != 'PX':
+                                remove_params.append(ffk)
         # Check which parameters should be added
         elif "Add" in fk:
             for ffk in Ftest_dict[fk].keys():
                 if ffk == 'Binary':
                     for fffk in Ftest_dict[fk][ffk].keys():
-                        if Ftest_dict[fk][ffk][fffk]['ft'] <= alpha and Ftest_dict[fk][ffk][fffk]['ft']:
-                            add_params.append(fffk)
+                        if Ftest_dict[fk][ffk][fffk] is not None:
+                            if Ftest_dict[fk][ffk][fffk]['ft'] <= alpha and Ftest_dict[fk][ffk][fffk]['ft']:
+                                add_params.append(fffk)
                 elif ffk == 'FD':
                     for fffk in Ftest_dict[fk][ffk].keys():
-                        if Ftest_dict[fk][ffk][fffk]['ft'] <= alpha and Ftest_dict[fk][ffk][fffk]['ft']:
-                            fd_add.append(fffk)
-                            fd_add_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
+                        if Ftest_dict[fk][ffk][fffk] is not None:
+                            if Ftest_dict[fk][ffk][fffk]['ft'] <= alpha and Ftest_dict[fk][ffk][fffk]['ft']:
+                                fd_add.append(fffk)
+                                fd_add_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
                 else:
-                    if Ftest_dict[fk][ffk]['ft'] <= alpha and Ftest_dict[fk][ffk]['ft']:
-                        add_params.append(ffk)
+                    if Ftest_dict[fk][ffk]['ft'] is not None:
+                        if Ftest_dict[fk][ffk]['ft'] <= alpha and Ftest_dict[fk][ffk]['ft']:
+                            add_params.append(ffk)
         # Policy is to never add additional spin derivatives in general
         elif fk == 'F':
             pass
