@@ -16,13 +16,14 @@ setup(
     packages = find_packages('src'),
     install_requires=[
         'ruamel.yaml', 
-        "pint_pulsar",
-        "enterprise-pulsar",
-        "enterprise-extensions",
+        "pint_pulsar>=0.8.2",
+        "enterprise-pulsar>=3.1.0",
+        "enterprise-extensions==v2.1.0",
         "pytest",
         "nbconvert",
         "ipywidgets>=7.6.3",
         "pypulse>=0.0.1"
+        "numpy"
 ],
     python_requires='>=3.6'
 )
