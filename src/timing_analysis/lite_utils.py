@@ -1030,3 +1030,24 @@ def get_cut_files(toas,cut_flag):
     cut_inds = np.where(toa_cut_flags==cut_flag)[0]
     filenames = np.array([t['flags']['name'] for t in toas.orig_table])
     return set(filenames[cut_inds])
+
+def check_convergence(fitter):
+    """Computes decrease in chi2 after fit and checks for convergence
+
+    Parameters
+    ==========
+    fitter: `pint.fitter` object
+    """
+    chi2_decrease = fitter.resids_init.chi2-fitter.resids.chi2
+    print(f"chi-squared decreased during fit by {chi2_decrease}")
+    if hasattr(fitter, "converged") and fitter.converged:
+        print("Fitter has converged")
+    else:
+        if abs(chi2_decrease)<0.01:
+            print("Fitter has probably converged")
+        elif chi2_decrease<0:
+            log.warning("Fitter has increased chi2!")
+        else:
+            log.warning("Fitter may not have converged")
+    if chi2_decrease > 0.01:
+        log.warning("Input par file is not fully fitted")
