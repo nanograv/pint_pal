@@ -5,7 +5,7 @@ A long-lived repository for NANOGrav Timing analysis work.
 Installing on the notebook server
 ---------------------------------
 
-1. Go to notebook.nanograv.org and sign in with your NANOGrav.org Google Account. Your username should follow the convention of FirstName.LastName@nanograv.org. If you have any issues, please submit a ticket at http://support.nanograv.org and a CyberI team member will address it quickly.
+1. Go to notebook.nanograv.org and sign in with your NANOGrav.org Google Account. Your username should follow the convention of first.last@nanograv.org. If you have any issues, please submit a ticket at http://support.nanograv.org and a CyberI team member will address it quickly.
 
 2. Once logged in, you can access the terminal by navigating to the 'New' drop-down and selecting 'Terminal'. (Note: you will be user "jovyan" but in your own separate userspace/container)
 
@@ -26,11 +26,7 @@ git config user.email "FirstName.LastName@nanograv.org"
 ```
 Note: You may have to reconfigure this if your container is brought down at any point. This should be remedied in the future.
 
-4. Get the latest copy of PINT; in a terminal:
-```
-pip install git+git://github.com/nanograv/pint --user --upgrade
-```
-Even if PINT is already installed, run this same command to update to the latest version.
+4. On the notebook server, required versions of pint, enterprise, and enterprise_extensions are already available. If you are not working on the notebook server, you will need to install these packages based on requirements in the timing_analysis `setup.py`.
 
 5. To install and make sure paths are set up properly, `cd` into `timing_analysis` and:
 ```
@@ -56,13 +52,13 @@ This package has a variety of tools to support timing for NANOGrav, but the basi
 > git checkout -b psr/J1234+5678/{your_initials}
 ```
 
-3. If no .yaml file exists in the configs directory for the pulsar (this really shouldn't be the case), copy `configs/template.nb.yaml` to `configs/J1234+5678.nb.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). For now you may want to select *narrowband* `.tim` files (indicated by `.nb.tim` rather than `.wb.tim`) and ensure `toa-type` is set correctly in the `.yaml` file. If you are timing a pulsar that's been around for a while, check to see if ASP/GASP `.tim` files are available for your source in the latest release directory and ensure they're listed in the `.yaml` file if so; these were recently added. For some pulsars, YUPPI (VLA) data are also available, so please check that those `.tim` files are included.
+3. If no .yaml file exists in the configs directory for the pulsar (this really shouldn't be the case), copy `configs/[template].nb.yaml` to `configs/J1234+5678.nb.yaml` and fill in the basic parameters, in particular `.par` file (will probably be in `results/`) and `.tim` file(s) (will probably be in the most recent release under `/nanograv/releases/15y/toagen/releases/`). You may select *narrowband*/*wideband* `.tim` files (indicated by `.nb.tim` or `.wb.tim`), but ensure `toa-type` is set accordingly in the `.yaml` file. If you are timing a pulsar that's been around for a while, check to see if ASP/GASP `.tim` files are available for your source in the latest release directory and ensure they're listed in the `.yaml` file if so. Same goes for VLA pulsars - if YUPPI data are available, those `.tim` files should be included.
 
 4. You may need to select which parameters to fit - at a minimum they should be ones that are in the `.par` file. For position, prefer `ELONG`/`ELAT` rather than `RAJ`/`DECJ` or `LAMBDA`/`BETA`; likewise the proper motion parameters `PMELONG`/`PMELAT`. More, NANOGrav policy is that all pulsars should be fit for at least `ELONG`, `ELAT`, `PMELONG`, `PMELAT`, `PX`, `F0`, `F1` in every pulsar.
 
 5. Copy the template notebook to the root directory (where you should probably work):
 ```
-> cp nb_templates/process_v0.9.ipynb J1234+5678.ipynb
+> cp nb_templates/process_v1.0.ipynb J1234+5678.ipynb
 ```
 Because the notebooks aren't version controlled, you can technically name them whatever you'd like. However, we strongly recommend using the psrname + wb/nb + ipynb formatting (you will likely want to keep nb/wb notebooks separate).
 
@@ -87,7 +83,7 @@ There are a lot of things that can go wrong at this point; that's why this isn't
 
 - Plots are thrown off by lots of points with huge error bars: consider adjusting `snr-cut` to remove the ones with the worst signal-to-noise.
 
-- Plots are thrown off by a few outliers with normal error bars: For a proper analysis we should definitely understand what's wrong with these. For now it may be okay to just excise them. It's not as easy as one might wish to figure out which ones they are yet, but there is the function `large_residuals()` which will print out some of the largest in a format suitable for excision.
+- Plots are thrown off by a few outliers with normal error bars: For a proper analysis we should definitely understand what's wrong with these. For early stages, it may be okay to just excise them, though there are now tools available for further investigation in `toa_excision.ipynb`. It's not as easy as one might wish to figure out which ones they are yet, but there is the function `large_residuals()` which will print out some of the largest in a format suitable for excision.
 
 - Post-fit model is bad: You may need to fit for more parameters, or switch timing models. 
 
@@ -135,27 +131,18 @@ An error message appears with the command you should have run instead; run that.
 
 8. Document your (significant) changes in the yaml! Each yaml file has a "changelog" section at the bottom. It's expecting entries in this format:  - ['YYYY-MM-DD user.name KEYWORD: (explain yourself here)']. There is a function in lite_utils called new_changelog_entry that can help you format these entries. The template nb also has a cell explaining change logging.   
 
-It's probably also worth checking the [high-level decisions](https://gitlab.nanograv.org/nano-time/timing_analysis/-/wikis/High-level-decisions-for-v0).
-
 Noise modeling
 ---------------
 
-Make sure to run the following commands _before_ attempting noise modeling (you might have to restart your kernel if it's already running):
-```
-> pip install git+https://github.com/nanograv/enterprise.git --upgrade --user
-> pip install git+https://github.com/nanograv/enterprise_extensions.git --upgrade --user
-```
-
-Noise modeling in the notebook is implemented through the use of the `run_noise_analysis` flag. This flag is set to __False__ by default. __Do not__ perform noise modeling until everything else for the pulsar is finalized, since noise modeling can take a long time to finish, especially for the A-rated and some of the B-rated pulsars. Your workflow should thus look like:
+Noise modeling in the notebook is implemented through the use of the `run_noise_analysis` flag. This flag is set to __False__ by default. __Do not__ perform noise modeling until everything else for the pulsar is finalized, since noise modeling can take a long time to finish. A sample workflow might look like:
 
 1. Generate a good timing solution for your pulsar _without_ noise modeling.
 2. Commit and push the TOAs and parfiles as described above.
 3. Re-run the notebook _with_ `run_noise_analysis = True`, i.e. _with_ noise modeling.
 4. Commit and push the new noise modeled parfile in the same way as above.
 
-These steps might not work for the new pulsars (C-type) which don't have noise parameters. In these cases, feel free to run the noise analysis since it is quicker than that for A- and B-type pulsars.
+Note that for v1.0 analysis, noise runs are being done exclusively on Thorny Flats, so if they need to be re-done, intermediate `.yaml`/`.par` files need to be checked in and new runs can be coordinated [here](https://gitlab.nanograv.org/nano-time/timing_analysis/-/wikis/15yr-Data-Release/Automatic-Runs-on-Thorny-Flats). To use existing results from Thorny Flats, set `use_existing_noise_dir = True` and keep `run_noise_analysis = False`.
 
-Congratulations, you have timed a pulsar for NANOGrav!
 
 Other development
 -----------------
