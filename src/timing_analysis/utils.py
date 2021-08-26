@@ -859,10 +859,10 @@ def pdf_writer(fitter,
         fsum.write("\n")
         fsum.write("Noise chains not available.\\\\\n")
     else:
-        if hasattr(model, "created_time"):
-            fsum.write(f"Par file created: {model.created_time}\n\n")
-        elif hasattr(model, "file_mtime"):
-            fsum.write(f"Par file modified/checked out of git: {model.file_mtime}\n\n")
+        if hasattr(fitter.model, "created_time"):
+            fsum.write(f"Par file created: {fitter.model.created_time}\n\n")
+        elif hasattr(fitter.model, "file_mtime"):
+            fsum.write(f"Par file modified/checked out of git: {fitter.model.file_mtime}\n\n")
         if hasattr(fitter_noise.model, "noise_mtime"):
             fsum.write(f"Noise chains created: {fitter_noise.model.noise_mtime}\n\n")
         any_bogus = False
