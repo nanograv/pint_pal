@@ -15,7 +15,7 @@ setup(
     package_dir = {'': 'src'},
     packages = find_packages('src'),
     install_requires=[
-        'ruamel.yaml', 
+        'ruamel.yaml',
         "pint_pulsar>=0.8.2",
         "enterprise-pulsar>=3.1.0",
         "enterprise-extensions==v2.1.0",
@@ -24,6 +24,7 @@ setup(
         "ipywidgets>=7.6.3",
         "pypulse>=0.0.1"
         "numpy"
+        "pytest-xdist[psutil]>=2.3.0"
 ],
     python_requires='>=3.6'
 )
