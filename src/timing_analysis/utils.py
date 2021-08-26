@@ -861,7 +861,7 @@ def pdf_writer(fitter,
     else:
         if hasattr(fitter.model, "created_time"):
             fsum.write(f"Par file created: {fitter.model.created_time}" + r"\\" + "\n")
-        elif hasattr(fitter.model, "file_mtime"):
+        if hasattr(fitter.model, "file_mtime"):
             fsum.write(f"Par file modified/checked out of git: {fitter.model.file_mtime}" + r"\\" + "\n")
         if hasattr(fitter_noise.model, "noise_mtime"):
             fsum.write(f"Noise chains created: {fitter_noise.model.noise_mtime}" + r"\\" + "\n")
