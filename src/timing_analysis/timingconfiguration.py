@@ -8,12 +8,14 @@ Very basic usage:
 """
 import io
 import os
+import re
 import pint.toa as toa
 import pint.models as model
 import pint.fitter
 import numpy as np
 import astropy.units as u
 from astropy import log
+from astropy.time import Time
 import yaml
 import glob
 from timing_analysis.utils import write_if_changed, apply_cut_flag, apply_cut_select
@@ -88,6 +90,12 @@ class TimingConfiguration:
         BIPM = self.get_bipm()
         EPHEM = self.get_ephem()
         m = model.get_model(par_path)
+        match = re.search(r"# +Created: +([^ ]+)", open(par_path).read())
+        if match:
+            m.created_time = match.group(1)
+            log.info(f"Par file created: {m.created_time}")
+        m.file_mtime = Time(os.path.getmtime(par_path), format="unix").isot
+
 
         if m.PSR.value != self.get_source():
             log.warning(f'{self.filename} source entry does not match par file value ({m.PSR.value}).')

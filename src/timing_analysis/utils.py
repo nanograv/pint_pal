@@ -813,9 +813,13 @@ def pdf_writer(fitter,
     large_value = False
     for p in sorted(model.params):
         pm = getattr(model, p)
+        if pm.value is None:
+            value = np.nan
+        else:
+            value = pm.value
         if p.startswith("EQUAD") or p.startswith("ECORR"):
             unc = np.median(fitter.toas.table["error"][pm.select_toa_mask(fitter.toas)])
-            ratio = pm.value/unc
+            ratio = value/unc
             r = f"{ratio:.2f}"
             ro = r
             if ratio>0.75: 
@@ -831,12 +835,13 @@ def pdf_writer(fitter,
                        f"{unc:.3f} $\\mu$s & {ro}" + "\\\\\n")
         if p.startswith("DMEQUAD"):
             unc = np.median(fitter.toas.get_dm_errors().to_value(pint.dmu)[pm.select_toa_mask(fitter.toas)])
-            ratio = pm.value/unc
+            ratio = value/unc
             r = f"{ratio:.2f}"
             if ratio>0.75:
                 large_ratio = True
                 r = alert(r)
-            fsum.write(verb(f"{p} {pm.key} {pm.key_value[0]}") + f" & {pm.value:.3g} dmu & "
+
+            fsum.write(verb(f"{p} {pm.key} {pm.key_value}") + f" & {value:.3g} dmu & "
                        f"{unc:.3g} dmu & {r}" + "\\\\\n")
     fsum.write(r"\end{tabular}\\" + "\n")
     if large_ratio:
@@ -854,6 +859,12 @@ def pdf_writer(fitter,
         fsum.write("\n")
         fsum.write("Noise chains not available.\\\\\n")
     else:
+        if hasattr(model, "created_time"):
+            fsum.write(f"Par file created: {model.created_time}\n\n")
+        elif hasattr(model, "file_mtime"):
+            fsum.write(f"Par file modified/checked out of git: {model.file_mtime}\n\n")
+        if hasattr(fitter_noise.model, "noise_mtime"):
+            fsum.write(f"Noise chains created: {fitter_noise.model.noise_mtime}\n\n")
         any_bogus = False
         fsum.write(r"\begin{tabular}{l c c c c}" + "\n")
         fsum.write(r"Parameter & par value & chain value & ratio & TOA median\\" + "\n")
