@@ -1,5 +1,6 @@
 import numpy as np, os
 from astropy import log
+from astropy.time import Time
 
 from enterprise.pulsar import Pulsar
 from enterprise_extensions import models, model_utils, sampler
@@ -349,7 +350,8 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     rn_bf: Savage-Dickey BF for RN for given pulsar
     """
 
-    chain = np.loadtxt(chaindir + 'chain_1.txt')
+    chainfile = chaindir + 'chain_1.txt'
+    chain = np.loadtxt(chainfile)
     burn = int(burn_frac * chain.shape[0])
     pars = np.loadtxt(chaindir + 'pars.txt', dtype = str)
 
@@ -486,6 +488,9 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     log.info(f'Using existing noise analysis results in {chaindir}')
     log.info('Adding new noise parameters to model.')
     wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner)
+    chainfile = chaindir + 'chain_1.txt'
+    mtime = Time(os.path.getmtime(chainfile), format="unix")
+    log.info(f"Noise chains loaded from {chainfile} created at {mtime.isot}")
 
     #Create the maskParameter for EFACS
     efac_params = []
@@ -610,5 +615,6 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     #Setup and validate the timing model to ensure things are correct
     model.setup()
     model.validate()
+    model.noise_mtime = mtime.isot
 
     return model
