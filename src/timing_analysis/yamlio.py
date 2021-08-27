@@ -357,6 +357,8 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
             config['ephem'] = value
         elif field == 'mjd-end' and isinstance(value,float):
             config['ignore']['mjd-end'] = value
+        elif field == 'timing-model' and isinstance(value,str):
+            config['timing-model'] = value
         else:
             log.error(f'Provided field ({field}) is valid, but not yet implemented in set_field(); doing nothing.')
 

@@ -1,7 +1,7 @@
 source: J0605+3757
 par-directory: results/
 tim-directory: /nanograv/timing/releases/15y/toagen/releases/2021.08.25-9d8d617/
-timing-model: J0605+3757_PINT_20210304.wb.par
+timing-model: J0605+3757_PINT_20210809.wb.par
 compare-model: archive/J0605+3757.14yrbw.par
 toas:
 - J0605+3757.Rcvr1_2.GUPPI.15y.x.wb.tim
