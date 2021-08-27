@@ -13,4 +13,4 @@ FREQUENCY_RATIO = 1.1       # set the high/low frequency ratio for DMX bins
 MAX_SOLARWIND_DELAY = 0.1   # set the maximum permited 'delay' from SW [us]
 
 # Desired TOA release tag
-LATEST_TOA_RELEASE = "2021.04.21-9eefb99"    # current set of TOAs available
+LATEST_TOA_RELEASE = "2021.08.25-9d8d617"    # current set of TOAs available
