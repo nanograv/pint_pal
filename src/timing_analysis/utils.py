@@ -16,7 +16,7 @@ import glob
 import pint
 import astropy
 # import enterprise_extensions as e_e # NOTE - enterprise_extensions has no attribute __version__
-from timing_analysis.ftester import get_fblist, param_check
+from timing_analysis.ftester import get_fblist, param_check, summarize_Ftest
 import scipy.stats
 import copy
 
@@ -935,7 +935,10 @@ def pdf_writer(fitter,
         for l in ftest_lines:
             fsum.write(l + '\n')
         fsum.write(r'\end{verbatim}' + '\n')
-    # FIXME: report suggestions based on F test results, if any
+        # Write a summary of the F-test results and suggestions
+        add_statement, remove_statement = summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA)
+        fsum.write(add_statement + "\n")
+        fsum.write(remove_statement + "\n")
 
     # Write if there are bad DMX ranges
 

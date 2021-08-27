@@ -196,7 +196,7 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
     fd_remove = []
     fd_remove_ft = []
     for fk in Ftest_dict.keys():
-        if 'FB' in fk and Ftest_dict[fk] is not None:
+        if 'FB' in fk:
             try:
                 fbmax = (int(max(Ftest_dict[fk].keys())[-1]))
             except IndexError:
@@ -260,14 +260,18 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
         elif fk == 'F':
             pass
 
-    # Now print which parameters to add/remove
+    # Now return which parameters to add/remove
     if fd_remove:
         remove_params.append(fd_remove[np.where(fd_remove_ft==min(fd_remove_ft))[0][0]])
+        remove_statement = "F-tests recommend removing the following parameters: " + " ".join(remove_params)
+    else:
+        remove_statement = "F-tests do not recommend removing any parameters."
     if fd_add:
         add_params.append(fd_add[np.where(fd_add_ft==min(fd_add_ft))[0][0]])
-
-    print("F-tests recommend adding the following parameters: " + " ".join(add_params))
-    print("F-tests recommend removing the following parameters: " + " ".join(remove_params))
+        add_statement = "F-tests recommend adding the following parameters: " + " ".join(add_params)
+    else:
+        add_statement = "F-tests do not recommend adding any parameters."
+    return add_statement, remove_statement
     
 def reset_params(params):
     """
@@ -408,7 +412,9 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
                 retdict['FB'] = FBdict
     
     # Print a summary of the F-tests results and suggestions
-    summarize_Ftest(retdict, fitter, alpha = ALPHA)
+    add_statement, remove_statement = summarize_Ftest(retdict, fitter, alpha = ALPHA)
+    print(add_statement)
+    print(remove_statement)
 
     return retdict
 
