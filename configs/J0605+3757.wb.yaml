@@ -24,7 +24,7 @@ dmx:  # control dmx windowing/fixing
 
 intermediate-results: # use results from previous runs
   noise-dir: /nanograv/share/15yr/timing/intermediate/20210818.Noise.wb.447001c5/
-  excised-tim: /nanograv/share/15yr/timing/intermediate/20210806.Outlier.wb.687f088d/J0605+3757.wb/J0605+3757.wb_excise.tim
+  excised-tim: /nanograv/share/15yr/timing/intermediate/20210828.Outlier.wb.5719caa/J0605+3757.wb/J0605+3757.wb_excise.tim
 ignore: # toa excision
   mjd-start:
   mjd-end: 59072.0
