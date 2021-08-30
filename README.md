@@ -2,6 +2,16 @@
 
 A long-lived repository for NANOGrav Timing analysis work.
 
+A Note Regarding the 15yr v1.0 Workflow
+---------------------------------
+For those volunteering to time pulsars for the v1.0 release, please see the [instructions found here](https://gitlab.nanograv.org/nano-time/timing_analysis/-/wikis/15yr-Data-Release/Running-notebooks).
+
+You can also find our Who/Which page for [full timings here]( https://gitlab.nanograv.org/nano-time/timing_analysis/-/wikis/15yr-Data-Release/15yr-(v1.0)-who_which ) and [outlier analysis]( https://gitlab.nanograv.org/nano-time/timing_analysis/-/wikis/15yr-Data-Release/15yr-(v1)-Outlier-Who-Which ).
+
+For information regarding the status of Thorny Flats runs or to submit a request for one, please [use this page](https://gitlab.nanograv.org/nano-time/timing_analysis/-/wikis/15yr-Data-Release/Automatic-Runs-on-Thorny-Flats).
+
+For questions regarding the file structure of our intermediate data products (like `excise.tim` files), see [this documentation](https://gitlab.nanograv.org/nano-time/timing_analysis/-/wikis/15yr-Data-Release/Sharing-Data-on-Notebook).
+
 Installing on the notebook server
 ---------------------------------
 
