@@ -683,7 +683,7 @@ def pdf_writer(fitter,
     if nnotjumped==1:
         fsum.write('One non-JUMPed receiver.  Good.\\\\')
     else:
-        fsum.write('Warning: %d non-JUMPed receivers.\\\\' % (nnotjumped,))
+        fsum.write(alert('Warning: %d non-JUMPed receivers.' % (nnotjumped,))+ '\\\\')
     fsum.write('\end{tabbing}\n')
     fsum.write('}\n\n')   # ends environment started above.
 
@@ -712,7 +712,7 @@ def pdf_writer(fitter,
             if skip:
                 continue
             any_dodgy = True
-            fsum.write(f"Parameter {verb(p)} is frozen at {pm.value}\\\\\n")
+            fsum.write(alert(f"Parameter {verb(p)} is frozen at {pm.value}")+"\\\\\n")
     if ignoring:
         w = ', '.join([verb(i) for i in ignoring])
         fsum.write(f"Ignoring {w}\\\\\n")
@@ -782,7 +782,7 @@ def pdf_writer(fitter,
             fsum.write('\\\\ New false positive probability is believable\n')
         else:
             log.warning(f"New reduced chi-squared of {rchi} has unlikely false positive probability of {fpp}") 
-            fsum.write('\\\\ Warning: New false positive probability not believable\n')
+            fsum.write('\\\\ Warning: '+alert('New false positive probability not believable') + '\n')
 
     # Check EFACs, EQUADs, ECORRs:
     fsum.write(r'\subsection*{Error parameters reasonable?}' + '\n')
