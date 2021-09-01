@@ -878,8 +878,8 @@ def pdf_writer(fitter,
                 try:
                     pm_noise = getattr(fitter_noise.model, p)
                 except AttributeError:
-                    pm_noise_value = r"\cdot"
-                    r = r"\cdot"
+                    pm_noise_value = r"$\cdot$"
+                    r = r"$\cdot$"
                 else:
                     pm_noise_value = f"{pm_noise.value:.3g} {pm_noise.units}"
                     ratio = pm.value/pm_noise.value
