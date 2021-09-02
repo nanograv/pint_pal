@@ -17,6 +17,7 @@ from pint.models.timing_model import Component
 import copy
 import astropy.units as u
 import numpy as np
+import re
 
 ALPHA = 0.0027
 
@@ -197,14 +198,11 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
     fd_remove_ft = []
     for fk in Ftest_dict.keys():
         if 'FB' in fk:
-            try:
-                fbmax = (int(max(Ftest_dict[fk].keys())[-1]))
-            except (IndexError, ValueError):
-                fbmax = (int(max(Ftest_dict[fk].keys())[-2]))
+            fbmax = max([int(re.match(r"FB(\d+)\+?", k).groups(1)[0]) for k in Ftest_dict[fk]])
             fblist = get_fblist(fitter)
             fbused = (len(fblist)>0)
             fbp = [fblist[ifb] for ifb in sorted(fblist.keys())]  # sorted list of fb parameters
-            # Remoeing FB parameters
+            # Removing FB parameters
             for i in range(1,len(fblist)):
                 p = [fbp[j] for j in range(i,len(fbp))]
                 ffk = 'FB%s+'%i
