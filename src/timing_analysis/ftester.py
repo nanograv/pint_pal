@@ -198,7 +198,7 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
     fd_remove_ft = []
     for fk in Ftest_dict.keys():
         if 'FB' in fk:
-            fbmax = max([int(re.match(r"FB(\d+)\+?", k).groups(1)[0]) for k in Ftest_dict[fk]])
+            fbmax = max([int(re.match(r"FB(\d+)\+?", k).group(1)) for k in Ftest_dict[fk]])
             fblist = get_fblist(fitter)
             fbused = (len(fblist)>0)
             fbp = [fblist[ifb] for ifb in sorted(fblist.keys())]  # sorted list of fb parameters
