@@ -113,7 +113,7 @@ Submitting a good timing solution
 
 When you have a post-fit timing solution that seems good - no wild outliers, no visible structure in terms of time or orbital phase, reduced chi-squared not too far above 1, no warnings from the timing model - you are probably ready to commit the new timing model to the `timing_analysis` repository. In steps summarized below, we use a narrowband files as examples.
 
-1. Generate an output `.par` file; this can be done by having the notebook run `write_par(fo,toatype=tc.get_toa_type())` on a successful fitter `fo`. This will create a file `J1234+5678_PINT_YYYYMMDD.nb.par` in your working directory if you have the `toa-type` field in your `.yaml` file set to `NB`.
+1. Generate an output `.par` file; this can be done by having the notebook run `lu.write_par(fo,toatype=tc.get_toa_type())` on a successful fitter `fo`. This will create a file `J1234+5678_PINT_YYYYMMDD.nb.par` in your working directory if you have the `toa-type` field in your `.yaml` file set to `NB`.
 
 2. Archive the old `.par` file and put the new one in place (note: the initial `.par` file naming convention may vary):
 ```
