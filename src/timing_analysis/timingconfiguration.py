@@ -141,6 +141,9 @@ class TimingConfiguration:
                 'snr-cut','poor-febe'])
             apply_cut_select(t,reason='initial cuts, specified keys')
 
+        # Possibly better to handle this with toagen, but...ignore wb TOAs without pp_dm
+        self.check_ppdm(t)
+
         check_toa_version(t)
         check_tobs(t)
 
@@ -210,6 +213,15 @@ class TimingConfiguration:
                     maxout_applied = True
 
         if maxout_applied: apply_cut_select(toas,reason=f"> {outpct_threshold}% outliers in file; maxout")
+
+    def check_ppdm(self,toas):
+        """ If wb type, check for pp_dm flags in all TOAs, else ignore """
+        if self.get_toa_type() == 'WB':
+            no_ppdm_inds = np.where(toas['pp_dm'] == '')[0]
+            if no_ppdm_inds:
+                log.warning(f"{len(no_ppdm_inds)} wb TOA(s) without pp_dm flag(s)?! Ignoring...")
+                apply_cut_flag(toas,no_ppdm_inds,'no_ppdm')
+                apply_cut_select(toas,reason='WB TOAs without pp_dm flags')
 
     def manual_cuts(self,toas,warn=False):
         """ Apply manual cuts after everything else and warn if redundant """
