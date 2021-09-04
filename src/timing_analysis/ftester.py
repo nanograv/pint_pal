@@ -231,11 +231,14 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
                                 fd_remove.append(fffk)
                                 fd_remove_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
                 else:
-                    if Ftest_dict[fk][ffk]['ft'] is not None:
-                        if Ftest_dict[fk][ffk]['ft'] > alpha and Ftest_dict[fk][ffk]['ft']:
-                            # Policy is never to remove parallax
-                            if ffk != 'PX':
-                                remove_params.append(ffk)
+                    if Ftest_dict[fk][ffk] is not None: # This is added because some parameters fail ftest due to max convergence limit and hence are defaulted to None
+                        if Ftest_dict[fk][ffk]['ft'] is not None:
+                            if Ftest_dict[fk][ffk]['ft'] > alpha and Ftest_dict[fk][ffk]['ft']:
+                                # Policy is never to remove parallax
+                                if ffk != 'PX':
+                                    remove_params.append(ffk)
+                    elif Ftest_dict[fk][ffk] is None:
+                        print(f"Due to max iter limit, {ffk} hasn't converged and hence removing it can't be justified") 
         # Check which parameters should be added
         elif "Add" in fk:
             for ffk in Ftest_dict[fk].keys():
