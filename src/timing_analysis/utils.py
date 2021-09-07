@@ -1106,3 +1106,54 @@ def apply_cut_select(toas,reason='???'):
         log.info(f"Selecting {sum(mask)} TOAs out of {n_origtoas} ({n_more} more removed based on {reason}).")
     toas.table = toas.orig_table[mask]
     toas.table = toas.table.group_by('obs')  # otherwise table.groups.keys gets clobbered; consider using separate toas object
+
+def check_recentness_noise(tc):
+    """Check whether the timing configuration points to the most recent noise run.
+
+    Returns
+    =======
+    name of chains in use, sorted list of available chains
+        Under normal circumstances the first of these should equal the last element
+        of the second; that is, the name of the directory in use should match the
+        name of the most recent available set of chains
+    """
+    d = os.path.abspath(tc.get_noise_dir())
+    noise_runs = [os.path.dirname(os.path.dirname(os.path.abspath(p))) 
+                  for p in sorted(glob.glob(os.path.join(d,
+                                                    "..",
+                                                    "*.Noise.*",
+                                                    tc.get_source()+"_"+tc.get_toa_type().lower(),
+                                                    "chain*.txt")))]
+    used_chains = os.path.basename(d)
+    available_chains = [os.path.basename(n) for n in noise_runs]
+    log.info(f"Using: {used_chains}")
+    log.info(f"Available: {' '.join(available_chains)}")
+    if used_chains != available_chains[-1]:
+        log.warning(f"Using chains from {used_chains} but {available_chains[-1]} is available")
+    return used_chains, available_chains
+
+def check_recentness_excision(tc):
+    """Check whether the timing configuration points to the most recent set of excised TOAs.
+
+    Returns
+    =======
+    name of excision run in use, sorted list of available excision runs
+        Under normal circumstances the first of these should equal the last element
+        of the second; that is, the name of the directory in use should match the
+        name of the most recent available set of chains
+    """
+    e = os.path.abspath(tc.get_excised())
+    d = os.path.dirname(e)
+    excision_dirs = [os.path.dirname(os.path.dirname(os.path.abspath(p))) 
+                  for p in sorted(glob.glob(os.path.join(d,
+                                                         "..", "..",
+                                                         "*.Outlier.*",
+                                                         tc.get_source()+"."+tc.get_toa_type().lower(),
+                                                         "*_excise.tim")))]
+    used_excision = os.path.basename(os.path.dirname(d))
+    available_excision = [os.path.basename(n) for n in excision_dirs]
+    log.info(f"Using: {used_excision}")
+    log.info(f"Available: {' '.join(available_excision)}")
+    if used_excision != available_excision[-1]:
+        log.warning(f"Using excision from {used_excision} but {available_excision[-1]} is available")
+    return used_excision, available_excision
