@@ -1131,8 +1131,13 @@ def check_recentness_noise(tc):
     available_chains = [os.path.basename(n) for n in noise_runs]
     log.info(f"Using: {used_chains}")
     log.info(f"Available: {' '.join(available_chains)}")
-    if used_chains != available_chains[-1]:
-        log.warning(f"Using chains from {used_chains} but {available_chains[-1]} is available")
+    try:
+        newest_chains = available_chains[-1]
+    except IndexError:
+        log.warning(f"No noise chains are available for this pulsar! Make sure to run the noise modeling.")
+    else:
+        if used_chains != newest_chains:
+            log.warning(f"Using chains from {used_chains} but {newest_chains} is available")
     return used_chains, available_chains
 
 def check_recentness_excision(tc):
