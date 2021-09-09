@@ -542,6 +542,12 @@ class TimingConfiguration:
         if 'noise-dir' in self.config['intermediate-results'].keys():
             return self.config['intermediate-results']['noise-dir']
         return None
+    
+    def get_compare_noise_dir(self):
+        """ Return base directory for noise results """
+        if 'compare-noise-dir' in self.config['intermediate-results'].keys():
+            return self.config['intermediate-results']['compare-noise-dir']
+        return None
 
     def get_ignore_dmx(self):
         """ Return ignore-dmx toggle """
