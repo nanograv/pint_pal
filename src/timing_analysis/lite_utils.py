@@ -557,6 +557,7 @@ def get_cut_colors(palette='pastel'):
         'badtoa':'k',
         'badfile':'C3',
         'mjdstart':'C9',
+        'mjdend': 'C9',
     }
     return color_dict
 
