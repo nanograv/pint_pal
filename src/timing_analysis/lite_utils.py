@@ -1055,3 +1055,65 @@ def check_convergence(fitter):
             log.warning("Fitter may not have converged")
     if chi2_decrease > 0.01:
         log.warning("Input par file is not fully fitted")
+
+def file_look(filenm, plot_type = 'profile'):
+    """ Plots profile, GTpd, or YFp for a single file
+    
+    Parameters
+    ==========
+    filenm: file name of observation of interest
+    plot_type: choose if you'd like to see the profile vs. phase, frequency vs. phase, or time vs. phase (valid values = 'profile', 'GTpd', 'YFp')
+    """
+    ff_list = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
+    fmatch = [f for f in ff_list if filenm in f]
+    if len(fmatch) == 0: 
+        log.warning(f'File can\'t be found: {filenm}')
+    else:
+        if plot_type == 'profile':
+            for f in fmatch:
+                ar = pypulse.Archive(f, prepare=True)
+                ar.fscrunch()
+                ar.plot(subint=0, pol=0, chan=0, show=True)
+        elif plot_type == 'GTpd':
+            for f in fmatch:
+                ar = pypulse.Archive(f, prepare=True)
+                ar.tscrunch()
+                ar.imshow()
+        elif plot_type == 'YFp':
+            for f in fmatch:
+                ar = pypulse.Archive(f, prepare=True)
+                ar.fscrunch()
+                ar.imshow()
+        else:
+            log.warning(f'Unrecognized plot type: {plot_type}')
+
+def nonexcised_file_look(toas, plot_type = 'profile'):
+    """ Plots profile, GTpd, or YFp for all non-excised files
+    WARNING: THIS PRODUCES A LOT OF OUTPUT!!
+    
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object (usually 'to' here)
+    plot_type: choose if you'd like to see the profile vs. phase, frequency vs. phase, or time vs. phase (valid values = 'profile', 'GTpd', 'YFp')
+    """
+    ff_list = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
+    fnames = toas['name']
+    matches = []
+    for f in ff_list:
+        for ff in fnames:
+            if ff in f and f not in matches:
+                matches.append(f)
+                if plot_type == 'profile':
+                    ar = pypulse.Archive(f, prepare=True)
+                    ar.fscrunch()
+                    ar.plot(subint=0, pol=0, chan=0, show=True)
+                elif plot_type == 'GTpd':
+                    ar = pypulse.Archive(f, prepare=True)
+                    ar.tscrunch()
+                    ar.imshow()
+                elif plot_type == 'YFp':
+                    ar = pypulse.Archive(f, prepare=True)
+                    ar.fscrunch()
+                    ar.imshow()
+                else:
+                    log.warning(f'Unrecognized plot type: {plot_type}')
