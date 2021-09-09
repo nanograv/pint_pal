@@ -553,7 +553,10 @@ def get_cut_colors(palette='pastel'):
         'orphaned':palette[6],
         'maxout':palette[7],
         'simul':palette[8],
-        'poorfebe':palette[9]
+        'poorfebe':palette[9],
+        'badtoa':'k',
+        'badfile':'C3',
+        'mjdstart':'C9',
     }
     return color_dict
 
