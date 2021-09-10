@@ -260,15 +260,19 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
         # Policy is to never add additional spin derivatives in general
         elif fk == 'F':
             pass
-
-    # Now return which parameters to add/remove
+    
+    # Determine which FD parameters to add/remove
     if fd_remove:
         remove_params.append(fd_remove[np.where(fd_remove_ft==min(fd_remove_ft))[0][0]])
+    if fd_add:
+        add_params.append(fd_add[np.where(fd_add_ft==min(fd_add_ft))[0][0]])
+    
+    # Now return which parameters to add/remove
+    if remove_params:
         remove_statement = "F-tests recommend removing the following parameters: " + " ".join(remove_params)
     else:
         remove_statement = "F-tests do not recommend removing any parameters."
-    if fd_add:
-        add_params.append(fd_add[np.where(fd_add_ft==min(fd_add_ft))[0][0]])
+    if add_params:
         add_statement = "F-tests recommend adding the following parameters: " + " ".join(add_params)
     else:
         add_statement = "F-tests do not recommend adding any parameters."

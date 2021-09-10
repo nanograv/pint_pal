@@ -742,6 +742,9 @@ def pdf_writer(fitter,
         # FIXME: replicate compare_model here? run compare_model? maybe with low verbosity but capture log messages?
         pm = getattr(fitter.model, p)
         iv = getattr(fitter.model_init, p).value
+        if iv is None:
+            fsum.write(alert("WARNING:") + f" free parameter {verb(p)} is unset in input model.\\\\\n")
+            continue
         fv = pm.value
         u = pm.uncertainty.value
         cs = (iv-fv)/u
@@ -751,7 +754,7 @@ def pdf_writer(fitter,
         if abs(cs) > sigma_threshold:
             msg = f"parameter {verb(p)} changed from {iv} to {fv} ({cs:.2g} sigma) during fit."
             log.warn(msg)
-            fsum.write("WARNING: " + msg + "\\\\\n")
+            fsum.write(alert("WARNING: ") + msg + "\\\\\n")
     fsum.write(f"Largest parameter change during fit was {verb(changed)} by {max_cs:.2g} sigma.\\\\\n")
                    
     # Write out if reduced chi squared is close to 1
@@ -1128,8 +1131,13 @@ def check_recentness_noise(tc):
     available_chains = [os.path.basename(n) for n in noise_runs]
     log.info(f"Using: {used_chains}")
     log.info(f"Available: {' '.join(available_chains)}")
-    if used_chains != available_chains[-1]:
-        log.warning(f"Using chains from {used_chains} but {available_chains[-1]} is available")
+    try:
+        newest_chains = available_chains[-1]
+    except IndexError:
+        log.warning(f"No noise chains are available for this pulsar! Make sure to run the noise modeling.")
+    else:
+        if used_chains != newest_chains:
+            log.warning(f"Using chains from {used_chains} but {newest_chains} is available")
     return used_chains, available_chains
 
 def check_recentness_excision(tc):
