@@ -658,7 +658,7 @@ def pdf_writer(fitter,
     # Check for more than one jumped receiver
     fsum.write(r'\subsection*{Receivers and JUMPs}' + '\n')
     groups = set(np.array(resids.toas.get_flag_value('f')[0]))
-    receivers = set([g.replace("_GUPPI","").replace("_GASP","").replace("_PUPPI","").replace("_ASP","") for g in groups])
+    receivers = set([g.replace("_GUPPI","").replace("_GASP","").replace("_PUPPI","").replace("_ASP","").replace("_YUPPI","") for g in groups])
     jumped = []
     for p in model.params:
         if "JUMP" in p and "DM" not in p:
