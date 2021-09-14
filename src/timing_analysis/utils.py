@@ -700,7 +700,7 @@ def pdf_writer(fitter,
             and pm.frozen
             and pm.value is not None
             and pm.value != 0):
-            if p in {"START", "FINISH", "POSEPOCH", "DMEPOCH", "PEPOCH", "TZRMJD", "DM", "DMX", "NTOA", "CHI2", "DMDATA", "TZRFRQ"}:
+            if p in {"START", "FINISH", "POSEPOCH", "DMEPOCH", "PEPOCH", "TZRMJD", "DM", "DMX", "NTOA", "CHI2", "DMDATA", "TZRFRQ", "RNAMP", "RNIDX"}:
                 ignoring.append(p)
                 continue
             skip = False
