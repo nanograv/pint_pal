@@ -443,7 +443,8 @@ def pdf_writer(fitter,
                dm_dict=None, 
                append=None, 
                previous_parfile=None, 
-               fitter_noise=None):
+               fitter_noise=None,
+               cuts_dict=None):
     """Take output from timing notebook functions and write things out nicely in a summary pdf.
 
     Input
@@ -990,6 +991,16 @@ def pdf_writer(fitter,
             fsum.write(r"\end{verbatim}" + "\n")
             fsum.write(r"}" + "\n")
             fsum.write("\n")
+            
+    # Check excision percentage
+    fsum.write(r'\subsection*{Percentage of excised TOAs}' + '\n')
+    cut_th = 1 - (cuts_dict['good'] / sum(cuts_dict.values()))
+    fsum.write(f"Cut breakdown: {cuts_dict}\\\\\n")
+    if cut_th > 0.5:
+        msg = f"More than 50\% of TOAs have been automatically excised! See attached donut plot. Cut \%: {round(cut_th, 3)}"
+        fsum.write(alert(msg) + "\\\\\n")
+    else:
+        fsum.write("Fewer than 50\% of TOAs are being automatically excised. See attached donut plot.\\\\\n")
         
     # Write out software versions used
     fsum.write(r'\subsection*{Software versions used in timing\_analysis:}' + '\n')
@@ -1046,8 +1057,17 @@ def pdf_writer(fitter,
     else:
         log.info(f"Could not find noise corner plot {noise_plot}")
         fsum.write(f"Noise corner plot {verb(noise_plot)} not found.\\\\\n")
-        
-
+    # excision donut plot
+    if NB:
+        excise_plot_list = sorted(glob.glob("*%s.nb_donut.png" % (model.PSR.value)))
+    else:
+        excise_plot_list = sorted(glob.glob("*%s.wb_donut.png" % (model.PSR.value)))
+    if not excise_plot_list:
+        raise IOError("Unable to find any donut plots to include in summary PDF!")
+    for ex_plt in excise_plot_list:
+        fsum.write(r'\begin{figure}[p]' + '\n')
+        fsum.write(r'\centerline{\includegraphics[]{' + ex_plt + '}}\n')
+        fsum.write(r'\end{figure}' + '\n')
     if append is None:
 
         fsum.write(r'\end{document}' + '\n')
