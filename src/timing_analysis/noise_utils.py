@@ -420,7 +420,12 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
                 
                 #Set the shape of the subplots
                 shape = pars.shape[0]
-                ncols = 3
+                
+                if '_wb' in chaindir:
+                    ncols = 4
+                else:
+                    ncols = 3
+                    
                 nrows = int(np.ceil(shape / ncols))
                 
                 mp_idx = np.argmax(chain[burn:, -4])
@@ -453,7 +458,12 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
         if chaindir_compare is None:
             #Set the shape of the subplots
             shape = pars.shape[0]
-            ncols = 3
+            
+            if '_wb' in chaindir:
+                ncols = 4
+            else:
+                ncols = 3
+            
             nrows = int(np.ceil(shape / ncols))
             
             mp_idx = np.argmax(chain[burn:, -4])
