@@ -628,7 +628,7 @@ def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=Fal
         plt.close()
     return cuts_dict
 
-def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pastel', save=False):
+def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pastel', save=False, using_wideband=False):
     """Plot TOAs for a single backend in the frequency-time plane, colored by reason for excision (if any)
 
     Parameters
@@ -644,6 +644,8 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pas
         Seaborn color palette name
     save: bool, optional
         Save a png of the plot
+    using_wideband: bool, optional
+        TOAs are WB
 
     Returns
     =======
@@ -677,15 +679,20 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pas
     ax.set_title(f'{backend} ({ntoas_total} total TOAs, {ntoas_cut} cut)')
     ax.legend(loc='center left', bbox_to_anchor=(1.01, 0.5))
     if save:
-        plt.savefig(f'{psr}-{backend}-excision.png', dpi=150)
+        if using_wideband:
+            plt.savefig(f'{psr}-{backend}-excision_wb.png', dpi=150)
+        else:
+            plt.savefig(f'{psr}-{backend}-excision_nb.png', dpi=150)
     return fig, ax
 
-def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', save=False):
+def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', save=False, using_wideband=False):
     """Plot TOAs for each backend in the frequency-time plane, colored by reason for excision (if any)
 
     Parameters
     ==========
     toas: `pint.toa.TOAs` object
+    using_wideband: bool, optional
+        TOAs are WB
     marker: str, optional
         Marker to use in scatterplots
     marker_size: int, optional
@@ -697,7 +704,7 @@ def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', s
     """
     backends = set(t['flags']['be'] for t in toas.orig_table)
     for backend in backends:
-        plot_cuts_by_backend(toas, backend, marker, marker_size, palette, save)
+        plot_cuts_by_backend(toas, backend, marker, marker_size, palette, save, using_wideband=using_wideband)
     plt.show()
        
 def display_excise_dropdowns(file_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):
@@ -946,7 +953,7 @@ def display_auto_ex(tc, mo, cutkeys=['epochdrop', 'outlier10'], plot_type='profi
 
     return plot_list
 
-def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True):
+def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True,save=True):
     """ Plot residuals vs. time, highlight specified cuts (default: badtoa/badfile) 
     
     Parameters
@@ -958,6 +965,8 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_goo
         cuts to highlight in residuals plot (default: manual cuts)
     ylim_good: bool, optional
         set ylim to that of uncut TOAs (default: True)
+    save: bool (default: True)
+        saves the output plot
     """
     toas.table = toas.orig_table
     fo = tc_object.construct_fitter(toas,model)
@@ -997,6 +1006,12 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_goo
     plt.title(f'{model.PSR.value} highlighted cuts',y=1.2)
     ax.set_xlabel('MJD')
     ax.set_ylabel('Residual ($\mu$s)')
+    
+    if save:
+        if using_wideband:
+            plt.savefig(f'{model.PSR.value}_manual_hl_wb.png', dpi=150)
+        else:
+            plt.savefig(f'{model.PSR.value}_manual_hl_nb.png', dpi=150)
     
     # reset cuts for additional processing
     from timing_analysis.utils import apply_cut_select
