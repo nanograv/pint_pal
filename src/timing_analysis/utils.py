@@ -994,14 +994,21 @@ def pdf_writer(fitter,
             
     # Check excision percentage
     fsum.write(r'\subsection*{Percentage of excised TOAs}' + '\n')
-    cut_th = 100.0 * (1 - (cuts_dict['good'] / sum(cuts_dict.values())))
-    fsum.write(f"Cut breakdown: {cuts_dict}\\\\\n")
+    cut_th = 100.0 * (1 - (cuts_dict['good'] / sum(cuts_dict.values())))    
+    dict_print = ', '.join("{}: {}".format(k, v) for k, v in cuts_dict.items())
+    fsum.write(f"Cut breakdown: {dict_print}\\\\\n")
     if cut_th > 50.0:
-        msg = f"More than 50\% of TOAs have been auto-excised! See attached plots. Cut \%: {round(cut_th, 1)}"
+        msg = f"More than 50\% of TOAs have been excised! See attached plots. Cut \%: {round(cut_th, 1)}"
         fsum.write(alert(msg) + "\\\\\n")
     else:
-        fsum.write("Fewer than 50\% of TOAs are being auto-excised. See attached plots.\\\\\n")
-        
+        fsum.write("Fewer than 50\% of TOAs are being excised. See attached plots.\\\\\n")
+    if 'badfile' in cuts_dict:
+        fsum.write('Total number of manually excised files (badfile): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['badfile']))
+    if 'badtoa' in cuts_dict:
+        fsum.write('Total number of manually excised TOAs (badtoa): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['badtoa']))
+    if 'badfile' not in cuts_dict and 'badtoa' not in cuts_dict:
+        fsum.write('No TOAs have been manually excised, so no manual cut plot will be appended to the PDF.\\\\\n')
+     
     # Write out software versions used
     fsum.write(r'\subsection*{Software versions used in timing\_analysis:}' + '\n')
     fsum.write('PINT: %s\\\\\n' % verb(pint.__version__))
@@ -1080,16 +1087,17 @@ def pdf_writer(fitter,
         fsum.write(r'\centerline{\includegraphics[width=0.9\linewidth]{' + freq_plt + '}}\n')
         fsum.write(r'\end{figure}' + '\n')
     # manual excision plots
-    if NB:
-        hl_plot_list = sorted(glob.glob("%s_manual_hl_nb.png" % (model.PSR.value)))
-    else:
-        hl_plot_list = sorted(glob.glob("%s_manual_hl_wb.png" % (model.PSR.value)))
-    if not hl_plot_list:
-        raise IOError("Unable to find any manual cut highlight plots to include in summary PDF!")
-    for hl_plt in hl_plot_list:
-        fsum.write(r'\begin{figure}[p]' + '\n')
-        fsum.write(r'\centerline{\includegraphics[width=\linewidth]{' + hl_plt + '}}\n')
-        fsum.write(r'\end{figure}' + '\n')
+    if 'badtoa' in cuts_dict or 'badfile' in cuts_dict:
+        if NB:
+            hl_plot_list = sorted(glob.glob("%s_manual_hl_nb.png" % (model.PSR.value)))
+        else:
+            hl_plot_list = sorted(glob.glob("%s_manual_hl_wb.png" % (model.PSR.value)))
+        if not hl_plot_list:
+            raise IOError("Unable to find any manual cut highlight plots to include in summary PDF!")
+        for hl_plt in hl_plot_list:
+            fsum.write(r'\begin{figure}[p]' + '\n')
+            fsum.write(r'\centerline{\includegraphics[width=\linewidth]{' + hl_plt + '}}\n')
+            fsum.write(r'\end{figure}' + '\n')
     if append is None:
 
         fsum.write(r'\end{document}' + '\n')
