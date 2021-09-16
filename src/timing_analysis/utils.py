@@ -443,7 +443,8 @@ def pdf_writer(fitter,
                dm_dict=None, 
                append=None, 
                previous_parfile=None, 
-               fitter_noise=None):
+               fitter_noise=None,
+               no_corner=False):
     """Take output from timing notebook functions and write things out nicely in a summary pdf.
 
     Input
@@ -457,6 +458,7 @@ def pdf_writer(fitter,
     append [string or None]: default is `None`, else should be a string to the path to the texfile to append output to.
     previous_parfile [string or None]: If provided, report a comparison with this par file (presumably from a previous release).
     fitter_noise [pint.fitter.Fitter]: Fitter that has had new noise parameters applied (if available).
+    no_corner [boolean]: default is `False` to append corner plot, else will look for posterior plots
     """
     def verb(s):
         s = str(s).strip()
@@ -1038,15 +1040,26 @@ def pdf_writer(fitter,
         fsum.write(r'\end{figure}' + '\n')
     nb_wb = "nb" if NB else "wb"
     noise_plot = f"{model.PSR.value}_noise_corner_{nb_wb}.pdf"
-    if os.path.exists(noise_plot):
-        log.info(f"Including noise corner plot {noise_plot}")
-        fsum.write(r'\begin{figure}[p]' + '\n')
-        fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_plot + '}}\n')
-        fsum.write(r'\end{figure}' + '\n')
+    noise_posterior_plots = f"{model.PSR.value}_noise_posterior_{nb_wb}.pdf"
+
+    if no_corner:
+        if os.path.exists(noise_posterior_plots):
+            log.info(f"Including noise posterior plots {noise_posterior_plots}")
+            fsum.write(r'\begin{figure}[p]' + '\n')
+            fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_posterior_plots + '}}\n')
+            fsum.write(r'\end{figure}' + '\n')
+        else:
+            log.info(f"Could not find noise posterior plots {noise_posterior_plots}")
+            fsum.write(f"Noise posterior plots {verb(noise_posterior_plots)} not found.\\\\\n")
     else:
-        log.info(f"Could not find noise corner plot {noise_plot}")
-        fsum.write(f"Noise corner plot {verb(noise_plot)} not found.\\\\\n")
-        
+        if os.path.exists(noise_plot):
+            log.info(f"Including noise corner plot {noise_plot}")
+            fsum.write(r'\begin{figure}[p]' + '\n')
+            fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_plot + '}}\n')
+            fsum.write(r'\end{figure}' + '\n')
+        else:
+            log.info(f"Could not find noise corner plot {noise_plot}")
+            fsum.write(f"Noise corner plot {verb(noise_plot)} not found.\\\\\n")
 
     if append is None:
 

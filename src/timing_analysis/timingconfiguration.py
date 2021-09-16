@@ -549,6 +549,12 @@ class TimingConfiguration:
             return self.config['intermediate-results']['compare-noise-dir']
         return None
 
+    def get_no_corner(self):
+        """ Return boolean for no corner plot """
+        if 'no-corner' in self.config['intermediate-results'].keys():
+            return self.config['intermediate-results']['no-corner']
+        return False
+
     def get_ignore_dmx(self):
         """ Return ignore-dmx toggle """
         if 'ignore-dmx' in self.config['dmx'].keys():
