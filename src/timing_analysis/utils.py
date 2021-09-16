@@ -444,7 +444,8 @@ def pdf_writer(fitter,
                append=None, 
                previous_parfile=None, 
                fitter_noise=None,
-               cuts_dict=None):
+               cuts_dict=None,
+               no_corner=False):
     """Take output from timing notebook functions and write things out nicely in a summary pdf.
 
     Input
@@ -458,6 +459,8 @@ def pdf_writer(fitter,
     append [string or None]: default is `None`, else should be a string to the path to the texfile to append output to.
     previous_parfile [string or None]: If provided, report a comparison with this par file (presumably from a previous release).
     fitter_noise [pint.fitter.Fitter]: Fitter that has had new noise parameters applied (if available).
+    cuts_dict [dictionary]: optional dictionary specifying cuts by various flags
+    no_corner [boolean]: default is `False` to append corner plot, else will look for posterior plots
     """
     def verb(s):
         s = str(s).strip()
@@ -993,21 +996,22 @@ def pdf_writer(fitter,
             fsum.write("\n")
             
     # Check excision percentage
-    fsum.write(r'\subsection*{Percentage of excised TOAs}' + '\n')
-    cut_th = 100.0 * (1 - (cuts_dict['good'] / sum(cuts_dict.values())))    
-    dict_print = ', '.join("{}: {}".format(k, v) for k, v in cuts_dict.items())
-    fsum.write(f"Cut breakdown: {dict_print}\\\\\n")
-    if cut_th > 50.0:
-        msg = f"More than 50\% of TOAs have been excised! See attached plots. Cut \%: {round(cut_th, 1)}"
-        fsum.write(alert(msg) + "\\\\\n")
-    else:
-        fsum.write("Fewer than 50\% of TOAs are being excised. See attached plots.\\\\\n")
-    if 'badfile' in cuts_dict:
-        fsum.write('Total number of manually excised files (badfile): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['badfile']))
-    if 'badtoa' in cuts_dict:
-        fsum.write('Total number of manually excised TOAs (badtoa): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['badtoa']))
-    if 'badfile' not in cuts_dict and 'badtoa' not in cuts_dict:
-        fsum.write('No TOAs have been manually excised, so no manual cut plot will be appended to the PDF.\\\\\n')
+    if cuts_dict is not None:
+        fsum.write(r'\subsection*{Percentage of excised TOAs}' + '\n')
+        cut_th = 100.0 * (1 - (cuts_dict['good'] / sum(cuts_dict.values())))    
+        dict_print = ', '.join("{}: {}".format(k, v) for k, v in cuts_dict.items())
+        fsum.write(f"Cut breakdown: {dict_print}\\\\\n")
+        if cut_th > 50.0:
+            msg = f"More than 50\% of TOAs have been excised! See attached plots. Cut \%: {round(cut_th, 1)}"
+            fsum.write(alert(msg) + "\\\\\n")
+        else:
+            fsum.write("Fewer than 50\% of TOAs are being excised. See attached plots.\\\\\n")
+        if 'badfile' in cuts_dict:
+            fsum.write('Total number of manually excised files (badfile): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['badfile']))
+        if 'badtoa' in cuts_dict:
+            fsum.write('Total number of manually excised TOAs (badtoa): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['badtoa']))
+        if 'badfile' not in cuts_dict and 'badtoa' not in cuts_dict:
+            fsum.write('No TOAs have been manually excised, so no manual cut plot will be appended to the PDF.\\\\\n')
      
     # Write out software versions used
     fsum.write(r'\subsection*{Software versions used in timing\_analysis:}' + '\n')
@@ -1056,48 +1060,63 @@ def pdf_writer(fitter,
         fsum.write(r'\end{figure}' + '\n')
     nb_wb = "nb" if NB else "wb"
     noise_plot = f"{model.PSR.value}_noise_corner_{nb_wb}.pdf"
-    if os.path.exists(noise_plot):
-        log.info(f"Including noise corner plot {noise_plot}")
-        fsum.write(r'\begin{figure}[p]' + '\n')
-        fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_plot + '}}\n')
-        fsum.write(r'\end{figure}' + '\n')
-    else:
-        log.info(f"Could not find noise corner plot {noise_plot}")
-        fsum.write(f"Noise corner plot {verb(noise_plot)} not found.\\\\\n")
-    # excision donut plot
-    if NB:
-        excise_plot_list = sorted(glob.glob("*%s.nb_donut.png" % (model.PSR.value)))
-    else:
-        excise_plot_list = sorted(glob.glob("*%s.wb_donut.png" % (model.PSR.value)))
-    if not excise_plot_list:
-        raise IOError("Unable to find any donut plots to include in summary PDF!")
-    for ex_plt in excise_plot_list:
-        fsum.write(r'\begin{figure}[p]' + '\n')
-        fsum.write(r'\centerline{\includegraphics[width=0.5\linewidth]{' + ex_plt + '}}\n')
-        fsum.write(r'\end{figure}' + '\n')
-    # freq spread vs. MJD plot
-    if NB:
-        freq_plot_list = sorted(glob.glob("*%s*excision_nb.png" % (model.PSR.value)))
-    else:
-        freq_plot_list = sorted(glob.glob("*%s*excision_wb.png" % (model.PSR.value)))
-    if not freq_plot_list:
-        raise IOError("Unable to find any freq vs. MJD plots to include in summary PDF!")
-    for freq_plt in freq_plot_list:
-        fsum.write(r'\begin{figure}[p]' + '\n')
-        fsum.write(r'\centerline{\includegraphics[width=0.9\linewidth]{' + freq_plt + '}}\n')
-        fsum.write(r'\end{figure}' + '\n')
-    # manual excision plots
-    if 'badtoa' in cuts_dict or 'badfile' in cuts_dict:
-        if NB:
-            hl_plot_list = sorted(glob.glob("%s_manual_hl_nb.png" % (model.PSR.value)))
-        else:
-            hl_plot_list = sorted(glob.glob("%s_manual_hl_wb.png" % (model.PSR.value)))
-        if not hl_plot_list:
-            raise IOError("Unable to find any manual cut highlight plots to include in summary PDF!")
-        for hl_plt in hl_plot_list:
+    noise_posterior_plots = f"{model.PSR.value}_noise_posterior_{nb_wb}.pdf"
+
+    if no_corner:
+        if os.path.exists(noise_posterior_plots):
+            log.info(f"Including noise posterior plots {noise_posterior_plots}")
             fsum.write(r'\begin{figure}[p]' + '\n')
-            fsum.write(r'\centerline{\includegraphics[width=\linewidth]{' + hl_plt + '}}\n')
+            fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_posterior_plots + '}}\n')
             fsum.write(r'\end{figure}' + '\n')
+        else:
+            log.info(f"Could not find noise posterior plots {noise_posterior_plots}")
+            fsum.write(f"Noise posterior plots {verb(noise_posterior_plots)} not found.\\\\\n")
+    else:
+        if os.path.exists(noise_plot):
+            log.info(f"Including noise corner plot {noise_plot}")
+            fsum.write(r'\begin{figure}[p]' + '\n')
+            fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_plot + '}}\n')
+            fsum.write(r'\end{figure}' + '\n')
+        else:
+            log.info(f"Could not find noise corner plot {noise_plot}")
+            fsum.write(f"Noise corner plot {verb(noise_plot)} not found.\\\\\n")
+
+    # excision donut plot
+    if cuts_dict is not None:
+        if NB:
+            excise_plot_list = sorted(glob.glob("*%s.nb_donut.png" % (model.PSR.value)))
+        else:
+            excise_plot_list = sorted(glob.glob("*%s.wb_donut.png" % (model.PSR.value)))
+        if not excise_plot_list:
+            raise IOError("Unable to find any donut plots to include in summary PDF!")
+        for ex_plt in excise_plot_list:
+            fsum.write(r'\begin{figure}[p]' + '\n')
+            fsum.write(r'\centerline{\includegraphics[width=0.5\linewidth]{' + ex_plt + '}}\n')
+            fsum.write(r'\end{figure}' + '\n')
+        # freq spread vs. MJD plot
+        if NB:
+            freq_plot_list = sorted(glob.glob("*%s*excision_nb.png" % (model.PSR.value)))
+        else:
+            freq_plot_list = sorted(glob.glob("*%s*excision_wb.png" % (model.PSR.value)))
+        if not freq_plot_list:
+            raise IOError("Unable to find any freq vs. MJD plots to include in summary PDF!")
+        for freq_plt in freq_plot_list:
+            fsum.write(r'\begin{figure}[p]' + '\n')
+            fsum.write(r'\centerline{\includegraphics[width=0.9\linewidth]{' + freq_plt + '}}\n')
+            fsum.write(r'\end{figure}' + '\n')
+        # manual excision plots
+        if 'badtoa' in cuts_dict or 'badfile' in cuts_dict:
+            if NB:
+                hl_plot_list = sorted(glob.glob("%s_manual_hl_nb.png" % (model.PSR.value)))
+            else:
+                hl_plot_list = sorted(glob.glob("%s_manual_hl_wb.png" % (model.PSR.value)))
+            if not hl_plot_list:
+                raise IOError("Unable to find any manual cut highlight plots to include in summary PDF!")
+            for hl_plt in hl_plot_list:
+                fsum.write(r'\begin{figure}[p]' + '\n')
+                fsum.write(r'\centerline{\includegraphics[width=\linewidth]{' + hl_plt + '}}\n')
+                fsum.write(r'\end{figure}' + '\n')
+
     if append is None:
 
         fsum.write(r'\end{document}' + '\n')
