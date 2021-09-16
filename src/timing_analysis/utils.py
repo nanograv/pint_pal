@@ -994,10 +994,10 @@ def pdf_writer(fitter,
             fsum.write(r"\end{verbatim}" + "\n")
             fsum.write(r"}" + "\n")
             fsum.write("\n")
-       
+            
     # Check excision percentage
     fsum.write(r'\subsection*{Percentage of excised TOAs}' + '\n')
-    cut_th = 100.0 * (1 - (cuts_dict['good'] / sum(cuts_dict.values())))
+    cut_th = 100.0 * (1 - (cuts_dict['good'] / sum(cuts_dict.values())))    
     dict_print = ', '.join("{}: {}".format(k, v) for k, v in cuts_dict.items())
     fsum.write(f"Cut breakdown: {dict_print}\\\\\n")
     if cut_th > 50.0:
@@ -1011,8 +1011,7 @@ def pdf_writer(fitter,
         fsum.write('Total number of manually excised TOAs (badtoa): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['badtoa']))
     if 'badfile' not in cuts_dict and 'badtoa' not in cuts_dict:
         fsum.write('No TOAs have been manually excised, so no manual cut plot will be appended to the PDF.\\\\\n')
-
-
+     
     # Write out software versions used
     fsum.write(r'\subsection*{Software versions used in timing\_analysis:}' + '\n')
     fsum.write('PINT: %s\\\\\n' % verb(pint.__version__))
@@ -1115,7 +1114,6 @@ def pdf_writer(fitter,
             fsum.write(r'\begin{figure}[p]' + '\n')
             fsum.write(r'\centerline{\includegraphics[width=\linewidth]{' + hl_plt + '}}\n')
             fsum.write(r'\end{figure}' + '\n')
-
 
     if append is None:
 
