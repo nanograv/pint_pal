@@ -444,6 +444,7 @@ def pdf_writer(fitter,
                append=None, 
                previous_parfile=None, 
                fitter_noise=None,
+               cuts_dict=None,
                no_corner=False):
     """Take output from timing notebook functions and write things out nicely in a summary pdf.
 
@@ -458,6 +459,7 @@ def pdf_writer(fitter,
     append [string or None]: default is `None`, else should be a string to the path to the texfile to append output to.
     previous_parfile [string or None]: If provided, report a comparison with this par file (presumably from a previous release).
     fitter_noise [pint.fitter.Fitter]: Fitter that has had new noise parameters applied (if available).
+    cuts_dict [dictionary]: optional dictionary specifying cuts by various flags
     no_corner [boolean]: default is `False` to append corner plot, else will look for posterior plots
     """
     def verb(s):
