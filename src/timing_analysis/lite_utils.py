@@ -561,15 +561,65 @@ def get_cut_colors(palette='pastel'):
     }
     return color_dict
 
-def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=False):
+def get_cutsDict(toas):
+    """Gather useful information about cuts by telescope, febe, flag value
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+
+    Returns
+    =======
+    cutsDict: dict
+        cuts and total number of TOAs per febe, telescope, cut flag
+    """
+    cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
+    set_cuts = set(cuts)
+    tottoa = len(cuts)
+
+    tels = np.array([t[5] for t in toas.orig_table])
+    set_tels = set(tels)
+
+    fbs = np.array([f['f'] for f in toas.orig_table['flags']])
+    set_fbs = set(fbs)
+
+    fcutDict = {}
+    for fb in set_fbs:
+        inds = np.where(fbs == fb)[0]
+        ntot = len(inds)
+        ncuts = sum(x is not None for x in cuts[inds])
+        fcutDict[fb] = [ntot,ncuts]
+
+    tcutDict = {}
+    for tel in set_tels:
+        inds = np.where(tels == tel)[0]
+        ntot = len(inds)
+        ncuts = sum(x is not None for x in cuts[inds])
+        tcutDict[tel] = [ntot,ncuts]
+    
+    ncut_manual = 0
+    ccutDict = {}
+    for c in set_cuts:
+        ncut = list(cuts).count(c)
+        if c:
+            if c in ['badtoa', 'badfile']:  ncut_manual += ncut
+            else: ccutDict[c] = [tottoa,ncut]
+        else: ccutDict['good'] = [tottoa,ncut]
+    if ncut_manual: ccutDict['manual'] = [tottoa,ncut_manual]
+        
+    cutsDict = {'f':fcutDict,
+                'tel':tcutDict,
+                'cut':ccutDict,
+               }
+    return cutsDict
+
+def cut_summary(toas, tc, donut=True, legend=True, save=False):
     """Basic summary of cut TOAs, associated reasons
 
     Parameters
     ==========
     toas: `pint.toa.TOAs` object
     tc: `timing_analysis.timingconfiguration.TimingConfiguration` object
-    print_summary: bool, optional
-        Print reasons for cuts and respective nTOA/percentages
     donut: bool, optional
         Make a donut chart showing reasons/percentages for cuts
     legend: bool, optional
@@ -583,6 +633,7 @@ def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=Fal
         Cut flags and number of instances for input TOAs
     """
     color_dict = get_cut_colors()
+    cutsDict = get_cutsDict(toas)
 
     # gather info for title (may also be useful for other features in the future)
     tel = [t[5] for t in toas.table]
@@ -595,15 +646,11 @@ def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=Fal
     flavor = f"{tc.get_outfile_basename()} ({mashtel}; {', '.join(setfe)})"
 
     # kwarg that makes it possible to break this down by telescope/backend...?
-    toa_cut_flags = [t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table]
-    nTOA = len(toa_cut_flags)
-    cuts_present = set(toa_cut_flags)
+    nTOA = len(toas)
+    cdc = cutsDict['cut']
     cuts_dict = {}
-    for c in cuts_present: 
-        ncut = toa_cut_flags.count(c)
-        if c: cuts_dict[c] = ncut
-        else: cuts_dict['good'] = ncut
-        if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')    
+    for c in cdc.keys():
+        cuts_dict[c] = cdc[c][1]
 
     nTOAcut = np.array(list(cuts_dict.values()))
     sizes = nTOAcut/nTOA
