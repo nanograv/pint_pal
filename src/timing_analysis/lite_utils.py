@@ -613,13 +613,15 @@ def get_cutsDict(toas):
                }
     return cutsDict
 
-def cut_summary(toas, tc, donut=True, legend=True, save=False):
+def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=False):
     """Basic summary of cut TOAs, associated reasons
 
     Parameters
     ==========
     toas: `pint.toa.TOAs` object
     tc: `timing_analysis.timingconfiguration.TimingConfiguration` object
+    print_summary: bool, optional
+        Print reasons for cuts and respective nTOA/percentages
     donut: bool, optional
         Make a donut chart showing reasons/percentages for cuts
     legend: bool, optional
@@ -629,8 +631,8 @@ def cut_summary(toas, tc, donut=True, legend=True, save=False):
 
     Returns
     =======
-    cuts_dict: dict
-        Cut flags and number of instances for input TOAs
+    cutsDict: dict
+        Number total/cut TOAs per telescope, febe, cut flag. 
     """
     color_dict = get_cut_colors()
     cutsDict = get_cutsDict(toas)
@@ -650,7 +652,9 @@ def cut_summary(toas, tc, donut=True, legend=True, save=False):
     cdc = cutsDict['cut']
     cuts_dict = {}
     for c in cdc.keys():
-        cuts_dict[c] = cdc[c][1]
+        ncut = cdc[c][1]
+        cuts_dict[c] = ncut
+        if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')
 
     nTOAcut = np.array(list(cuts_dict.values()))
     sizes = nTOAcut/nTOA
@@ -673,7 +677,7 @@ def cut_summary(toas, tc, donut=True, legend=True, save=False):
     if save:
         plt.savefig(f"{mashtel}_{tc.get_outfile_basename()}_donut.png",bbox_inches='tight')
         plt.close()
-    return cuts_dict
+    return cutsDict
 
 def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pastel', save=False, using_wideband=False):
     """Plot TOAs for a single backend in the frequency-time plane, colored by reason for excision (if any)
