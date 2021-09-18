@@ -601,9 +601,10 @@ def get_cutsDict(toas):
     ccutDict = {}
     for c in set_cuts:
         ncut = list(cuts).count(c)
-        if c:
-            if c in ['badtoa', 'badfile']:  ncut_manual += ncut
-            else: ccutDict[c] = [tottoa,ncut]
+        #if c:
+        #    if c in ['badtoa', 'badfile']:  ncut_manual += ncut
+        #    else: ccutDict[c] = [tottoa,ncut]
+        if c: ccutDict[c] = [tottoa,ncut]
         else: ccutDict['good'] = [tottoa,ncut]
     if ncut_manual: ccutDict['manual'] = [tottoa,ncut_manual]
         

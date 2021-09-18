@@ -1022,7 +1022,7 @@ def pdf_writer(fitter,
             tot,cut = cuts_dict['tel'][tel]
             cut_pct = 100.0 * float(cut)/tot
             remain = tot-cut
-            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}%!")
+            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\%!")
             fsum.write('%s: %i TOAs excised (%i total). %s \\\\\n' % (verb(tel), cut, tot, cutwarn))
         # cuts per frontend/backend combo
         fsum.write(r'\subsubsection*{Excised TOAs by Frontend/Backend Combination}' + '\n')
@@ -1031,7 +1031,7 @@ def pdf_writer(fitter,
             tot,cut = cuts_dict['f'][febe]
             cut_pct = 100.0 * float(cut)/tot
             remain = tot-cut
-            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}%!")
+            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\%!")
             fsum.write('%s: %i TOAs excised (%i total). %s \\\\\n' % (verb(febe), cut, tot, cutwarn))
 
     # Write out software versions used
