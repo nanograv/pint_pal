@@ -1022,17 +1022,26 @@ def pdf_writer(fitter,
             tot,cut = cuts_dict['tel'][tel]
             cut_pct = 100.0 * float(cut)/tot
             remain = tot-cut
-            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\%!")
-            fsum.write('%s: %i TOAs excised (%i total). %s \\\\\n' % (verb(tel), cut, tot, cutwarn))
+            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\% cut!")
+            fsum.write('%s: %i TOAs remain (%i cut; %i total). %s \\\\\n' % (verb(tel), remain, cut, tot, cutwarn))
         # cuts per frontend/backend combo
+        problem_febes = []
         fsum.write(r'\subsubsection*{Excised TOAs by Frontend/Backend Combination}' + '\n')
         for febe in cuts_dict['f'].keys():
             cutwarn = ""
             tot,cut = cuts_dict['f'][febe]
             cut_pct = 100.0 * float(cut)/tot
             remain = tot-cut
-            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\%!")
-            fsum.write('%s: %i TOAs excised (%i total). %s \\\\\n' % (verb(febe), cut, tot, cutwarn))
+            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\% cut!")
+            fsum.write('%s: %i TOAs remain (%i cut; %i total). %s \\\\\n' % (verb(febe), remain, cut, tot, cutwarn))
+
+            if float(remain)/ntoa < 0.05:
+                problem_febes.append(verb(febe))
+
+        if problem_febes:
+            msg = alert("Very few TOAs remain and corresponding noise parameters may be poorly determined for: ")
+            febe_str = ', '.join(problem_febes)
+            fsum.write(msg + febe_str + "\\\\\n")
 
     # Write out software versions used
     fsum.write(r'\subsection*{Software versions used in timing\_analysis:}' + '\n')
