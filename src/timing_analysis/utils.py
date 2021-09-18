@@ -459,7 +459,7 @@ def pdf_writer(fitter,
     append [string or None]: default is `None`, else should be a string to the path to the texfile to append output to.
     previous_parfile [string or None]: If provided, report a comparison with this par file (presumably from a previous release).
     fitter_noise [pint.fitter.Fitter]: Fitter that has had new noise parameters applied (if available).
-    cuts_dict [dictionary]: optional dictionary specifying cuts by various flags
+    cuts_dict [dictionary]: optional dictionary specifying total number TOAs/cuts by tel, febe, flag value
     no_corner [boolean]: default is `False` to append corner plot, else will look for posterior plots
     """
     def verb(s):
@@ -998,19 +998,19 @@ def pdf_writer(fitter,
     # Check excision percentage
     if cuts_dict is not None:
         fsum.write(r'\subsection*{Percentage of excised TOAs}' + '\n')
-        cut_th = 100.0 * (1 - (cuts_dict['good'] / sum(cuts_dict.values())))    
-        dict_print = ', '.join("{}: {}".format(k, v) for k, v in cuts_dict.items())
+        cut_th = 100.0 * (1 - (cuts_dict['cut']['good'][1] / cuts_dict['cut']['good'][0]))    
+        dict_print = ', '.join("{}: {}".format(k, v[1]) for k, v in cuts_dict['cut'].items())
         fsum.write(f"Cut breakdown: {dict_print}\\\\\n")
         if cut_th > 50.0:
             msg = f"More than 50\% of TOAs have been excised! See attached plots. Cut \%: {round(cut_th, 1)}"
             fsum.write(alert(msg) + "\\\\\n")
         else:
             fsum.write("Fewer than 50\% of TOAs are being excised. See attached plots.\\\\\n")
-        if 'badfile' in cuts_dict:
-            fsum.write('Total number of manually excised files (badfile): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['badfile']))
-        if 'badtoa' in cuts_dict:
-            fsum.write('Total number of manually excised TOAs (badtoa): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['badtoa']))
-        if 'badfile' not in cuts_dict and 'badtoa' not in cuts_dict:
+        if 'badfile' in cuts_dict['cut']:
+            fsum.write('Total number of manually excised files (badfile): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['cut']['badfile'][1]))
+        if 'badtoa' in cuts_dict['cut']:
+            fsum.write('Total number of manually excised TOAs (badtoa): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['cut']['badtoa'][1]))
+        if 'badfile' not in cuts_dict['cut'] and 'badtoa' not in cuts_dict['cut']:
             fsum.write('No TOAs have been manually excised, so no manual cut plot will be appended to the PDF.\\\\\n')
      
     # Write out software versions used
@@ -1105,7 +1105,7 @@ def pdf_writer(fitter,
             fsum.write(r'\centerline{\includegraphics[width=0.9\linewidth]{' + freq_plt + '}}\n')
             fsum.write(r'\end{figure}' + '\n')
         # manual excision plots
-        if 'badtoa' in cuts_dict or 'badfile' in cuts_dict:
+        if 'badtoa' in cuts_dict['cut'] or 'badfile' in cuts_dict['cut']:
             if NB:
                 hl_plot_list = sorted(glob.glob("%s_manual_hl_nb.png" % (model.PSR.value)))
             else:
