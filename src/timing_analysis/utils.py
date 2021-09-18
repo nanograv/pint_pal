@@ -995,17 +995,19 @@ def pdf_writer(fitter,
             fsum.write(r"}" + "\n")
             fsum.write("\n")
             
-    # Check excision percentage
+    # Check excision percentage, add text to summary
     if cuts_dict is not None:
+        # info about cut flags
         fsum.write(r'\subsection*{Percentage of excised TOAs}' + '\n')
-        cut_th = 100.0 * (1 - (cuts_dict['cut']['good'][1] / cuts_dict['cut']['good'][0]))    
+        ntoa = cuts_dict['cut']['good'][0]
+        cut_th = 100.0 * (1 - (cuts_dict['cut']['good'][1] / ntoa))    
         dict_print = ', '.join("{}: {}".format(k, v[1]) for k, v in cuts_dict['cut'].items())
         fsum.write(f"Cut breakdown: {dict_print}\\\\\n")
         if cut_th > 50.0:
-            msg = f"More than 50\% of TOAs have been excised! See attached plots. Cut \%: {round(cut_th, 1)}"
+            msg = f"More than 50\% of {ntoa} TOAs have been excised! See attached plots. Cut \%: {round(cut_th, 1)}"
             fsum.write(alert(msg) + "\\\\\n")
         else:
-            fsum.write("Fewer than 50\% of TOAs are being excised. See attached plots.\\\\\n")
+            fsum.write(f"Fewer than 50\% of {ntoa} TOAs are being excised. See attached plots.\\\\\n")
         if 'badfile' in cuts_dict['cut']:
             fsum.write('Total number of manually excised files (badfile): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['cut']['badfile'][1]))
         if 'badtoa' in cuts_dict['cut']:
@@ -1013,6 +1015,25 @@ def pdf_writer(fitter,
         if 'badfile' not in cuts_dict['cut'] and 'badtoa' not in cuts_dict['cut']:
             fsum.write('No TOAs have been manually excised, so no manual cut plot will be appended to the PDF.\\\\\n')
      
+        # cuts per telescope
+        fsum.write(r'\subsubsection*{Excised TOAs by Observatory}' + '\n')
+        for tel in cuts_dict['tel'].keys():
+            cutwarn = ""
+            tot,cut = cuts_dict['tel'][tel]
+            cut_pct = 100.0 * float(cut)/tot
+            remain = tot-cut
+            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}%!")
+            fsum.write('%s: %i TOAs excised (%i total). %s \\\\\n' % (verb(tel), cut, tot, cutwarn))
+        # cuts per frontend/backend combo
+        fsum.write(r'\subsubsection*{Excised TOAs by Frontend/Backend Combination}' + '\n')
+        for febe in cuts_dict['f'].keys():
+            cutwarn = ""
+            tot,cut = cuts_dict['f'][febe]
+            cut_pct = 100.0 * float(cut)/tot
+            remain = tot-cut
+            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}%!")
+            fsum.write('%s: %i TOAs excised (%i total). %s \\\\\n' % (verb(febe), cut, tot, cutwarn))
+
     # Write out software versions used
     fsum.write(r'\subsection*{Software versions used in timing\_analysis:}' + '\n')
     fsum.write('PINT: %s\\\\\n' % verb(pint.__version__))
