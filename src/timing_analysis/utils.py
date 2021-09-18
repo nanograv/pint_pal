@@ -997,24 +997,18 @@ def pdf_writer(fitter,
             
     # Check excision percentage, add text to summary
     if cuts_dict is not None:
+
         # info about cut flags
-        fsum.write(r'\subsection*{Percentage of excised TOAs}' + '\n')
         ntoa = cuts_dict['cut']['good'][0]
-        cut_th = 100.0 * (1 - (cuts_dict['cut']['good'][1] / ntoa))    
-        dict_print = ', '.join("{}: {}".format(k, v[1]) for k, v in cuts_dict['cut'].items())
-        fsum.write(f"Cut breakdown: {dict_print}\\\\\n")
-        if cut_th > 50.0:
-            msg = f"More than 50\% of {ntoa} TOAs have been excised! See attached plots. Cut \%: {round(cut_th, 1)}"
-            fsum.write(alert(msg) + "\\\\\n")
-        else:
-            fsum.write(f"Fewer than 50\% of {ntoa} TOAs are being excised. See attached plots.\\\\\n")
-        if 'badfile' in cuts_dict['cut']:
-            fsum.write('Total number of manually excised files (badfile): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['cut']['badfile'][1]))
-        if 'badtoa' in cuts_dict['cut']:
-            fsum.write('Total number of manually excised TOAs (badtoa): %i (see attached manual cut plot)\\\\\n' % (cuts_dict['cut']['badtoa'][1]))
+        fsum.write(r'\subsubsection*{Excised TOAs by Cut Flag}' + '\n')
+        fsum.write(f"Note: {cuts_dict['cut']['good'][1]} good TOAs remain out of {ntoa} total. See attached plots. " + "\\\\\n")
+        for cf in cuts_dict['cut'].keys():
+            if cf != 'good':
+                tot,cut = cuts_dict['cut'][cf]
+                fsum.write('%s: %i \\\\\n' % (verb(cf), cut))
         if 'badfile' not in cuts_dict['cut'] and 'badtoa' not in cuts_dict['cut']:
             fsum.write('No TOAs have been manually excised, so no manual cut plot will be appended to the PDF.\\\\\n')
-     
+
         # cuts per telescope
         fsum.write(r'\subsubsection*{Excised TOAs by Observatory}' + '\n')
         for tel in cuts_dict['tel'].keys():
@@ -1024,6 +1018,7 @@ def pdf_writer(fitter,
             remain = tot-cut
             if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\% cut!")
             fsum.write('%s: %i TOAs remain (%i cut; %i total). %s \\\\\n' % (verb(tel), remain, cut, tot, cutwarn))
+
         # cuts per frontend/backend combo
         problem_febes = []
         fsum.write(r'\subsubsection*{Excised TOAs by Frontend/Backend Combination}' + '\n')
