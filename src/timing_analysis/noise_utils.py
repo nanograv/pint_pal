@@ -511,7 +511,7 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     wn_dict = dict(zip(pars, wn_vals))
 
     #Print bayes factor for red noise in pulsar
-    rn_bf = model_utils.bayes_fac(chain[burn:, -5])[0]
+    rn_bf = model_utils.bayes_fac(chain[burn:, -5], logAmax=-11, logAmin=-20)[0]
 
     return wn_dict, rn_bf
 
