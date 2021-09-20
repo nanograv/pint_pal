@@ -1000,8 +1000,15 @@ def pdf_writer(fitter,
 
         # info about cut flags
         ntoa = cuts_dict['cut']['good'][0]
+        cutflag_vals = [cdv[1] for cdv in cuts_dict['cut'].values()]
+        total_cuts = np.sum(cutflag_vals)-cuts_dict['cut']['good'][1] # do not count "good"
+        cut_pct = 100.0 * float(total_cuts)/ntoa
+
         fsum.write(r'\subsubsection*{Excised TOAs by Cut Flag}' + '\n')
-        fsum.write(f"Note: {cuts_dict['cut']['good'][1]} good TOAs remain out of {ntoa} total. See attached plots. " + "\\\\\n")
+        fsum.write(f"Note: {cuts_dict['cut']['good'][1]} good TOAs remain out of {ntoa} total." + "\\\\\n")
+        if cut_pct > 75.0:
+            msg = f"Lots of TOAs have been excised ({round(cut_pct, 1)}\%)! Is that intended? See attached plots."
+            fsum.write(alert(msg) + "\\\\\n")
         for cf in cuts_dict['cut'].keys():
             if cf != 'good':
                 tot,cut = cuts_dict['cut'][cf]
@@ -1034,7 +1041,7 @@ def pdf_writer(fitter,
                 problem_febes.append(verb(febe))
 
         if problem_febes:
-            msg = alert("Very few TOAs remain and corresponding noise parameters may be poorly determined for: ")
+            msg = alert("Very few TOAs; noise parameters may be poorly determined for: ")
             febe_str = ', '.join(problem_febes)
             fsum.write(msg + febe_str + "\\\\\n")
 
