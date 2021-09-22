@@ -553,9 +553,63 @@ def get_cut_colors(palette='pastel'):
         'orphaned':palette[6],
         'maxout':palette[7],
         'simul':palette[8],
-        'poorfebe':palette[9]
+        'poorfebe':palette[9],
+        'badtoa':'k',
+        'badfile':'C3',
+        'mjdstart':'C9',
+        'mjdend': 'C9',
     }
     return color_dict
+
+def get_cutsDict(toas):
+    """Gather useful information about cuts by telescope, febe, flag value
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+
+    Returns
+    =======
+    cutsDict: dict
+        cuts and total number of TOAs per febe, telescope, cut flag
+    """
+    cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
+    set_cuts = set(cuts)
+    tottoa = len(cuts)
+
+    tels = np.array([t[5] for t in toas.orig_table])
+    set_tels = set(tels)
+
+    fbs = np.array([f['f'] for f in toas.orig_table['flags']])
+    set_fbs = set(fbs)
+
+    fcutDict = {}
+    for fb in set_fbs:
+        inds = np.where(fbs == fb)[0]
+        ntot = len(inds)
+        ncuts = sum(x is not None for x in cuts[inds])
+        fcutDict[fb] = [ntot,ncuts]
+
+    tcutDict = {}
+    for tel in set_tels:
+        inds = np.where(tels == tel)[0]
+        ntot = len(inds)
+        ncuts = sum(x is not None for x in cuts[inds])
+        tcutDict[tel] = [ntot,ncuts]
+    
+    ncut_manual = 0
+    ccutDict = {}
+    for c in set_cuts:
+        ncut = list(cuts).count(c)
+        if c: ccutDict[c] = [tottoa,ncut]
+        else: ccutDict['good'] = [tottoa,ncut]
+    if ncut_manual: ccutDict['manual'] = [tottoa,ncut_manual]
+        
+    cutsDict = {'f':fcutDict,
+                'tel':tcutDict,
+                'cut':ccutDict,
+               }
+    return cutsDict
 
 def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=False):
     """Basic summary of cut TOAs, associated reasons
@@ -575,10 +629,11 @@ def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=Fal
 
     Returns
     =======
-    cuts_dict: dict
-        Cut flags and number of instances for input TOAs
+    cutsDict: dict
+        Number total/cut TOAs per telescope, febe, cut flag. 
     """
     color_dict = get_cut_colors()
+    cutsDict = get_cutsDict(toas)
 
     # gather info for title (may also be useful for other features in the future)
     tel = [t[5] for t in toas.table]
@@ -591,15 +646,13 @@ def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=Fal
     flavor = f"{tc.get_outfile_basename()} ({mashtel}; {', '.join(setfe)})"
 
     # kwarg that makes it possible to break this down by telescope/backend...?
-    toa_cut_flags = [t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table]
-    nTOA = len(toa_cut_flags)
-    cuts_present = set(toa_cut_flags)
+    nTOA = len(toas)
+    cdc = cutsDict['cut']
     cuts_dict = {}
-    for c in cuts_present: 
-        ncut = toa_cut_flags.count(c)
-        if c: cuts_dict[c] = ncut
-        else: cuts_dict['good'] = ncut
-        if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')    
+    for c in cdc.keys():
+        ncut = cdc[c][1]
+        cuts_dict[c] = ncut
+        if print_summary: print(f'{c}: {ncut} ({100*ncut/nTOA:.1f}%)')
 
     nTOAcut = np.array(list(cuts_dict.values()))
     sizes = nTOAcut/nTOA
@@ -622,9 +675,9 @@ def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=Fal
     if save:
         plt.savefig(f"{mashtel}_{tc.get_outfile_basename()}_donut.png",bbox_inches='tight')
         plt.close()
-    return cuts_dict
+    return cutsDict
 
-def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pastel', save=False):
+def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pastel', save=False, using_wideband=False):
     """Plot TOAs for a single backend in the frequency-time plane, colored by reason for excision (if any)
 
     Parameters
@@ -640,6 +693,8 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pas
         Seaborn color palette name
     save: bool, optional
         Save a png of the plot
+    using_wideband: bool, optional
+        TOAs are WB
 
     Returns
     =======
@@ -673,15 +728,20 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pas
     ax.set_title(f'{backend} ({ntoas_total} total TOAs, {ntoas_cut} cut)')
     ax.legend(loc='center left', bbox_to_anchor=(1.01, 0.5))
     if save:
-        plt.savefig(f'{psr}-{backend}-excision.png', dpi=150)
+        if using_wideband:
+            plt.savefig(f'{psr}-{backend}-excision_wb.png', dpi=150)
+        else:
+            plt.savefig(f'{psr}-{backend}-excision_nb.png', dpi=150)
     return fig, ax
 
-def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', save=False):
+def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', save=False, using_wideband=False):
     """Plot TOAs for each backend in the frequency-time plane, colored by reason for excision (if any)
 
     Parameters
     ==========
     toas: `pint.toa.TOAs` object
+    using_wideband: bool, optional
+        TOAs are WB
     marker: str, optional
         Marker to use in scatterplots
     marker_size: int, optional
@@ -693,7 +753,7 @@ def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', s
     """
     backends = set(t['flags']['be'] for t in toas.orig_table)
     for backend in backends:
-        plot_cuts_by_backend(toas, backend, marker, marker_size, palette, save)
+        plot_cuts_by_backend(toas, backend, marker, marker_size, palette, save, using_wideband=using_wideband)
     plt.show()
        
 def display_excise_dropdowns(file_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):
@@ -942,7 +1002,7 @@ def display_auto_ex(tc, mo, cutkeys=['epochdrop', 'outlier10'], plot_type='profi
 
     return plot_list
 
-def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True):
+def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True,save=True):
     """ Plot residuals vs. time, highlight specified cuts (default: badtoa/badfile) 
     
     Parameters
@@ -954,6 +1014,8 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_goo
         cuts to highlight in residuals plot (default: manual cuts)
     ylim_good: bool, optional
         set ylim to that of uncut TOAs (default: True)
+    save: bool (default: True)
+        saves the output plot
     """
     toas.table = toas.orig_table
     fo = tc_object.construct_fitter(toas,model)
@@ -993,6 +1055,12 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_goo
     plt.title(f'{model.PSR.value} highlighted cuts',y=1.2)
     ax.set_xlabel('MJD')
     ax.set_ylabel('Residual ($\mu$s)')
+    
+    if save:
+        if using_wideband:
+            plt.savefig(f'{model.PSR.value}_manual_hl_wb.png', dpi=150)
+        else:
+            plt.savefig(f'{model.PSR.value}_manual_hl_nb.png', dpi=150)
     
     # reset cuts for additional processing
     from timing_analysis.utils import apply_cut_select
@@ -1051,3 +1119,65 @@ def check_convergence(fitter):
             log.warning("Fitter may not have converged")
     if chi2_decrease > 0.01:
         log.warning("Input par file is not fully fitted")
+
+def file_look(filenm, plot_type = 'profile'):
+    """ Plots profile, GTpd, or YFp for a single file
+    
+    Parameters
+    ==========
+    filenm: file name of observation of interest
+    plot_type: choose if you'd like to see the profile vs. phase, frequency vs. phase, or time vs. phase (valid values = 'profile', 'GTpd', 'YFp')
+    """
+    ff_list = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
+    fmatch = [f for f in ff_list if filenm in f]
+    if len(fmatch) == 0: 
+        log.warning(f'File can\'t be found: {filenm}')
+    else:
+        if plot_type == 'profile':
+            for f in fmatch:
+                ar = pypulse.Archive(f, prepare=True)
+                ar.fscrunch()
+                ar.plot(subint=0, pol=0, chan=0, show=True)
+        elif plot_type == 'GTpd':
+            for f in fmatch:
+                ar = pypulse.Archive(f, prepare=True)
+                ar.tscrunch()
+                ar.imshow()
+        elif plot_type == 'YFp':
+            for f in fmatch:
+                ar = pypulse.Archive(f, prepare=True)
+                ar.fscrunch()
+                ar.imshow()
+        else:
+            log.warning(f'Unrecognized plot type: {plot_type}')
+
+def nonexcised_file_look(toas, plot_type = 'profile'):
+    """ Plots profile, GTpd, or YFp for all non-excised files
+    WARNING: THIS PRODUCES A LOT OF OUTPUT!!
+    
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object (usually 'to' here)
+    plot_type: choose if you'd like to see the profile vs. phase, frequency vs. phase, or time vs. phase (valid values = 'profile', 'GTpd', 'YFp')
+    """
+    ff_list = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
+    fnames = toas['name']
+    matches = []
+    for f in ff_list:
+        for ff in fnames:
+            if ff in f and f not in matches:
+                matches.append(f)
+                if plot_type == 'profile':
+                    ar = pypulse.Archive(f, prepare=True)
+                    ar.fscrunch()
+                    ar.plot(subint=0, pol=0, chan=0, show=True)
+                elif plot_type == 'GTpd':
+                    ar = pypulse.Archive(f, prepare=True)
+                    ar.tscrunch()
+                    ar.imshow()
+                elif plot_type == 'YFp':
+                    ar = pypulse.Archive(f, prepare=True)
+                    ar.fscrunch()
+                    ar.imshow()
+                else:
+                    log.warning(f'Unrecognized plot type: {plot_type}')

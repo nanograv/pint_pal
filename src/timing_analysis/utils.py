@@ -443,7 +443,9 @@ def pdf_writer(fitter,
                dm_dict=None, 
                append=None, 
                previous_parfile=None, 
-               fitter_noise=None):
+               fitter_noise=None,
+               cuts_dict=None,
+               no_corner=False):
     """Take output from timing notebook functions and write things out nicely in a summary pdf.
 
     Input
@@ -457,6 +459,8 @@ def pdf_writer(fitter,
     append [string or None]: default is `None`, else should be a string to the path to the texfile to append output to.
     previous_parfile [string or None]: If provided, report a comparison with this par file (presumably from a previous release).
     fitter_noise [pint.fitter.Fitter]: Fitter that has had new noise parameters applied (if available).
+    cuts_dict [dictionary]: optional dictionary specifying total number TOAs/cuts by tel, febe, flag value
+    no_corner [boolean]: default is `False` to append corner plot, else will look for posterior plots
     """
     def verb(s):
         s = str(s).strip()
@@ -658,7 +662,7 @@ def pdf_writer(fitter,
     # Check for more than one jumped receiver
     fsum.write(r'\subsection*{Receivers and JUMPs}' + '\n')
     groups = set(np.array(resids.toas.get_flag_value('f')[0]))
-    receivers = set([g.replace("_GUPPI","").replace("_GASP","").replace("_PUPPI","").replace("_ASP","") for g in groups])
+    receivers = set([g.replace("_GUPPI","").replace("_GASP","").replace("_PUPPI","").replace("_ASP","").replace("_YUPPI","") for g in groups])
     jumped = []
     for p in model.params:
         if "JUMP" in p and "DM" not in p:
@@ -700,7 +704,7 @@ def pdf_writer(fitter,
             and pm.frozen
             and pm.value is not None
             and pm.value != 0):
-            if p in {"START", "FINISH", "POSEPOCH", "DMEPOCH", "PEPOCH", "TZRMJD", "DM", "DMX", "NTOA", "CHI2", "DMDATA", "TZRFRQ"}:
+            if p in {"START", "FINISH", "POSEPOCH", "DMEPOCH", "PEPOCH", "TZRMJD", "DM", "DMX", "NTOA", "CHI2", "DMDATA", "TZRFRQ", "RNAMP", "RNIDX"}:
                 ignoring.append(p)
                 continue
             skip = False
@@ -742,6 +746,9 @@ def pdf_writer(fitter,
         # FIXME: replicate compare_model here? run compare_model? maybe with low verbosity but capture log messages?
         pm = getattr(fitter.model, p)
         iv = getattr(fitter.model_init, p).value
+        if iv is None:
+            fsum.write(alert("WARNING:") + f" free parameter {verb(p)} is unset in input model.\\\\\n")
+            continue
         fv = pm.value
         u = pm.uncertainty.value
         cs = (iv-fv)/u
@@ -751,7 +758,7 @@ def pdf_writer(fitter,
         if abs(cs) > sigma_threshold:
             msg = f"parameter {verb(p)} changed from {iv} to {fv} ({cs:.2g} sigma) during fit."
             log.warn(msg)
-            fsum.write("WARNING: " + msg + "\\\\\n")
+            fsum.write(alert("WARNING: ") + msg + "\\\\\n")
     fsum.write(f"Largest parameter change during fit was {verb(changed)} by {max_cs:.2g} sigma.\\\\\n")
                    
     # Write out if reduced chi squared is close to 1
@@ -987,7 +994,57 @@ def pdf_writer(fitter,
             fsum.write(r"\end{verbatim}" + "\n")
             fsum.write(r"}" + "\n")
             fsum.write("\n")
-        
+            
+    # Check excision percentage, add text to summary
+    if cuts_dict is not None:
+
+        # info about cut flags
+        ntoa = cuts_dict['cut']['good'][0]
+        cutflag_vals = [cdv[1] for cdv in cuts_dict['cut'].values()]
+        total_cuts = np.sum(cutflag_vals)-cuts_dict['cut']['good'][1] # do not count "good"
+        cut_pct = 100.0 * float(total_cuts)/ntoa
+
+        fsum.write(r'\subsubsection*{Excised TOAs by Cut Flag}' + '\n')
+        fsum.write(f"Note: {cuts_dict['cut']['good'][1]} good TOAs remain out of {ntoa} total." + "\\\\\n")
+        if cut_pct > 75.0:
+            msg = f"Lots of TOAs have been excised ({round(cut_pct, 1)}\%)! Is that intended? See attached plots."
+            fsum.write(alert(msg) + "\\\\\n")
+        for cf in cuts_dict['cut'].keys():
+            if cf != 'good':
+                tot,cut = cuts_dict['cut'][cf]
+                fsum.write('%s: %i \\\\\n' % (verb(cf), cut))
+        if 'badfile' not in cuts_dict['cut'] and 'badtoa' not in cuts_dict['cut']:
+            fsum.write('No TOAs have been manually excised, so no manual cut plot will be appended to the PDF.\\\\\n')
+
+        # cuts per telescope
+        fsum.write(r'\subsubsection*{Excised TOAs by Observatory}' + '\n')
+        for tel in cuts_dict['tel'].keys():
+            cutwarn = ""
+            tot,cut = cuts_dict['tel'][tel]
+            cut_pct = 100.0 * float(cut)/tot
+            remain = tot-cut
+            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\% cut!")
+            fsum.write('%s: %i TOAs remain (%i cut; %i total). %s \\\\\n' % (verb(tel), remain, cut, tot, cutwarn))
+
+        # cuts per frontend/backend combo
+        problem_febes = []
+        fsum.write(r'\subsubsection*{Excised TOAs by Frontend/Backend Combination}' + '\n')
+        for febe in cuts_dict['f'].keys():
+            cutwarn = ""
+            tot,cut = cuts_dict['f'][febe]
+            cut_pct = 100.0 * float(cut)/tot
+            remain = tot-cut
+            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\% cut!")
+            fsum.write('%s: %i TOAs remain (%i cut; %i total). %s \\\\\n' % (verb(febe), remain, cut, tot, cutwarn))
+
+            if float(remain)/ntoa < 0.05:
+                problem_febes.append(verb(febe))
+
+        if problem_febes:
+            msg = alert("Very few TOAs; noise parameters may be poorly determined for: ")
+            febe_str = ', '.join(problem_febes)
+            fsum.write(msg + febe_str + "\\\\\n")
+
     # Write out software versions used
     fsum.write(r'\subsection*{Software versions used in timing\_analysis:}' + '\n')
     fsum.write('PINT: %s\\\\\n' % verb(pint.__version__))
@@ -1035,15 +1092,62 @@ def pdf_writer(fitter,
         fsum.write(r'\end{figure}' + '\n')
     nb_wb = "nb" if NB else "wb"
     noise_plot = f"{model.PSR.value}_noise_corner_{nb_wb}.pdf"
-    if os.path.exists(noise_plot):
-        log.info(f"Including noise corner plot {noise_plot}")
-        fsum.write(r'\begin{figure}[p]' + '\n')
-        fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_plot + '}}\n')
-        fsum.write(r'\end{figure}' + '\n')
+    noise_posterior_plots = f"{model.PSR.value}_noise_posterior_{nb_wb}.pdf"
+
+    if no_corner:
+        if os.path.exists(noise_posterior_plots):
+            log.info(f"Including noise posterior plots {noise_posterior_plots}")
+            fsum.write(r'\begin{figure}[p]' + '\n')
+            fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_posterior_plots + '}}\n')
+            fsum.write(r'\end{figure}' + '\n')
+        else:
+            log.info(f"Could not find noise posterior plots {noise_posterior_plots}")
+            fsum.write(f"Noise posterior plots {verb(noise_posterior_plots)} not found.\\\\\n")
     else:
-        log.info(f"Could not find noise corner plot {noise_plot}")
-        fsum.write(f"Noise corner plot {verb(noise_plot)} not found.\\\\\n")
-        
+        if os.path.exists(noise_plot):
+            log.info(f"Including noise corner plot {noise_plot}")
+            fsum.write(r'\begin{figure}[p]' + '\n')
+            fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_plot + '}}\n')
+            fsum.write(r'\end{figure}' + '\n')
+        else:
+            log.info(f"Could not find noise corner plot {noise_plot}")
+            fsum.write(f"Noise corner plot {verb(noise_plot)} not found.\\\\\n")
+
+    # excision donut plot
+    if cuts_dict is not None:
+        if NB:
+            excise_plot_list = sorted(glob.glob("*%s.nb_donut.png" % (model.PSR.value)))
+        else:
+            excise_plot_list = sorted(glob.glob("*%s.wb_donut.png" % (model.PSR.value)))
+        if not excise_plot_list:
+            raise IOError("Unable to find any donut plots to include in summary PDF!")
+        for ex_plt in excise_plot_list:
+            fsum.write(r'\begin{figure}[p]' + '\n')
+            fsum.write(r'\centerline{\includegraphics[width=0.5\linewidth]{' + ex_plt + '}}\n')
+            fsum.write(r'\end{figure}' + '\n')
+        # freq spread vs. MJD plot
+        if NB:
+            freq_plot_list = sorted(glob.glob("*%s*excision_nb.png" % (model.PSR.value)))
+        else:
+            freq_plot_list = sorted(glob.glob("*%s*excision_wb.png" % (model.PSR.value)))
+        if not freq_plot_list:
+            raise IOError("Unable to find any freq vs. MJD plots to include in summary PDF!")
+        for freq_plt in freq_plot_list:
+            fsum.write(r'\begin{figure}[p]' + '\n')
+            fsum.write(r'\centerline{\includegraphics[width=0.9\linewidth]{' + freq_plt + '}}\n')
+            fsum.write(r'\end{figure}' + '\n')
+        # manual excision plots
+        if 'badtoa' in cuts_dict['cut'] or 'badfile' in cuts_dict['cut']:
+            if NB:
+                hl_plot_list = sorted(glob.glob("%s_manual_hl_nb.png" % (model.PSR.value)))
+            else:
+                hl_plot_list = sorted(glob.glob("%s_manual_hl_wb.png" % (model.PSR.value)))
+            if not hl_plot_list:
+                raise IOError("Unable to find any manual cut highlight plots to include in summary PDF!")
+            for hl_plt in hl_plot_list:
+                fsum.write(r'\begin{figure}[p]' + '\n')
+                fsum.write(r'\centerline{\includegraphics[width=\linewidth]{' + hl_plt + '}}\n')
+                fsum.write(r'\end{figure}' + '\n')
 
     if append is None:
 
@@ -1106,3 +1210,59 @@ def apply_cut_select(toas,reason='???'):
         log.info(f"Selecting {sum(mask)} TOAs out of {n_origtoas} ({n_more} more removed based on {reason}).")
     toas.table = toas.orig_table[mask]
     toas.table = toas.table.group_by('obs')  # otherwise table.groups.keys gets clobbered; consider using separate toas object
+
+def check_recentness_noise(tc):
+    """Check whether the timing configuration points to the most recent noise run.
+
+    Returns
+    =======
+    name of chains in use, sorted list of available chains
+        Under normal circumstances the first of these should equal the last element
+        of the second; that is, the name of the directory in use should match the
+        name of the most recent available set of chains
+    """
+    d = os.path.abspath(tc.get_noise_dir())
+    noise_runs = [os.path.dirname(os.path.dirname(os.path.abspath(p))) 
+                  for p in sorted(glob.glob(os.path.join(d,
+                                                    "..",
+                                                    "*.Noise.*",
+                                                    tc.get_source()+"_"+tc.get_toa_type().lower(),
+                                                    "chain*.txt")))]
+    used_chains = os.path.basename(d)
+    available_chains = [os.path.basename(n) for n in noise_runs]
+    log.info(f"Using: {used_chains}")
+    log.info(f"Available: {' '.join(available_chains)}")
+    try:
+        newest_chains = available_chains[-1]
+    except IndexError:
+        log.warning(f"No noise chains are available for this pulsar! Make sure to run the noise modeling.")
+    else:
+        if used_chains != newest_chains:
+            log.warning(f"Using chains from {used_chains} but {newest_chains} is available")
+    return used_chains, available_chains
+
+def check_recentness_excision(tc):
+    """Check whether the timing configuration points to the most recent set of excised TOAs.
+
+    Returns
+    =======
+    name of excision run in use, sorted list of available excision runs
+        Under normal circumstances the first of these should equal the last element
+        of the second; that is, the name of the directory in use should match the
+        name of the most recent available set of chains
+    """
+    e = os.path.abspath(tc.get_excised())
+    d = os.path.dirname(e)
+    excision_dirs = [os.path.dirname(os.path.dirname(os.path.abspath(p))) 
+                  for p in sorted(glob.glob(os.path.join(d,
+                                                         "..", "..",
+                                                         "*.Outlier.*",
+                                                         tc.get_source()+"."+tc.get_toa_type().lower(),
+                                                         "*_excise.tim")))]
+    used_excision = os.path.basename(os.path.dirname(d))
+    available_excision = [os.path.basename(n) for n in excision_dirs]
+    log.info(f"Using: {used_excision}")
+    log.info(f"Available: {' '.join(available_excision)}")
+    if used_excision != available_excision[-1]:
+        log.warning(f"Using excision from {used_excision} but {available_excision[-1]} is available")
+    return used_excision, available_excision

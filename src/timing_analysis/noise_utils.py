@@ -9,6 +9,7 @@ import corner
 import pint.models as pm
 from pint.models.parameter import maskParameter
 
+import matplotlib as mpl
 import matplotlib.pyplot as pl
 
 #Imports necessary for e_e noise modeling functions
@@ -334,7 +335,7 @@ def model_singlepsr_noise(psr, tm_var=False, tm_linear=False,
 
     return pta
 
-def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True):
+def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True, no_corner_plot = False, chaindir_compare=None):
     """
     Reads enterprise chain file; produces and saves corner plot; returns WN dictionary and RN (SD) BF
 
@@ -343,13 +344,13 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     chaindir: path to enterprise noise run chain; Default: './noise_run_chains/'
     burn_frac: fraction of chain to use for burn-in; Default: 0.25
     save_corner: Flag to toggle saving of corner plots; Default: True
+    chaindir_compare: path to enterprise noise run chain wish to plot in corner plot for comparison; Default: None
 
     Returns
     =======
     wn_dict: Dictionary of maximum likelihood WN values
     rn_bf: Savage-Dickey BF for RN for given pulsar
     """
-
     chainfile = chaindir + 'chain_1.txt'
     chain = np.loadtxt(chainfile)
     burn = int(burn_frac * chain.shape[0])
@@ -357,10 +358,36 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
 
     psr_name = pars[0].split('_')[0]
 
-    if save_corner:
+    # load in same for comparison noise model
+    if chaindir_compare is not None:
+        chainfile_compare = chaindir_compare + 'chain_1.txt'
+        chain_compare = np.loadtxt(chainfile_compare)
+        burn_compare = int(burn_frac * chain_compare.shape[0])
+        pars_compare = np.loadtxt(chaindir_compare + 'pars.txt', dtype = str)
+
+        psr_name_compare = pars_compare[0].split('_')[0]
+        if psr_name_compare != psr_name:
+            log.warning(f"Pulsar name from {chaindir_compare} does not match. Will not plot comparison")
+            chaindir_compare = None
+
+    if save_corner and not no_corner_plot:
         pars_short = [p.split("_",1)[1] for p in pars]
         log.info(f"Chain parameter names are {pars_short}")
-        corner.corner(chain[burn:, :-4], labels = pars_short)
+        if chaindir_compare is not None:
+            # need to plot comparison corner plot first so it's underneath
+            compare_pars_short = [p.split("_",1)[1] for p in pars_compare]
+            log.info(f"Comparison chain parameter names are {compare_pars_short}")
+            # don't plot comparison if the parameter names don't match
+            if compare_pars_short != pars_short:
+                log.warning("Parameter names for comparison noise chains do not match, not plotting the compare-noise-dir chains")
+                chaindir_compare = None
+            else:
+                normalization_factor = np.ones(len(chain_compare[burn:, :-4]))*len(chain[burn:, :-4])/len(chain_compare[burn:, :-4])
+                fig = corner.corner(chain_compare[burn:, :-4], color='orange', alpha=0.5, weights=normalization_factor, labels = compare_pars_short)
+                # normal corner plot
+                corner.corner(chain[burn:, :-4], fig=fig, color='black', labels = pars_short)
+        if chaindir_compare is None:
+            corner.corner(chain[burn:, :-4], labels = pars_short)
 
         if '_wb' in chaindir:
             figname = f"./{psr_name}_noise_corner_wb.pdf"
@@ -373,7 +400,110 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
         pl.savefig(figname.replace(".pdf",".png"), dpi=300)
 
         pl.show()
+        
+    if no_corner_plot:
+        
+        default_figsize = mpl.rcParams['figure.figsize']
+        
+        pars_short = [p.split("_",1)[1] for p in pars]
+        log.info(f"Chain parameter names are {pars_short}")
+        if chaindir_compare is not None:
+            # need to plot comparison corner plot first so it's underneath
+            compare_pars_short = [p.split("_",1)[1] for p in pars_compare]
+            log.info(f"Comparison chain parameter names are {compare_pars_short}")
+            # don't plot comparison if the parameter names don't match
+            if compare_pars_short != pars_short:
+                log.warning("Parameter names for comparison noise chains do not match, not plotting the compare-noise-dir chains")
+                chaindir_compare = None
+            else:
+                normalization_factor = np.ones(len(chain_compare[burn:, :-4]))*len(chain[burn:, :-4])/len(chain_compare[burn:, :-4])
+                
+                #Set the shape of the subplots
+                shape = pars.shape[0]
+                
+                if '_wb' in chaindir:
+                    ncols = 4
+                else:
+                    ncols = 3
+                    
+                nrows = int(np.ceil(shape / ncols))
+                
+                mp_idx = np.argmax(chain[burn:, -4])
+                mp_compare_idx = np.argmax(chain_compare[burn:, -4])
+                
+                fig_dim = [default_figsize[0] * ncols, default_figsize[1] * nrows]
+                
+                #Do actual plotting
+                fig, ax = pl.subplots(nrows = nrows, ncols = ncols, figsize = fig_dim)
 
+                nr = 0
+                nc = 0
+                nbins = 20
+
+                for idx in range(shape):
+                    
+                    ax[nr][nc].hist(chain[burn:, idx], bins = nbins, histtype = 'step', color='black', label = 'Current')
+                    ax[nr][nc].hist(chain_compare[burn:, idx], bins = nbins, histtype = 'step', color='orange', label = 'Past')
+                    
+                    ax[nr][nc].axvline(chain[burn:, idx][mp_idx], ls = '--', color = 'black')
+                    ax[nr][nc].axvline(chain_compare[burn:, idx][mp_compare_idx], ls = '--', color = 'orange')
+                    
+                    ax[nr][nc].set_xlabel(pars_short[idx], fontsize = 14)
+                    
+                    nc += 1
+                    if nc % ncols == 0:
+                        nc = 0
+                        nr += 1
+                        
+        if chaindir_compare is None:
+            #Set the shape of the subplots
+            shape = pars.shape[0]
+            
+            if '_wb' in chaindir:
+                ncols = 4
+            else:
+                ncols = 3
+            
+            nrows = int(np.ceil(shape / ncols))
+            
+            mp_idx = np.argmax(chain[burn:, -4])
+            
+            fig_dim = [default_figsize[0] * ncols, default_figsize[1] * nrows]
+            #Do actual plotting
+            fig, ax = pl.subplots(nrows = nrows, ncols = ncols, figsize = fig_dim)
+
+            nr = 0
+            nc = 0
+            nbins = 20
+
+            for idx in range(shape):
+
+                ax[nr][nc].hist(chain[burn:, idx], bins = nbins, histtype = 'step', color = 'black', label = 'Current')
+                
+                ax[nr][nc].axvline(chain[burn:, idx][mp_idx], ls = '--', color = 'black')
+                
+                ax[nr][nc].set_xlabel(pars_short[idx], fontsize = 14)
+
+                nc += 1
+                if nc % ncols == 0:
+                    nc = 0
+                    nr += 1
+                    
+        if '_wb' in chaindir:
+            figname = f"./{psr_name}_noise_posterior_wb.pdf"
+        elif '_nb' in chaindir:
+            figname = f"./{psr_name}_noise_posterior_nb.pdf"
+        else:
+            figname = f"./{psr_name}_noise_posterior.pdf"
+        
+        ax[nr][nc].legend(loc = 'best')
+        pl.tight_layout()
+        
+        pl.savefig(figname)
+        pl.savefig(figname.replace(".pdf",".png"), dpi=300)
+
+        pl.show()
+    
     ml_idx = np.argmax(chain[burn:, -4])
 
     wn_vals = chain[burn:, :-4][ml_idx]
@@ -381,7 +511,7 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     wn_dict = dict(zip(pars, wn_vals))
 
     #Print bayes factor for red noise in pulsar
-    rn_bf = model_utils.bayes_fac(chain[burn:, -5])[0]
+    rn_bf = model_utils.bayes_fac(chain[burn:, -5], ntol=1, logAmax=-11, logAmin=-20)[0]
 
     return wn_dict, rn_bf
 
@@ -455,7 +585,7 @@ def convert_to_RNAMP(value):
     """
     return (86400.*365.24*1e6)/(2.0*np.pi*np.sqrt(3.0)) * 10 ** value
 
-def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_noise = False, using_wideband = False, rn_bf_thres = 1e2, base_dir = None):
+def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_plot = False, ignore_red_noise = False, using_wideband = False, rn_bf_thres = 1e2, base_dir = None, compare_dir=None):
     """
     Add WN and RN parameters to timing model.
 
@@ -480,14 +610,21 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, ignore_red_n
     if not base_dir:
         base_dir = './'
 
+    chaindir_compare = compare_dir
     if not using_wideband:
         chaindir = os.path.join(base_dir,f'{model.PSR.value}_nb/')
+        if compare_dir is not None:
+            chaindir_compare = os.path.join(compare_dir,f'{model.PSR.value}_nb/')
     else:
         chaindir = os.path.join(base_dir,f'{model.PSR.value}_wb/')
+        if compare_dir is not None:
+            chaindir_compare = os.path.join(compare_dir,f'{model.PSR.value}_wb/')
+
+            
 
     log.info(f'Using existing noise analysis results in {chaindir}')
     log.info('Adding new noise parameters to model.')
-    wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner)
+    wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner, no_corner_plot, chaindir_compare=chaindir_compare)
     chainfile = chaindir + 'chain_1.txt'
     mtime = Time(os.path.getmtime(chainfile), format="unix")
     log.info(f"Noise chains loaded from {chainfile} created at {mtime.isot}")
