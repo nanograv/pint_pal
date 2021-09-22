@@ -451,7 +451,10 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
             if chaindir_compare is not None:
                 ax.hist(chain_compare[burn:, idx], bins = nbins, histtype = 'step', color='orange', label = 'Past')
                 ax.axvline(chain_compare[burn:, idx][mp_compare_idx], ls = '--', color = 'orange')
-            ax.set_xlabel(par, fontsize = 10)
+            if '_wb' in chaindir: ax.set_xlabel(par, fontsize=8)
+            else: ax.set_xlabel(par, fontsize = 10)
+            ax.set_yticks([])
+            ax.set_yticklabels([])
 
             if j == (nrows*ncols)-1 or idx == len(pars_short)-1:
                 pl.tight_layout()
