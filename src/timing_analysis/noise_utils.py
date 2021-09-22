@@ -405,11 +405,11 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
         
         from matplotlib.backends.backend_pdf import PdfPages
         if '_wb' in chaindir:
-            figname = f"./{psr_name}_noise_posterior_wb.pdf"
+            figbase = f"./{psr_name}_noise_posterior_wb"
         elif '_nb' in chaindir:
-            figname = f"./{psr_name}_noise_posterior_nb.pdf"
+            figbase = f"./{psr_name}_noise_posterior_nb"
         else:
-            figname = f"./{psr_name}_noise_posterior.pdf"
+            figbase = f"./{psr_name}_noise_posterior"
         
         pars_short = [p.split("_",1)[1] for p in pars]
         log.info(f"Chain parameter names are {pars_short}")
@@ -437,12 +437,12 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
         mp_idx = np.argmax(chain[burn:, -4])
         if chaindir_compare is not None: mp_compare_idx = np.argmax(chain_compare[burn:, -4])
                 
-        pdf = PdfPages(figname)
-
         nbins = 20
+        pp = 0
         for idx, par in enumerate(pars_short):
             j = idx % (nrows*ncols)
             if j == 0:
+                pp += 1
                 fig = pl.figure(figsize=(8,11))
 
             ax = fig.add_subplot(nrows, ncols, j+1)
@@ -454,17 +454,11 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
             ax.set_xlabel(par, fontsize = 10)
 
             if j == (nrows*ncols)-1 or idx == len(pars_short)-1:
-                fig.tight_layout()
-                pdf.savefig(fig)
+                pl.tight_layout()
+                pl.savefig(f"{figbase}_{pp}.pdf")
 
-        pdf.close()
-                    
         # Wasn't working before, but how do I implement a legend?
         #ax[nr][nc].legend(loc = 'best')
-        
-        # Do we need a png?
-        #pl.savefig(figname.replace(".pdf",".png"), dpi=300)
-
         pl.show()
     
     ml_idx = np.argmax(chain[burn:, -4])
