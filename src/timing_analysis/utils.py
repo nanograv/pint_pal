@@ -1099,7 +1099,7 @@ def pdf_writer(fitter,
             raise IOError("Unable to find any noise posterior plots to include in summary PDF!")
         else:
             for npost_plt in noise_posterior_plots_list:
-                log.info(f"Including noise posterior plots {noise_posterior_plots}")
+                log.info(f"Including noise posterior plots {npost_plt}")
                 fsum.write(r'\begin{figure}[p]' + '\n')
                 fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + npost_plt + '}}\n')
                 fsum.write(r'\end{figure}' + '\n')
