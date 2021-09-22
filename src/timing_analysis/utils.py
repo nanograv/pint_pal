@@ -520,6 +520,7 @@ def pdf_writer(fitter,
         fsum.write(r'\DeclareUnicodeCharacter{2079}{\textsuperscript{9}}' + '\n')
         fsum.write(r'\usepackage{graphicx}' + '\n')
         fsum.write(r'\usepackage{xcolor}' + '\n')
+        fsum.write(r'\usepackage{pdfpages}' + '\n')
         fsum.write(r'\addtolength{\hoffset}{-2.5cm}' + '\n')
         fsum.write(r'\addtolength{\textwidth}{5.0cm}' + '\n')
         fsum.write(r'\addtolength{\voffset}{-2.5cm}' + '\n')
@@ -1097,9 +1098,10 @@ def pdf_writer(fitter,
     if no_corner:
         if os.path.exists(noise_posterior_plots):
             log.info(f"Including noise posterior plots {noise_posterior_plots}")
-            fsum.write(r'\begin{figure}[p]' + '\n')
-            fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_posterior_plots + '}}\n')
-            fsum.write(r'\end{figure}' + '\n')
+            #fsum.write(r'\begin{figure}[p]' + '\n')
+            #fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_posterior_plots + '}}\n')
+            #fsum.write(r'\end{figure}' + '\n')
+            fsum.writer(r'\includepdf[pages=-]{' + noise_posterior_plots + '} \n')
         else:
             log.info(f"Could not find noise posterior plots {noise_posterior_plots}")
             fsum.write(f"Noise posterior plots {verb(noise_posterior_plots)} not found.\\\\\n")
