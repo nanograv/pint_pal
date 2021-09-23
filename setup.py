@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="timing_analysis",
-    version="0.1.0",
+    version="1.0.0",
     description="NANOGrav Timimg Analysis",
     author="Joe Swiggum",
     author_email="swiggumj@gmail.com",
