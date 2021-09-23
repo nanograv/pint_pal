@@ -1092,17 +1092,17 @@ def pdf_writer(fitter,
         fsum.write(r'\end{figure}' + '\n')
     nb_wb = "nb" if NB else "wb"
     noise_plot = f"{model.PSR.value}_noise_corner_{nb_wb}.pdf"
-    noise_posterior_plots = f"{model.PSR.value}_noise_posterior_{nb_wb}.pdf"
+    noise_posterior_plots_list = sorted(glob.glob(f"{model.PSR.value}_noise_posterior_{nb_wb}_*.pdf"))
 
     if no_corner:
-        if os.path.exists(noise_posterior_plots):
-            log.info(f"Including noise posterior plots {noise_posterior_plots}")
-            fsum.write(r'\begin{figure}[p]' + '\n')
-            fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + noise_posterior_plots + '}}\n')
-            fsum.write(r'\end{figure}' + '\n')
+        if not noise_posterior_plots_list:
+            raise IOError("Unable to find any noise posterior plots to include in summary PDF!")
         else:
-            log.info(f"Could not find noise posterior plots {noise_posterior_plots}")
-            fsum.write(f"Noise posterior plots {verb(noise_posterior_plots)} not found.\\\\\n")
+            for npost_plt in noise_posterior_plots_list:
+                log.info(f"Including noise posterior plots {npost_plt}")
+                fsum.write(r'\begin{figure}[p]' + '\n')
+                fsum.write(r'\centerline{\includegraphics[width=\textwidth]{' + npost_plt + '}}\n')
+                fsum.write(r'\end{figure}' + '\n')
     else:
         if os.path.exists(noise_plot):
             log.info(f"Including noise corner plot {noise_plot}")

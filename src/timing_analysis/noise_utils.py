@@ -403,7 +403,13 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
         
     if no_corner_plot:
         
-        default_figsize = mpl.rcParams['figure.figsize']
+        from matplotlib.backends.backend_pdf import PdfPages
+        if '_wb' in chaindir:
+            figbase = f"./{psr_name}_noise_posterior_wb"
+        elif '_nb' in chaindir:
+            figbase = f"./{psr_name}_noise_posterior_nb"
+        else:
+            figbase = f"./{psr_name}_noise_posterior"
         
         pars_short = [p.split("_",1)[1] for p in pars]
         log.info(f"Chain parameter names are {pars_short}")
@@ -418,90 +424,44 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
             else:
                 normalization_factor = np.ones(len(chain_compare[burn:, :-4]))*len(chain[burn:, :-4])/len(chain_compare[burn:, :-4])
                 
-                #Set the shape of the subplots
-                shape = pars.shape[0]
+        #Set the shape of the subplots
+        shape = pars.shape[0]
                 
-                if '_wb' in chaindir:
-                    ncols = 4
-                else:
-                    ncols = 3
-                    
-                nrows = int(np.ceil(shape / ncols))
-                
-                mp_idx = np.argmax(chain[burn:, -4])
-                mp_compare_idx = np.argmax(chain_compare[burn:, -4])
-                
-                fig_dim = [default_figsize[0] * ncols, default_figsize[1] * nrows]
-                
-                #Do actual plotting
-                fig, ax = pl.subplots(nrows = nrows, ncols = ncols, figsize = fig_dim)
-
-                nr = 0
-                nc = 0
-                nbins = 20
-
-                for idx in range(shape):
-                    
-                    ax[nr][nc].hist(chain[burn:, idx], bins = nbins, histtype = 'step', color='black', label = 'Current')
-                    ax[nr][nc].hist(chain_compare[burn:, idx], bins = nbins, histtype = 'step', color='orange', label = 'Past')
-                    
-                    ax[nr][nc].axvline(chain[burn:, idx][mp_idx], ls = '--', color = 'black')
-                    ax[nr][nc].axvline(chain_compare[burn:, idx][mp_compare_idx], ls = '--', color = 'orange')
-                    
-                    ax[nr][nc].set_xlabel(pars_short[idx], fontsize = 14)
-                    
-                    nc += 1
-                    if nc % ncols == 0:
-                        nc = 0
-                        nr += 1
-                        
-        if chaindir_compare is None:
-            #Set the shape of the subplots
-            shape = pars.shape[0]
-            
-            if '_wb' in chaindir:
-                ncols = 4
-            else:
-                ncols = 3
-            
-            nrows = int(np.ceil(shape / ncols))
-            
-            mp_idx = np.argmax(chain[burn:, -4])
-            
-            fig_dim = [default_figsize[0] * ncols, default_figsize[1] * nrows]
-            #Do actual plotting
-            fig, ax = pl.subplots(nrows = nrows, ncols = ncols, figsize = fig_dim)
-
-            nr = 0
-            nc = 0
-            nbins = 20
-
-            for idx in range(shape):
-
-                ax[nr][nc].hist(chain[burn:, idx], bins = nbins, histtype = 'step', color = 'black', label = 'Current')
-                
-                ax[nr][nc].axvline(chain[burn:, idx][mp_idx], ls = '--', color = 'black')
-                
-                ax[nr][nc].set_xlabel(pars_short[idx], fontsize = 14)
-
-                nc += 1
-                if nc % ncols == 0:
-                    nc = 0
-                    nr += 1
-                    
         if '_wb' in chaindir:
-            figname = f"./{psr_name}_noise_posterior_wb.pdf"
-        elif '_nb' in chaindir:
-            figname = f"./{psr_name}_noise_posterior_nb.pdf"
+            ncols = 4 # number of columns per page
         else:
-            figname = f"./{psr_name}_noise_posterior.pdf"
-        
-        ax[nr][nc].legend(loc = 'best')
-        pl.tight_layout()
-        
-        pl.savefig(figname)
-        pl.savefig(figname.replace(".pdf",".png"), dpi=300)
+            ncols = 3
+                    
+        nrows = 5 # number of rows per page
 
+        mp_idx = np.argmax(chain[burn:, -4])
+        if chaindir_compare is not None: mp_compare_idx = np.argmax(chain_compare[burn:, -4])
+                
+        nbins = 20
+        pp = 0
+        for idx, par in enumerate(pars_short):
+            j = idx % (nrows*ncols)
+            if j == 0:
+                pp += 1
+                fig = pl.figure(figsize=(8,11))
+
+            ax = fig.add_subplot(nrows, ncols, j+1)
+            ax.hist(chain[burn:, idx], bins = nbins, histtype = 'step', color='black', label = 'Current')
+            ax.axvline(chain[burn:, idx][mp_idx], ls = '--', color = 'black')
+            if chaindir_compare is not None:
+                ax.hist(chain_compare[burn:, idx], bins = nbins, histtype = 'step', color='orange', label = 'Past')
+                ax.axvline(chain_compare[burn:, idx][mp_compare_idx], ls = '--', color = 'orange')
+            if '_wb' in chaindir: ax.set_xlabel(par, fontsize=8)
+            else: ax.set_xlabel(par, fontsize = 10)
+            ax.set_yticks([])
+            ax.set_yticklabels([])
+
+            if j == (nrows*ncols)-1 or idx == len(pars_short)-1:
+                pl.tight_layout()
+                pl.savefig(f"{figbase}_{pp}.pdf")
+
+        # Wasn't working before, but how do I implement a legend?
+        #ax[nr][nc].legend(loc = 'best')
         pl.show()
     
     ml_idx = np.argmax(chain[burn:, -4])
