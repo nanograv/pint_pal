@@ -23,8 +23,8 @@ dmx:  # control dmx windowing/fixing
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 
 intermediate-results: # use results from previous runs
-  noise-dir: /nanograv/share/15yr/timing/intermediate/20210908.Noise.wb.351af4e/
-  compare-noise-dir: /nanograv/share/15yr/timing/intermediate/20210831.Noise.wb.5933923/
+  noise-dir: /nanograv/share/15yr/timing/intermediate/20210924.Noise.wb.198096e/
+  compare-noise-dir: /nanograv/share/15yr/timing/intermediate/20210908.Noise.wb.351af4e/
   excised-tim: /nanograv/share/15yr/timing/intermediate/20210828.Outlier.wb.5719caa/J0605+3757.wb/J0605+3757.wb_excise.tim
   no-corner: true
 ignore: # toa excision

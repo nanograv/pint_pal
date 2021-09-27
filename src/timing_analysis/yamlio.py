@@ -345,15 +345,13 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
             'compare-model','toas','free-params','free-dmx','toa-type','fitter',
             'n-iterations','ephem','bipm','noise','results-dir','dmx','ignore-dmx',
             'fratio','max-sw-delay','custom-dmx','intermediate-results','noise-dir',
-            'excised-tim','ignore','mjd-start','mjd-end','snr-cut','bad-toa',
-            'bad-range','bad-file','changelog']
+            'compare-noise-dir','excised-tim','no-corner','ignore','mjd-start',
+            'mjd-end','snr-cut','bad-toa','bad-range','bad-file','changelog']
 
     if field not in valid_keys:
         log.warning(f'Provided field ({field}) not valid.')
     else:
-        if field == 'results-dir' and isinstance(value,str):
-            config['noise']['results-dir'] = value
-        elif field == 'ephem' and isinstance(value,str):
+        if field == 'ephem' and isinstance(value,str):
             config['ephem'] = value
         elif field == 'mjd-end' and isinstance(value,float):
             config['ignore']['mjd-end'] = value
@@ -362,6 +360,10 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
         # changelog appends value to existing
         elif field == 'changelog' and isinstance(value,str):
             config['changelog'].append(value)
+        elif field == 'noise-dir' and isinstance(value,str):
+            config['intermediate-results']['noise-dir'] = value
+        elif field == 'no-corner' and isinstance(value,bool):
+            config['intermediate-results']['no-corner'] = value
         else:
             log.error(f'Provided field ({field}) is valid, but not yet implemented in set_field(); doing nothing.')
 
