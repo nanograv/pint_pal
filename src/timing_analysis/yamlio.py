@@ -357,6 +357,8 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
             config['ignore']['mjd-end'] = value
         elif field == 'timing-model' and isinstance(value,str):
             config['timing-model'] = value
+        elif field == 'compare-model' and isinstance(value,str):
+            config['compare-model'] = value
         # changelog appends value to existing
         elif field == 'changelog' and isinstance(value,str):
             config['changelog'].append(value)
