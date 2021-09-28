@@ -549,6 +549,56 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
 
     return
 
+def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None):
+    """ Make simple dmx vs. time plot with dmxout file(s) as input
+
+    Parameters
+    ==========
+    dmxout_files: list/str
+        list of dmxout files to plot (or str if only one)
+    labels: list/str
+        list of labels for dmx timeseries (or str if only one)
+    psrname: str, optional
+        pulsar name
+    outfile: str, optional
+        save figure and write to outfile if set
+
+    Returns
+    =======
+    dmxDict: dictionary
+        dmxout information (mjd, val, err, r1, r2) for each label
+    """
+    from astropy.time import Time
+    if isinstance(dmxout_files, str): dmxout_files = [dmxout_files]
+    if isinstance(labels, str): labels = [labels]
+    
+    figsize = (10,4)
+    fig = plt.figure(figsize=figsize)
+    ax1 = fig.add_subplot(111)
+
+    dmxDict = {}
+    for df,lab in zip(dmxout_files,labels):
+        dmxmjd, dmxval, dmxerr, dmxr1, dmxr2 = np.loadtxt(df, unpack=True, usecols=range(0,5))
+        mjdTime = Time(dmxmjd,format='mjd')
+        dyTime = mjdTime.decimalyear
+        idmxDict = {'mjd':dmxmjd,'val':dmxval,'err':dmxerr,'r1':dmxr1,'r2':dmxr2}        
+        ax1.set_xlabel(r'Year')
+        ax1.grid(True)
+        ax2 = ax1.twiny()
+        ax2.set_xlabel('MJD')
+        ax2.set_xlim(np.sort(dmxmjd)[0], np.sort(dmxmjd)[-1])
+        ax1.errorbar(dyTime, dmxval*10**3, yerr=dmxerr*10**3, label = lab, marker='o', ls='', markerfacecolor='none')
+        ax1.legend(loc='best')
+        ax1.set_ylabel(r"DMX ($10^{-3}$ pc cm$^{-3}$)")
+        if psrname: ax1.text(0.975,0.05,psrname,transform=ax1.transAxes,size=18,c='lightgray',
+                            horizontalalignment='right', verticalalignment='bottom')
+        dmxDict[lab] = idmxDict
+
+    plt.tight_layout()
+    if outfile: plt.savefig(outfile)
+    return dmxDict
+
+
 # Now we want to make wideband DM vs. time plot, this uses the premade dm_resids from PINT
 def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False, legend = True, title = True,\
                       axs = None, mean_sub = True, **kwargs):
