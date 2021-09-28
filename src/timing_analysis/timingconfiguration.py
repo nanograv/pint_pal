@@ -144,7 +144,8 @@ class TimingConfiguration:
         # Possibly better to handle this with toagen, but...ignore wb TOAs without pp_dm
         self.check_ppdm(t)
 
-        check_toa_version(t)
+        # Issue with how PINT handles TOAs loaded from pickle vs. not (no pint version for the latter)
+        if usepickle: check_toa_version(t)
         check_tobs(t)
 
         return m, t
