@@ -364,6 +364,8 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
             config['changelog'].append(value)
         elif field == 'noise-dir' and isinstance(value,str):
             config['intermediate-results']['noise-dir'] = value
+        elif field == 'compare-noise-dir' and isinstance(value,str):
+            config['intermediate-results']['compare-noise-dir'] = value
         elif field == 'no-corner' and isinstance(value,bool):
             config['intermediate-results']['no-corner'] = value
         else:
