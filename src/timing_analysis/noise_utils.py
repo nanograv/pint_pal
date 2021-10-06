@@ -152,7 +152,7 @@ def red_noise_block(psd='powerlaw', prior='log-uniform', Tspan=None,
         else:
             #gamma = parameter.Uniform(0, 7)
             ##########This is specific for timing##################
-            gamma = parameter.Uniform(1.2, 7)
+            gamma = parameter.Uniform(0, 7)
 
         # different PSD function parameters
         if psd == 'powerlaw':
