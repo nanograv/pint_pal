@@ -575,24 +575,26 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None):
     figsize = (10,4)
     fig = plt.figure(figsize=figsize)
     ax1 = fig.add_subplot(111)
+    ax1.set_xlabel(r'Year')
+    ax1.set_ylabel(r"DMX ($10^{-3}$ pc cm$^{-3}$)")
+    ax1.grid(True)
+    ax2 = ax1.twiny()
+    ax2.set_xlabel('MJD')
 
     dmxDict = {}
-    for df,lab in zip(dmxout_files,labels):
+    for ii,(df,lab) in enumerate(zip(dmxout_files,labels)):
         dmxmjd, dmxval, dmxerr, dmxr1, dmxr2 = np.loadtxt(df, unpack=True, usecols=range(0,5))
         mjdTime = Time(dmxmjd,format='mjd')
         dyTime = mjdTime.decimalyear
         idmxDict = {'mjd':dmxmjd,'val':dmxval,'err':dmxerr,'r1':dmxr1,'r2':dmxr2}        
-        ax1.set_xlabel(r'Year')
-        ax1.grid(True)
-        ax2 = ax1.twiny()
-        ax2.set_xlabel('MJD')
-        ax2.set_xlim(np.sort(dmxmjd)[0], np.sort(dmxmjd)[-1])
+        if ii == 0: # set ax2 lims based on first file
+            ax2.set_xlim(np.sort(dmxmjd)[0], np.sort(dmxmjd)[-1])
         ax1.errorbar(dyTime, dmxval*10**3, yerr=dmxerr*10**3, label = lab, marker='o', ls='', markerfacecolor='none')
-        ax1.legend(loc='best')
-        ax1.set_ylabel(r"DMX ($10^{-3}$ pc cm$^{-3}$)")
         if psrname: ax1.text(0.975,0.05,psrname,transform=ax1.transAxes,size=18,c='lightgray',
                             horizontalalignment='right', verticalalignment='bottom')
         dmxDict[lab] = idmxDict
+
+    ax1.legend(loc='best')
 
     plt.tight_layout()
     if outfile: plt.savefig(outfile)
