@@ -549,7 +549,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
 
     return
 
-def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None):
+def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
     """ Make simple dmx vs. time plot with dmxout file(s) as input
 
     Parameters
@@ -562,6 +562,8 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None):
         pulsar name
     outfile: str, optional
         save figure and write to outfile if set
+    model: `pint.model.TimingModel` object, optional
+        if provided, plot excess DM based on a basic SWM (NE_SW = 10.0)
 
     Returns
     =======
@@ -588,12 +590,31 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None):
         dyTime = mjdTime.decimalyear
         idmxDict = {'mjd':dmxmjd,'val':dmxval,'err':dmxerr,'r1':dmxr1,'r2':dmxr2}        
         if ii == 0: # set ax2 lims based on first file
-            ax2.set_xlim(np.sort(dmxmjd)[0], np.sort(dmxmjd)[-1])
+            minmjd, maxmjd = np.sort(dmxmjd)[0], np.sort(dmxmjd)[-1]
+            ax2.set_xlim(minmjd, maxmjd)
         ax1.errorbar(dyTime, dmxval*10**3, yerr=dmxerr*10**3, label = lab, marker='o', ls='', markerfacecolor='none')
         if psrname: ax1.text(0.975,0.05,psrname,transform=ax1.transAxes,size=18,c='lightgray',
                             horizontalalignment='right', verticalalignment='bottom')
         dmxDict[lab] = idmxDict
 
+    orig_ylim = ax1.get_ylim()
+
+    if model:
+        from pint.simulation import make_fake_toas_fromMJDs
+        fake_mjds = np.linspace(minmjd,maxmjd,num=int(maxmjd-minmjd))
+        fake_mjdTime = Time(fake_mjds,format='mjd')
+        fake_dyTime = fake_mjdTime.decimalyear
+
+        # copy the model and add sw component
+        mo_swm = copy.deepcopy(model)
+        mo_swm.NE_SW.value = 10.0
+
+        # generate fake TOAs and calculate excess DM due to solar wind
+        fake_toas = make_fake_toas_fromMJDs(fake_mjdTime,mo_swm)
+        sun_dm_delays = mo_swm.solar_wind_dm(fake_toas)*10**3  # same scaling as above
+        ax1.plot(fake_dyTime,sun_dm_delays,c='lightgray',label='Excess DM')
+
+    ax1.set_ylim(orig_ylim)
     ax1.legend(loc='best')
 
     plt.tight_layout()
