@@ -601,12 +601,14 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
 
     if model:
         from pint.simulation import make_fake_toas_fromMJDs
+        from timing_analysis.lite_utils import remove_noise
         fake_mjds = np.linspace(minmjd,maxmjd,num=int(maxmjd-minmjd))
         fake_mjdTime = Time(fake_mjds,format='mjd')
         fake_dyTime = fake_mjdTime.decimalyear
 
         # copy the model and add sw component
         mo_swm = copy.deepcopy(model)
+        remove_noise(mo_swm)  # Not necessary here and avoids lots of warnings
         mo_swm.NE_SW.value = 10.0
 
         # generate fake TOAs and calculate excess DM due to solar wind
