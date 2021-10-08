@@ -56,6 +56,12 @@ class TimingConfiguration:
         """ Return the source name """
         return self.config['source']
 
+    def get_model_path(self):
+        """ Return full path to timing-model """
+        if "timing-model" in self.config.keys() and self.config["timing-model"] is not None:
+            return os.path.join(self.par_directory,self.config["timing-model"])
+        return None
+
     def get_compare_model(self):
         """ Return the timing model file to compare with """
         if "compare-model" in self.config.keys() and self.config['compare-model'] is not None:
