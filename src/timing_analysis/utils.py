@@ -1096,7 +1096,9 @@ def pdf_writer(fitter,
 
     if no_corner:
         if not noise_posterior_plots_list:
-            raise IOError("Unable to find any noise posterior plots to include in summary PDF!")
+            # raise IOError("Unable to find any noise posterior plots to include in summary PDF!")
+            log.info(f"Could not find existing N noise posterior plots, e.g. {model.PSR.value}_noise_posterior_{nb_wb}_N.pdf")
+            fsum.write(f"Noise posterior plots not found.\\\\\n")
         else:
             for npost_plt in noise_posterior_plots_list:
                 log.info(f"Including noise posterior plots {npost_plt}")
