@@ -677,7 +677,8 @@ def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=Fal
         plt.close()
     return cutsDict
 
-def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pastel', save=False, using_wideband=False):
+def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pastel', save=False,
+                        source_name=None, using_wideband=False):
     """Plot TOAs for a single backend in the frequency-time plane, colored by reason for excision (if any)
 
     Parameters
@@ -693,6 +694,8 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pas
         Seaborn color palette name
     save: bool, optional
         Save a png of the plot
+    source_name: str, optional
+        Explicitly input source name, if desired, for output filename
     using_wideband: bool, optional
         TOAs are WB
 
@@ -702,7 +705,10 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pas
     ax: `matplotlib.axes._subplots.AxesSubplot` object
         Figure and axes -- can be used to modify plot
     """
-    psr = toas.table[0]['flags']['tmplt'].split('.')[0]
+    if source_name is not None:
+        psr = source_name
+    else:
+        psr = toas.table[0]['flags']['tmplt'].split('.')[0]
     color_dict = get_cut_colors(palette)
 
     ntoas_total = sum(1 for t in toas.orig_table if t['flags']['be'] == backend)
@@ -734,7 +740,8 @@ def plot_cuts_by_backend(toas, backend, marker='o', marker_size=10, palette='pas
             plt.savefig(f'{psr}-{backend}-excision_nb.png', dpi=150)
     return fig, ax
 
-def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', save=False, using_wideband=False):
+def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', save=False,
+                          source_name=None, using_wideband=False):
     """Plot TOAs for each backend in the frequency-time plane, colored by reason for excision (if any)
 
     Parameters
@@ -750,10 +757,15 @@ def plot_cuts_all_backends(toas, marker='o', marker_size=10, palette='pastel', s
         Seaborn color palette name
     save: bool, optional
         Save a png of each plot
+    source_name: str, optional
+        Explicitly input source name, if desired, for output filename
+    using_wideband: bool, optional
+        TOAs are WB
     """
     backends = set(t['flags']['be'] for t in toas.orig_table)
     for backend in backends:
-        plot_cuts_by_backend(toas, backend, marker, marker_size, palette, save, using_wideband=using_wideband)
+        plot_cuts_by_backend(toas, backend, marker, marker_size, palette, save, using_wideband=using_wideband,
+                            source_name=source_name)
     plt.show()
        
 def display_excise_dropdowns(file_matches, toa_matches, all_YFp=False, all_GTpd=False, all_profile=False):

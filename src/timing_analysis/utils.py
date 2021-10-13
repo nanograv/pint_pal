@@ -1096,7 +1096,9 @@ def pdf_writer(fitter,
 
     if no_corner:
         if not noise_posterior_plots_list:
-            raise IOError("Unable to find any noise posterior plots to include in summary PDF!")
+            # raise IOError("Unable to find any noise posterior plots to include in summary PDF!")
+            log.info(f"Could not find existing N noise posterior plots, e.g. {model.PSR.value}_noise_posterior_{nb_wb}_N.pdf")
+            fsum.write(f"Noise posterior plots not found.\\\\\n")
         else:
             for npost_plt in noise_posterior_plots_list:
                 log.info(f"Including noise posterior plots {npost_plt}")
@@ -1221,6 +1223,10 @@ def check_recentness_noise(tc):
         of the second; that is, the name of the directory in use should match the
         name of the most recent available set of chains
     """
+    if not tc.get_noise_dir():
+        log.warning(f"Yaml file does not have a noise-dir field (or it is unset).")
+        return None, None
+
     d = os.path.abspath(tc.get_noise_dir())
     noise_runs = [os.path.dirname(os.path.dirname(os.path.abspath(p))) 
                   for p in sorted(glob.glob(os.path.join(d,
@@ -1251,6 +1257,10 @@ def check_recentness_excision(tc):
         of the second; that is, the name of the directory in use should match the
         name of the most recent available set of chains
     """
+    if not tc.get_excised():
+        log.warning(f"Yaml file does not have an excised-tim field (or it is unset).")
+        return None, None
+
     e = os.path.abspath(tc.get_excised())
     d = os.path.dirname(e)
     excision_dirs = [os.path.dirname(os.path.dirname(os.path.abspath(p))) 
