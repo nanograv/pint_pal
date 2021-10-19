@@ -1,6 +1,8 @@
 import itertools
+import logging
 import os.path
 import subprocess
+import tempfile
 from collections import defaultdict
 from io import StringIO
 
@@ -27,20 +29,31 @@ class Report:
     configurable (and HTML might allow for such things too).
     """
 
-    def __init__(self, sections=None):
+    def __init__(self, *, title="", sections=None, figure_location=None):
+        self.title = title
         self.sections = [] if sections is None else sections
         self.section_titles = {}
-        self.section_content = defaultdict(str)
+        self.section_content = defaultdict(StringIO)
+        if figure_location is None:
+            self.temporary_directory_object = tempfile.TemporaryDirectory()
+            # Will go away when (if) this report is garbage collected
+            figure_location = self.temporary_directory_object.name
+        self.figure_location = figure_location
 
     def _ensure_section(self, section):
         if section not in self.sections:
             self.sections.append(section)
 
+    def new_section(self, section):
+        self._ensure_section(section)
+        self.section_content[section] = StringIO()
+
     def add_markdown(self, section, content, *, also_display=True):
         self._ensure_section(section)
         if also_display:
             display(Markdown(content))
-        self.section_content[section] += "\n\n" + content
+        self.section_content[section].write("\n\n")
+        self.section_content[section].write(content)
 
     def add_verbatim(
         self, section, content, *, highlight_language="", also_display=True
@@ -55,7 +68,7 @@ class Report:
 
     def _new_figure_filename(self, section):
         for i in itertools.count(start=1):
-            name = f"figure-{section}-{i:04d}.png"
+            name = os.path.join(self.figure_location, f"figure-{section}-{i:04d}.png")
             if not os.path.exists(name):
                 return name
 
@@ -79,17 +92,61 @@ class Report:
         new_content = f"![{caption}]({filename})\n\n"
         self.add_markdown(section, new_content, also_display=also_display)
 
-    def generate(self):
+    def generate(self, *, include_title=True):
         with StringIO() as o:
+            if self.title and include_title:
+                print(f"# {self.title}\n\n", file=o)
             for s in self.sections:
                 t = self.section_titles.get(s, s)
-                print(f"\n\n# {t}\n\n", file=o)
-                print(self.section_content.get(s, "No content"), file=o)
+                print(f"\n\n## {t}\n\n", file=o)
+                print(self.section_content[s].getvalue(), file=o)
             return o.getvalue()
 
     def generate_pdf(self, pdf_filename):
         subprocess.run(
-            ["pandoc", "--from", "markdown", "--to", "pdf", "-o", pdf_filename,],
+            [
+                "pandoc",
+                "--from",
+                "markdown",
+                "--to",
+                "pdf",
+                "--metadata", f'title="{self.title}"',
+                "-o",
+                pdf_filename,
+                "--pdf-engine",
+                "xelatex",
+            ],
             text=True,
             input=self.generate(),
         )
+
+    def generate_html(self, html_filename):
+        # The HTML is constructed from a template that can be viewed with `pandoc -D html`
+        # The HTML can also be customized by supplying `--css file.css`
+        subprocess.run(
+            [
+                "pandoc",
+                "--from",
+                "markdown",
+                "--to",
+                "html",
+                "-s",   # standalone, i.e., complete HTML including <html>
+                "--self-contained",   # include images inline
+                "--mathjax",
+                "--metadata", f'title={self.title}',
+                "-o",
+                html_filename,
+                "--pdf-engine",
+                "xelatex",
+            ],
+            text=True,
+            input=self.generate(include_title=False),
+        )
+
+    def begin_capturing_log(self, section, *, level=logging.WARNING):
+        self._ensure_section(section)
+        report_log = logging.StreamHandler(self.section_content[section])
+        report_log.setLevel(level)
+        report_log.setFormatter(logging.Formatter('- %(name)-12s: %(levelname)-8s %(message)s'))
+        logging.getLogger('').addHandler(report_log)
+ 

@@ -156,6 +156,21 @@ class TimingConfiguration:
 
         return m, t
 
+    def get_summary(self):
+        with io.StringIO() as o:
+            # The two spaces at the end here ensure a line break (not a paragraph break) in Markdown
+            print(f"Pulsar: {self.get_source()}  ", file=o)
+            print(f"Mode: {self.get_toa_type()}  ", file=o)
+            print(f"Par file: `{self.get_model_path()}`  ", file=o)
+            print(f"Tim files:\n", file=o)
+            toas = self.config["toas"]
+            if isinstance(toas, str):
+                toas = [toas]
+            for t in toas:
+                print(f"- `{t}`", file=o)
+            print(file=o)
+            return o.getvalue()
+
     def check_simultaneous(self,toas,backend1,backend2,warn=False):
         """Cut overlapped TOAs from the specified backends (simul)
     
