@@ -2,6 +2,7 @@ import itertools
 import logging
 import os.path
 import subprocess
+import textwrap
 import tempfile
 from collections import defaultdict
 from io import StringIO
@@ -117,12 +118,27 @@ class Report:
                 "xelatex",
             ],
             text=True,
-            input=self.generate(),
+            input=self.generate(include_title=False),
         )
 
     def generate_html(self, html_filename):
         # The HTML is constructed from a template that can be viewed with `pandoc -D html`
-        # The HTML can also be customized by supplying `--css file.css`
+        # We will display bold in red
+        header=textwrap.dedent("""
+        ---
+        header-includes: |
+          <style>
+          body {
+              background-color: #f0f0ff;
+              max-width: 70em;
+          }
+          strong {
+            color: #ff0000;
+          }
+
+          </style>
+        ---
+        """)
         subprocess.run(
             [
                 "pandoc",
@@ -140,13 +156,13 @@ class Report:
                 "xelatex",
             ],
             text=True,
-            input=self.generate(include_title=False),
+            input=header+self.generate(include_title=False),
         )
 
     def begin_capturing_log(self, section, *, level=logging.WARNING):
         self._ensure_section(section)
         report_log = logging.StreamHandler(self.section_content[section])
         report_log.setLevel(level)
-        report_log.setFormatter(logging.Formatter('- %(name)-12s: %(levelname)-8s %(message)s'))
+        report_log.setFormatter(logging.Formatter('- `%(name)s`: %(levelname)s - %(message)s'))
         logging.getLogger('').addHandler(report_log)
  
