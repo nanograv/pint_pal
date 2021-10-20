@@ -111,34 +111,40 @@ class Report:
                 "markdown",
                 "--to",
                 "pdf",
-                "--metadata", f'title="{self.title}"',
+                "--metadata",
+                f"title={self.title}",
                 "-o",
                 pdf_filename,
                 "--pdf-engine",
-                "xelatex",
+                "weasyprint",
             ],
             text=True,
-            input=self.generate(include_title=False),
+            input=self.header + self.generate(include_title=False),
         )
+
+    # We will display bold in red
+    header = textwrap.dedent(
+        """
+    ---
+    header-includes: |
+      <style>
+      @media not print {
+          max-width: 70em;
+      }
+      body {
+          background-color: #f0f0ff;
+      }
+      strong {
+        color: #ff0000;
+      }
+
+      </style>
+    ---
+    """
+    )
 
     def generate_html(self, html_filename):
         # The HTML is constructed from a template that can be viewed with `pandoc -D html`
-        # We will display bold in red
-        header=textwrap.dedent("""
-        ---
-        header-includes: |
-          <style>
-          body {
-              background-color: #f0f0ff;
-              max-width: 70em;
-          }
-          strong {
-            color: #ff0000;
-          }
-
-          </style>
-        ---
-        """)
         subprocess.run(
             [
                 "pandoc",
@@ -146,23 +152,23 @@ class Report:
                 "markdown",
                 "--to",
                 "html",
-                "-s",   # standalone, i.e., complete HTML including <html>
-                "--self-contained",   # include images inline
+                "-s",  # standalone, i.e., complete HTML including <html>
+                "--self-contained",  # include images inline
                 "--mathjax",
-                "--metadata", f'title={self.title}',
+                "--metadata",
+                f"title={self.title}",
                 "-o",
                 html_filename,
-                "--pdf-engine",
-                "xelatex",
             ],
             text=True,
-            input=header+self.generate(include_title=False),
+            input=self.header + self.generate(include_title=False),
         )
 
     def begin_capturing_log(self, section, *, level=logging.WARNING):
         self._ensure_section(section)
         report_log = logging.StreamHandler(self.section_content[section])
         report_log.setLevel(level)
-        report_log.setFormatter(logging.Formatter('- `%(name)s`: %(levelname)s - %(message)s'))
-        logging.getLogger('').addHandler(report_log)
- 
+        report_log.setFormatter(
+            logging.Formatter("- `%(name)s`: %(levelname)s - %(message)s")
+        )
+        logging.getLogger().addHandler(report_log)

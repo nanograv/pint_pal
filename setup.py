@@ -12,8 +12,8 @@ setup(
     url="",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    package_dir = {'': 'src'},
-    packages = find_packages('src'),
+    package_dir={"": "src"},
+    packages=find_packages("src"),
     install_requires=[
         'ruamel.yaml',
         "pint_pulsar>=0.8.3",
@@ -22,9 +22,10 @@ setup(
         "pytest",
         "nbconvert",
         "ipywidgets>=7.6.3",
-        "pypulse>=0.0.1"
-        "numpy"
-        "pytest-xdist[psutil]>=2.3.0"
-],
-    python_requires='>=3.6'
+        "pypulse>=0.0.1",
+        "numpy",
+        "weasyprint",
+        "pytest-xdist[psutil]>=2.3.0",
+    ],
+    python_requires=">=3.6",
 )
