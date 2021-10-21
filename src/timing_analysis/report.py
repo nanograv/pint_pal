@@ -123,24 +123,32 @@ class Report:
         )
 
     # We will display bold in red
+    # The page margins are supplemented by the margins in the web HTML
     header = textwrap.dedent(
         """
-    ---
-    header-includes: |
-      <style>
-      @media not print {
-          max-width: 70em;
-      }
-      body {
-          background-color: #f0f0ff;
-      }
-      strong {
-        color: #ff0000;
-      }
-
-      </style>
-    ---
-    """
+        ---
+        header-includes: |
+          <style>
+          body {
+            max-width: 70em;
+            background-color: #f0f0ff;
+          }
+          @media print {
+            body {
+                background-color: transparent;
+                font-size: 10pt;
+            }
+          }
+          @page {
+            size: letter;
+            margin: 1cm;
+          }
+          strong {
+            color: #ff0000;
+          }
+          </style>
+        ---
+        """
     )
 
     def generate_html(self, html_filename):
