@@ -25,6 +25,189 @@ from pint.modelutils import model_equatorial_to_ecliptic
 from pint.models.parameter import maskParameter
 from pint.models.timing_model import Component
 
+def strip_pars(path_to_par, op_path = "./"):
+    """
+    Function to remove noise parameters from parfile.
+    -----------------------
+    
+    Input:
+    path_to_par: path to parfile
+    op_path: path to write modified parfile
+    
+    Returns:
+    new_par: New par file without noise parameters
+    """
+    
+    with open(path_to_par, 'r') as ff:
+    
+        par_lines = ff.readlines()
+        
+    new_par = []
+    
+    for ii in range(len(par_lines)):
+
+        entries = par_lines[ii].split(" ")
+        
+        if 'PSR' in entries or 'PSRJ' in entries:
+            psr_name = entries[-1].split('\n')[0]
+            
+        if entries[0] in ['EFAC', 'EQUAD', 'ECORR', 'TNECORR', 'T2EFAC', 'T2ECORR', 'T2EQUAD',
+                          'RNAMP', 'RNIDX', 'TNRedAmp', 'TNRedGam', 'TNRedC']:
+            continue
+        else:
+            new_par.append(par_lines[ii])
+            
+    with open(op_path + '/' + psr_name + '.par', 'w') as oo:
+        for ll in new_par:
+            oo.write(ll)
+    
+    return new_par
+
+def convert_pint_to_tempo_timfile(tim_path, op_path, psr_name = "test", timing_pkg = 'tempo'):
+    """
+    Function to convert PINT produced timfile to tempo-compatible parfile.
+    Add "MODE 1" to tim file to use uncertainties
+    Change "arecibo" to "ao" if it is an Arecibo pulsar
+    -----------------------
+    
+    Input:
+    path_to_tim: path to timfile
+    op_path: path to write modified timfile
+    psr_name: Name of pulsar; used for writing op filename;
+              can obtain from `convert_pint_to_tempo_parfile()` function.
+    
+    Returns:
+    None
+    """
+    
+    with open(tim_path) as ff:
+        tim_lines = ff.readlines()
+        
+    new_tim = []
+
+    for ii in range(len(tim_lines)):
+
+        if ii == 0:
+            if timing_pkg == 'tempo':
+                new_tim.append("MODE 1\n")    
+            
+            new_tim.append(tim_lines[ii])
+
+        else:
+            entries = tim_lines[ii].split(" ")
+            if ("arecibo" not in entries) or (timing_pkg == 'tempo2'):
+                new_tim.append(tim_lines[ii])
+            else:
+                ent_arr = np.array(entries)
+
+                idx = np.where(ent_arr == 'arecibo')[0][0]
+                entries[idx] = 'ao'
+
+                new_entry = " ".join(entries)
+                new_tim.append(new_entry)
+                
+    with open(op_path + '/' + psr_name + '.tim', 'w') as oo:
+        for ll in new_tim:
+            oo.write(ll)
+            
+def convert_pint_to_tempo_parfile(path_to_par, op_path = "./", timing_pkg = 'tempo'):
+    """
+    Function to convert PINT produced parfile to tempo-compatible parfile.
+    Removes CHI2 and SWM from the parfile.
+    Changes EFAC/EQUAD to T2EFAC/T2EQUAD.
+    If converting to tempo2 parfile, make sure ECL IERS2003 is set
+    -----------------------
+    
+    Input:
+    path_to_par: path to parfile
+    op_path: path to write modified parfile
+    timing_pkg: options: tempo, tempo2; if tempo2, sets ECL IERS2003.
+    
+    Returns:
+    psr_name: Name of pulsar (convenience for tim file conversion)
+    """
+    
+    with open(path_to_par, 'r') as ff:
+    
+        par_lines = ff.readlines()
+    
+    new_par = []
+
+    for ii in range(len(par_lines)):
+
+        entries = par_lines[ii].split(" ")
+        
+        if ii == 0:
+            if timing_pkg == 'tempo2':
+                new_par.append("MODE 1\n")
+                
+        if 'PSR' in entries:
+            psr_name = entries[-1].split('\n')[0]
+        
+        if "CHI2" in entries:
+            continue
+
+        elif "SWM" in entries:
+            continue
+            
+        elif "A1DOT" in entries:
+            entries[0] = "XDOT"
+            
+            new_entry = " ".join(entries)
+            
+            new_par.append(new_entry)
+            
+        elif "STIGMA" in entries:
+            entries[0] = "VARSIGMA"
+            
+            new_entry = " ".join(entries)
+            
+            new_par.append(new_entry)
+            
+        elif "NHARMS" in entries:
+            entries[-1] = str(int(float(entries[-1]))) + '\n'
+            
+            new_entry = " ".join(entries)
+            
+            new_par.append(new_entry)
+            
+        elif ("ECL" in entries) and (timing_pkg == 'tempo2'):
+            entries[-1] = "IERS2003\n"
+            
+            new_entry = " ".join(entries)
+            
+            new_par.append(new_entry)
+
+        elif "EFAC" in entries:
+            entries[0] = "T2EFAC"
+
+            new_entry = " ".join(entries)
+
+            new_par.append(new_entry)
+
+        elif "EQUAD" in entries:
+            entries[0] = "T2EQUAD"
+
+            new_entry = " ".join(entries)
+
+            new_par.append(new_entry)
+            
+        elif ("T2CMETHOD" in entries) and (timing_pkg == 'tempo2'):
+            entries[0] = "#T2CMETHOD"
+            
+            new_entry = " ".join(entries)
+            
+            new_par.append(new_entry)
+
+        else:
+            new_par.append(par_lines[ii])
+            
+    with open(op_path + '/' + psr_name + '.par', 'w') as oo:
+        for ll in new_par:
+            oo.write(ll)
+            
+    return psr_name
+
 def write_par(fitter,toatype='',addext='',outfile=None):
     """Writes a timing model object to a par file in the working directory.
 
