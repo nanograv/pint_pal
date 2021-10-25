@@ -172,8 +172,9 @@ class Report:
             input=self.header + self.generate(include_title=False),
         )
 
-    def begin_capturing_log(self, section, *, level=logging.WARNING):
+    def begin_capturing_log(self, section, introduction="", *, level=logging.WARNING):
         self._ensure_section(section)
+        print(introduction +"\n", file=self.section_content[section])
         report_log = logging.StreamHandler(self.section_content[section])
         report_log.setLevel(level)
         report_log.setFormatter(
