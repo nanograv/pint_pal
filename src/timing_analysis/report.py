@@ -175,6 +175,9 @@ class Report:
     def begin_capturing_log(self, section, introduction="", *, level=logging.WARNING):
         self._ensure_section(section)
         print(introduction +"\n", file=self.section_content[section])
+        # This call ensures that logging is fully initialized before we add things
+        # Without this the notebook loses the log messages
+        logging.debug("Starting log capturing to report")
         report_log = logging.StreamHandler(self.section_content[section])
         report_log.setLevel(level)
         report_log.setFormatter(
