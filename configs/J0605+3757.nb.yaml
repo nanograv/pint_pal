@@ -1,8 +1,8 @@
 source: J0605+3757
 par-directory: results/
 tim-directory: /nanograv/timing/releases/15y/toagen/releases/2021.08.25-9d8d617/
-timing-model: J0605+3757_PINT_20210923_prenoise.nb.par
-compare-model: archive/J0605+3757_PINT_20210903.nb.par
+timing-model: J0605+3757_PINT_20210928.nb.par
+compare-model: archive/J0605+3757_PINT_20210916.nb.par
 toas:
 - J0605+3757.Rcvr1_2.GUPPI.15y.x.nb.tim
 - J0605+3757.Rcvr_800.GUPPI.15y.x.nb.tim
@@ -26,8 +26,8 @@ outlier: # control outlier analysis runs
   n-samples: 20000
 
 intermediate-results: # use results from previous runs
-  noise-dir: /nanograv/share/15yr/timing/intermediate/20210908.Noise.nb.351af4e/
-  compare-noise-dir: /nanograv/share/15yr/timing/intermediate/20210831.Noise.nb.5933923/
+  noise-dir: /nanograv/share/15yr/timing/intermediate/20210928.Noise.nb.1aa5922/
+  compare-noise-dir: /nanograv/share/15yr/timing/intermediate/20210924.Noise.nb.198096e/
   excised-tim: /nanograv/share/15yr/timing/intermediate/20210828.Outlier.nb.5719caa/J0605+3757.nb/J0605+3757.nb_excise.tim
   no-corner: true
 ignore: # toa excision
@@ -45,3 +45,4 @@ changelog:
 - '2021-08-24 joe.swiggum CURATE: no manual cuts to inspect'
 - '2021-09-22 ingrid.stairs READY_FOR: v1.0'
 - '2021-09-24 joe.swiggum NOTE: updated AO/GBO coords (pint v0.8.3) and refit'
+- '2021-09-30 joe.swiggum NOTE: par file handed off to DWG for v1.0 is J0605+3757_PINT_20210928.nb.par'

@@ -550,6 +550,81 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
 
     return
 
+def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
+    """ Make simple dmx vs. time plot with dmxout file(s) as input
+
+    Parameters
+    ==========
+    dmxout_files: list/str
+        list of dmxout files to plot (or str if only one)
+    labels: list/str
+        list of labels for dmx timeseries (or str if only one)
+    psrname: str, optional
+        pulsar name
+    outfile: str, optional
+        save figure and write to outfile if set
+    model: `pint.model.TimingModel` object, optional
+        if provided, plot excess DM based on a basic SWM (NE_SW = 10.0)
+
+    Returns
+    =======
+    dmxDict: dictionary
+        dmxout information (mjd, val, err, r1, r2) for each label
+    """
+    from astropy.time import Time
+    if isinstance(dmxout_files, str): dmxout_files = [dmxout_files]
+    if isinstance(labels, str): labels = [labels]
+    
+    figsize = (10,4)
+    fig = plt.figure(figsize=figsize)
+    ax1 = fig.add_subplot(111)
+    ax1.set_xlabel(r'Year')
+    ax1.set_ylabel(r"DMX ($10^{-3}$ pc cm$^{-3}$)")
+    ax1.grid(True)
+    ax2 = ax1.twiny()
+    ax2.set_xlabel('MJD')
+
+    dmxDict = {}
+    for ii,(df,lab) in enumerate(zip(dmxout_files,labels)):
+        dmxmjd, dmxval, dmxerr, dmxr1, dmxr2 = np.loadtxt(df, unpack=True, usecols=range(0,5))
+        mjdTime = Time(dmxmjd,format='mjd')
+        dyTime = mjdTime.decimalyear
+        idmxDict = {'mjd':dmxmjd,'val':dmxval,'err':dmxerr,'r1':dmxr1,'r2':dmxr2}        
+        if ii == 0: # set ax2 lims based on first file
+            minmjd, maxmjd = np.sort(dmxmjd)[0], np.sort(dmxmjd)[-1]
+            ax2.set_xlim(minmjd, maxmjd)
+        ax1.errorbar(dyTime, dmxval*10**3, yerr=dmxerr*10**3, label = lab, marker='o', ls='', markerfacecolor='none')
+        if psrname: ax1.text(0.975,0.05,psrname,transform=ax1.transAxes,size=18,c='lightgray',
+                            horizontalalignment='right', verticalalignment='bottom')
+        dmxDict[lab] = idmxDict
+
+    orig_ylim = ax1.get_ylim()
+
+    if model:
+        from pint.simulation import make_fake_toas_fromMJDs
+        from timing_analysis.lite_utils import remove_noise
+        fake_mjds = np.linspace(minmjd,maxmjd,num=int(maxmjd-minmjd))
+        fake_mjdTime = Time(fake_mjds,format='mjd')
+        fake_dyTime = fake_mjdTime.decimalyear
+
+        # copy the model and add sw component
+        mo_swm = copy.deepcopy(model)
+        remove_noise(mo_swm)  # Not necessary here and avoids lots of warnings
+        mo_swm.NE_SW.value = 10.0
+
+        # generate fake TOAs and calculate excess DM due to solar wind
+        fake_toas = make_fake_toas_fromMJDs(fake_mjdTime,mo_swm)
+        sun_dm_delays = mo_swm.solar_wind_dm(fake_toas)*10**3  # same scaling as above
+        ax1.plot(fake_dyTime,sun_dm_delays,c='lightgray',label='Excess DM')
+
+    ax1.set_ylim(orig_ylim)
+    ax1.legend(loc='best')
+
+    plt.tight_layout()
+    if outfile: plt.savefig(outfile)
+    return dmxDict
+
+
 # Now we want to make wideband DM vs. time plot, this uses the premade dm_resids from PINT
 def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False, legend = True, title = True,\
                       axs = None, mean_sub = True, **kwargs):

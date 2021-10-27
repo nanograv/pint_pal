@@ -14,6 +14,8 @@ def config_files():
                      + glob(join(base_dir, 'configs/J*.wb.yaml')))
     config_files = sorted(config_files)
     basenames = [splitext(split(filename)[1])[0] for filename in config_files]
+    print(config_files)
+    print(basenames)
     return [pytest.param(filename, id=basename) for filename, basename in zip(config_files, basenames)]
 
 @pytest.fixture(scope='session', autouse=True)
