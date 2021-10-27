@@ -41,7 +41,7 @@ colorschemes = {'thankful_2':{
               "1.5GHz_YUPPI":    "#45062E",
               "3GHz_YUPPI":      "#E5A4CB",
               "6GHz_YUPPI":      "#40635F",
-              "CHIME":           "#DAA520",
+              "CHIME":           "#ECE133",
               }}
 # marker dictionary to be used if desired, currently all 'x'
 markers = {"327_ASP":        "x",
