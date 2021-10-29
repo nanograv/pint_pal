@@ -25,48 +25,6 @@ from pint.modelutils import model_equatorial_to_ecliptic
 from pint.models.parameter import maskParameter
 from pint.models.timing_model import Component
 
-def strip_pars(path_to_par, op_path = "./"):
-    """
-    Function to remove noise parameters from parfile and save the stripped parfile.
-    -----------------------
-    
-    Input:
-    path_to_par: path to parfile
-    op_path: path to write modified parfile
-    
-    Returns:
-    new_par: New par file without noise parameters
-    
-    Example usage:
-    >>> par = "results/J1903+0327_PINT_20210925.nb.par"
-    >>> new_par = strip_pars(par, op_path = "./")
-    """
-    
-    with open(path_to_par, 'r') as ff:
-    
-        par_lines = ff.readlines()
-        
-    new_par = []
-    
-    for ii in range(len(par_lines)):
-
-        entries = par_lines[ii].split(" ")
-        
-        if 'PSR' in entries or 'PSRJ' in entries:
-            psr_name = entries[-1].split('\n')[0]
-            
-        if entries[0] in ['EFAC', 'EQUAD', 'ECORR', 'TNECORR', 'T2EFAC', 'T2ECORR', 'T2EQUAD',
-                          'RNAMP', 'RNIDX', 'TNRedAmp', 'TNRedGam', 'TNRedC']:
-            continue
-        else:
-            new_par.append(par_lines[ii])
-            
-    with open(op_path + '/' + psr_name + '.par', 'w') as oo:
-        for ll in new_par:
-            oo.write(ll)
-    
-    return new_par
-
 def convert_pint_to_tempo_timfile(tim_path, op_path, psr_name = "test", timing_pkg = 'tempo'):
     """
     Function to convert PINT produced timfile to tempo-compatible parfile.
