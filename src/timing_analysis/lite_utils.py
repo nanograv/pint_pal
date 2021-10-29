@@ -27,7 +27,7 @@ from pint.models.timing_model import Component
 
 def strip_pars(path_to_par, op_path = "./"):
     """
-    Function to remove noise parameters from parfile.
+    Function to remove noise parameters from parfile and save the stripped parfile.
     -----------------------
     
     Input:
@@ -36,6 +36,10 @@ def strip_pars(path_to_par, op_path = "./"):
     
     Returns:
     new_par: New par file without noise parameters
+    
+    Example usage:
+    >>> par = "results/J1903+0327_PINT_20210925.nb.par"
+    >>> new_par = strip_pars(par, op_path = "./")
     """
     
     with open(path_to_par, 'r') as ff:
@@ -78,6 +82,11 @@ def convert_pint_to_tempo_timfile(tim_path, op_path, psr_name = "test", timing_p
     
     Returns:
     None
+    
+    Example usage:
+    >>> test_tim = "./J1903+0327_PINT_20210925.nb.tim"
+    >>> psr_name = "J1903+0327"
+    >>> convert_pint_to_tempo_timfile(test_tim, op_path = "./", psr_name = psr_name)
     """
     
     with open(tim_path) as ff:
@@ -125,6 +134,12 @@ def convert_pint_to_tempo_parfile(path_to_par, op_path = "./", timing_pkg = 'tem
     
     Returns:
     psr_name: Name of pulsar (convenience for tim file conversion)
+    
+    Example usage:
+    >>> test_par = "results/J1903+0327_PINT_20210925.nb.par"
+    >>> psr_name = convert_pint_to_tempo_parfile(test_par, op_path = "./", timing_pkg = 'tempo2')
+    >>> print(psr_name)
+     'J1903+0327'
     """
     
     with open(path_to_par, 'r') as ff:
