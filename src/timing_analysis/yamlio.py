@@ -368,6 +368,8 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
             config['intermediate-results']['compare-noise-dir'] = value
         elif field == 'no-corner' and isinstance(value,bool):
             config['intermediate-results']['no-corner'] = value
+        elif field == 'excised-tim' and isinstance(value,str):
+            config['intermediate-results']['excised-tim'] = value
         else:
             log.error(f'Provided field ({field}) is valid, but not yet implemented in set_field(); doing nothing.')
 
