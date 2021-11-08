@@ -75,7 +75,8 @@ class TimingConfiguration:
         else:
             return self.config['free-params']
 
-    def get_model_and_toas(self,usepickle=True,print_all_ignores=False,apply_initial_cuts=True, excised=False):
+    def get_model_and_toas(self,usepickle=True,print_all_ignores=False,apply_initial_cuts=True, excised=False,
+        combine_curated=False):
         """Return the PINT model and TOA objects"""
         par_path = os.path.join(self.par_directory,self.config["timing-model"])
         toas = self.config["toas"]
@@ -132,6 +133,22 @@ class TimingConfiguration:
         if excised:
             apply_initial_cuts = False
             apply_cut_select(t,reason='existing cuts, pre-excised')
+
+        # If combining curated (pre-excised) data sets; same as excised, but without
+        # check for excised-tim file as above in intermediate-results
+        if combine_curated:
+            apply_initial_cuts = False
+
+            # Check TOAs and ensure ta-required flags are there (f/fe/be); if not, use sys, if available
+            self.check_flag_conventions(t)
+
+            apply_cut_select(t,reason='existing cut flags')
+
+            # May need to do some additional curation here...
+            # (subint), though ideally manual cuts will not be applied in this case
+
+            # a summary of constituent data sets might be nice?
+
 
         # Add 'cut' flags to TOAs according to config 'ignore' block.
         if apply_initial_cuts:
@@ -391,6 +408,41 @@ class TimingConfiguration:
                 match_toas.append([[filenm, bt[1], bt[2]] for filenm in ff_list if bt[0] in filenm])
         return sum(match_files,[]), sum(match_toas,[])
     
+    def check_flag_conventions(self, toas):
+        """ IPTA data combination; check flags of constituent TOAs, and make sure that
+        required flags used throughout timing_analysis (f/fe/be) are present, else use others
+        (sys/group) to compose/add required flags. If neither are present, throw warnings.
+
+        Parameters
+        ==========
+        toas: `pint.TOAs object`
+        """
+        tt_inds = []
+        for tt in toas.orig_table:
+            ffebe_check = np.all(
+            np.array(['fe' in tt['flags'],
+                    'be' in tt['flags'],
+                    'f' in tt['flags'],
+                    ])
+            )
+            if ffebe_check:
+                pass # all required flags are present
+            elif ('sys' in tt['flags']):
+                # sys in form fe.be.cfreq
+                tt_fe, tt_be, _cfreq = tt['flags']['sys'].split('.')
+                tt['flags']['fe'],tt['flags']['be'] = tt_fe, tt_be
+                tt['flags']['f'] = f"{tt_fe}_{tt_be}"
+                tt_inds.append(tt['index'])
+            else: # ...though should probably check for f separately?
+                log.warning(f"fe/be/f/sys are all not present in TOA {tt['index']}")
+
+        if tt_inds:
+            modified_toa_f = [t['flags']['f'] for t in toas.orig_table[np.array(tt_inds)]]
+            log.info(f"fe/be/f flags composed from sys and added for {len(tt_inds)} TOAs.")
+            log.info(f"Modified flags for TOAs from: {', '.join(set(modified_toa_f))}")
+
+        return toas
+
     def check_for_orphaned_recs(self, toas, nfiles_threshold=3):
         """Check for frontend/backend pairs that arise at or below threshold
         for number of files; also check that the set matches with those listed
