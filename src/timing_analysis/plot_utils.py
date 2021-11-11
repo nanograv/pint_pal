@@ -591,21 +591,19 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
         dyTime = mjdTime.decimalyear
         idmxDict = {'mjd':dmxmjd,'val':dmxval,'err':dmxerr,'r1':dmxr1,'r2':dmxr2}        
         if ii == 0: # set ax2 lims based on first file
-            minmjd, maxmjd = np.sort(dmxmjd)[0], np.sort(dmxmjd)[-1]
-            ax2.set_xlim(minmjd, maxmjd)
-        ax1.errorbar(dyTime, dmxval*10**3, yerr=dmxerr*10**3, label = lab, marker='o', ls='', markerfacecolor='none')
+            ax1.set_xlim(np.min(dyTime),np.max(dyTime))
+        ax2.errorbar(dmxmjd, dmxval*10**3, yerr=dmxerr*10**3, label=lab, marker='o', ls='', markerfacecolor='none')
         dmxDict[lab] = idmxDict
 
     if psrname: ax1.text(0.975,0.05,psrname,transform=ax1.transAxes,size=18,c='lightgray',
                          horizontalalignment='right', verticalalignment='bottom')
-    orig_ylim = ax1.get_ylim()
+    orig_ylim = ax2.get_ylim()
 
     if model:
         from pint.simulation import make_fake_toas_fromMJDs
         from timing_analysis.lite_utils import remove_noise
-        fake_mjds = np.linspace(minmjd,maxmjd,num=int(maxmjd-minmjd))
+        fake_mjds = np.linspace(np.min(dmxmjd),np.max(dmxmjd),num=int(np.max(dmxmjd)-np.min(dmxmjd)))
         fake_mjdTime = Time(fake_mjds,format='mjd')
-        fake_dyTime = fake_mjdTime.decimalyear
 
         # copy the model and add sw component
         mo_swm = copy.deepcopy(model)
@@ -615,10 +613,10 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
         # generate fake TOAs and calculate excess DM due to solar wind
         fake_toas = make_fake_toas_fromMJDs(fake_mjdTime,mo_swm)
         sun_dm_delays = mo_swm.solar_wind_dm(fake_toas)*10**3  # same scaling as above
-        ax1.plot(fake_dyTime,sun_dm_delays,c='lightgray',label='Excess DM')
+        ax2.plot(fake_mjds,sun_dm_delays,c='lightgray',label='Excess DM')
 
-    ax1.set_ylim(orig_ylim)
-    ax1.legend(loc='best')
+    ax2.set_ylim(orig_ylim)
+    ax2.legend(loc='best')
 
     plt.tight_layout()
     if outfile: plt.savefig(outfile)
