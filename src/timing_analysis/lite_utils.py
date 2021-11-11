@@ -1378,24 +1378,30 @@ def dmx_mjds_to_files(mjds,toas,dmxDict,mode='nb',file_only=False):
         closest_r2 = dmxDict[mode]['r2'][closest_ind] #  late edge of DMX window
         
         # check that mm is between r1 and r2?
-        
-        # get toas inside DMX window
-        toa_mjds = np.array([tm for tm in toas.orig_table['mjd_float']])
-        dmxwin_inds = np.where((toa_mjds>closest_r1) & (toa_mjds<closest_r2))[0]
-        
-        # find corresponding files
-        toa_allfiles = np.array([tf['name'] for tf in toas.orig_table['flags']])
-        files_to_investigate = list(set(toa_allfiles[dmxwin_inds]))
-        
-        # check that there is a match, len(fti) > 0?
-        
-        # get full paths for files_to_investigate, unless file_only=True
-        if not file_only:
-            for fti in files_to_investigate:
-                match = [fp for fp in ff_path if fti in fp]
-                if match: match_files.extend(match)  # though match really shouldn't have len > 1.
-                else: print(f"No match to file: {fti}")
+        if ((mm > closest_r1) and (mm < closest_r2)):
+            mjd_in_closest_window = True
         else:
-            match_files = files_to_investigate
+            mjd_in_closest_window = False
+            log.warning(f"Selected MJD ({mm}) is outside the nearest DMX window: {closest_r1} - {closest_r2}")
+
+        if mjd_in_closest_window:
+            # get toas inside DMX window
+            toa_mjds = np.array([tm for tm in toas.orig_table['mjd_float']])
+            dmxwin_inds = np.where((toa_mjds>closest_r1) & (toa_mjds<closest_r2))[0]
+        
+            # find corresponding files
+            toa_allfiles = np.array([tf['name'] for tf in toas.orig_table['flags']])
+            files_to_investigate = list(set(toa_allfiles[dmxwin_inds]))
+        
+            # check that there is a match, len(fti) > 0?
+        
+            # get full paths for files_to_investigate, unless file_only=True
+            if not file_only:
+                for fti in files_to_investigate:
+                    match = [fp for fp in ff_path if fti in fp]
+                    if match: match_files.extend(match)  # though match really shouldn't have len > 1.
+                    else: print(f"No match to file: {fti}")
+            else:
+                match_files = files_to_investigate
         
     return match_files
