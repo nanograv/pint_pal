@@ -1349,3 +1349,53 @@ def nonexcised_file_look(toas, plot_type = 'profile'):
                     ar.imshow()
                 else:
                     log.warning(f'Unrecognized plot type: {plot_type}')
+
+def dmx_mjds_to_files(mjds,toas,dmxDict,mode='nb',file_only=False):
+    """ Find files in DMX windows associated with input mjds
+    
+    Tool to facilitate the process of inspecting data associated with outlier
+    or unusual DMX measurements.
+    
+    Parameters
+    ==========
+    mjds: list
+        List of MJDs associated with unusual DMX values
+    toas: `pint.toa.TOAs` object
+    dmxDict: dictionary
+        dmxout information (mjd, val, err, r1, r2), e.g. for nb, wb, respectively
+    mode: str, optional
+        (default: 'nb')
+    file_only: bool, optional
+        if True, return matching file names only, not full paths (default: False)
+    """
+    match_files = []
+    ff_path = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
+    
+    for mm in mjds:
+        mjd_diff = dmxDict[mode]['mjd']-mm
+        closest_ind = np.argmin(np.absolute(mjd_diff))
+        closest_r1 = dmxDict[mode]['r1'][closest_ind] # early edge of DMX window
+        closest_r2 = dmxDict[mode]['r2'][closest_ind] #  late edge of DMX window
+        
+        # check that mm is between r1 and r2?
+        
+        # get toas inside DMX window
+        toa_mjds = np.array([tm for tm in toas.orig_table['mjd_float']])
+        dmxwin_inds = np.where((toa_mjds>closest_r1) & (toa_mjds<closest_r2))[0]
+        
+        # find corresponding files
+        toa_allfiles = np.array([tf['name'] for tf in toas.orig_table['flags']])
+        files_to_investigate = list(set(toa_allfiles[dmxwin_inds]))
+        
+        # check that there is a match, len(fti) > 0?
+        
+        # get full paths for files_to_investigate, unless file_only=True
+        if not file_only:
+            for fti in files_to_investigate:
+                match = [fp for fp in ff_path if fti in fp]
+                if match: match_files.extend(match)  # though match really shouldn't have len > 1.
+                else: print(f"No match to file: {fti}")
+        else:
+            match_files = files_to_investigate
+        
+    return match_files
