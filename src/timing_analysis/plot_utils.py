@@ -587,18 +587,21 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
     dmxDict = {}
     for ii,(df,lab) in enumerate(zip(dmxout_files,labels)):
         dmxmjd, dmxval, dmxerr, dmxr1, dmxr2 = np.loadtxt(df, unpack=True, usecols=range(0,5))
-        mjdTime = Time(dmxmjd,format='mjd')
-        dyTime = mjdTime.decimalyear
         idmxDict = {'mjd':dmxmjd,'val':dmxval,'err':dmxerr,'r1':dmxr1,'r2':dmxr2}        
-        if ii == 0: # set ax2 lims based on first file
-            ax1.set_xlim(np.min(dyTime),np.max(dyTime))
         ax2.errorbar(dmxmjd, dmxval*10**3, yerr=dmxerr*10**3, label=lab, marker='o', ls='', markerfacecolor='none')
         dmxDict[lab] = idmxDict
 
-    if psrname: ax1.text(0.975,0.05,psrname,transform=ax1.transAxes,size=18,c='lightgray',
-                         horizontalalignment='right', verticalalignment='bottom')
+    # set ax1 lims (year) based on ax2 lims (mjd)
+    mjd_xlo, mjd_xhi = ax2.get_xlim()
+    dy_xlo = Time(mjd_xlo,format='mjd').decimalyear
+    dy_xhi = Time(mjd_xhi,format='mjd').decimalyear
+    ax1.set_xlim(dy_xlo,dy_xhi)
+
+    # capture ylim
     orig_ylim = ax2.get_ylim()
 
+    if psrname: ax1.text(0.975,0.05,psrname,transform=ax1.transAxes,size=18,c='lightgray',
+                         horizontalalignment='right', verticalalignment='bottom')
     if model:
         from pint.simulation import make_fake_toas_fromMJDs
         from timing_analysis.lite_utils import remove_noise
@@ -615,6 +618,7 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
         sun_dm_delays = mo_swm.solar_wind_dm(fake_toas)*10**3  # same scaling as above
         ax2.plot(fake_mjds,sun_dm_delays,c='lightgray',label='Excess DM')
 
+    # don't change ylim based on excess dm trace, if plotted
     ax2.set_ylim(orig_ylim)
     ax2.legend(loc='best')
 
