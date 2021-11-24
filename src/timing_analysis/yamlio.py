@@ -286,9 +286,9 @@ def add_check_block(yaml_file,overwrite=True,extension='fix',insert_after='ignor
         # check block goes after ignore by default (insert_after)
         insert_ind = list(config).index(insert_after) + 1
         check_block = {
-            'toa-outliers':[],
-            'dmx-outliers':[],
-            'unusual-params':[],
+            'toa-outliers':None,
+            'dmx-outliers':None,
+            'unusual-params':None,
             'other':None,
             'cleared':False,
             }
