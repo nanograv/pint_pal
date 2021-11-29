@@ -298,6 +298,37 @@ def add_check_block(yaml_file,overwrite=True,extension='fix',insert_after='ignor
     else:
         log.info(f'{yaml_file} already contains check block.')
 
+def check_cleared(yaml_file,overwrite=True,extension='fix'):
+    """Assigns 'cleared' status based on other check block fields
+
+    Parameters
+    ==========
+    yaml_file: str, input file
+    overwrite: bool, optional
+        write yaml with same name (true), or add extenion (false)
+    extension: str, optional
+        extention added to output filename if overwrite=False
+    """
+    config = read_yaml(yaml_file)
+    out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
+
+    if not config.get('check'):
+        log.warning(f'{yaml_file} check block does not exist.')
+    else:
+        cleared = True
+        for v in config.get('check').keys():  
+            if not config['check'][v]:
+                pass
+            else:
+                log.info(f'{yaml_file} not clear due to {v}.')
+                cleared = False
+                break
+
+        if cleared:
+            log.info(f'{yaml_file} check is cleared.')
+            config['check']['cleared'] = True
+            write_yaml(config, out_yaml)
+
 def curate_comments(yaml_file,overwrite=True,extension='fix'):
     """Standardizes info comments on specific yaml fields
 
@@ -525,6 +556,12 @@ def main():
         help="add check block to input yaml file(s)",
     )
     parser.add_argument(
+        "--checkcleared",
+        action="store_true",
+        default=False,
+        help="assign cleared: true if check block is empty",
+    )
+    parser.add_argument(
         "--bkv",
         nargs=3,
         help="add block/key/value (3 items) to instantiate new yaml field",
@@ -559,6 +596,9 @@ def main():
     elif args.addcheck:
         for ff in args.files:
             add_check_block(ff,overwrite=args.overwrite)
+    elif args.checkcleared:
+        for ff in args.files:
+            check_cleared(ff,overwrite=args.overwrite)
     if args.bkv:
         block, key, value = args.bkv
         for ff in args.files:
