@@ -34,9 +34,9 @@ ignore: # toa excision
   bad-range:
   bad-file:
 check:  # check before final
-  toa-outliers: []
-  dmx-outliers: []
-  unusual-params: []
+  toa-outliers:
+  dmx-outliers:
+  unusual-params:
   other:
   cleared: false
 
