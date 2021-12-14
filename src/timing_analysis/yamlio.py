@@ -407,9 +407,11 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
     valid_keys = ['source','par-directory','tim-directory','timing-model',
             'compare-model','toas','free-params','free-dmx','toa-type','fitter',
             'n-iterations','ephem','bipm','noise','results-dir','dmx','ignore-dmx',
-            'fratio','max-sw-delay','custom-dmx','intermediate-results','noise-dir',
+            'fratio','max-sw-delay','custom-dmx','method','n-burn','n-samples',
+            'intermediate-results','noise-dir',
             'compare-noise-dir','excised-tim','no-corner','ignore','mjd-start',
-            'mjd-end','snr-cut','bad-toa','bad-range','bad-file','changelog']
+            'mjd-end','snr-cut','bad-toa','bad-range','bad-file','changelog',
+            'toa-outliers','dmx-outliers','unusual-params','other','cleared']
 
     if field not in valid_keys:
         log.warning(f'Provided field ({field}) not valid.')
@@ -433,6 +435,8 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
             config['intermediate-results']['no-corner'] = value
         elif field == 'excised-tim' and isinstance(value,str):
             config['intermediate-results']['excised-tim'] = value
+        elif field == 'method' and isinstance(value,str):
+            config['outlier']['method'] = value
         else:
             log.error(f'Provided field ({field}) is valid, but not yet implemented in set_field(); doing nothing.')
 
@@ -562,6 +566,11 @@ def main():
         help="assign cleared: true if check block is empty",
     )
     parser.add_argument(
+        "--setvalue",
+        nargs=2,
+        help="set yaml field to value (2 items)",
+    )
+    parser.add_argument(
         "--bkv",
         nargs=3,
         help="add block/key/value (3 items) to instantiate new yaml field",
@@ -599,7 +608,11 @@ def main():
     elif args.checkcleared:
         for ff in args.files:
             check_cleared(ff,overwrite=args.overwrite)
-    if args.bkv:
+    elif args.setvalue:
+        field,value = args.setvalue
+        for ff in args.files:
+            set_field(ff,field,value,overwrite=args.overwrite)
+    elif args.bkv:
         block, key, value = args.bkv
         for ff in args.files:
             add_block_field(ff,block,key,value,overwrite=args.overwrite)
