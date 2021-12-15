@@ -1170,7 +1170,7 @@ def display_auto_ex(tc, mo, cutkeys=['epochdrop', 'outlier10'], plot_type='profi
 
     return plot_list
 
-def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True,save=True):
+def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],multi=False,ylim_good=True,save=True):
     """ Plot residuals vs. time, highlight specified cuts (default: badtoa/badfile) 
     
     Parameters
@@ -1180,6 +1180,8 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_goo
     tc_object: `timing_analysis.timingconfiguration` object
     cuts: list, optional
         cuts to highlight in residuals plot (default: manual cuts)
+    multi: bool, optional
+        plot both full ylim and zoom-in, supercedes ylim_good (default: False)
     ylim_good: bool, optional
         set ylim to that of uncut TOAs (default: True)
     save: bool (default: True)
@@ -1195,35 +1197,53 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_goo
     errs = fo.toas.get_errors().to(u.us).value
     mjds = fo.toas.get_mjds().value
 
-    figsize = (12,3)
-    fig = plt.figure(figsize=figsize)
-    ax = fig.add_subplot(111)
+    if multi:
+        figsize = (12,6.5)
+        fig = plt.figure(figsize=figsize)
+        ax1 = fig.add_subplot(211)
+        ax2 = fig.add_subplot(212)
+        axes = [ax1, ax2]
+    else:    
+        figsize = (12,3)
+        fig = plt.figure(figsize=figsize)
+        ax1 = fig.add_subplot(111)
+        axes = [ax1]
     
-    # find appropriate indices & plot remaining TOAs
-    toa_cut_flags = np.array([t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table])
-    uncut_inds = np.where(toa_cut_flags==None)[0]
-    ax.errorbar(mjds[uncut_inds],time_resids[uncut_inds],yerr=errs[uncut_inds],fmt='x',alpha=0.5,color='gray')
-    uncut_ylim = ax.get_ylim() # ylim for plot with good TOAs only
-
     import seaborn as sns
     valid_cuts = ['snr','simul','orphaned','maxout','outlier10','dmx','epochdrop','badfile','badtoa','badrange','poorfebe']
     sns.color_palette()
-    for c in cuts:
-        if c in valid_cuts:
-            cut_inds = np.where(toa_cut_flags==c)[0]
-            plt.errorbar(mjds[cut_inds],time_resids[cut_inds],yerr=errs[cut_inds],fmt='x',label=c)
-        else:
-            log.warning(f"Unrecognized cut: {c}")
 
-    if ylim_good:
-        ax.set_ylim(uncut_ylim)
+    # find appropriate indices & plot remaining TOAs
+    toa_cut_flags = np.array([t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table])
+    uncut_inds = np.where(toa_cut_flags==None)[0]
+    for ax in axes:
+        ax.errorbar(mjds[uncut_inds],time_resids[uncut_inds],yerr=errs[uncut_inds],fmt='x',alpha=0.5,color='gray')
+        uncut_ylim = ax.get_ylim() # ylim for plot with good TOAs only
 
-    ax.grid(True)
-    ax.legend(loc='upper center', bbox_to_anchor= (0.5, 1.2), ncol=len(cuts))
-    plt.title(f'{model.PSR.value} highlighted cuts',y=1.2)
-    ax.set_xlabel('MJD')
-    ax.set_ylabel('Residual ($\mu$s)')
-    
+        for c in cuts:
+            if c in valid_cuts:
+                cut_inds = np.where(toa_cut_flags==c)[0]
+                ax.errorbar(mjds[cut_inds],time_resids[cut_inds],yerr=errs[cut_inds],fmt='x',label=c)
+            else:
+                log.warning(f"Unrecognized cut: {c}")
+
+        ax.grid(True)
+        ax.set_ylabel('Residual ($\mu$s)')
+
+    ax1.legend(loc='upper center', bbox_to_anchor= (0.5, 1.2), ncol=len(cuts))
+    #plt.title(f'{model.PSR.value} highlighted cuts',y=1.2)
+    ax1.text(0.975,0.05,tc_object.get_source(),transform=ax1.transAxes,size=18,c='lightgray',
+        horizontalalignment='right', verticalalignment='bottom')
+
+    if multi:
+        ax1.set_xticklabels([])
+        ax2.set_ylim(uncut_ylim)
+        ax2.set_xlabel('MJD')
+    else:
+        ax1.set_xlabel('MJD')
+        if ylim_good:
+            ax1.set_ylim(uncut_ylim)
+
     if save:
         if using_wideband:
             plt.savefig(f'{model.PSR.value}_manual_hl_wb.png', dpi=150)
