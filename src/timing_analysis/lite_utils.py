@@ -698,7 +698,7 @@ def get_cut_colors(palette='pastel'):
         Dictionary mapping cut flags to colors in the specified palette
     """
     import seaborn as sns
-    palette = sns.color_palette(palette, 10)
+    palette = sns.color_palette(palette, 11)
     color_dict = {
         'good':palette[2],
         'dmx':palette[0],
@@ -710,6 +710,7 @@ def get_cut_colors(palette='pastel'):
         'maxout':palette[7],
         'simul':palette[8],
         'poorfebe':palette[9],
+        'eclipsing':palette[10],
         'badtoa':'k',
         'badfile':'C3',
         'mjdstart':'C9',

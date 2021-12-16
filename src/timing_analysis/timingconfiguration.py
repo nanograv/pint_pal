@@ -144,7 +144,7 @@ class TimingConfiguration:
                 self.check_simultaneous(t,'GUPPI','GASP')
 
             t = self.apply_ignore(t,specify_keys=['orphaned-rec','mjd-start','mjd-end','bad-range',
-                'snr-cut','poor-febe'])
+                'snr-cut','poor-febe','orb-phase-range'],model=m)
             apply_cut_select(t,reason='initial cuts, specified keys')
 
         # Possibly better to handle this with toagen, but...ignore wb TOAs without pp_dm
@@ -619,10 +619,16 @@ class TimingConfiguration:
             return self.config['outlier']['method']
         return None
 
-    def apply_ignore(self,toas,specify_keys=None,warn=False):
+    def get_orb_phase_range(self):
+        """ Return orb-phase-range to ignore """
+        if 'orb-phase-range' in self.config['ignore'].keys():
+            return self.config['ignore']['orb-phase-range']
+        return None
+
+    def apply_ignore(self,toas,specify_keys=None,warn=False,model=None):
         """ Basic checks and return TOA excision info. """
         OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-file',
-                        'orphaned-rec','prob-outlier','poor-febe']
+                        'orphaned-rec','prob-outlier','poor-febe','orb-phase-range']
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
 
@@ -735,6 +741,16 @@ class TimingConfiguration:
                 else:
                     rangeinds = np.where((mjds>br[0]) & (mjds<br[1]))[0]
                 apply_cut_flag(toas,rangeinds,'badrange',warn=warn)
+        if 'orb-phase-range' in valid_valued:
+            mjds = np.array([m for m in toas.orig_table['mjd_float']])
+            if not model:
+                log.warning("Keyword argument 'model' is unset; can not compute orbital phase, or apply eclipsing cut.")
+            else:
+                orbphase = model.orbital_phase(mjds, radians = False)
+                phmin,phmax = self.get_orb_phase_range()
+                phase_cut_inds = np.where((orbphase > phmin) & (orbphase < phmax))[0]
+                apply_cut_flag(toas,phase_cut_inds,'eclipsing',warn=warn)
+
         if 'bad-toa' in valid_valued:
             logwarntoa = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
