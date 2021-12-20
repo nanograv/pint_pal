@@ -28,7 +28,7 @@ outlier: # control outlier analysis runs
 intermediate-results: # use results from previous runs
   noise-dir: /nanograv/share/15yr/timing/intermediate/20210928.Noise.nb.1aa5922/
   compare-noise-dir: /nanograv/share/15yr/timing/intermediate/20210924.Noise.nb.198096e/
-  excised-tim: /nanograv/share/15yr/timing/intermediate/20210828.Outlier.nb.5719caa/J0605+3757.nb/J0605+3757.nb_excise.tim
+  excised-tim: /nanograv/share/15yr/timing/intermediate/20211217.Outlier.nb.8551468/J0605+3757.nb/J0605+3757.nb_excise.tim
   no-corner: true
 ignore: # toa excision
   mjd-start:
