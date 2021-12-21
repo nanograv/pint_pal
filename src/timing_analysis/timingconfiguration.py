@@ -744,7 +744,7 @@ class TimingConfiguration:
         if 'orb-phase-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             if not model:
-                log.warning("Keyword argument 'model' is unset; can not compute orbital phase, or apply eclipsing cut.")
+                log.warning("Keyword argument 'model' is unset; cannot compute orbital phase, or apply eclipsing cut.")
             else:
                 orbphase = model.orbital_phase(mjds, radians = False)
                 phmin,phmax = self.get_orb_phase_range()
