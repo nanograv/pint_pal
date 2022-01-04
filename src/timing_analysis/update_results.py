@@ -50,6 +50,7 @@ def new_noise_results(input_pars,logs_only=False):
 
             # Copy par file(s) and git add
             log.info(f"Copying {p} to {TA_RESULTS}")
+            # Could also add a check here for whether results are already up to date
             if not logs_only:
                 process_cpnew = subprocess.Popen(["cp",par_path,TA_RESULTS],
                                                 stdout=subprocess.PIPE,
@@ -113,7 +114,7 @@ def new_outlier_results(input_tims,logs_only=False):
     """
     for tim_path in input_tims:
         # Compose yaml file corresponding to input par
-        t = os.path.basename(tim_path) # get par file only
+        t = os.path.basename(tim_path) # get tim file only
         src = t.split('.')[0]
         mode = t.split('.')[1].split('_')[0]
         y = f"{src}.{mode}.yaml" # yaml file only
