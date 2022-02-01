@@ -698,7 +698,7 @@ def get_cut_colors(palette='pastel'):
         Dictionary mapping cut flags to colors in the specified palette
     """
     import seaborn as sns
-    palette = sns.color_palette(palette, 10)
+    palette = sns.color_palette(palette, 11)
     color_dict = {
         'good':palette[2],
         'dmx':palette[0],
@@ -710,6 +710,7 @@ def get_cut_colors(palette='pastel'):
         'maxout':palette[7],
         'simul':palette[8],
         'poorfebe':palette[9],
+        'eclipsing':palette[10],
         'badtoa':'k',
         'badfile':'C3',
         'mjdstart':'C9',
@@ -1170,7 +1171,7 @@ def display_auto_ex(tc, mo, cutkeys=['epochdrop', 'outlier10'], plot_type='profi
 
     return plot_list
 
-def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_good=True,save=True):
+def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],multi=False,ylim_good=True,save=True):
     """ Plot residuals vs. time, highlight specified cuts (default: badtoa/badfile) 
     
     Parameters
@@ -1180,6 +1181,8 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_goo
     tc_object: `timing_analysis.timingconfiguration` object
     cuts: list, optional
         cuts to highlight in residuals plot (default: manual cuts)
+    multi: bool, optional
+        plot both full ylim and zoom-in, supercedes ylim_good (default: False)
     ylim_good: bool, optional
         set ylim to that of uncut TOAs (default: True)
     save: bool (default: True)
@@ -1195,35 +1198,53 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],ylim_goo
     errs = fo.toas.get_errors().to(u.us).value
     mjds = fo.toas.get_mjds().value
 
-    figsize = (12,3)
-    fig = plt.figure(figsize=figsize)
-    ax = fig.add_subplot(111)
+    if multi:
+        figsize = (12,6.5)
+        fig = plt.figure(figsize=figsize)
+        ax1 = fig.add_subplot(211)
+        ax2 = fig.add_subplot(212)
+        axes = [ax1, ax2]
+    else:    
+        figsize = (12,3)
+        fig = plt.figure(figsize=figsize)
+        ax1 = fig.add_subplot(111)
+        axes = [ax1]
     
-    # find appropriate indices & plot remaining TOAs
-    toa_cut_flags = np.array([t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table])
-    uncut_inds = np.where(toa_cut_flags==None)[0]
-    ax.errorbar(mjds[uncut_inds],time_resids[uncut_inds],yerr=errs[uncut_inds],fmt='x',alpha=0.5,color='gray')
-    uncut_ylim = ax.get_ylim() # ylim for plot with good TOAs only
-
     import seaborn as sns
     valid_cuts = ['snr','simul','orphaned','maxout','outlier10','dmx','epochdrop','badfile','badtoa','badrange','poorfebe']
     sns.color_palette()
-    for c in cuts:
-        if c in valid_cuts:
-            cut_inds = np.where(toa_cut_flags==c)[0]
-            plt.errorbar(mjds[cut_inds],time_resids[cut_inds],yerr=errs[cut_inds],fmt='x',label=c)
-        else:
-            log.warning(f"Unrecognized cut: {c}")
 
-    if ylim_good:
-        ax.set_ylim(uncut_ylim)
+    # find appropriate indices & plot remaining TOAs
+    toa_cut_flags = np.array([t['flags']['cut'] if 'cut' in t['flags'] else None for t in toas.orig_table])
+    uncut_inds = np.where(toa_cut_flags==None)[0]
+    for ax in axes:
+        ax.errorbar(mjds[uncut_inds],time_resids[uncut_inds],yerr=errs[uncut_inds],fmt='x',alpha=0.5,color='gray')
+        uncut_ylim = ax.get_ylim() # ylim for plot with good TOAs only
 
-    ax.grid(True)
-    ax.legend(loc='upper center', bbox_to_anchor= (0.5, 1.2), ncol=len(cuts))
-    plt.title(f'{model.PSR.value} highlighted cuts',y=1.2)
-    ax.set_xlabel('MJD')
-    ax.set_ylabel('Residual ($\mu$s)')
-    
+        for c in cuts:
+            if c in valid_cuts:
+                cut_inds = np.where(toa_cut_flags==c)[0]
+                ax.errorbar(mjds[cut_inds],time_resids[cut_inds],yerr=errs[cut_inds],fmt='x',label=c)
+            else:
+                log.warning(f"Unrecognized cut: {c}")
+
+        ax.grid(True)
+        ax.set_ylabel('Residual ($\mu$s)')
+
+    ax1.legend(loc='upper center', bbox_to_anchor= (0.5, 1.2), ncol=len(cuts))
+    #plt.title(f'{model.PSR.value} highlighted cuts',y=1.2)
+    ax1.text(0.975,0.05,tc_object.get_source(),transform=ax1.transAxes,size=18,c='lightgray',
+        horizontalalignment='right', verticalalignment='bottom')
+
+    if multi:
+        ax1.set_xticklabels([])
+        ax2.set_ylim(uncut_ylim)
+        ax2.set_xlabel('MJD')
+    else:
+        ax1.set_xlabel('MJD')
+        if ylim_good:
+            ax1.set_ylim(uncut_ylim)
+
     if save:
         if using_wideband:
             plt.savefig(f'{model.PSR.value}_manual_hl_wb.png', dpi=150)
@@ -1349,3 +1370,80 @@ def nonexcised_file_look(toas, plot_type = 'profile'):
                     ar.imshow()
                 else:
                     log.warning(f'Unrecognized plot type: {plot_type}')
+
+def dmx_mjds_to_files(mjds,toas,dmxDict,mode='nb',file_only=False):
+    """ Find files in DMX windows associated with input mjds
+    
+    Tool to facilitate the process of inspecting data associated with outlier
+    or unusual DMX measurements.
+    
+    Parameters
+    ==========
+    mjds: list
+        List of MJDs associated with unusual DMX values
+    toas: `pint.toa.TOAs` object
+    dmxDict: dictionary
+        dmxout information (mjd, val, err, r1, r2), e.g. for nb, wb, respectively
+    mode: str, optional
+        (default: 'nb')
+    file_only: bool, optional
+        if True, return matching file names only, not full paths (default: False)
+    """
+    match_files = []
+    ff_path = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
+    
+    for mm in mjds:
+        mjd_diff = dmxDict[mode]['mjd']-mm
+        closest_ind = np.argmin(np.absolute(mjd_diff))
+        closest_r1 = dmxDict[mode]['r1'][closest_ind] # early edge of DMX window
+        closest_r2 = dmxDict[mode]['r2'][closest_ind] #  late edge of DMX window
+        
+        # check that mm is between r1 and r2?
+        if ((mm > closest_r1) and (mm < closest_r2)):
+            mjd_in_closest_window = True
+        else:
+            mjd_in_closest_window = False
+            log.warning(f"Selected MJD ({mm}) is outside the nearest DMX window: {closest_r1} - {closest_r2}")
+
+        if mjd_in_closest_window:
+            # get toas inside DMX window
+            toa_mjds = np.array([tm for tm in toas.orig_table['mjd_float']])
+            dmxwin_inds = np.where((toa_mjds>closest_r1) & (toa_mjds<closest_r2))[0]
+        
+            # find corresponding files
+            toa_allfiles = np.array([tf['name'] for tf in toas.orig_table['flags']])
+            files_to_investigate = list(set(toa_allfiles[dmxwin_inds]))
+        
+            # check that there is a match, len(fti) > 0?
+        
+            # get full paths for files_to_investigate, unless file_only=True
+            if not file_only:
+                for fti in files_to_investigate:
+                    match = [fp for fp in ff_path if fti in fp]
+                    if match: match_files.extend(match)  # though match really shouldn't have len > 1.
+                    else: print(f"No match to file: {fti}")
+            else:
+                match_files = files_to_investigate
+        
+    return match_files
+
+def convert_enterprise_equads(model):
+    """ EQUADS from enterprise v3.1.0 and earlier follow a different convention than that
+    in Tempo/Tempo2/PINT; this function applies a simple conversion until a more general
+    fix is available. For example, with a given EFAC/EQUAD pair:
+
+    EQUAD (pint) = EQUAD (enterprise) / EFAC
+    """
+    efacs = [x for x in model.keys() if 'EFAC' in x]
+    equads = [x for x in model.keys() if 'EQUAD' in x]
+
+    if not len(efacs):
+        log.warning('There are no white noise parameters in this timing model.')
+        return model
+    else:
+        for ef,eq in zip(efacs,equads):
+            old_eq = model[eq].value
+            new_eq = old_eq/model[ef].value
+            model[eq].value = new_eq
+            log.info(f"EQUAD has been converted from {old_eq} to {new_eq}.")
+        return model

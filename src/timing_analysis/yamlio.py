@@ -199,7 +199,7 @@ def add_dmx_block(yaml_file,overwrite=True,extension='fix',insert_after='noise')
         log.info(f'{yaml_file} already contains dmx block.')
 
 def add_outlier_block(yaml_file,overwrite=True,extension='fix',insert_after='dmx'):
-    """Adds dmx block to yaml file
+    """Adds outlier block to yaml file
 
     Parameters
     ==========
@@ -226,7 +226,7 @@ def add_outlier_block(yaml_file,overwrite=True,extension='fix',insert_after='dmx
 
 def add_results_block(yaml_file,overwrite=True,extension='fix',insert_before='ignore',
         set_to_current=True):
-    """Adds noise block to yaml file
+    """Adds intermediate-results block to yaml file
 
     Parameters
     ==========
@@ -265,6 +265,69 @@ def add_results_block(yaml_file,overwrite=True,extension='fix',insert_before='ig
         write_yaml(config, out_yaml)
     else:
         log.info(f'{yaml_file} already contains noise block.')
+
+def add_check_block(yaml_file,overwrite=True,extension='fix',insert_after='ignore'):
+    """Adds check block to yaml file
+
+    Parameters
+    ==========
+    yaml_file: str, input file
+    overwrite: bool, optional
+        write yaml with same name (true), or add extenion (false)
+    extension: str, optional
+        extention added to output filename if overwrite=False
+    insert_after: str, optional
+        field after which to insert this block in the yaml
+    """
+    config = read_yaml(yaml_file)
+    out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
+
+    if not config.get('check'):
+        # check block goes after ignore by default (insert_after)
+        insert_ind = list(config).index(insert_after) + 1
+        check_block = {
+            'toa-outliers':None,
+            'dmx-outliers':None,
+            'unusual-params':None,
+            'other':None,
+            'cleared':False,
+            }
+        config.insert(insert_ind,'check',check_block,'check before final')
+        log.info(f'Adding standard check block to {out_yaml}.')
+        write_yaml(config, out_yaml)
+    else:
+        log.info(f'{yaml_file} already contains check block.')
+
+def check_cleared(yaml_file,overwrite=True,extension='fix'):
+    """Assigns 'cleared' status based on other check block fields
+
+    Parameters
+    ==========
+    yaml_file: str, input file
+    overwrite: bool, optional
+        write yaml with same name (true), or add extenion (false)
+    extension: str, optional
+        extention added to output filename if overwrite=False
+    """
+    config = read_yaml(yaml_file)
+    out_yaml = get_outfile(yaml_file,overwrite=overwrite,extension=extension)
+
+    if not config.get('check'):
+        log.warning(f'{yaml_file} check block does not exist.')
+    else:
+        cleared = True
+        for v in config.get('check').keys():  
+            if not config['check'][v]:
+                pass
+            else:
+                log.info(f'{yaml_file} not clear due to {v}.')
+                cleared = False
+                break
+
+        if cleared:
+            log.info(f'{yaml_file} check is cleared.')
+            config['check']['cleared'] = True
+            write_yaml(config, out_yaml)
 
 def curate_comments(yaml_file,overwrite=True,extension='fix'):
     """Standardizes info comments on specific yaml fields
@@ -344,9 +407,11 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
     valid_keys = ['source','par-directory','tim-directory','timing-model',
             'compare-model','toas','free-params','free-dmx','toa-type','fitter',
             'n-iterations','ephem','bipm','noise','results-dir','dmx','ignore-dmx',
-            'fratio','max-sw-delay','custom-dmx','intermediate-results','noise-dir',
+            'fratio','max-sw-delay','custom-dmx','method','n-burn','n-samples',
+            'intermediate-results','noise-dir',
             'compare-noise-dir','excised-tim','no-corner','ignore','mjd-start',
-            'mjd-end','snr-cut','bad-toa','bad-range','bad-file','changelog']
+            'mjd-end','snr-cut','bad-toa','bad-range','bad-file','changelog',
+            'toa-outliers','dmx-outliers','unusual-params','other','cleared']
 
     if field not in valid_keys:
         log.warning(f'Provided field ({field}) not valid.')
@@ -368,6 +433,10 @@ def set_field(yaml_file,field,value,overwrite=True,extension='fix'):
             config['intermediate-results']['compare-noise-dir'] = value
         elif field == 'no-corner' and isinstance(value,bool):
             config['intermediate-results']['no-corner'] = value
+        elif field == 'excised-tim' and isinstance(value,str):
+            config['intermediate-results']['excised-tim'] = value
+        elif field == 'method' and isinstance(value,str):
+            config['outlier']['method'] = value
         else:
             log.error(f'Provided field ({field}) is valid, but not yet implemented in set_field(); doing nothing.')
 
@@ -485,12 +554,30 @@ def main():
         help="add results block to input yaml file(s)",
     )
     parser.add_argument(
+        "--addcheck",
+        action="store_true",
+        default=False,
+        help="add check block to input yaml file(s)",
+    )
+    parser.add_argument(
+        "--checkcleared",
+        action="store_true",
+        default=False,
+        help="assign cleared: true if check block is empty",
+    )
+    parser.add_argument(
+        "--setvalue",
+        nargs=2,
+        help="set yaml field to value (2 items)",
+    )
+    parser.add_argument(
         "--bkv",
         nargs=3,
         help="add block/key/value (3 items) to instantiate new yaml field",
     )
     args = parser.parse_args()
 
+    # maybe we want a "initiate" function to make a new yaml?
     if args.check:
         for ff in args.files:
             log.setLevel('DEBUG')
@@ -499,6 +586,8 @@ def main():
             add_noise_block(ff,overwrite=args.overwrite)
             add_dmx_block(ff,overwrite=args.overwrite)
             #curate_comments(ff,overwrite=args.overwrite)
+            # + outlier block?
+            # + check block?
     elif args.roundtrip:
         for ff in args.files:
             config = read_yaml(ff)
@@ -513,7 +602,17 @@ def main():
     elif args.addresults:
         for ff in args.files:
             add_results_block(ff,overwrite=args.overwrite)
-    if args.bkv:
+    elif args.addcheck:
+        for ff in args.files:
+            add_check_block(ff,overwrite=args.overwrite)
+    elif args.checkcleared:
+        for ff in args.files:
+            check_cleared(ff,overwrite=args.overwrite)
+    elif args.setvalue:
+        field,value = args.setvalue
+        for ff in args.files:
+            set_field(ff,field,value,overwrite=args.overwrite)
+    elif args.bkv:
         block, key, value = args.bkv
         for ff in args.files:
             add_block_field(ff,block,key,value,overwrite=args.overwrite)

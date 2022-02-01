@@ -639,25 +639,26 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
     dmxDict = {}
     for ii,(df,lab) in enumerate(zip(dmxout_files,labels)):
         dmxmjd, dmxval, dmxerr, dmxr1, dmxr2 = np.loadtxt(df, unpack=True, usecols=range(0,5))
-        mjdTime = Time(dmxmjd,format='mjd')
-        dyTime = mjdTime.decimalyear
         idmxDict = {'mjd':dmxmjd,'val':dmxval,'err':dmxerr,'r1':dmxr1,'r2':dmxr2}        
-        if ii == 0: # set ax2 lims based on first file
-            minmjd, maxmjd = np.sort(dmxmjd)[0], np.sort(dmxmjd)[-1]
-            ax2.set_xlim(minmjd, maxmjd)
-        ax1.errorbar(dyTime, dmxval*10**3, yerr=dmxerr*10**3, label = lab, marker='o', ls='', markerfacecolor='none')
-        if psrname: ax1.text(0.975,0.05,psrname,transform=ax1.transAxes,size=18,c='lightgray',
-                            horizontalalignment='right', verticalalignment='bottom')
+        ax2.errorbar(dmxmjd, dmxval*10**3, yerr=dmxerr*10**3, label=lab, marker='o', ls='', markerfacecolor='none')
         dmxDict[lab] = idmxDict
 
-    orig_ylim = ax1.get_ylim()
+    # set ax1 lims (year) based on ax2 lims (mjd)
+    mjd_xlo, mjd_xhi = ax2.get_xlim()
+    dy_xlo = Time(mjd_xlo,format='mjd').decimalyear
+    dy_xhi = Time(mjd_xhi,format='mjd').decimalyear
+    ax1.set_xlim(dy_xlo,dy_xhi)
 
+    # capture ylim
+    orig_ylim = ax2.get_ylim()
+
+    if psrname: ax1.text(0.975,0.05,psrname,transform=ax1.transAxes,size=18,c='lightgray',
+                         horizontalalignment='right', verticalalignment='bottom')
     if model:
         from pint.simulation import make_fake_toas_fromMJDs
         from timing_analysis.lite_utils import remove_noise
-        fake_mjds = np.linspace(minmjd,maxmjd,num=int(maxmjd-minmjd))
+        fake_mjds = np.linspace(np.min(dmxmjd),np.max(dmxmjd),num=int(np.max(dmxmjd)-np.min(dmxmjd)))
         fake_mjdTime = Time(fake_mjds,format='mjd')
-        fake_dyTime = fake_mjdTime.decimalyear
 
         # copy the model and add sw component
         mo_swm = copy.deepcopy(model)
@@ -667,15 +668,103 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
         # generate fake TOAs and calculate excess DM due to solar wind
         fake_toas = make_fake_toas_fromMJDs(fake_mjdTime,mo_swm)
         sun_dm_delays = mo_swm.solar_wind_dm(fake_toas)*10**3  # same scaling as above
-        ax1.plot(fake_dyTime,sun_dm_delays,c='lightgray',label='Excess DM')
+        ax2.plot(fake_mjds,sun_dm_delays,c='lightgray',label='Excess DM')
 
-    ax1.set_ylim(orig_ylim)
-    ax1.legend(loc='best')
+    # don't change ylim based on excess dm trace, if plotted
+    ax2.set_ylim(orig_ylim)
+    ax2.legend(loc='best')
 
     plt.tight_layout()
     if outfile: plt.savefig(outfile)
     return dmxDict
 
+def plot_dmx_diffs_nbwb(dmxDict, show_missing=True, psrname=None, outfile=None):
+    """ Uses output dmxDict from plot_dmxout() to plot diffs between simultaneous nb-wb values
+
+    Parameters
+    ==========
+    dmxDict: dictionary
+        dmxout information (mjd, val, err, r1, r2) for nb, wb, respectively (check both exist)
+    show_missing: bool, optional
+        if one value is missing (nb/wb), indicate the epoch and which one
+    psrname: str, optional
+        pulsar name
+    outfile: str, optional
+        save figure and write to outfile if set
+
+    Returns
+    =======
+    None?
+    """
+    # should check that both nb/wb entries exist first...
+    nbmjd = dmxDict['nb']['mjd']
+    wbmjd = dmxDict['wb']['mjd']
+    allmjds = set(list(nbmjd) + list(wbmjd))
+
+    # May need slightly more curation if nb/wb mjds are *almost* identical
+    wbonly = allmjds-set(nbmjd)
+    nbonly = allmjds-set(wbmjd)
+    both = set(nbmjd).intersection(set(wbmjd))
+
+    # assemble arrays of common inds for plotting later; probably a better way to do this
+    nb_common_inds = []
+    wb_common_inds = []
+    for b in both:
+        nb_common_inds.append(np.where(nbmjd==b)[0][0])
+        wb_common_inds.append(np.where(wbmjd==b)[0][0])
+
+    nb_common_inds, wb_common_inds = np.array(nb_common_inds), np.array(wb_common_inds)
+
+    nbdmx,nbdmxerr = dmxDict['nb']['val'],dmxDict['nb']['err']
+    wbdmx,wbdmxerr = dmxDict['wb']['val'],dmxDict['wb']['err']
+
+    # propagate errors as quadrature sum, though Michael thinks geometric mean might be better?
+    nbwb_dmx_diffs = nbdmx[nb_common_inds]-wbdmx[wb_common_inds]
+    nbwb_err_prop = np.sqrt(nbdmxerr[nb_common_inds]**2 + wbdmxerr[wb_common_inds]**2)
+
+    # make the plot
+    from astropy.time import Time
+    figsize = (10,4)
+    fig = plt.figure(figsize=figsize)
+    ax1 = fig.add_subplot(111)
+    ax1.set_xlabel(r'Year')
+    ax1.set_ylabel(r"$\Delta$DMX ($10^{-3}$ pc cm$^{-3}$)")
+    ax1.grid(True)
+    ax2 = ax1.twiny()
+    ax2.set_xlabel('MJD')
+
+    botharray = np.array(list(both))
+    mjdbothTime = Time(botharray,format='mjd')
+    dybothTime = mjdbothTime.decimalyear
+
+    minmjd, maxmjd = np.sort(botharray)[0], np.sort(botharray)[-1]
+    ax2.set_xlim(minmjd, maxmjd)
+
+    ax1.errorbar(dybothTime,nbwb_dmx_diffs*1e3,yerr=nbwb_err_prop*1e3,
+                marker='o', ls='', markerfacecolor='none',label='nb - wb')
+
+    # want arrows indicating missing nb/wb DMX values to difference
+    if show_missing:
+        stddiffs = np.std(nbwb_dmx_diffs)
+        mjdnbonlyTime = Time(np.array(list(nbonly)),format='mjd')
+        dynbonlyTime = mjdnbonlyTime.decimalyear
+        ax1.scatter(dynbonlyTime,np.zeros(len(nbonly))+stddiffs*1e3,marker='v',c='r',label='nb only')
+        nbonlystr = [str(no) for no in nbonly]
+        if nbonlystr: log.warning(f"nb-only measurements available for MJDs: {', '.join(nbonlystr)}")
+
+        mjdwbonlyTime = Time(np.array(list(wbonly)),format='mjd')
+        dywbonlyTime = mjdwbonlyTime.decimalyear
+        ax1.scatter(dywbonlyTime,np.zeros(len(wbonly))-stddiffs*1e3,marker='^',c='r',label='wb only')
+        wbonlystr = [str(wo) for wo in wbonly]
+        if wbonlystr: log.warning(f"wb-only measurements available for MJDs: {', '.join(wbonlystr)}")
+
+    if psrname: ax1.text(0.975,0.05,psrname,transform=ax1.transAxes,size=18,c='lightgray',
+                        horizontalalignment='right', verticalalignment='bottom')
+    plt.tight_layout()
+    ax1.legend(loc='best')
+    if outfile: plt.savefig(outfile)
+
+    return None
 
 # Now we want to make wideband DM vs. time plot, this uses the premade dm_resids from PINT
 def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False, legend = True, title = True,\
