@@ -70,6 +70,8 @@ colorschemes = {'thankful_2':{
               "MULTI_PDFB3":    "#BE0119",
               "MULTI_PDFB4":    "#BE0119",
               }}
+
+
 # marker dictionary to be used if desired, currently all 'x'
 markers = {"327_ASP":        "x",
           "327_PUPPI":       "x",
@@ -116,6 +118,8 @@ markers = {"327_ASP":        "x",
             }
 # Define the color map option
 colorscheme = colorschemes['thankful_2']
+#colorscheme = thesis_colorschemes['thesis']
+
 
 def call(x):
     subprocess.call(x,shell=True)
@@ -282,7 +286,7 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
     if 'figsize' in kwargs.keys():
         figsize = kwargs['figsize']
     else:
-        figsize = (10,4)
+        figsize = (10,5)
     if axs == None:
         fig = plt.figure(figsize=figsize)
         ax1 = fig.add_subplot(111)
@@ -326,7 +330,7 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
                      color=clr, label=r_b_label+" Prefit", alpha = alpha, picker=True)
 
     # Set second axis
-    ax1.set_xlabel(r'Year')
+    ax1.set_xlabel(r'Year', fontsize=18)
     ax1.grid(True)
     ax2 = ax1.twiny()
     mjd0  = ((ax1.get_xlim()[0])-2004.0)*365.25+53005.
@@ -349,7 +353,7 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
         elif whitened and not avg:
             ax1.set_ylabel('Residual ($\mu$s) \n (Whitened)', multialignment='center')
         else:
-            ax1.set_ylabel('Residual ($\mu$s)')
+            ax1.set_ylabel('Residual ($\mu$s)', fontsize=18)
     if legend:
         if len(RCVR_BCKNDS) > 5:
             ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
