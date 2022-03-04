@@ -181,7 +181,7 @@ def convert_pint_to_tempo_parfile(path_to_par, op_path = "./", timing_pkg = 'tem
             
     return psr_name
 
-def write_par(fitter,toatype='',addext='',outfile=None):
+def write_par(fitter,toatype='',addext='',outfile=None, fmt=None):
     """Writes a timing model object to a par file in the working directory.
 
     Parameters
@@ -193,17 +193,23 @@ def write_par(fitter,toatype='',addext='',outfile=None):
         if set, adds extension to date
     outfile: str, optional
         if set, overrides default naming convention
+    fmt: str, optional
+        if set, writes a tempo/tempo2-friendly par file
     """
+    if fmt is None:
+        fmt = 'PINT'
+    # Error is fmt is not supported (tempo/tempo2)?
+
     if outfile is None:
         source = fitter.get_allparams()['PSR'].value
         date_str = date.today().strftime('%Y%m%d')
         if toatype:
-            outfile = f'{source}_PINT_{date_str}{addext}.{toatype.lower()}.par'
+            outfile = f'{source}_{fmt}_{date_str}{addext}.{toatype.lower()}.par'
         else:
-            outfile = f'{source}_PINT_{date_str}{addext}.par'
+            outfile = f'{source}_{fmt}_{date_str}{addext}.par'
 
     with open(outfile, 'w') as fout:
-        fout.write(fitter.model.as_parfile())
+        fout.write(fitter.model.as_parfile(format=fmt))
 
 def write_tim(fitter,toatype='',addext='',outfile=None,commentflag=None):
     """Writes TOAs to a tim file in the working directory.
