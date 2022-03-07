@@ -75,7 +75,8 @@ class TimingConfiguration:
         else:
             return self.config['free-params']
 
-    def get_model_and_toas(self,usepickle=True,print_all_ignores=False,apply_initial_cuts=True, excised=False):
+    def get_model_and_toas(self,usepickle=True,print_all_ignores=False,apply_initial_cuts=True,
+            excised=False,pout_tim_path=None):
         """Return the PINT model and TOA objects"""
         par_path = os.path.join(self.par_directory,self.config["timing-model"])
         toas = self.config["toas"]
@@ -88,6 +89,15 @@ class TimingConfiguration:
             else: # unset or file does not exist... 
                 log.warning(f"excised-tim is unset or file does not exist")
                 return None, None
+
+        # capability to point to start from a pout.tim file
+        if pout_tim_path:
+            log.info(f"Loading TOAs from pout.tim file: {pout_tim_path}")
+            toas = pout_tim_path
+            self.tim_directory = ''
+            if excised:
+                log.warning(f"Set specific_tim_path=None (default) if excised-tim should be loaded.")
+            excised = True # to avoid re-applying initial cuts
 
         # Individual tim file
         if isinstance(toas, str):
@@ -128,7 +138,7 @@ class TimingConfiguration:
 
         self.backendset = set([f['be'] for f in t.orig_table['flags']])
 
-        # If reading an intermediate (excised) tim file, can simply apply cuts
+        # If reading an intermediate (pout/excised) tim file, can simply apply cuts
         if excised:
             apply_initial_cuts = False
             apply_cut_select(t,reason='existing cuts, pre-excised')
