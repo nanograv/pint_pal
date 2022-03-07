@@ -198,7 +198,7 @@ def write_par(fitter,toatype='',addext='',outfile=None, fmt=None):
     """
     if fmt is None:
         fmt = 'PINT'
-    # Error is fmt is not supported (tempo/tempo2)?
+    # Error if fmt is not supported (tempo/tempo2)?
 
     if outfile is None:
         source = fitter.get_allparams()['PSR'].value
@@ -209,7 +209,10 @@ def write_par(fitter,toatype='',addext='',outfile=None, fmt=None):
             outfile = f'{source}_{fmt}_{date_str}{addext}.par'
 
     with open(outfile, 'w') as fout:
-        fout.write(fitter.model.as_parfile(format=fmt))
+        if fmt == 'PINT':
+            fout.write(fitter.model.as_parfile())
+        else:
+            fout.write(fitter.model.as_parfile(format=fmt))
 
 def write_tim(fitter,toatype='',addext='',outfile=None,commentflag=None):
     """Writes TOAs to a tim file in the working directory.
