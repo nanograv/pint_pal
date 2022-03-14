@@ -106,7 +106,7 @@ def locate_copy_results(yamls,type,destination=None):
         source = tc.get_source()
         noise_dir = tc.get_noise_dir()
         latest_par = [f"{TA_PATH}{tc.get_model_path()}"]
-        latest_tim = glob.glob(f"{noise_dir}results/{source}*.tim")
+        latest_tim = glob.glob(f"{noise_dir}results/{source}_*.tim") # underscore to avoid duplicating split-tel results
         noise_chains = glob.glob(f"{noise_dir}{source}_{type}/chain_1.txt")
         noise_pars = glob.glob(f"{noise_dir}{source}_{type}/pars.txt")
 
