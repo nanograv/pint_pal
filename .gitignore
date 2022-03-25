@@ -40,3 +40,6 @@ core.*
 /*.tim
 *.pickle.gz
 /*.out
+
+bkup/*
+temp_files/*
