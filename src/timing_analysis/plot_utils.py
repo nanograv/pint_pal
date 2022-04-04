@@ -39,13 +39,17 @@ colorschemes = {'thankful_2':{
               "Rcvr_800_GUPPI":  "#61C853",
               "S-wide_ASP":      "#855CA0",
               "S-wide_PUPPI":    "#855CA0",
-              "1.5GHz_YUPPI":    "#45062E",
-              "3GHz_YUPPI":      "#E5A4CB",
+              "1.5GHz_YUPPI":    "#40635F",
+              "3GHz_YUPPI":      "#40635F",
               "6GHz_YUPPI":      "#40635F",
               "CHIME":           "#ECE133",
               "NRT.BON.1600":    "#FD9927",
               "NRT.BON.1400":    "#FD9927",
               "NRT.BON.2000":    "#FD9927",
+              "NRT.NUPPI.1484":  "#FD9927",
+              "NRT.NUPPI.1854":  "#FD9927",
+              "NRT.NUPPI.2154":  "#FD9927",
+              "NRT.NUPPI.2539":  "#FD9927",
               "EFF.EBPP.1360":   "#855CA0",
               "EFF.EBPP.1410":   "#855CA0",
               "EFF.EBPP.2639":   "#855CA0",
@@ -64,6 +68,9 @@ colorschemes = {'thankful_2':{
               "MULTI_CPSR2m":   "#BE0119",
               "MULTI_PDFB1":    "#BE0119",
               "H-OH_PDFB1":     "#BE0119",
+              "H-OH_CPSR2n":    "#BE0119",
+              "H-OH_CPSR2m":    "#BE0119",
+              "MULTI_CPSR2m":   "#BE0119",
               "MULTI_CPSR2n":   "#BE0119",
               "MULTI_WBCORR":   "#BE0119",
               "MULTI_PDFB2":    "#BE0119",
@@ -83,15 +90,19 @@ markers = {"327_ASP":        "x",
           "Rcvr1_2_GUPPI":   "x",
           "Rcvr_800_GASP":   "o",
           "Rcvr_800_GUPPI":  "o",
-          "S-wide_ASP":      "x",
-          "S-wide_PUPPI":    "x",
+          "S-wide_ASP":      "o",
+          "S-wide_PUPPI":    "o",
           "1.5GHz_YUPPI":    "x",
-          "3GHz_YUPPI":      "x",
-          "6GHz_YUPPI":      "x",
+          "3GHz_YUPPI":      "o",
+          "6GHz_YUPPI":      "^",
           "CHIME":           "x",
           "NRT.BON.1600":    "x",
           "NRT.BON.1400":    "o",
           "NRT.BON.2000":    "^",
+          "NRT.NUPPI.1484":  "x",
+          "NRT.NUPPI.1854":  "o",
+          "NRT.NUPPI.2154":  "^",
+          "NRT.NUPPI.2539":  "^",
           "EFF.EBPP.1360":   "o",
           "EFF.EBPP.1410":   "x",
           "EFF.EBPP.2639":   "^",
@@ -107,9 +118,12 @@ markers = {"327_ASP":        "x",
           "1050CM_PDFB3":   "x",
           "1050CM_WBCORR":  "x",
           "1050CM_CPSR2":   "x",
+          "1050CM_CPSR2m":   "x",
           "MULTI_CPSR2m":   "o",
           "MULTI_PDFB1":    "o",
           "H-OH_PDFB1":     "^",
+          "H-OH_CPSR2m":   "^",
+          "H-OH_CPSR2n":   "^",
           "MULTI_CPSR2n":   "o",
           "MULTI_WBCORR":   "o",
           "MULTI_PDFB2":    "o",
@@ -330,7 +344,7 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
                      color=clr, label=r_b_label+" Prefit", alpha = alpha, picker=True)
 
     # Set second axis
-    ax1.set_xlabel(r'Year', fontsize=18)
+    ax1.set_xlabel(r'Year')
     ax1.grid(True)
     ax2 = ax1.twiny()
     mjd0  = ((ax1.get_xlim()[0])-2004.0)*365.25+53005.
@@ -353,7 +367,7 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
         elif whitened and not avg:
             ax1.set_ylabel('Residual ($\mu$s) \n (Whitened)', multialignment='center')
         else:
-            ax1.set_ylabel('Residual ($\mu$s)', fontsize=18)
+            ax1.set_ylabel('Residual ($\mu$s)')
     if legend:
         if len(RCVR_BCKNDS) > 5:
             ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
