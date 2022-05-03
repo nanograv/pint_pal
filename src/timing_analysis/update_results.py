@@ -6,8 +6,10 @@ based on output from autoruns on Thorny Flats (or potentially elsewhere).
 from timing_analysis.yamlio import *
 from timing_analysis.timingconfiguration import TimingConfiguration
 from astropy import log
+from datetime import datetime
 import subprocess
 import argparse
+import os
 
 # accessible to functions here, apparently
 TA_PATH = "/home/jovyan/work/timing_analysis/" # assume running from here?
@@ -129,6 +131,30 @@ def new_outlier_results(input_tims,logs_only=False):
 
         else:
             log.warning(f"Corresponding yaml file {y} not found.")
+
+def add_ready_for(input_yamls,version):
+    """Add READY_FOR [version] changelogs to yaml(s)
+
+    Parameters
+    ==========
+    input_yamls: list
+        one or more yamls to modify
+    version:
+        data set version string (e.g. v1.1)
+
+    Example usage (from TA base dir):
+    >>> python src/timing_analysis/update_results.py -y [yaml file(s)] --readyfor [version]
+    """
+    time = datetime.now()
+    date_string = time.strftime("%Y-%m-%d")
+    gitemail = os.popen('git config --get user.email').read().rstrip()
+    user_string = gitemail.split('@')[0]
+
+    for y in input_yamls:
+        log.info(f"Adding READY_FOR changelog to {y}")
+        ready_for_log = f"{date_string} {user_string} READY_FOR: {version}"
+        set_field(y,'changelog',ready_for_log) # can set overwrite=False to test
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -140,7 +166,6 @@ def main():
         "--pars",
         type=str,
         nargs="+",
-        #required=False,
         help="New par file(s); noise run",
     )
     parser.add_argument(
@@ -148,8 +173,20 @@ def main():
         "--tims",
         type=str,
         nargs="+",
-        #required=False,
         help="New tim file(s); outlier run",
+    )
+    parser.add_argument(
+        "-y",
+        "--yamls",
+        type=str,
+        nargs="+",
+        help="Work with yaml(s)",
+    )
+    parser.add_argument(
+        "--readyfor",
+        type=str,
+        nargs=1,
+        help="Add changelog READY_FOR with input version",
     )
     parser.add_argument(
         "--logsonly",
@@ -167,9 +204,13 @@ def main():
         log.info('Working with tim files from a recent outlier run...')
         print(args.tims)
         new_outlier_results(args.tims,logs_only=args.logsonly)
-    if (not args.pars) and (not args.tims):
-        log.warning('No pars/tims specified.')
-        # display usage(?)
+    if args.yamls:
+        log.info('Working with input yamls...')
+        print(args.yamls)
+        if args.readyfor:
+            add_ready_for(args.yamls,args.readyfor[0])
+    if (not args.pars) and (not args.tims) and (not args.yamls):
+        log.warning('No pars/tims/yamls specified.')
 
 
 if __name__ == "__main__":
