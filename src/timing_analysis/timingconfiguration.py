@@ -74,6 +74,17 @@ class TimingConfiguration:
             return self.config['free-params'] + [p for p in fitter.model.params if p.startswith("DMX_")]
         else:
             return self.config['free-params']
+        
+    def get_febe_pairs(self):
+        febe_list = []
+        for f in to.orig_table['flags']:
+            if f['pta'] == 'NANOGrav':
+                febe_list.append(f['f'])
+            elif f['pta'] == 'EPTA' or 'PPTA':
+                febe_list.append(f['sys'])
+            febe_pairs = set(f for f in febe_list)
+        return febe_pairs
+
 
     def get_model_and_toas(self,usepickle=True,print_all_ignores=False,apply_initial_cuts=True,
             excised=False,pout_tim_path=None):
@@ -137,6 +148,8 @@ class TimingConfiguration:
         t.orig_table = t.table.copy()
 
         self.backendset = set([f['be'] for f in t.orig_table['flags']])
+        
+        self.febe_set = self.get_febe_pairs(t)
 
         # If reading an intermediate (pout/excised) tim file, can simply apply cuts
         if excised:
@@ -286,6 +299,16 @@ class TimingConfiguration:
         if "ephem" in self.config.keys():
             return self.config['ephem']
         return None #return some default value instead?
+    
+    def get_febe_pairs(self,toas):
+        febe_list = []
+        for f in toas.orig_table['flags']:
+            if f['pta'] == 'NANOGrav':
+                febe_list.append(f['f'])
+            elif f['pta'] == 'EPTA' or 'PPTA':
+                febe_list.append(f['sys'])
+            febe_pairs = set(f for f in febe_list)
+        return febe_pairs
 
     def print_changelog(self):
         """Print changelog entries from .yaml in the notebook."""
@@ -413,7 +436,11 @@ class TimingConfiguration:
             Number of files at/below which a frontend/backend pair is orphaned.
 
         """
-        febe_pairs = set(toas.get_flag_value('f')[0])
+        #if toas.get_flag_value('f') != None
+        #febe_pairs = set(toas.get_flag_value('f')[0])
+
+        febe_pairs = self.get_febe_pairs(toas)
+        
         log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
 
         febe_to_cut = []
