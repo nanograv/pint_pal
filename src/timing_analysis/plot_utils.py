@@ -76,6 +76,7 @@ colorschemes = {'thankful_2':{
               "MULTI_PDFB2":    "#BE0119",
               "MULTI_PDFB3":    "#BE0119",
               "MULTI_PDFB4":    "#BE0119",
+              "None":           "#808080",
               }}
 
 
@@ -129,6 +130,7 @@ markers = {"327_ASP":        "x",
           "MULTI_PDFB2":    "o",
           "MULTI_PDFB3":    "o",
           "MULTI_PDFB4":    "o",
+          "None":           "x",
             }
 # Define the color map option
 colorscheme = colorschemes['thankful_2']
@@ -288,14 +290,21 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
     if 'rcvr_bcknds' in kwargs.keys():
         rcvr_bcknds = kwargs['rcvr_bcknds']
     else:
+        rcvr_bcknds_f = np.array(fitter.toas.get_flag_value('f')[0])
+        rcvr_bcknds_sys = np.array(fitter.toas.get_flag_value('sys')[0])
+        #rcvr_bcknds = np.vstack((rcvr_bcknds_f, rcvr_bcknds_sys)).flatten()
         rcvr_bcknds = np.array(fitter.toas.get_flag_value('f')[0])
+        print(rcvr_bcknds)
         if avg == True:
             avg_rcvr_bcknds = []
             for iis in avg_dict['indices']:
                 avg_rcvr_bcknds.append(rcvr_bcknds[iis[0]])
             rcvr_bcknds = np.array(avg_rcvr_bcknds)
     # Get the set of unique receiver-bandend combos
-    RCVR_BCKNDS = set(rcvr_bcknds)
+    RCVR_BCKNDS_F = set(rcvr_bcknds_f)
+    RCVR_BCKNDS_SYS = set(rcvr_bcknds_sys)
+    RCVR_BCKNDS = RCVR_BCKNDS_F.symmetric_difference(RCVR_BCKNDS_SYS)
+    #RCVR_BCKNDS = set(rcvr_bcknds)
 
     if 'figsize' in kwargs.keys():
         figsize = kwargs['figsize']
