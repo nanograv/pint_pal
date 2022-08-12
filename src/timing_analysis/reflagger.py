@@ -1,62 +1,69 @@
 import pint.toa as toa
+import sys
 
 # This is v0 of a script to load in a tim file and bring flags into alignment with the IPTA data standard
 # TO-DO
 # ------
-# -command line set-up so that I'm not making name & tim file changes in the script
 # -Find edge cases
-# -make better organized/less adhoc.
 
-
-tim_file = 'tims/J1909-3744/NRT.BON.1400.tim'
-bipm_ver = 'BIPM2019'
-eph = 'DE441'
-
-t = toa.get_TOAs(tim_file, bipm_version=bipm_ver,ephem=eph)
-
-# Ensure every tim has a value for f. 
-# Match to sys if available, otherwise group.
-
-
-if t.get_flag_value('f')[0][0] == None:
-    if t.get_flag_value('sys')[0] != None:
-        t['f'] = t['sys'][0]
-    elif t.get_flag_value('group')[0] !=None:
-        t['f'] = t['group'][0]
-    else:
-        t['f'] = 'unknown'
+def reflag_add_empty(toa, flag_name):
+    if toa.get_flag_value(flag_name)[0][0] == None:
+        toa[flag_name] = 'unknown'
         
-
-# fix receiver
-alt_fe = 'r'
-if t.get_flag_value('fe')[0][0] == None:
-    if t.get_flag_value(alt_fe)[0][0] != None:
-        t['fe'] = t[alt_fe][0]
-    else:
-        t['fe'] = 'unknown'
-
-# alterate 'be option'
-alt_be = 'i'
-if t.get_flag_value('be')[0][0] == None:
-    if t.get_flag_value(alt_be)[0][0]  == None:
-        t['be'] = t[alt_be][0]
-    else:
-        t['be'] = 'unknown'
+def reflag_add_value(toa, flag_name, value):
+    if toa.get_flag_value(flag_name)[0][0] == None:
+        toa[flag_name] = value
         
-        
-# fix other flags
-if t.get_flag_value('proc')[0][0] == None:
-    t['proc'] = 'unknown'
-if t.get_flag_value('B')[0][0] == None:
-    t['B'] = 'unknown'
-if t.get_flag_value('bw')[0][0] == None:
-    t['bw'] = 'unknown'
-if t.get_flag_value('tobs')[0][0] == None:
-    t['tobs'] = 'unknown'
-if t.get_flag_value('pta')[0][0] == None:
-    t['pta'] = 'unknown'
+def reflag_alt_name(toa, flag_name, alt_name):
+    if toa.get_flag_value(flag_name)[0][0] == None:
+        if toa.get_flag_value(alt_name)[0] == None:
+            toa[alt_name] = 'unknown'
+        else:
+            toa[flag_name] = toa[alt_name][0]     
+
+            
+def ipta_standard_reflag(toa, f_alt, fe_alt, be_alt, pta):
+    # Account for alternative names for fe/be/f
+    reflag_alt_name(toa, 'f', f_alt)
+    reflag_alt_name(toa, 'fe', fe_alt)
+    reflag_alt_name(toa, 'be', be_alt)   
+    
+    # Add value if flag is missing but the value is known.
+    reflag_add_value(toa, 'pta', pta)
+
+    # Add 'unknown' if flags are missing (where there is not a known alternative)
+    reflag_add_empty(toa, 'proc')
+    reflag_add_empty(toa, 'B')
+    reflag_add_empty(toa, 'bw')
+    reflag_add_empty(toa, 'tobs')
+    
+
     
     
-# Write new par
-outfile = 'reflagged_test.tim'
-t.write_TOA_file(outfile, format='tempo2')
+def process_reflagging(timfile, outfile, alt_flag_dict, pta, bipm_ver='BIPM2019', eph='DE441'):
+    t = toa.get_TOAs(timfile, bipm_version=bipm_ver,ephem=eph)
+    ipta_standard_reflag(t, alt_flag_dict['f'], alt_flag_dict['fe'], alt_flag_dict['be'], pta)
+    
+    t.write_TOA_file(outfile, format='tempo2')
+    
+    
+ipta_alt_flags = {'f': 'sys', 'fe': 'r', 'be': 'i'}
+
+    
+if  __name__=="__main__":
+    narg = len(sys.argv)
+    timfile = sys.argv[1]
+    print('Tim file is', timfile)
+    outfile = sys.argv[2]
+    print('Outfile name is', outfile)
+    pta = sys.argv[3]
+    print('PTA is ', pta)
+   
+    
+    process_reflagging(timfile, outfile, ipta_alt_flags, pta)
+        
+    
+
+    
+    
+
