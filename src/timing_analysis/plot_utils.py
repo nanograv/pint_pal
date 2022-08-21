@@ -42,6 +42,7 @@ colorschemes = {'thankful_2':{
               "3GHz_YUPPI":      "#E5A4CB",
               "6GHz_YUPPI":      "#40635F",
               "CHIME":           "#ECE133",
+              "CHIME_CHIME":     "#680980"
               }}
 # marker dictionary to be used if desired, currently all 'x'
 markers = {"327_ASP":        "x",
@@ -60,7 +61,7 @@ markers = {"327_ASP":        "x",
           "3GHz_YUPPI":      "x",
           "6GHz_YUPPI":      "x",
           "CHIME":           "x",
-
+          "CHIME_CHIME":     "x"
             }
 # Define the color map option
 colorscheme = colorschemes['thankful_2']
@@ -368,7 +369,148 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
 
     return
 
+def plot_FD_delay(fitter = None, model_object = None, save = False, title= True, axs = None,legend=True, **kwargs):
+    """
+    Make a plot of frequency (MHz) vs the time delay (us) implied by FD parameters. 
+    Z. Arzoumanian, The NANOGrav Nine-year Data Set: Observations, Arrival
+        Time Measurements, and Analysis of 37 Millisecond Pulsars, The
+        Astrophysical Journal, Volume 813, Issue 1, article id. 65, 31 pp.(2015).
+        Eq.(2):
+        FDdelay = sum(c_i * (log(obs_freq/1GHz))^i)
+        
+    This can be run with EITHER a PINT fitter object OR PINT model object. If run with a model object, the user will need to specify which frequencies they would like to plot FD delays over. 
+    
+    Arguments
+    ----------
+    
+    fitter[object] : The PINT fitter object.
+    model[object] : The PINT model object. Can be used instead of fitter
+    save [boolean] : If True will save plot with the name "FD_delay.png"[default: False].
+    title [boolean] : If False, will not print plot title [default: True].
+    axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
+         larger figure [default: None].
+    
+    Optional Arguments:
+    --------------------
+    freqs [list/array] : List or array of frequencies (MHz) to plot. Will override values from toa object.
+    figsize [tuple] : Size of the figure passed to matplotlib [default: (8,4)].
+    ls ['string'] : matplotlib format option for linestyle [default: ('-')]
+    color ['string'] : matplotlib color option for plot [default: green]
+    alpha [float] : matplotlib alpha options for error regions [default: 0.2]
+    loc ['string'] : matplotlib legend location [default: 'upper right'] Only used when legend = True
+    """
+    
+    #Make sure that either a fitter or model object has been specified 
+    if fitter == None and model_object == None:
+        raise Exception("Need to specify either a fitter or model object")
+        
+    #Get frequencies
+    if 'freqs' in kwargs.keys():
+        freqs = kwargs['freqs']
+    elif model_object is not None:
+        raise Exception("Using a PINT model object. Need to add list/array of frequencies to calculate FD delay over")
+    else:
+        freqs = fitter.toas.get_freqs().value
+        freqs = np.sort(freqs)
+        print(freqs)
+    #Get FD delay in units of milliseconds as a function of frequency. This will eventually by available in PINT and become redundant. PINT version may need to be modified to allow for calculation of error regions
+    def get_FD_delay(pint_model_object,freqs):
+        FD_map = model.TimingModel.get_prefix_mapping(pint_model_object,"FD")
+        FD_names = list(FD_map.values())
+        FD_names.reverse()
+        FD_vals = []
+        FD_uncert = []
+        for i in FD_names:
+            FD_vals.append(pint_model_object.get_params_dict(which="all",kind="value")[i])
+            FD_uncert.append(pint_model_object.get_params_dict(which="all",kind="uncertainty")[i])
+        FD_vals.append(0.0)
+        FD_uncert.append(0.0)
+        FD_vals = np.array(FD_vals)
+        FD_uncert = np.array(FD_uncert)
+        delay = np.polyval(FD_vals,np.log10(freqs))
+        delta_delay_plus = np.polyval(FD_uncert+FD_vals,np.log10(freqs))
+        delta_delay_minus = np.polyval(FD_vals-FD_uncert,np.log10(freqs))
+        if len(FD_vals) - 1 > 1:
+            FD_phrase = "FD1-%s" % (len(FD_vals) - 1)
+        else:
+            FD_phrase = "FD1"
+        return delay *1e6, delta_delay_plus * 1e6, delta_delay_minus * 1e6 , FD_phrase
+    
+    #Get FD params if fitter object is given
+    if fitter is not None:
+    #Check if the fitter object has FD parameters
+        try:
+            FD_delay, FD_delay_err_plus, FD_delay_err_minus, legend_text = get_FD_delay(fitter.model, freqs*1e-3)
+            #print(FD_delay)
+            psr_name = fitter.model.PSR.value
+            """For when new version of PINT is default on timing_analysis    
+        FD_delay = pint.models.frequency_dependent.FD.FD_delay(fitter.model,freqs)
+        
+            """
+        except:
+            print("No FD parameters in this model! Exitting...")
+            #sys.exit()
+            
+    #Get FD params if model object is given       
+    if model_object is not None:
+    #Check if the model object has FD parameters
+        try:
+            FD_delay, FD_delay_err_plus, FD_delay_err_minus, legend_text = get_FD_delay(model_object, freqs*1e-3)
+            psr_name = model_object.PSR.value
+            """For when new version of PINT is default on timing_analysis    
+        FD_delay = pint.models.frequency_dependent.FD.FD_delay(fitter.model,freqs)
+        
+            """
+        except:
+            print("No FD parameters in this model! Exitting...")
+            #sys.exit() 
+        
 
+    #Get plotting preferences. 
+    if 'figsize' in kwargs.keys():
+        figsize = kwargs['figsize']
+    else:
+        figsize = (8,4)
+    if axs == None:
+        fig = plt.figure(figsize=figsize)
+        ax1 = fig.add_subplot(111)
+    else:
+        fig = plt.gcf()
+        ax1 = axs
+    if 'ls' in kwargs.keys():
+        linestyle = kwargs['ls']
+    else:
+        linestyle = '-'
+    if 'color' in kwargs.keys():
+        clr = kwargs['color']
+    else:
+        clr = "green"
+    if 'alpha' in kwargs.keys():
+        alpha = kwargs['alpha']
+    else:
+        alpha = 0.2
+    if 'loc' in kwargs.keys():
+        loc = kwargs['loc']
+    else:
+        loc = "upper right"
+    #Plot frequency (MHz) vs delay (microseconds)
+    ax1.plot(freqs,FD_delay,label = legend_text,color=clr,ls=linestyle)
+    ax1.fill_between(freqs,
+                 FD_delay_err_plus,
+                 FD_delay_err_minus,
+                 color=clr,alpha=alpha)
+    ax1.set_xlabel("Frequency (MHz)")
+    ax1.set_ylabel("Delay ($\mu$s)")
+    if title:
+        ax1.set_title("%s FD Delay" % psr_name)
+    if legend:
+        ax1.legend(loc=loc) 
+    if axs == None:
+        plt.tight_layout()
+    if save:
+        plt.savefig("%s_fd_delay.png" % psr_name)
+
+    return 
 
 def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = False, whitened = False, \
                         save = False, legend = True, title = True, axs = None, **kwargs):
@@ -398,7 +540,7 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
     --------------------
     res [list/array] : List or array of residual values to plot. Will override values from fitter object.
     errs [list/array] : List or array of residual error values to plot. Will override values from fitter object.
-    freqs [list/array] : List or array of frequencies to plot. Will override values from toa object.
+    freqs [list/array] : List or array of frequencies (MHz) to plot. Will override values from toa object.
     rcvr_bcknds[list/array] : List or array of TOA receiver-backend combinations. Will override values from toa object.
     figsize [tuple] : Size of the figure passed to matplotlib [default: (10,4)].
     fmt ['string'] : matplotlib format option for markers [default: ('x')]
@@ -572,7 +714,7 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
                      color=clr, label=r_b_label+" Prefit", alpha = alpha, picker=True)
 
     # Set second axis
-    ax1.set_xlabel(r'Frequncy (MHz)')
+    ax1.set_xlabel(r'Frequency (MHz)')
     ax1.grid(True)
     ax2 = ax1.twiny()
     freq0 = freqs.min()
