@@ -579,7 +579,7 @@ def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
             model.remove_component(component)
     return
 
-def get_receivers_ng(toas):
+def get_receivers(toas):
     """Returns a list of receivers present in the tim file(s)
 
     Parameters
@@ -594,8 +594,7 @@ def get_receivers_ng(toas):
     receivers = list(set([str(f) for f in set(toas.get_flag_value('fe')[0])]))
     return receivers
 
-    
-def get_receivers(self,toas):
+def get_receivers_epta(toas):
     """Returns a list of receivers present in the tim file(s)
 
     Parameters
@@ -607,10 +606,27 @@ def get_receivers(self,toas):
     receivers: list of strings
         unique set of receivers present in input toas
     """
-    receivers_r= list(set([str(f) for f in set(to.get_flag_value('r')[0])]))
-    receivers_fe = list(set([str(f) for f in set(to.get_flag_value('fe')[0])]))
-    receivers = receivers_r + receivers_fe
-    return receivers.remove('None')
+    receivers_r= list(set([str(f) for f in set(toas.get_flag_value('r')[0])]))
+    return receivers_r
+
+    
+def get_receivers_ipta(toas):
+    """Returns a list of receivers present in the tim file(s)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+
+    Returns
+    =======
+    receivers: list of strings
+        unique set of receivers present in input toas
+    """
+    receivers_r= list(set([str(f) for f in set(toas.get_flag_value('r')[0])]))
+    receivers_fe = list(set([str(f) for f in set(toas.get_flag_value('fe')[0])]))
+    receivers_all = receivers_r + receivers_fe
+    receivers = receivers_all.remove('None')
+    return receivers
 
 def git_config_info():
     """Reports user's git config (name/email) with log.info"""
