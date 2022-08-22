@@ -75,15 +75,15 @@ class TimingConfiguration:
         else:
             return self.config['free-params']
         
-    def get_febe_pairs(self):
-        febe_list = []
-        for f in to.orig_table['flags']:
-            if f['pta'] == 'NANOGrav':
-                febe_list.append(f['f'])
-            elif f['pta'] == 'EPTA' or 'PPTA':
-                febe_list.append(f['sys'])
-            febe_pairs = set(f for f in febe_list)
-        return febe_pairs
+    #def get_febe_pairs(self):
+    #    febe_list = []
+    #    for f in to.orig_table['flags']:
+    #        if f['pta'] == 'NANOGrav':
+    #            febe_list.append(f['f'])
+    #        elif f['pta'] == 'EPTA' or 'PPTA':
+    #            febe_list.append(f['sys'])
+    #        febe_pairs = set(f for f in febe_list)
+    #    return febe_pairs
 
 
     def get_model_and_toas(self,usepickle=True,print_all_ignores=False,apply_initial_cuts=True,
@@ -149,7 +149,8 @@ class TimingConfiguration:
 
         self.backendset = set([f['be'] for f in t.orig_table['flags']])
         
-        self.febe_set = self.get_febe_pairs(t)
+        #self.febe_set = self.get_febe_pairs(t)
+        self.febe_set = set([f['f'] for f in t.orig_table['flags']])
 
         # If reading an intermediate (pout/excised) tim file, can simply apply cuts
         if excised:
@@ -439,9 +440,9 @@ class TimingConfiguration:
         #if toas.get_flag_value('f') != None
         #febe_pairs = set(toas.get_flag_value('f')[0])
 
-        febe_pairs = self.get_febe_pairs(toas)
-        
+        febe_pairs = set(toas.get_flag_value('f')[0])
         log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
+
 
         febe_to_cut = []
         for febe in febe_pairs:
