@@ -16,10 +16,13 @@ def reflag_add_value(toa, flag_name, value):
         
 def reflag_alt_name(toa, flag_name, alt_name):
     if toa.get_flag_value(flag_name)[0][0] == None:
-        if toa.get_flag_value(alt_name)[0] == None:
-            toa[alt_name] = 'unknown'
+        print(flag_name, 'not present')
+        if toa.get_flag_value(alt_name)[0][0] == None:
+            toa[flag_name] = 'unknown'
+#            print(alt_name,'not present')
         else:
-            toa[flag_name] = toa[alt_name][0]     
+            toa[flag_name] = toa[alt_name][0] 
+#            print(alt_name, 'is present')
 
             
 def ipta_standard_reflag(toa, f_alt, fe_alt, be_alt, pta):
@@ -36,6 +39,7 @@ def ipta_standard_reflag(toa, f_alt, fe_alt, be_alt, pta):
     reflag_add_empty(toa, 'B')
     reflag_add_empty(toa, 'bw')
     reflag_add_empty(toa, 'tobs')
+    #reflag_add_empty(toa, 'fe')
     
 
     
