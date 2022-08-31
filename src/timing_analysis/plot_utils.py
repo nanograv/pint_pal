@@ -411,7 +411,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
         DMXs = kwargs['dmx']
     else:
         # get dmx dictionary from pint dmxparse function
-        dmx_dict = pu.dmxparse(fitter, save=savedmx)
+        dmx_dict = pu.dmxparse(fitter, save="dmxparse.out")
         DMXs = dmx_dict['dmxs'].value
         DMX_vErrs = dmx_dict['dmx_verrs'].value
         DMX_center_MJD = dmx_dict['dmxeps'].value
@@ -2159,7 +2159,7 @@ def summary_plots(fitter, title = None, legends = False, save = False, avg = Tru
 
     # and the DMX vs. time
     ax4 = fig.add_subplot(gs[count+k, :])
-    plot_dmx_time(fitter, savedmx = True, legend = False, title = False, axs = ax4, figsize=(12,3))
+    plot_dmx_time(fitter, savedmx = "dmxparse.out", legend = False, title = False, axs = ax4, figsize=(12,3))
     k += 1
 
     # And residual vs. Frequency
@@ -2309,7 +2309,7 @@ def summary_plots_ft(fitter, title = None, legends = False, save = False):
 
     # And DMX vs. time
     ax4 = fig.add_subplot(gs[count+k, :])
-    plot_dmx_time(fitter, savedmx = True, legend = False, title = False, axs = ax4, figsize=(12,3))
+    plot_dmx_time(fitter, savedmx = "dmxparse.out", legend = False, title = False, axs = ax4, figsize=(12,3))
     k += 1
 
     # Whitened residuals v. time
@@ -2450,7 +2450,7 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
                     plot_residuals_orb(fitter, title = False, legend = False, avg = False, axs = ax2, figsize=(8,2.5))
             # plot dmx v. time
             if 'dispersion_dmx' in fitter.model.get_components_by_category().keys():
-                plot_dmx_time(fitter, savedmx = True, legend = False, title = False, axs = ax3,  figsize=(8,2.5))
+                plot_dmx_time(fitter, savedmx = "dmxparse.out", legend = False, title = False, axs = ax3,  figsize=(8,2.5))
             else:
                 log.warning("No DMX bins in timing model, cannot plot DMX v. Time.")
             plt.tight_layout()
@@ -2588,7 +2588,7 @@ def plots_for_summary_pdf_wb(fitter, title = None, legends = False):
             # Plot time residuals v. orbital phase
             if hasattr(fitter.model, 'binary_model_name'):
                 plot_residuals_orb(fitter, title = False, legend = False, axs = ax2, figsize=(8,2.5))
-            plot_dmx_time(fitter, savedmx = True, legend = False, title = False, axs = ax3, figsize=(8,2.5))
+            plot_dmx_time(fitter, savedmx = "dmxparse.out", legend = False, title = False, axs = ax3, figsize=(8,2.5))
             plt.tight_layout()
             plt.savefig("%s_summary_plot_1_wb.png" % (fitter.model.PSR.value))
             plt.close()
