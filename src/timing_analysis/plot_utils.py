@@ -398,7 +398,7 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
     loc ['string'] : matplotlib legend location [default: 'upper right'] Only used when legend = True
     """
     
-    #Make sure that either a fitter or model object has been specified 
+   #Make sure that either a fitter or model object has been specified 
     if fitter == None and model_object == None:
         raise Exception("Need to specify either a fitter or model object")
         
@@ -410,7 +410,7 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
     else:
         freqs = fitter.toas.get_freqs().value
         freqs = np.sort(freqs)
-        print(freqs)
+        
     #Get FD delay in units of milliseconds as a function of frequency. This will eventually by available in PINT and become redundant. PINT version may need to be modified to allow for calculation of error regions
     def get_FD_delay(pint_model_object,freqs):
         FD_map = model.TimingModel.get_prefix_mapping(pint_model_object,"FD")
@@ -711,13 +711,9 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
                 ax1.errorbar(freqs[inds], res_pre[inds], yerr=errs_pre[inds], fmt=mkr_pre, \
                      color=clr, label=r_b_label+" Prefit", alpha = alpha, picker=True)
 
-    # Set second axis
+    # Set axis
     ax1.set_xlabel(r'Frequency (MHz)')
     ax1.grid(True)
-    ax2 = ax1.twiny()
-    freq0 = freqs.min()
-    freq1 = freqs.max()
-    ax2.set_xlim(freq0, freq1)
     if plotsig:
         if avg and whitened:
             ax1.set_ylabel('Average Residual/Uncertainty \n (Whitened)', multialignment='center')
@@ -772,7 +768,7 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
     
     if axs == None:
         # Define clickable points
-        text = ax2.text(0,0,"")
+        text = ax1.text(0,0,"")
 
         # Define point highlight color
         if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
@@ -794,7 +790,7 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
             d = np.sqrt(((xdata - xclick)/10.0)**2 + (ydata - yclick)**2)
             ind_close = np.where(np.min(d) == d)[0]
             # highlight clicked point
-            ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
+            ax1.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
             # Print point info
             text.set_position((xdata[ind_close], ydata[ind_close]))
             if plotsig:
