@@ -54,9 +54,12 @@ def check_cleared(type):
     Parameters
     ==========
     type: str
-        narrowband (nb) or wideband (wb)
+        narrowband (nb), wideband (wb), or both (nbwb)
     """
-    yamls = glob.glob(f"{TA_CONFIGS}/*.{type}.yaml")
+    if type == "nbwb":
+        yamls = glob.glob(f"{TA_CONFIGS}/*.yaml")
+    else:
+        yamls = glob.glob(f"{TA_CONFIGS}/*.{type}.yaml")
     for y in yamls:
         tc = TimingConfiguration(y)
         if not tc.get_check_cleared():
@@ -105,6 +108,7 @@ def locate_copy_results(yamls,type,destination=None):
         tc = TimingConfiguration(y)
         source = tc.get_source()
         noise_dir = tc.get_noise_dir()
+        latest_yaml = [y]
         latest_par = [f"{TA_PATH}{tc.get_model_path()}"]
         latest_tim = glob.glob(f"{noise_dir}results/{source}_*.tim") # underscore to avoid duplicating split-tel results
         noise_chains = glob.glob(f"{noise_dir}{source}_{type}/chain_1.txt")
@@ -113,6 +117,7 @@ def locate_copy_results(yamls,type,destination=None):
         log.info(f"Locating/copying files for {source}...")
         check_dupes_copy(latest_tim, destination)
         check_dupes_copy(latest_par, destination)
+        check_dupes_copy(latest_yaml, destination)
         check_dupes_copy(noise_chains, destination, add_base=f"{source}.{type}")
         check_dupes_copy(noise_pars, destination, add_base=f"{source}.{type}")
 
@@ -143,19 +148,22 @@ def main():
         print(args.type)
         print("Unrecognized release type.")
     else:
-        if "nb" in args.type[0]:
+        if args.type[0] != "nbwb":
             # make directory
             rel_dir = make_release_dir(args.type[0], overwrite=args.overwrite)
 
             # get yamls
-            yamls = check_cleared('nb')
+            yamls = check_cleared(args.type[0])
 
             # locate results and copy them to release directory
-            locate_copy_results(yamls,'nb',rel_dir)
+            locate_copy_results(yamls,args.type[0],rel_dir)
 
-        if "wb" in args.type[0]:
-            print("In progress...")
-
+        else: # nbwb
+            rel_dir = make_release_dir(args.type[0], overwrite=args.overwrite)
+            nb_yamls = check_cleared('nb')
+            locate_copy_results(nb_yamls,'nb',rel_dir) # works for nb/wb separately
+            wb_yamls = check_cleared('wb')
+            locate_copy_results(yamls,'wb',rel_dir)
 
 if __name__ == "__main__":
     main()
