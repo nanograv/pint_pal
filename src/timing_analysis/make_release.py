@@ -163,7 +163,7 @@ def main():
             nb_yamls = check_cleared('nb')
             locate_copy_results(nb_yamls,'nb',rel_dir) # works for nb/wb separately
             wb_yamls = check_cleared('wb')
-            locate_copy_results(yamls,'wb',rel_dir)
+            locate_copy_results(wb_yamls,'wb',rel_dir)
 
 if __name__ == "__main__":
     main()
