@@ -43,7 +43,7 @@ def make_release_dir(type, overwrite=False):
     elif os.path.isdir(release_dir) and overwrite:
         log.warning(f"Overwriting files in release directory: {release_dir}")
     else:
-        log.warning("Release directory already exists: {release_dir}")
+        log.warning(f"Release directory already exists: {release_dir}")
 
     return release_dir
 
