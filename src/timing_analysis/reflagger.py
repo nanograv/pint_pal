@@ -24,7 +24,7 @@ def reflag_alt_name(toa, flag_name, alt_name):
             toa[flag_name] = toa[alt_name][0] 
 #            print(alt_name, 'is present')
 
-            
+
 def ipta_standard_reflag(toa, f_alt, fe_alt, be_alt, pta):
     # Account for alternative names for fe/be/f
     reflag_alt_name(toa, 'f', f_alt)

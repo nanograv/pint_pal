@@ -116,7 +116,7 @@ class TimingConfiguration:
 
         BIPM = self.get_bipm()
         EPHEM = self.get_ephem()
-        m = model.get_model(par_path)
+        m = model.get_model(par_path,allow_name_mixing=True)
         match = re.search(r"#\s+Created:\s+(\S+)", open(par_path).read())
         if match:
             m.created_time = match.group(1)
