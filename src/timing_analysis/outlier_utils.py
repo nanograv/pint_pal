@@ -12,8 +12,10 @@ from scipy.special import fdtr
 from timing_analysis.utils import apply_cut_flag, apply_cut_select
 from timing_analysis.lite_utils import write_tim
 from timing_analysis.dmx_utils import *
-from enterprise_extensions.outlier.gibbs_outlier import OutlierGibbs
-from enterprise_extensions.outlier.hmc_outlier import OutlierHMC
+#from enterprise_extensions.outlier.gibbs_outlier import OutlierGibbs
+#from enterprise_extensions.outlier.hmc_outlier import OutlierHMC
+from enterprise_outliers.gibbs_outlier import OutlierGibbs
+from enterprise_outliers.hmc_outlier import OutlierHMC
 
 def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     """Necessary set-up to run gibbs sampler, and run it. Return pout.
