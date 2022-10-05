@@ -17,9 +17,9 @@ setup(
     install_requires=[
         'ruamel.yaml',
         "pint_pulsar>=0.8.3",
-        "enterprise-pulsar>=3.1.0",
+        "enterprise-pulsar==3.1.0",
         "enterprise-extensions>=v2.1.0",
-        #"enterprise-outliers>=v0.0.0",
+        "enterprise-outliers>=v0.0.0",
         "pytest",
         "nbconvert",
         "ipywidgets>=7.6.3",
