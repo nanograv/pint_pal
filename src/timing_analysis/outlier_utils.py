@@ -12,10 +12,6 @@ from scipy.special import fdtr
 from timing_analysis.utils import apply_cut_flag, apply_cut_select
 from timing_analysis.lite_utils import write_tim
 from timing_analysis.dmx_utils import *
-#from enterprise_extensions.outlier.gibbs_outlier import OutlierGibbs
-#from enterprise_extensions.outlier.hmc_outlier import OutlierHMC
-from enterprise_outliers.gibbs_outlier import OutlierGibbs
-from enterprise_outliers.hmc_outlier import OutlierHMC
 
 def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     """Necessary set-up to run gibbs sampler, and run it. Return pout.
@@ -30,6 +26,7 @@ def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     from enterprise.signals.selections import Selection
     from enterprise.signals import selections
     from enterprise.signals import deterministic_signals
+    from enterprise_outliers.gibbs_outlier import OutlierGibbs
 
     # white noise
     efac = parameter.Uniform(0.01,10.0)
@@ -99,6 +96,7 @@ def calculate_pout(model, toas, tc_object):
 
     if method == 'hmc':
         epp = get_entPintPulsar(model, toas, drop_pintpsr=False)
+        from enterprise_outliers.hmc_outlier import OutlierHMC
         pout = OutlierHMC(epp, outdir=results_dir, Nsamples=Nsamples, Nburnin=Nburnin)
         print('') # Progress bar doesn't print a newline
         # Some sorting will be needed here so pout refers to toas order?
