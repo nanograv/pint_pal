@@ -662,6 +662,12 @@ class TimingConfiguration:
         if 'orb-phase-range' in self.config['ignore'].keys():
             return self.config['ignore']['orb-phase-range']
         return None
+    
+    def get_check_cleared(self):
+        """ Return bool to check if yaml has been cleared """
+        if 'cleared' in self.config['check'].keys():
+            return self.config['check']['cleared']
+        return None
 
     def apply_ignore(self,toas,specify_keys=None,warn=False,model=None):
         """ Basic checks and return TOA excision info. """
