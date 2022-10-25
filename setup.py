@@ -16,7 +16,7 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         'ruamel.yaml',
-        "pint_pulsar>=0.8.3",
+        "pint_pulsar==0.9.1",
         "enterprise-pulsar>=3.1.0",
         "enterprise-extensions>=v2.1.0",
         "pytest",
