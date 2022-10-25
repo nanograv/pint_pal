@@ -447,6 +447,88 @@ def add_feDMJumps(mo,rcvrs):
             log.info(f"Adding frontend DMJUMP {j}")
             DMJUMPn = maskParameter('DMJUMP',key='-fe',key_value=[j],value=0.0,units=u.pc*u.cm**-3)
             dmjump.add_param(DMJUMPn,setup=True)
+            
+def get_flag_val_list(toas, flag):
+    """Returns a list of receivers present in the tim file(s)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    flag: string
+          Name of the flag you're using for jumps
+
+    Returns
+    =======
+    flaglist: list of strings
+        unique value of whatever the flag was in input toas, designated using 'flag'. This is for jumps
+    """
+    flaglist = list(set([str(f) for f in set(toas.get_flag_value(flag)[0])]))
+    if 'None' in flaglist: flaglist.remove('None')
+    if 'unknown' in flaglist: flaglist.remove('unknown')
+    return flaglist
+
+
+def add_flag_jumps(mo,flag,flaglist,base=False):
+    """Automatically add appropriate jumps based on jump flag present
+
+    Parameters
+    ==========
+    mo: `pint.model.TimingModel` object
+    flag: string
+        the name of the flag you're jumping on (e.g. 'fe' or 'f')
+    flaglist: list
+        list of values of that flag in this dataset.
+    base: bool
+          Is this the flag you're using as your "one not jumped" category?
+    """
+    flagval = '-' + flag
+    # Might want a warning here if no jumps are necessary.
+    if len(flaglist) <= 1:
+        return
+
+    if not 'PhaseJump' in mo.components.keys():
+        log.info("No JUMPed.")
+        log.info(f"Adding flag JUMPs {flaglist[0]}")
+        all_components = Component.component_types
+        phase_jump_instance = all_components['PhaseJump']()
+        mo.add_component(phase_jump_instance)
+
+        mo.JUMP1.key = '-' + flag
+        mo.JUMP1.key_value = [flaglist[0]]
+        mo.JUMP1.value = 0.0
+        mo.JUMP1.frozen = False
+
+    phasejump = mo.components['PhaseJump']
+    all_jumps = phasejump.get_jump_param_objects()
+    jump_flag = [x.key_value[0] for x in all_jumps if x.key == flagval]
+    missing_jumps = list(set(flaglist) - set(jump_flag))
+
+    if base == True:
+        if len(missing_jumps):
+            if len(missing_jumps) == 1:
+                log.info('Exactly one' + flag + ' not JUMPed.')
+            else:
+                log.info(flag + f" not JUMPed: {missing_jumps}...")
+        else:
+            log.warning("All " + flag + " are JUMPed. One JUMP should be removed from the .par file if this is your base flag.")
+        if len(missing_jumps) > 1:
+            for j in missing_jumps[:-1]:
+                log.info(f"Adding frontend JUMP {j}")
+                JUMPn = maskParameter('JUMP',key=flagval,key_value=[j],value=0.0,units=u.second)
+                phasejump.add_param(JUMPn,setup=True)
+    else:
+        if len(missing_jumps):
+            if len(missing_jumps) == 0:
+                log.info('All' + flag + ' JUMPed.')
+            else:
+                log.info(flag + f" not JUMPed: {missing_jumps}...")
+        else:
+            log.warning("All " + flag + " are JUMPed. One JUMP should be removed from the .par file if this is your base flag.")
+        if len(missing_jumps) >= 1:
+            for j in missing_jumps[:-1]:
+                log.info(f"Adding frontend JUMP {j}")
+                JUMPn = maskParameter('JUMP',key=flagval,key_value=[j],value=0.0,units=u.second)
+                phasejump.add_param(JUMPn,setup=True)
 
 def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True):
     """Quick and dirty routine to find outlier residuals based on some threshold.
