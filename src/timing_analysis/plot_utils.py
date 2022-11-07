@@ -367,7 +367,7 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
 
     return
 
-def plot_FD_delay(fitter = None, model_object = None, save = False, title= True, axs = None,legend=True, **kwargs):
+def plot_FD_delay(fitter = None, model_object = None, save = False, title= True, axs = None, legend=True, show_bin=True, **kwargs):
     """
     Make a plot of frequency (MHz) vs the time delay (us) implied by FD parameters. 
     Z. Arzoumanian, The NANOGrav Nine-year Data Set: Observations, Arrival
@@ -391,6 +391,7 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
     Optional Arguments:
     --------------------
     freqs [list/array] : List or array of frequencies (MHz) to plot. Will override values from toa object.
+    show_bin [boolean] : Show the delay corresponding to 1 bin of the profile for comparison. (requires fitter)
     figsize [tuple] : Size of the figure passed to matplotlib [default: (8,4)].
     ls ['string'] : matplotlib format option for linestyle [default: ('-')]
     color ['string'] : matplotlib color option for plot [default: green]
@@ -445,6 +446,10 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
         FD_delay = pint.models.frequency_dependent.FD.FD_delay(fitter.model,freqs)
         
             """
+            if show_bin:
+                nbins = fitter.toas['nbin'].astype(int).min()
+                P0 = 1/fitter.model.F0.value
+                P0_bin_max = P0/nbins
         except:
             print("No FD parameters in this model! Exitting...")
             #sys.exit()
@@ -459,6 +464,9 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
         FD_delay = pint.models.frequency_dependent.FD.FD_delay(fitter.model,freqs)
         
             """
+            if show_bin:
+                print("show_bin requires a fitter object, cannot be used with the model alone")
+                show_bin = False
         except:
             print("No FD parameters in this model! Exitting...")
             #sys.exit() 
@@ -497,6 +505,11 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
                  FD_delay_err_plus,
                  FD_delay_err_minus,
                  color=clr,alpha=alpha)
+    if show_bin:
+        if (FD_delay > 0).any():
+            ax1.axhline(P0_bin_max*1E6, label="1 profile bin")
+        if (FD_delay < 0).any():
+            ax1.axhline(-P0_bin_max*1E6, label="1 profile bin")
     ax1.set_xlabel("Frequency (MHz)")
     ax1.set_ylabel("Delay ($\mu$s)")
     if title:
