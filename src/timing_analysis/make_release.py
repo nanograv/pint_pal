@@ -136,8 +136,8 @@ def plot_settings():
     fig_width = fig_width_pt*inches_per_pt  # width in inches
     fig_height = fig_width*golden_mean*2       # height in inches
     fig_size = [fig_width,fig_height]
-    fontsize = 14  # for xlabel, backend labels
-    plotting_params = {'backend': 'pdf', 'axes.labelsize': 12, 'lines.markersize': 4, 'font.size': 12, 'xtick.major.size': 6, 'xtick.minor.size': 3, 'ytick.major.size': 6, 'ytick.minor.size': 3, 'xtick.major.width': 0.5, 'ytick.major.width': 0.5, 'xtick.minor.width': 0.5, 'ytick.minor.width': 0.5, 'lines.markeredgewidth': 1, 'axes.linewidth': 1.2, 'legend.fontsize': 10, 'xtick.labelsize': 10, 'ytick.labelsize': 10, 'savefig.dpi': 400, 'path.simplify': True, 'font.family': 'serif', 'font.serif': 'Times', 'text.usetex': True, 'figure.figsize': fig_size, 'text.latex.preamble': [r'\usepackage{amsmath}', r'\usepackage{apjfonts}']}
+    fontsize = 20  # for xlabel, backend labels
+    plotting_params = {'backend': 'pdf', 'axes.labelsize': 12, 'lines.markersize': 4, 'font.size': 12, 'xtick.major.size': 6, 'xtick.minor.size': 3, 'ytick.major.size': 6, 'ytick.minor.size': 3, 'xtick.major.width': 0.5, 'ytick.major.width': 0.5, 'xtick.minor.width': 0.5, 'ytick.minor.width': 0.5, 'lines.markeredgewidth': 1, 'axes.linewidth': 1.2, 'legend.fontsize': 10, 'xtick.labelsize': 12, 'ytick.labelsize': 10, 'savefig.dpi': 400, 'path.simplify': True, 'font.family': 'serif', 'font.serif': 'Times', 'text.usetex': True, 'figure.figsize': fig_size, 'text.latex.preamble': [r'\usepackage{amsmath}', r'\usepackage{apjfonts}']}
 
     plt.rcParams.update(plotting_params)
 
@@ -263,7 +263,7 @@ def get_DMX_info(fo):
     DMX_center_Year = (DMX_center_MJD - 51544.0)/365.25 + 2000.0
     return DMXs, DMX_vErrs, DMX_center_Year
 
-def plot_by_color(ax, x, y, err, bknds, rn_off):
+def plot_by_color(ax, x, y, err, bknds, rn_off, be_legend):
     """
     Plot color-divided-by-receiver/BE points on any axis
     
@@ -288,8 +288,14 @@ def plot_by_color(ax, x, y, err, bknds, rn_off):
         clr = colorscheme[r_b_label]
         ax.errorbar(x[inds], y[inds] - (rn_off * u.us), yerr=err[inds], fmt=mkr, color=clr, label=r_b_label, alpha=0.5)
         
-    ylim = (max(np.abs(y - (rn_off * u.us))).value + max(np.abs(err)).value)
-    ax.set_ylim(-1 * ylim * 1.1, ylim * 1.1)
+    ylim = (max(np.abs(y - (rn_off * u.us))).value + 0.6 * max(np.abs(err)).value)
+    ax.set_ylim(-1 * ylim * 1.08, ylim * 1.08)
+    
+    if be_legend:
+        handles, labels = ax.get_legend_handles_labels()
+        labels, handles = zip(*sorted(zip(labels, handles), key=lambda t: t[0]))
+        plt.legend(handles, labels, loc=(1.005, 0), fontsize=12)
+        
 
 def rec_labels(axs, bcknds, years_avg):
     """
@@ -339,26 +345,43 @@ def rec_labels(axs, bcknds, years_avg):
     
     ycoord = 1.1
     x_min_yr = min(years_avg)
-    x_max_yr = max(years_avg)        
+    x_max_yr = max(years_avg)
+    
+    tform = axs[0].get_xaxis_transform()
+    va = ha = 'center'
     
     if has_ao and has_gbt:
-        axs[0].text((guppi+x_min_yr)/2., ycoord, 'ASP/GASP', transform=axs[0].get_xaxis_transform(),va='center',ha='center')
-        axs[0].text((guppi+puppi)/2., ycoord, 'ASP/GUPPI', transform=axs[0].get_xaxis_transform(),va='center',ha='center')
-        axs[0].text((puppi+x_max_yr)/2., ycoord, 'PUPPI/GUPPI', transform=axs[0].get_xaxis_transform(),va='center',ha='center')
+        if has_yuppi:
+            axs[0].text((puppi+x_max_yr)/2., ycoord, 'PUPPI/GUPPI/YUPPI', transform=tform, va=va, ha=ha)
+        else:
+            axs[0].text((puppi+x_max_yr)/2., ycoord, 'PUPPI/GUPPI', transform=tform, va=va, ha=ha)
+        axs[0].text((guppi+x_min_yr)/2., ycoord, 'ASP/GASP', transform=tform, va=va, ha=ha)
+        axs[0].text((guppi+puppi)/2., ycoord, 'ASP/GUPPI', transform=tform, va=va, ha=ha)        
     elif has_ao and not has_gbt:
-        axs[0].text((puppi+x_min_yr)/2., ycoord, 'ASP', transform=axs[0].get_xaxis_transform(),va='center',ha='center')
-        axs[0].text((puppi+x_max_yr)/2., ycoord, 'PUPPI', transform=axs[0].get_xaxis_transform(),va='center',ha='center')
+        if has_yuppi:
+            axs[0].text((puppi+x_max_yr)/2., ycoord, 'PUPPI/YUPPI', transform=tform, va=va, ha=ha)
+        else:
+            axs[0].text((puppi+x_max_yr)/2., ycoord, 'PUPPI', transform=tform, va=va, ha=ha)
+        axs[0].text((puppi+x_min_yr)/2. - 0.2, ycoord, 'ASP', transform=tform, va=va, ha=ha)        
     elif not has_ao and has_gbt:
-        axs[0].text((guppi+x_min_yr)/2., ycoord, 'GASP', transform=axs[0].get_xaxis_transform(),va='center',ha='center')
-        axs[0].text((guppi+x_max_yr)/2., ycoord, 'GUPPI', transform=axs[0].get_xaxis_transform(),va='center',ha='center')
-        
+        if has_yuppi:
+            axs[0].text((puppi+x_max_yr)/2., ycoord, 'GUPPI/YUPPI', transform=tform, va=va, ha=ha)
+        else:
+            axs[0].text((guppi+x_max_yr)/2., ycoord, 'GUPPI', transform=tform, va=va, ha=ha)
+        axs[0].text((guppi+x_min_yr)/2., ycoord, 'GASP', transform=tform, va=va, ha=ha)
     if has_puppi and not has_asp and not has_gasp and not has_guppi:
-        axs[0].text((x_min_yr+x_max_yr)/2., ycoord, 'PUPPI', transform=axs[0].get_xaxis_transform(),va='center',ha='center')
+        if has_yuppi:
+            axs[0].text((x_min_yr+x_max_yr)/2., ycoord, 'PUPPI/YUPPI', transform=tform, va=va, ha=ha)
+        else:
+            axs[0].text((x_min_yr+x_max_yr)/2., ycoord, 'PUPPI', transform=tform, va=va, ha=ha)
     if has_guppi and not has_asp and not has_gasp and not has_puppi:
-        axs[0].text((x_min_yr+x_max_yr)/2., ycoord, 'GUPPI', transform=axs[0].get_xaxis_transform(),va='center',ha='center')
-    if has_yuppi:
-        axs[0].text((x_min_yr+x_max_yr)/2., ycoord, 'YUPPI', transform=axs[0].get_xaxis_transform(),va='center',ha='center')
-    
+        if has_yuppi:
+            axs[0].text((x_min_yr+x_max_yr)/2., ycoord, 'GUPPI/YUPPI', transform=tform, va=va, ha=ha)
+        else:
+            axs[0].text((x_min_yr+x_max_yr)/2., ycoord, 'GUPPI', transform=tform, va=va, ha=ha)
+    if has_yuppi and not has_guppi and not has_puppi:
+        axs[0].text((x_min_yr+x_max_yr)/2., ycoord, 'YUPPI', transform=tform, va=va, ha=ha)
+            
 def rn_sub(testing, rn_subtract, fo_nb, fo_wb):
     if rn_subtract:
         if testing:
