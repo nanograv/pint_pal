@@ -72,10 +72,12 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     if save_corner and not no_corner_plot:
         pars_short = [p.split("_",1)[1] for p in pars]
         log.info(f"Chain parameter names are {pars_short}")
+        log.info(f"Chain parameter convention: {test_equad_convention(pars_short)}")
         if chaindir_compare is not None:
             # need to plot comparison corner plot first so it's underneath
             compare_pars_short = [p.split("_",1)[1] for p in pars_compare]
             log.info(f"Comparison chain parameter names are {compare_pars_short}")
+            log.info(f"Comparison chain parameter convention: {test_equad_convention(compare_pars_short)}")
             # don't plot comparison if the parameter names don't match
             if compare_pars_short != pars_short:
                 log.warning("Parameter names for comparison noise chains do not match, not plotting the compare-noise-dir chains")
@@ -112,10 +114,12 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
         
         pars_short = [p.split("_",1)[1] for p in pars]
         log.info(f"Chain parameter names are {pars_short}")
+        log.info(f"Chain parameter convention: {test_equad_convention(pars_short)}")
         if chaindir_compare is not None:
             # need to plot comparison corner plot first so it's underneath
             compare_pars_short = [p.split("_",1)[1] for p in pars_compare]
             log.info(f"Comparison chain parameter names are {compare_pars_short}")
+            log.info(f"Comparison chain parameter convention: {test_equad_convention(compare_pars_short)}")
             # don't plot comparison if the parameter names don't match
             if compare_pars_short != pars_short:
                 log.warning("Parameter names for comparison noise chains do not match, not plotting the compare-noise-dir chains")
@@ -321,6 +325,26 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
                                value = val, units = '')
             efac_params.append(tp)
 
+        # See https://github.com/nanograv/enterprise/releases/tag/v3.3.0
+        # ..._t2equad uses PINT/Tempo2/Tempo convention, resulting in total variance EFAC^2 x (toaerr^2 + EQUAD^2)
+        elif '_t2equad' in key:
+
+            param_name = key.split('_t2equad')[0].split(psr_name)[1].split('_log10')[0][1:]
+
+            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name,
+                               value = 10 ** val / 1e-6, units = 'us')
+            equad_params.append(tp)
+
+        # ..._tnequad uses temponest convention, resulting in total variance EFAC^2 toaerr^2 + EQUAD^2
+        elif '_tnequad' in key:
+
+            param_name = key.split('_tnequad')[0].split(psr_name)[1].split('_log10')[0][1:]
+
+            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name,
+                               value = 10 ** val / 1e-6, units = 'us')
+            equad_params.append(tp)
+
+        # ..._equad uses temponest convention; generated with enterprise pre-v3.3.0
         elif '_equad' in key:
 
             param_name = key.split('_equad')[0].split(psr_name)[1].split('_log10')[0][1:]
@@ -354,6 +378,16 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
             dmequad_params.append(tp)
 
         ii += 1
+
+    # Test EQUAD convention and decide whether to convert
+    convert_equad_to_t2 = False
+    if test_equad_convention(wn_dict.keys()) == 'tnequad':
+        log.info('WN paramaters use temponest convention; EQUAD values will be converted once added to model')
+        convert_equad_to_t2 = True
+        if np.any(['_equad' in p for p in wn_dict.keys()]):
+            log.info('WN parameters generated using enterprise pre-v3.3.0')
+    elif test_equad_convention(wn_dict.keys()) == 't2equad':
+        log.info('WN parameters use T2 convention; no conversion necessary')
 
     ef_eq_comp = pm.ScaleToaError()
 
@@ -413,4 +447,32 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
     model.validate()
     model.noise_mtime = mtime.isot
 
+    if convert_equad_to_t2:
+        from timing_analysis.lite_utils import convert_enterprise_equads
+        model = convert_enterprise_equads(model)
+
     return model
+
+def test_equad_convention(pars_list):
+    """
+    If (t2/tn)equad present, report convention used.
+    See https://github.com/nanograv/enterprise/releases/tag/v3.3.0
+
+    Parameters
+    ==========
+    pars_list: list of noise parameters from enterprise run (e.g. pars.txt)
+
+    Returns
+    =======
+    convention_test: t2equad/tnequad/None 
+    """
+    # Test equad convention
+    t2_test = np.any(['_t2equad' in p for p in pars_list])
+    tn_test = np.any([('_tnequad' in p) or ('_equad' in p) for p in pars_list])
+    if t2_test and not tn_test:
+        return 't2equad'
+    elif tn_test and not t2_test:
+        return 'tnequad'
+    else:
+        log.warning('EQUADs not present in parameter list (or something strange is going on).')
+        return None
