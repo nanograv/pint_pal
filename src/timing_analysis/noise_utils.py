@@ -34,307 +34,6 @@ import types
 from enterprise.signals import utils
 from enterprise.signals import gp_priors as gpp
 
-def white_noise_block(vary=False, inc_ecorr=False, gp_ecorr=False,
-                      efac1=False, select='backend', name=None, is_wideband = False, wb_efac_sigma = 0.25):
-    """
-    Returns the white noise block of the model:
-        1. EFAC per backend/receiver system
-        2. EQUAD per backend/receiver system
-        3. ECORR per backend/receiver system
-    :param vary:
-        If set to true we vary these parameters
-        with uniform priors. Otherwise they are set to constants
-        with values to be set later.
-    :param inc_ecorr:
-        include ECORR, needed for NANOGrav channelized TOAs
-    :param gp_ecorr:
-        whether to use the Gaussian process model for ECORR
-    :param efac1:
-        use a strong prior on EFAC = Normal(mu=1, stdev=0.1)
-    :param is_wideband:
-        flag to toggle special normal prior for wideband EFAC and DMEFAC
-    :param wb_efac_sigma:
-        width of normal prior for wideband EFAC and DMEFAC.
-    """
-
-    if select == 'backend':
-        # define selection by observing backend
-        backend = selections.Selection(selections.by_backend)
-        # define selection by nanograv backends
-        backend_ng = selections.Selection(selections.nanograv_backends)
-    else:
-        # define no selection
-        backend = selections.Selection(selections.no_selection)
-
-    # white noise parameters
-    if vary:
-        if efac1:
-            efac = parameter.Normal(1.0, 0.1)
-        else:
-            if is_wideband:
-                efac = parameter.Normal(1.0, wb_efac_sigma)
-            else:
-                efac = parameter.Uniform(0.01, 10.0)
-        equad = parameter.Uniform(-8.5, -5)
-        if inc_ecorr:
-            ecorr = parameter.Uniform(-8.5, -5)
-    else:
-        efac = parameter.Constant()
-        equad = parameter.Constant()
-        if inc_ecorr:
-            ecorr = parameter.Constant()
-
-    # white noise signals
-    ef = white_signals.MeasurementNoise(efac=efac,
-                                        selection=backend, name=name)
-    eq = white_signals.EquadNoise(log10_equad=equad,
-                                  selection=backend, name=name)
-    if inc_ecorr:
-        if gp_ecorr:
-            if name is None:
-                ec = gp_signals.EcorrBasisModel(log10_ecorr=ecorr,
-                                                selection=backend_ng)
-            else:
-                ec = gp_signals.EcorrBasisModel(log10_ecorr=ecorr,
-                                                selection=backend_ng, name=name)
-
-        else:
-            ec = white_signals.EcorrKernelNoise(log10_ecorr=ecorr,
-                                                selection=backend_ng,
-                                                name=name)
-
-    # combine signals
-    if inc_ecorr:
-        s = ef + eq + ec
-    elif not inc_ecorr:
-        s = ef + eq
-
-    return s
-
-def red_noise_block(psd='powerlaw', prior='log-uniform', Tspan=None,
-                    components=30, gamma_val=None, coefficients=False,
-                    select=None, modes=None, wgts=None,
-                    break_flat=False, break_flat_fq=None):
-    """
-    Returns red noise model:
-        1. Red noise modeled as a power-law with 30 sampling frequencies
-    :param psd:
-        PSD function [e.g. powerlaw (default), turnover, spectrum, tprocess]
-    :param prior:
-        Prior on log10_A. Default if "log-uniform". Use "uniform" for
-        upper limits.
-    :param Tspan:
-        Sets frequency sampling f_i = i / Tspan. Default will
-        use overall time span for indivicual pulsar.
-    :param components:
-        Number of frequencies in sampling of red noise
-    :param gamma_val:
-        If given, this is the fixed slope of the power-law for
-        powerlaw, turnover, or tprocess red noise
-    :param coefficients: include latent coefficients in GP model?
-    """
-    # red noise parameters that are common
-    if psd in ['powerlaw', 'powerlaw_genmodes', 'turnover',
-               'tprocess', 'tprocess_adapt', 'infinitepower']:
-        # parameters shared by PSD functions
-        if prior == 'uniform':
-            log10_A = parameter.LinearExp(-20, -11)
-        elif prior == 'log-uniform' and gamma_val is not None:
-            if np.abs(gamma_val - 4.33) < 0.1:
-                log10_A = parameter.Uniform(-20, -11)
-            else:
-                log10_A = parameter.Uniform(-20, -11)
-        else:
-            log10_A = parameter.Uniform(-20, -11)
-
-        if gamma_val is not None:
-            gamma = parameter.Constant(gamma_val)
-        else:
-            #gamma = parameter.Uniform(0, 7)
-            ##########This is specific for timing##################
-            gamma = parameter.Uniform(0, 7)
-
-        # different PSD function parameters
-        if psd == 'powerlaw':
-            pl = utils.powerlaw(log10_A=log10_A, gamma=gamma)
-        elif psd == 'powerlaw_genmodes':
-            pl = gpp.powerlaw_genmodes(log10_A=log10_A, gamma=gamma, wgts=wgts)
-        elif psd == 'turnover':
-            kappa = parameter.Uniform(0, 7)
-            lf0 = parameter.Uniform(-9, -7)
-            pl = utils.turnover(log10_A=log10_A, gamma=gamma,
-                                lf0=lf0, kappa=kappa)
-        elif psd == 'tprocess':
-            df = 2
-            alphas = gpp.InvGamma(df/2, df/2, size=components)
-            pl = gpp.t_process(log10_A=log10_A, gamma=gamma, alphas=alphas)
-        elif psd == 'tprocess_adapt':
-            df = 2
-            alpha_adapt = gpp.InvGamma(df/2, df/2, size=1)
-            nfreq = parameter.Uniform(-0.5, 10-0.5)
-            pl = gpp.t_process_adapt(log10_A=log10_A, gamma=gamma,
-                                    alphas_adapt=alpha_adapt, nfreq=nfreq)
-        elif psd == 'infinitepower':
-            pl = gpp.infinitepower()
-
-    if psd == 'spectrum':
-        if prior == 'uniform':
-            log10_rho = parameter.LinearExp(-10, -4, size=components)
-        elif prior == 'log-uniform':
-            log10_rho = parameter.Uniform(-10, -4, size=components)
-
-        pl = gpp.free_spectrum(log10_rho=log10_rho)
-
-    if select == 'backend':
-        # define selection by observing backend
-        selection = selections.Selection(selections.by_backend)
-    elif select == 'band' or select == 'band+':
-        # define selection by observing band
-        selection = selections.Selection(selections.by_band)
-    else:
-        # define no selection
-        selection = selections.Selection(selections.no_selection)
-
-    if break_flat:
-        log10_A_flat = parameter.Uniform(-20, -11)
-        gamma_flat = parameter.Constant(0)
-        pl_flat = utils.powerlaw(log10_A=log10_A_flat, gamma=gamma_flat)
-
-        freqs = 1.0 * np.arange(1, components+1) / Tspan
-        components_low = sum(f < break_flat_fq for f in freqs)
-        if components_low < 1.5:
-            components_low = 2
-
-        rn = gp_signals.FourierBasisGP(pl, components=components_low,
-                                       Tspan=Tspan, coefficients=coefficients,
-                                       selection=selection)
-
-        rn_flat = gp_signals.FourierBasisGP(pl_flat,
-                                            modes=freqs[components_low:],
-                                            coefficients=coefficients,
-                                            selection=selection,
-                                            name='red_noise_hf')
-        rn = rn + rn_flat
-    else:
-        rn = gp_signals.FourierBasisGP(pl, components=components,
-                                       Tspan=Tspan,
-                                       coefficients=coefficients,
-                                       selection=selection,
-                                       modes=modes)
-
-    if select == 'band+':  # Add the common component as well
-        rn = rn + gp_signals.FourierBasisGP(pl, components=components,
-                                            Tspan=Tspan,
-                                            coefficients=coefficients)
-
-    return rn
-
-def model_singlepsr_noise(psr, tm_var=False, tm_linear=False,
-                          tmparam_list=None,
-                          red_var=True, psd='powerlaw', red_select=None,
-                          noisedict=None, tm_svd=False, tm_norm=True,
-                          white_vary=True, components=30, upper_limit=False,
-                          is_wideband=False, use_dmdata=False,
-                          dmjump_var=False, gamma_val=None, extra_sigs=None,
-                          select='backend', wb_efac_sigma = 0.25, coefficients=False):
-    """
-    Single pulsar noise model
-    :param psr: enterprise pulsar object
-    :param tm_var: explicitly vary the timing model parameters
-    :param tm_linear: vary the timing model in the linear approximation
-    :param tmparam_list: an explicit list of timing model parameters to vary
-    :param red_var: include red noise in the model
-    :param psd: red noise psd model
-    :param noisedict: dictionary of noise parameters
-    :param tm_svd: boolean for svd-stabilised timing model design matrix
-    :param tm_norm: normalize the timing model, or provide custom normalization
-    :param white_vary: boolean for varying white noise or keeping fixed
-    :param components: number of modes in Fourier domain processes
-    :param upper_limit: whether to do an upper-limit analysis
-    :param is_wideband: whether input TOAs are wideband TOAs; will exclude
-           ecorr from the white noise model
-    :param use_dmdata: whether to use DM data (WidebandTimingModel) if
-           is_wideband
-    :param gamma_val: red noise spectral index to fix
-    :param extra_sigs: Any additional `enterprise` signals to be added to the
-        model.
-        
-    :return s: single pulsar noise model
-    """
-    
-    amp_prior = 'uniform' if upper_limit else 'log-uniform'
-
-    # timing model
-    if not tm_var:
-        if (is_wideband and use_dmdata):
-            if dmjump_var:
-                dmjump = parameter.Uniform(pmin=-0.005, pmax=0.005)
-            else:
-                dmjump = parameter.Constant()
-            if white_vary:
-                #dmefac = parameter.Uniform(pmin=0.1, pmax=10.0)
-                ################Timing specific#######################
-                dmefac = parameter.Normal(1.0, wb_efac_sigma)
-                log10_dmequad = parameter.Uniform(pmin=-7.0, pmax=0.0)
-                #dmjump = parameter.Uniform(pmin=-0.005, pmax=0.005)
-            else:
-                dmefac = parameter.Constant()
-                log10_dmequad = parameter.Constant()
-                #dmjump = parameter.Constant()
-            s = gp_signals.WidebandTimingModel(dmefac=dmefac,
-                    log10_dmequad=log10_dmequad, dmjump=dmjump,
-                    dmefac_selection=selections.Selection(
-                        selections.by_backend),
-                    log10_dmequad_selection=selections.Selection(
-                        selections.by_backend),
-                    dmjump_selection=selections.Selection(
-                        selections.by_frontend))
-        else:
-            s = gp_signals.TimingModel(use_svd=tm_svd, normed=tm_norm,
-                                   coefficients=coefficients)
-    else:
-        # create new attribute for enterprise pulsar object
-        psr.tmparams_orig = OrderedDict.fromkeys(psr.t2pulsar.pars())
-        for key in psr.tmparams_orig:
-            psr.tmparams_orig[key] = (psr.t2pulsar[key].val,
-                                      psr.t2pulsar[key].err)
-        if not tm_linear:
-            s = timing_block(tmparam_list=tmparam_list)
-        else:
-            pass
-
-    # red noise
-    if red_var:
-        s += red_noise_block(psd=psd, prior=amp_prior,
-                             components=components, gamma_val=gamma_val,
-                             coefficients=coefficients, select=red_select)
-
-    if extra_sigs is not None:
-        s += extra_sigs
-        
-    # adding white-noise, and acting on psr objects
-    if 'NANOGrav' in psr.flags['pta'] and not is_wideband:
-        s2 = s + white_noise_block(vary=white_vary, inc_ecorr=True,
-                select=select, is_wideband = False, wb_efac_sigma = wb_efac_sigma)
-        model = s2(psr)
-    else:
-        s3 = s + white_noise_block(vary=white_vary, inc_ecorr=False,
-                select=select, is_wideband = True, wb_efac_sigma = wb_efac_sigma)
-        model = s3(psr)
-
-    # set up PTA
-    pta = signal_base.PTA([model])
-
-    # set white noise parameters
-    if not white_vary or (is_wideband and use_dmdata):
-        if noisedict is None:
-            print('No noise dictionary provided!...')
-        else:
-            noisedict = noisedict
-            pta.set_default_params(noisedict)
-
-    return pta
-
 def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corner = True, no_corner_plot = False, chaindir_compare=None):
     """
     Reads enterprise chain file; produces and saves corner plot; returns WN dictionary and RN (SD) BF
@@ -373,10 +72,12 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
     if save_corner and not no_corner_plot:
         pars_short = [p.split("_",1)[1] for p in pars]
         log.info(f"Chain parameter names are {pars_short}")
+        log.info(f"Chain parameter convention: {test_equad_convention(pars_short)}")
         if chaindir_compare is not None:
             # need to plot comparison corner plot first so it's underneath
             compare_pars_short = [p.split("_",1)[1] for p in pars_compare]
             log.info(f"Comparison chain parameter names are {compare_pars_short}")
+            log.info(f"Comparison chain parameter convention: {test_equad_convention(compare_pars_short)}")
             # don't plot comparison if the parameter names don't match
             if compare_pars_short != pars_short:
                 log.warning("Parameter names for comparison noise chains do not match, not plotting the compare-noise-dir chains")
@@ -413,10 +114,12 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
         
         pars_short = [p.split("_",1)[1] for p in pars]
         log.info(f"Chain parameter names are {pars_short}")
+        log.info(f"Chain parameter convention: {test_equad_convention(pars_short)}")
         if chaindir_compare is not None:
             # need to plot comparison corner plot first so it's underneath
             compare_pars_short = [p.split("_",1)[1] for p in pars_compare]
             log.info(f"Comparison chain parameter names are {compare_pars_short}")
+            log.info(f"Comparison chain parameter convention: {test_equad_convention(compare_pars_short)}")
             # don't plot comparison if the parameter names don't match
             if compare_pars_short != pars_short:
                 log.warning("Parameter names for comparison noise chains do not match, not plotting the compare-noise-dir chains")
@@ -518,9 +221,9 @@ def model_noise(mo, to, vary_red_noise = True, n_iter = int(1e5), using_wideband
 
     #Setup a single pulsar PTA using enterprise_extensions
     if not using_wideband:
-        pta = model_singlepsr_noise(e_psr, white_vary = True, red_var = vary_red_noise, is_wideband = False, use_dmdata = False, dmjump_var = False, wb_efac_sigma = wb_efac_sigma)
+        pta = models.model_singlepsr_noise(e_psr, white_vary = True, red_var = vary_red_noise, is_wideband = False, use_dmdata = False, dmjump_var = False, wb_efac_sigma = wb_efac_sigma)
     else:
-        pta = model_singlepsr_noise(e_psr, is_wideband = True, use_dmdata = True, white_vary = True, red_var = vary_red_noise, dmjump_var = False, wb_efac_sigma = wb_efac_sigma)
+        pta = models.model_singlepsr_noise(e_psr, is_wideband = True, use_dmdata = True, white_vary = True, red_var = vary_red_noise, dmjump_var = False, wb_efac_sigma = wb_efac_sigma, ng_twg_setup = True)
         dmjump_params = {}
         for param in mo.params:
             if param.startswith('DMJUMP'):
@@ -622,6 +325,26 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
                                value = val, units = '')
             efac_params.append(tp)
 
+        # See https://github.com/nanograv/enterprise/releases/tag/v3.3.0
+        # ..._t2equad uses PINT/Tempo2/Tempo convention, resulting in total variance EFAC^2 x (toaerr^2 + EQUAD^2)
+        elif '_t2equad' in key:
+
+            param_name = key.split('_t2equad')[0].split(psr_name)[1].split('_log10')[0][1:]
+
+            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name,
+                               value = 10 ** val / 1e-6, units = 'us')
+            equad_params.append(tp)
+
+        # ..._tnequad uses temponest convention, resulting in total variance EFAC^2 toaerr^2 + EQUAD^2
+        elif '_tnequad' in key:
+
+            param_name = key.split('_tnequad')[0].split(psr_name)[1].split('_log10')[0][1:]
+
+            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name,
+                               value = 10 ** val / 1e-6, units = 'us')
+            equad_params.append(tp)
+
+        # ..._equad uses temponest convention; generated with enterprise pre-v3.3.0
         elif '_equad' in key:
 
             param_name = key.split('_equad')[0].split(psr_name)[1].split('_log10')[0][1:]
@@ -655,6 +378,16 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
             dmequad_params.append(tp)
 
         ii += 1
+
+    # Test EQUAD convention and decide whether to convert
+    convert_equad_to_t2 = False
+    if test_equad_convention(wn_dict.keys()) == 'tnequad':
+        log.info('WN paramaters use temponest convention; EQUAD values will be converted once added to model')
+        convert_equad_to_t2 = True
+        if np.any(['_equad' in p for p in wn_dict.keys()]):
+            log.info('WN parameters generated using enterprise pre-v3.3.0')
+    elif test_equad_convention(wn_dict.keys()) == 't2equad':
+        log.info('WN parameters use T2 convention; no conversion necessary')
 
     ef_eq_comp = pm.ScaleToaError()
 
@@ -714,4 +447,32 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
     model.validate()
     model.noise_mtime = mtime.isot
 
+    if convert_equad_to_t2:
+        from timing_analysis.lite_utils import convert_enterprise_equads
+        model = convert_enterprise_equads(model)
+
     return model
+
+def test_equad_convention(pars_list):
+    """
+    If (t2/tn)equad present, report convention used.
+    See https://github.com/nanograv/enterprise/releases/tag/v3.3.0
+
+    Parameters
+    ==========
+    pars_list: list of noise parameters from enterprise run (e.g. pars.txt)
+
+    Returns
+    =======
+    convention_test: t2equad/tnequad/None 
+    """
+    # Test equad convention
+    t2_test = np.any(['_t2equad' in p for p in pars_list])
+    tn_test = np.any([('_tnequad' in p) or ('_equad' in p) for p in pars_list])
+    if t2_test and not tn_test:
+        return 't2equad'
+    elif tn_test and not t2_test:
+        return 'tnequad'
+    else:
+        log.warning('EQUADs not present in parameter list (or something strange is going on).')
+        return None
