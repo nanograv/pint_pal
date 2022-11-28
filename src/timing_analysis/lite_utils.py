@@ -447,6 +447,88 @@ def add_feDMJumps(mo,rcvrs):
             log.info(f"Adding frontend DMJUMP {j}")
             DMJUMPn = maskParameter('DMJUMP',key='-fe',key_value=[j],value=0.0,units=u.pc*u.cm**-3)
             dmjump.add_param(DMJUMPn,setup=True)
+            
+def get_flag_val_list(toas, flag):
+    """Returns a list of receivers present in the tim file(s)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+    flag: string
+          Name of the flag you're using for jumps
+
+    Returns
+    =======
+    flaglist: list of strings
+        unique value of whatever the flag was in input toas, designated using 'flag'. This is for jumps
+    """
+    flaglist = list(set([str(f) for f in set(toas.get_flag_value(flag)[0])]))
+    if 'None' in flaglist: flaglist.remove('None')
+    if 'unknown' in flaglist: flaglist.remove('unknown')
+    return flaglist
+
+
+def add_flag_jumps(mo,flag,flaglist,base=False):
+    """Automatically add appropriate jumps based on jump flag present
+
+    Parameters
+    ==========
+    mo: `pint.model.TimingModel` object
+    flag: string
+        the name of the flag you're jumping on (e.g. 'fe' or 'f')
+    flaglist: list
+        list of values of that flag in this dataset.
+    base: bool
+          Is this the flag you're using as your "one not jumped" category?
+    """
+    flagval = '-' + flag
+    # Might want a warning here if no jumps are necessary.
+    if len(flaglist) <= 1:
+        return
+
+    if not 'PhaseJump' in mo.components.keys():
+        log.info("No JUMPed.")
+        log.info(f"Adding flag JUMPs {flaglist[0]}")
+        all_components = Component.component_types
+        phase_jump_instance = all_components['PhaseJump']()
+        mo.add_component(phase_jump_instance)
+
+        mo.JUMP1.key = '-' + flag
+        mo.JUMP1.key_value = [flaglist[0]]
+        mo.JUMP1.value = 0.0
+        mo.JUMP1.frozen = False
+
+    phasejump = mo.components['PhaseJump']
+    all_jumps = phasejump.get_jump_param_objects()
+    jump_flag = [x.key_value[0] for x in all_jumps if x.key == flagval]
+    missing_jumps = list(set(flaglist) - set(jump_flag))
+
+    if base == True:
+        if len(missing_jumps):
+            if len(missing_jumps) == 1:
+                log.info('Exactly one' + flag + ' not JUMPed.')
+            else:
+                log.info(flag + f" not JUMPed: {missing_jumps}...")
+        else:
+            log.warning("All " + flag + " are JUMPed. One JUMP should be removed from the .par file if this is your base flag.")
+        if len(missing_jumps) > 1:
+            for j in missing_jumps[:-1]:
+                log.info(f"Adding frontend JUMP {j}")
+                JUMPn = maskParameter('JUMP',key=flagval,key_value=[j],value=0.0,units=u.second)
+                phasejump.add_param(JUMPn,setup=True)
+    else:
+        if len(missing_jumps):
+            if len(missing_jumps) == 0:
+                log.info('All' + flag + ' JUMPed.')
+            else:
+                log.info(flag + f" not JUMPed: {missing_jumps}...")
+        else:
+            log.warning("All " + flag + " are JUMPed. One JUMP should be removed from the .par file if this is your base flag.")
+        if len(missing_jumps) >= 1:
+            for j in missing_jumps[:-1]:
+                log.info(f"Adding frontend JUMP {j}")
+                JUMPn = maskParameter('JUMP',key=flagval,key_value=[j],value=0.0,units=u.second)
+                phasejump.add_param(JUMPn,setup=True)
 
 def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True):
     """Quick and dirty routine to find outlier residuals based on some threshold.
@@ -592,6 +674,40 @@ def get_receivers(toas):
         unique set of receivers present in input toas
     """
     receivers = list(set([str(f) for f in set(toas.get_flag_value('fe')[0])]))
+    return receivers
+
+def get_receivers_epta(toas):
+    """Returns a list of receivers present in the tim file(s)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+
+    Returns
+    =======
+    receivers: list of strings
+        unique set of receivers present in input toas
+    """
+    receivers_r= list(set([str(f) for f in set(toas.get_flag_value('r')[0])]))
+    return receivers_r
+
+    
+def get_receivers_ipta(toas):
+    """Returns a list of receivers present in the tim file(s)
+
+    Parameters
+    ==========
+    toas: `pint.toa.TOAs` object
+
+    Returns
+    =======
+    receivers: list of strings
+        unique set of receivers present in input toas
+    """
+    receivers_r= list(set([str(f) for f in set(toas.get_flag_value('r')[0])]))
+    receivers_fe = list(set([str(f) for f in set(toas.get_flag_value('fe')[0])]))
+    receivers_all = receivers_r + receivers_fe
+    receivers = receivers_all.remove('None')
     return receivers
 
 def git_config_info():
@@ -1437,11 +1553,13 @@ def dmx_mjds_to_files(mjds,toas,dmxDict,mode='nb',file_only=False):
     return match_files
 
 def convert_enterprise_equads(model):
-    """ EQUADS from enterprise v3.1.0 and earlier follow a different convention than that
-    in Tempo/Tempo2/PINT; this function applies a simple conversion until a more general
-    fix is available. For example, with a given EFAC/EQUAD pair:
+    """ EQUADS from enterprise v3.3.0 and earlier follow temponest convention, rather than
+    that in Tempo/Tempo2/PINT; this function applies a simple conversion.
+    For example, with a given EFAC/EQUAD pair:
 
     EQUAD (pint) = EQUAD (enterprise) / EFAC
+
+    For more information, see https://github.com/nanograv/enterprise/releases/tag/v3.3.0
     """
     efacs = [x for x in model.keys() if 'EFAC' in x]
     equads = [x for x in model.keys() if 'EQUAD' in x]
@@ -1454,5 +1572,5 @@ def convert_enterprise_equads(model):
             old_eq = model[eq].value
             new_eq = old_eq/model[ef].value
             model[eq].value = new_eq
-            log.info(f"EQUAD has been converted from {old_eq} to {new_eq}.")
+            log.info(f"{eq} has been converted from {old_eq} to {new_eq}.")
         return model
