@@ -20,29 +20,87 @@ import subprocess
 from timing_analysis.utils import *
 import os
 
+
 # color blind friends colors and markers?
 #CB_color_cycle = ['#377eb8', '#ff7f00', '#4daf4a', '#f781bf', '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00']
 #MARKERS = ['.', 'v', 's', 'x', '^', 'D', 'p', 'P', '*']
 
 # Color scheme for consistent reciever-backend combos, same as published 12.5 yr
 colorschemes = {'thankful_2':{
-              "327_ASP":         "#BE0119",
-              "327_PUPPI":       "#BE0119",
-              "430_ASP":         "#FD9927",
-              "430_PUPPI":       "#FD9927",
+              "327_ASP":         "#6BA9E2",
+              "327_PUPPI":       "#6BA9E2",
+              "430_ASP":         "#6BA9E2",
+              "430_PUPPI":       "#6BA9E2",
               "L-wide_ASP":      "#6BA9E2",
               "L-wide_PUPPI":    "#6BA9E2",
-              "Rcvr1_2_GASP":    "#407BD5",
-              "Rcvr1_2_GUPPI":   "#407BD5",
+              "Rcvr1_2_GASP":    "#61C853",
+              "Rcvr1_2_GUPPI":   "#61C853",
               "Rcvr_800_GASP":   "#61C853",
               "Rcvr_800_GUPPI":  "#61C853",
-              "S-wide_ASP":      "#855CA0",
-              "S-wide_PUPPI":    "#855CA0",
-              "1.5GHz_YUPPI":    "#45062E",
-              "3GHz_YUPPI":      "#E5A4CB",
+              "S-wide_ASP":      "#6BA9E2",
+              "S-wide_PUPPI":    "#6BA9E2",
+              "1.5GHz_YUPPI":    "#40635F",
+              "3GHz_YUPPI":      "#40635F",
               "6GHz_YUPPI":      "#40635F",
+              "CHIME":           "#ECE133",
+              "unknown_LEAP":    "#FD9927",
+              "NRT.BON.1600":    "#FD9927",
+              "NRT.BON.1400":    "#FD9927",
+              "NRT.BON.2000":    "#FD9927",
+              "NRT.NUPPI.1484":  "#FD9927",
+              "NRT.NUPPI.1854":  "#FD9927",
+              "NRT.NUPPI.2154":  "#FD9927",
+              "NRT.NUPPI.2539":  "#FD9927",
+              "EFF.EBPP.1360":   "#855CA0",
+              "EFF.EBPP.1410":   "#855CA0",
+              "EFF.EBPP.2639":   "#855CA0",
+              "S60-2_asterix":   "#855CA0",
+              "JBO.DFB.1400":    "#407BD5",
+              "JBO.DFB.1520":    "#407BD5",
+              "WSRT.P2.1380":    "#E5A4CB",
+              "WSRT.P1.1380.C":  "#E5A4CB",
+              "WSRT.P1.2273.C":  "#E5A4CB",
+              "WSRT.P1.323.C":  "#40635F",
+              "WSRT.P1.367.C":  "#40635F",
+              "P217-3_asterix": "#855CA0",
+              "unknown_asterix": "#855CA0",
+              "P200-3_asterix": "#855CA0",
+              "P217-3_PuMa2":   "#855CA0",
+              "P217-6_LEAP":    "#855CA0",
+              "P217-3_LEAP":    "#855CA0",
+              "R217-3_LEAP":    "#855CA0",
+              "P200-3_LEAP":    "#855CA0",
+              "JBO.ROACH.1620": "#407BD5",
+              "1050CM_PDFB4":   "#BE0119",
+              "1050CM_PDFB1":   "#BE0119",
+              "1050CM_PDFB2":   "#BE0119",
+              "1050CM_PDFB3":   "#BE0119",
+              "1050CM_WBCORR":  "#BE0119",
+              "1050CM_CPSR2":   "#BE0119",
+              "1050CM_CASPSR":  "#BE0119",
+              "MULTI_CPSR2m":   "#BE0119",
+              "MULTI_PDFB1":    "#BE0119",
+              "H-OH_PDFB1":     "#BE0119",
+              "H-OH_CPSR2n":    "#BE0119",
+              "H-OH_CPSR2m":    "#BE0119",
+              "H-OH_PDFB4":     "#BE0119",
+              "MULTI_CPSR2m":   "#BE0119",
+              "MULTI_CPSR2n":   "#BE0119",
+              "MULTI_WBCORR":   "#BE0119",
+              "MULTI_PDFB2":    "#BE0119",
+              "MULTI_PDFB3":    "#BE0119",
+              "MULTI_PDFB4":    "#BE0119",
+              "UWL_Medusa":     "#BE0119",
+              "UWL_CASPSR":     "#BE0119",
+              "UWL_PDFB4":     "#BE0119",
+              "UWL_PDFB4_10CM": "#BE0119",
+              "UWL_PDFB4_40CM": "#BE0119",
+              "None":           "#808080",
+              "unknown_asterix": "#855CA0",
               "CHIME":           "#ECE133"
               }}
+
+
 # marker dictionary to be used if desired, currently all 'x'
 markers = {"327_ASP":        "x",
           "327_PUPPI":       "x",
@@ -52,17 +110,75 @@ markers = {"327_ASP":        "x",
           "L-wide_PUPPI":    "x",
           "Rcvr1_2_GASP":    "x",
           "Rcvr1_2_GUPPI":   "x",
-          "Rcvr_800_GASP":   "x",
-          "Rcvr_800_GUPPI":  "x",
-          "S-wide_ASP":      "x",
-          "S-wide_PUPPI":    "x",
+          "Rcvr_800_GASP":   "o",
+          "Rcvr_800_GUPPI":  "o",
+          "S-wide_ASP":      "o",
+          "S-wide_PUPPI":    "o",
           "1.5GHz_YUPPI":    "x",
+          "3GHz_YUPPI":      "o",
+          "6GHz_YUPPI":      "^",
+          "CHIME":           "x",
+          "NRT.BON.1600":    "x",
+          "NRT.BON.1400":    "o",
+          "NRT.BON.2000":    "^",
+          "NRT.NUPPI.1484":  "x",
+          "NRT.NUPPI.1854":  "o",
+          "NRT.NUPPI.2154":  "^",
+          "NRT.NUPPI.2539":  "^",
+          "EFF.EBPP.1360":   "o",
+          "EFF.EBPP.1410":   "x",
+          "EFF.EBPP.2639":   "^",
+          "S60-2_asterix":   "v",
+          "P217-3_asterix":  "x",
+          "P200-3_asterix":  "v",
+          "unknown_asterix": "v",
+          "P217-3_PuMa2":    "x",
+          "P200-3_LEAP":     "v",
+          "P217-6_LEAP":     "x",
+          "P217-3_LEAP":     "x",
+          "R217-3_LEAP":     "x",
+          "unknown_LEAP":    "x",
+          "JBO.DFB.1400":    "x",
+          "JBO.DFB.1520":    "o",
+          "JBO.ROACH.1620":  "^",
+          "WSRT.P2.1380":    "v",
+          "WSRT.P1.1380.C": "x",
+          "WSRT.P1.2273.C": "o",
+          "WSRT.P1.323.C": "x",
+          "WSRT.P1.367.C": "x",
+          "1050CM_PDFB4":   "x",
+          "1050CM_PDFB1":   "x",
+          "1050CM_PDFB2":   "x",
+          "1050CM_PDFB3":   "x",
+          "1050CM_WBCORR":  "x",
+          "1050CM_CPSR2":   "x",
+          "1050CM_CPSR2m":  "x",
+          "1050CM_CASPSR":  "x",
+          "MULTI_CPSR2m":   "o",
+          "MULTI_PDFB1":    "o",
+          "H-OH_PDFB1":     "^",
+          "H-OH_CPSR2m":   "^",
+          "H-OH_CPSR2n":   "^",
+          "H-OH_PDFB4":     "^",
+          "MULTI_CPSR2n":   "o",
+          "MULTI_WBCORR":   "o",
+          "MULTI_PDFB2":    "o",
+          "MULTI_PDFB3":    "o",
+          "MULTI_PDFB4":    "o",
+          "UWL_Medusa":     "v",
+          "UWL_PDFB4":      "v",
+          "UWL_PDFB4_10CM": "v",
+          "UWL_PDFB4_40CM": "v",
+          "UWL_CASPSR":     "v",
+          "None":           "x",
           "3GHz_YUPPI":      "x",
           "6GHz_YUPPI":      "x",
-          "CHIME":           "x"
+          "CHIME":           "x",
             }
 # Define the color map option
 colorscheme = colorschemes['thankful_2']
+#colorscheme = thesis_colorschemes['thesis']
+
 
 def call(x):
     subprocess.call(x,shell=True)
@@ -202,7 +318,6 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
             else:
                 errs = fitter.resids.residual_objs['toa'].get_data_error().to(u.us)
                 errs_pre = fitter.toas.get_errors().to(u.us)
-
     # Get MJDs
     if 'mjds' in kwargs.keys():
         mjds = kwargs['mjds']
@@ -226,10 +341,11 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
     # Get the set of unique receiver-bandend combos
     RCVR_BCKNDS = set(rcvr_bcknds)
 
+
     if 'figsize' in kwargs.keys():
         figsize = kwargs['figsize']
     else:
-        figsize = (10,4)
+        figsize = (10,5)
     if axs == None:
         fig = plt.figure(figsize=figsize)
         ax1 = fig.add_subplot(111)

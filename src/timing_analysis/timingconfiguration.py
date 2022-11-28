@@ -74,9 +74,20 @@ class TimingConfiguration:
             return self.config['free-params'] + [p for p in fitter.model.params if p.startswith("DMX_")]
         else:
             return self.config['free-params']
+        
+    #def get_febe_pairs(self):
+    #    febe_list = []
+    #    for f in to.orig_table['flags']:
+    #        if f['pta'] == 'NANOGrav':
+    #            febe_list.append(f['f'])
+    #        elif f['pta'] == 'EPTA' or 'PPTA':
+    #            febe_list.append(f['sys'])
+    #        febe_pairs = set(f for f in febe_list)
+    #    return febe_pairs
+
 
     def get_model_and_toas(self,usepickle=True,print_all_ignores=False,apply_initial_cuts=True,
-            excised=False,pout_tim_path=None):
+            excised=False,pout_tim_path=None, include_pn=True):
         """Return the PINT model and TOA objects"""
         par_path = os.path.join(self.par_directory,self.config["timing-model"])
         toas = self.config["toas"]
@@ -105,7 +116,7 @@ class TimingConfiguration:
 
         BIPM = self.get_bipm()
         EPHEM = self.get_ephem()
-        m = model.get_model(par_path)
+        m = model.get_model(par_path,allow_name_mixing=True)
         match = re.search(r"#\s+Created:\s+(\S+)", open(par_path).read())
         if match:
             m.created_time = match.group(1)
@@ -124,7 +135,9 @@ class TimingConfiguration:
                           ephem=EPHEM,
                           planets=PLANET_SHAPIRO,
                           model=m,
-                          picklefilename=picklefilename)
+                          picklefilename=picklefilename,
+                          include_pn=include_pn
+                        )
 
         # if we're dealing with wideband TOAs, each epoch has a single TOA, 
         # so don't bother checking to see if we can reduce entries
@@ -137,6 +150,9 @@ class TimingConfiguration:
         t.orig_table = t.table.copy()
 
         self.backendset = set([f['be'] for f in t.orig_table['flags']])
+        
+        #self.febe_set = self.get_febe_pairs(t)
+        self.febe_set = set([f['f'] for f in t.orig_table['flags']])
 
         # If reading an intermediate (pout/excised) tim file, can simply apply cuts
         if excised:
@@ -259,6 +275,9 @@ class TimingConfiguration:
         """ Apply manual cuts after everything else and warn if redundant """
         toas = self.apply_ignore(toas,specify_keys=['bad-toa'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
+        
+        toas = self.apply_ignore(toas,specify_keys=['bad-toa-averaged'],warn=warn)
+        apply_cut_select(toas,reason='manual cuts, specified keys')
 
         toas = self.apply_ignore(toas,specify_keys=['bad-file'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
@@ -286,6 +305,16 @@ class TimingConfiguration:
         if "ephem" in self.config.keys():
             return self.config['ephem']
         return None #return some default value instead?
+    
+    def get_febe_pairs(self,toas):
+        febe_list = []
+        for f in toas.orig_table['flags']:
+            if f['pta'] == 'NANOGrav':
+                febe_list.append(f['f'])
+            elif f['pta'] == 'EPTA' or 'PPTA':
+                febe_list.append(f['sys'])
+            febe_pairs = set(f for f in febe_list)
+        return febe_pairs
 
     def print_changelog(self):
         """Print changelog entries from .yaml in the notebook."""
@@ -385,6 +414,13 @@ class TimingConfiguration:
             return self.config['ignore']['bad-toa']
         return None
 
+    def get_bad_toas_averaged(self):
+        """ Return list of bad TOAs (lists: [filename, channel, subint]) """
+        if 'bad-toa-averaged' in self.config['ignore'].keys():
+            return self.config['ignore']['bad-toa-averaged']
+        return None
+
+    
     def get_investigation_files(self):
         """ Makes a list from which the timer can choose which files they'd like to manually inspect"""
         ff_list = sorted(glob.glob('/nanograv/timing/releases/15y/toagen/data/*/*/*.ff'))
@@ -413,8 +449,12 @@ class TimingConfiguration:
             Number of files at/below which a frontend/backend pair is orphaned.
 
         """
+        #if toas.get_flag_value('f') != None
+        #febe_pairs = set(toas.get_flag_value('f')[0])
+
         febe_pairs = set(toas.get_flag_value('f')[0])
         log.info(f'Frontend/backend pairs present in this data set: {febe_pairs}')
+
 
         febe_to_cut = []
         for febe in febe_pairs:
@@ -643,7 +683,7 @@ class TimingConfiguration:
 
     def apply_ignore(self,toas,specify_keys=None,warn=False,model=None):
         """ Basic checks and return TOA excision info. """
-        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa','bad-range','bad-file',
+        OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa', 'bad-toa-averaged','bad-range','bad-file',
                         'orphaned-rec','prob-outlier','poor-febe','orb-phase-range']
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
@@ -801,6 +841,33 @@ class TimingConfiguration:
                 log.warning(f'One or more bad-toa entries lack reasons for excision; please add them.')
 
             apply_cut_flag(toas,np.array(btinds),'badtoa',warn=warn)
+        
+        if 'bad-toa-averaged' in valid_valued:
+            logwarntoa = False
+            names = np.array([f['name'] for f in toas.orig_table['flags']])
+            btinds = []
+            for bt in self.get_bad_toas_averaged():
+                name=bt[0]
+                bt_match = np.where((names==name))[0]
+                if len(bt_match): btinds.append(bt_match[0])
+                else: log.warning(f"Listed bad TOA not matched: [{name}]")
+            btinds = np.array(btinds)
+
+            # Check for pre-existing cut flags if there are bad toas matched:
+            cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
+            remaining = np.array([not cut for cut in cuts[btinds]])
+            alreadycut = np.invert(remaining)
+
+            if np.any(alreadycut):
+                log.info(f"{np.sum(alreadycut)} bad-toa entries already cut: {set(cuts[btinds][alreadycut])}")
+                log.info(f"bad-toa-averaged list can be reduced to {np.sum(remaining)} entries...")
+                for i in btinds[remaining]:
+                    print(f"  - [{names[i]},None,None]")
+
+            if logwarntoa:
+                log.warning(f'One or more bad-toa entries lack reasons for excision; please add them.')
+
+            apply_cut_flag(toas,np.array(btinds),'badtoa-averaged',warn=warn)
 
         return toas
 
