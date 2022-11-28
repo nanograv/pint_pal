@@ -35,6 +35,7 @@ jobs:
         python -m pip install pytest
         mamba install -c conda-forge tempo2 scikit-sparse
         python -m pip install -e .
+        export JUPYTER_PLATFORM_DIRS=1 && jupyter --paths
     - name: Test with Standard Pulsar
       run: |
         export PULSAR_NAME='J0605+3757'
