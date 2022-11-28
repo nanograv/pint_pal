@@ -1,6 +1,6 @@
 source: J0605+3757
 par-directory: tests/results/
-tim-directory: tests/tim/
+tim-directory: ./tests/tim/
 timing-model: J0605+3757_PINT_20220301.nb.par
 compare-model: archive/J0605+3757_PINT_20220223.nb.par
 toas:
@@ -28,7 +28,7 @@ outlier: # control outlier analysis runs
 intermediate-results: # use results from previous runs
   #noise-dir: /nanograv/share/15yr/timing/intermediate/20220301.Noise.nb.ac12e98/
   #compare-noise-dir: /nanograv/share/15yr/timing/intermediate/20220222.Noise.nb.4e07003/
-  excised-tim: tests/tim/J0605+3757.nb_excise.tim
+  excised-tim: ./tests/tim/J0605+3757.nb_excise.tim
   no-corner: true
 ignore: # toa excision
   mjd-start:
