@@ -24,11 +24,15 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Add conda to system path
+      run: |
+        # $CONDA is an environment variable pointing to the root of the miniconda directory
+        echo $CONDA/bin >> $GITHUB_PATH
     - name: Install Dependencies & Main Code
       run: |
         python -m pip install --upgrade pip
         python -m pip install pytest
-        $CONDA/bin/conda install -c conda-forge tempo2
+        conda install -c conda-forge tempo2
         python -m pip install -e .
     - name: Test with Standard Pulsar
       run: |
