@@ -8,10 +8,10 @@ from timing_analysis.notebook_runner import run_in_subdir
 base_dir = dirname(dirname(__file__))
 
 def config_files():
-    config_files = (glob(join(base_dir, 'configs/B*.nb.yaml'))
-                     + glob(join(base_dir, 'configs/J*.nb.yaml'))
-                     + glob(join(base_dir, 'configs/B*.wb.yaml'))
-                     + glob(join(base_dir, 'configs/J*.wb.yaml')))
+    config_files = (glob(join(base_dir, 'tests/configs/B*.nb.yaml'))
+                     + glob(join(base_dir, 'tests/configs/J*.nb.yaml'))
+                     + glob(join(base_dir, 'tests/configs/B*.wb.yaml'))
+                     + glob(join(base_dir, 'tests/configs/J*.wb.yaml')))
     config_files = sorted(config_files)
     basenames = [splitext(split(filename)[1])[0] for filename in config_files]
     print(config_files)
