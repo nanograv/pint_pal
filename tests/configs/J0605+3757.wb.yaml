@@ -1,6 +1,6 @@
 source: J0605+3757
-par-directory: results/
-tim-directory: /nanograv/timing/releases/15y/toagen/releases/2021.08.25-9d8d617/
+par-directory: tests/results/
+tim-directory: /home/runner/work/timing_analysis/timing_analysis/tests/tim
 timing-model: J0605+3757_PINT_20221021.wb.par
 compare-model: archive/J0605+3757_PINT_20220824.wb.par
 toas:
@@ -23,9 +23,9 @@ dmx:  # control dmx windowing/fixing
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 
 intermediate-results: # use results from previous runs
-  noise-dir: /nanograv/share/15yr/timing/intermediate/20221021.Noise.wb.a8ff4ddc/
-  compare-noise-dir: /nanograv/share/15yr/timing/intermediate/20220822.Noise.wb.a77c37bb/
-  excised-tim: /nanograv/share/15yr/timing/intermediate/20220913.Outlier.wb.281b67cb/J0605+3757.wb/J0605+3757.wb_excise.tim
+  #noise-dir: /nanograv/share/15yr/timing/intermediate/20221021.Noise.wb.a8ff4ddc/
+  #compare-noise-dir: /nanograv/share/15yr/timing/intermediate/20220822.Noise.wb.a77c37bb/
+  excised-tim: /home/runner/work/timing_analysis/timing_analysis/tests/tim/J0605+3757.wb_excise.tim
   no-corner: true
 ignore: # toa excision
   mjd-start:
