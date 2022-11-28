@@ -16,9 +16,9 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         'ruamel.yaml',
-        "pint_pulsar==0.9.1",
-        "enterprise-pulsar>=3.1.0",
-        "enterprise-extensions>=v2.1.0",
+        "pint_pulsar>=0.9.1",
+        "enterprise-pulsar>=3.3.2",
+        "enterprise-extensions>=v2.4.1",
         "pytest",
         "nbconvert",
         "ipywidgets>=7.6.3",
@@ -27,5 +27,5 @@ setup(
         "weasyprint",
         "pytest-xdist[psutil]>=2.3.0",
     ],
-    python_requires=">=3.6",
+    python_requires=">=3.7",
 )

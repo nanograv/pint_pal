@@ -1553,11 +1553,13 @@ def dmx_mjds_to_files(mjds,toas,dmxDict,mode='nb',file_only=False):
     return match_files
 
 def convert_enterprise_equads(model):
-    """ EQUADS from enterprise v3.1.0 and earlier follow a different convention than that
-    in Tempo/Tempo2/PINT; this function applies a simple conversion until a more general
-    fix is available. For example, with a given EFAC/EQUAD pair:
+    """ EQUADS from enterprise v3.3.0 and earlier follow temponest convention, rather than
+    that in Tempo/Tempo2/PINT; this function applies a simple conversion.
+    For example, with a given EFAC/EQUAD pair:
 
     EQUAD (pint) = EQUAD (enterprise) / EFAC
+
+    For more information, see https://github.com/nanograv/enterprise/releases/tag/v3.3.0
     """
     efacs = [x for x in model.keys() if 'EFAC' in x]
     equads = [x for x in model.keys() if 'EQUAD' in x]
@@ -1570,5 +1572,5 @@ def convert_enterprise_equads(model):
             old_eq = model[eq].value
             new_eq = old_eq/model[ef].value
             model[eq].value = new_eq
-            log.info(f"EQUAD has been converted from {old_eq} to {new_eq}.")
+            log.info(f"{eq} has been converted from {old_eq} to {new_eq}.")
         return model

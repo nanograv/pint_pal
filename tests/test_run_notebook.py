@@ -41,7 +41,7 @@ def test_run_notebook(config_file, output_dir):
     global_log = join(output_dir, f'test-run-notebook.log')
     with open(global_log, 'a') as f:
         run_in_subdir(
-            join(base_dir, 'nb_templates/process_v1.0.ipynb'),
+            join(base_dir, 'nb_templates/process_v1.2.ipynb'),
             config_file,
             output_dir,
             log_status_to = f,
