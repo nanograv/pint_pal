@@ -26,6 +26,7 @@ setup(
         "numpy",
         "weasyprint",
         "pytest-xdist[psutil]>=2.3.0",
+        "jupyter"
     ],
     python_requires=">=3.7",
 )
