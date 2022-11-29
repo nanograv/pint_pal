@@ -127,7 +127,29 @@ class TimingConfiguration:
         if m.PSR.value != self.get_source():
             log.warning(f'{self.filename} source entry does not match par file value ({m.PSR.value}).')
 
-        picklefilename = os.path.basename(self.filename) + ".pickle.gz"
+        config_file_path = filename  # so that there is no confusion
+        picklefilename =  f'{os.path.basename(config_file_name)}.pickle.gz'
+        modification_times_d = {
+            f : os.stat(f).st_mtime
+            for f in [
+                config_file_path,
+                os.path.join(self.tim_directory, picklefilename)
+            ]
+        }
+        newer_file = max(modification_times_d, key=modification_times_d.get)
+
+        # only print a warning in the case that the pickle file is older, but
+        # requested; AND MAKE IT BIG AND OBVIOUS so it won't easily be missed.
+        if usepickle and newer_file is config_file_path:
+            log.info(
+                '\x1b[44;5;75mPLEASE BE ADVISED:\033[0m ' +
+                f"\x1b[38;5;80mPickled file '{picklefilename}' was modified "+
+                f"less recently than '{config_file_path}'!  Proceeding "     +
+                "with pickled file; run with 'usepickle=False' to use the "  +
+                "newer non-pickled configuration and regenerate the pickle." +
+                "\033[0m"
+            )
+
         # Merge toa_objects (check this works for list of length 1)
         t = toa.get_TOAs([os.path.join(self.tim_directory,t) for t in toas],
                           usepickle=usepickle,
