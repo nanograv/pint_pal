@@ -1,6 +1,6 @@
 source: J0605+3757
 par-directory: tests/results/
-tim-directory: /home/runner/work/timing_analysis/timing_analysis/tests/tim
+tim-directory: tests/tim/
 timing-model: J0605+3757_PINT_20221021.wb.par
 compare-model: archive/J0605+3757_PINT_20220824.wb.par
 toas:
@@ -25,7 +25,7 @@ dmx:  # control dmx windowing/fixing
 intermediate-results: # use results from previous runs
   #noise-dir: /nanograv/share/15yr/timing/intermediate/20221021.Noise.wb.a8ff4ddc/
   #compare-noise-dir: /nanograv/share/15yr/timing/intermediate/20220822.Noise.wb.a77c37bb/
-  excised-tim: /home/runner/work/timing_analysis/timing_analysis/tests/tim/J0605+3757.wb_excise.tim
+  excised-tim: tests/tim/J0605+3757.wb_excise.tim
   no-corner: true
 ignore: # toa excision
   mjd-start:
