@@ -131,7 +131,7 @@ class TimingConfiguration:
         unpickled_filename = os.path.basename(self.filename)
         picklefilename =  f'{unpickled_filename}.pickle.gz'
         modification_times_d = {
-            f : os.stat(f'{rootdir}/{f}').st_mtime
+            f : os.stat(os.path.join(rootdir, f)).st_mtime
             for f in [unpickled_filename, picklefilename]
         }
         newer_file = max(modification_times_d, key=modification_times_d.get)
