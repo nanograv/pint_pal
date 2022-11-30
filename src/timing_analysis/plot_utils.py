@@ -367,7 +367,7 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
                 mkr = markers[r_b_label]
                 if restype == 'both':
                     mkr_pre = '.'
-            except:
+            except Exception:
                 mkr = 'x'
                 log.log(1, "Rec/Bknd combo doesn't have a marker label!!")
         if 'color' in kwargs.keys():
@@ -375,7 +375,7 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
         else:
             try:
                 clr = colorscheme[r_b_label]
-            except:
+            except Exception:
                 clr = 'k'
                 log.log(1, "Rec/Bknd combo doesn't have a color!!")
         if 'alpha' in kwargs.keys():
@@ -2091,25 +2091,25 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
             r_b_label = ""
         else:
             r_b_label = rcvr_bcknds[inds][0]
-    # Get plot preferences
-    if 'fmt' in kwargs.keys():
-        mkr = kwargs['fmt']
-    else:
-        try:
-            mkr = markers[r_b_label]
-            if restype == 'both':
-                mkr_pre = '.'
-        except:
-            mkr = 'x'
-            log.log(1, "Rec/Bknd combo doesn't have a marker label!!")
-    if 'color' in kwargs.keys():
-        clr = kwargs['color']
-    else:
-        try:
-            clr = colorscheme[r_b_label]
-        except:
-            clr = 'k'
-            log.log(1, "Rec/Bknd combo doesn't have a color!!")
+        # Get plot preferences
+        if 'fmt' in kwargs.keys():
+            mkr = kwargs['fmt']
+        else:
+            try:
+                mkr = markers[r_b_label]
+                if restype == 'both':
+                    mkr_pre = '.'
+            except Exception:
+                mkr = 'x'
+                log.log(1, "Rec/Bknd combo doesn't have a marker label!!")
+        if 'color' in kwargs.keys():
+            clr = kwargs['color']
+        else:
+            try:
+                clr = colorscheme[r_b_label]
+            except Exception:
+                clr = 'k'
+                log.log(1, "Rec/Bknd combo doesn't have a color!!")
         if 'alpha' in kwargs.keys():
             alpha = kwargs['alpha']
         else:
