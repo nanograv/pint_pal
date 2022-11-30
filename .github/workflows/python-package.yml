@@ -39,6 +39,7 @@ jobs:
       run: |
         export PULSAR_NAME='J0605+3757'
         export JUPYTER_PLATFORM_DIRS=1 && jupyter --paths
+        pwd
         pytest tests/test_run_notebook.py -n auto -k $PULSAR_NAME
         mv tmp-* nb_outputs
     - name: Archive Notebook Output Files
