@@ -110,14 +110,22 @@ def run_in_subdir(template_nb, config_file, output_dir=None, log_status_to=None,
     os.makedirs(cfg_dir)
     err_file = os.path.join(cfg_dir, f'{cfg_name}.traceback')
     output_nb = os.path.join(cfg_dir, f'{cfg_name}.ipynb')
-
-    run_notebook(
-        template_nb,
-        config_file,
-        output_nb,
-        err_file = err_file,
-        workdir = cfg_dir,
-        verbose = verbose,
-        log_status_to = log_status_to,
-        transformations = transformations,
-    )
+    
+    try:
+        run_notebook(
+            template_nb,
+            config_file,
+            output_nb,
+            err_file = err_file,
+            workdir = cfg_dir,
+            verbose = verbose,
+            log_status_to = log_status_to,
+            transformations = transformations,
+        )
+    except Exception as e:
+        print(e)
+        os.system('pwd')
+        os.system('ls -lht')
+        os.system('tree')
+        print(output_nb)
+        os.system(f'cat {errfile}')
