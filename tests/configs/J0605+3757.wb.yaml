@@ -2,7 +2,8 @@ source: J0605+3757
 par-directory: tests/results/
 tim-directory: tests/tim/
 timing-model: J0605+3757_PINT_20221021.wb.par
-compare-model: archive/J0605+3757_PINT_20220824.wb.par
+compare-model:
+    #archive/J0605+3757_PINT_20220824.wb.par
 toas:
 - J0605+3757.Rcvr1_2.GUPPI.15y.x.wb.tim
 - J0605+3757.Rcvr_800.GUPPI.15y.x.wb.tim
