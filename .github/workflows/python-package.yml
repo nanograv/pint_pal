@@ -20,7 +20,7 @@ jobs:
 
     steps:
     - name: Install pdflatex
-      run: apt-get install texlive-latex-base
+      run: sudo apt-get install texlive-latex-base
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v3
