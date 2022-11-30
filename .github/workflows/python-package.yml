@@ -40,6 +40,8 @@ jobs:
         export PULSAR_NAME='J0605+3757'
         export JUPYTER_PLATFORM_DIRS=1 && jupyter --paths
         pwd
+        ls tests/tim/J0605+3757.Rcvr1_2.GUPPI.15y.x.nb.tim
+        ls tests/ test/tim -lht
         pytest tests/test_run_notebook.py -n auto -k $PULSAR_NAME
         mv tmp-* nb_outputs
     - name: Archive Notebook Output Files
