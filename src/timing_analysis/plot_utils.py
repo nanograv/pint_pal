@@ -176,7 +176,6 @@ markers = {"327_ASP":        "x",
           "6GHz_YUPPI":      "x",
           "CHIME":           "x",
             }
-
 # Define the color map option
 colorscheme = colorschemes['thankful_2']
 #colorscheme = thesis_colorschemes['thesis']
@@ -364,13 +363,21 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
         if 'fmt' in kwargs.keys():
             mkr = kwargs['fmt']
         else:
-            mkr = markers[r_b_label]
-            if restype == 'both':
-                mkr_pre = '.'
+            try:
+                mkr = markers[r_b_label]
+                if restype == 'both':
+                    mkr_pre = '.'
+            except Exception:
+                mkr = 'x'
+                log.log(1, "Rec/Bknd combo doesn't have a marker label!!")
         if 'color' in kwargs.keys():
             clr = kwargs['color']
         else:
-            clr = colorscheme[r_b_label]
+            try:
+                clr = colorscheme[r_b_label]
+            except Exception:
+                clr = 'k'
+                log.log(1, "Rec/Bknd combo doesn't have a color!!")
         if 'alpha' in kwargs.keys():
             alpha = kwargs['alpha']
         else:
@@ -2088,13 +2095,21 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
         if 'fmt' in kwargs.keys():
             mkr = kwargs['fmt']
         else:
-            mkr = markers[r_b_label]
-            if restype == 'both':
-                mkr_pre = '.'
+            try:
+                mkr = markers[r_b_label]
+                if restype == 'both':
+                    mkr_pre = '.'
+            except Exception:
+                mkr = 'x'
+                log.log(1, "Rec/Bknd combo doesn't have a marker label!!")
         if 'color' in kwargs.keys():
             clr = kwargs['color']
         else:
-            clr = colorscheme[r_b_label]
+            try:
+                clr = colorscheme[r_b_label]
+            except Exception:
+                clr = 'k'
+                log.log(1, "Rec/Bknd combo doesn't have a color!!")
         if 'alpha' in kwargs.keys():
             alpha = kwargs['alpha']
         else:
@@ -3255,7 +3270,7 @@ def plot_settings():
         "6GHz_YUPPI":      "#40635F",
         "CHIME":           "#ECE133",
         }}
-    
+
     # marker dictionary to be used if desired, currently all 'x'
     markers = {"327_ASP":        "x",
           "327_PUPPI":       "x",
@@ -3274,10 +3289,10 @@ def plot_settings():
           "6GHz_YUPPI":      "x",
           "CHIME":           "x",
            }
-    
+
     # Define the color map option
     colorscheme = colorschemes['thankful_2']
-    
+
     return markers, colorscheme
 
 def get_fitter(yaml):
@@ -3382,10 +3397,10 @@ def plot_by_color(ax, x, y, err, bknds, rn_off, be_legend, be_format):
         mkr = markers[r_b_label]
         clr = colorscheme[r_b_label]
         ax.errorbar(x[inds], y[inds] - (rn_off * u.us), yerr=err[inds], fmt=mkr, color=clr, label=r_b_label, alpha=0.5)
-        
+
     ylim = (max(np.abs(y - (rn_off * u.us))).value + 0.6 * max(np.abs(err)).value)
     ax.set_ylim(-1 * ylim * 1.08, ylim * 1.08)
-    
+
     if be_legend:
         handles, labels = ax.get_legend_handles_labels()
         labels, handles = zip(*sorted(zip(labels, handles), key=lambda t: t[0]))        
@@ -3412,7 +3427,6 @@ def plot_by_color(ax, x, y, err, bknds, rn_off, be_legend, be_format):
         if be_format == 'horiz':
             plt.legend(handles, fixed_labels, loc='lower left', ncol=len(fixed_labels), borderpad=0.1, columnspacing=0.1)
             ax.set_ylim(-1 * ylim * 1.2, ylim * 1.08)
-        
 
 def rec_labels(axs, bcknds, years_avg):
     """
@@ -3459,14 +3473,14 @@ def rec_labels(axs, bcknds, years_avg):
         for a in axs:
             has_gbt = True
             a.axvline(guppi, linewidth=0.75, color='k', linestyle='--', alpha=0.6)
-    
+
     ycoord = 1.1
     x_min_yr = min(years_avg)
     x_max_yr = max(years_avg)
-    
+
     tform = axs[0].get_xaxis_transform()
     va = ha = 'center'
-    
+
     if has_ao and has_gbt:
         if has_yuppi:
             axs[0].text((puppi+x_max_yr)/2., ycoord, 'PUPPI/GUPPI/YUPPI', transform=tform, va=va, ha=ha)
@@ -3498,7 +3512,7 @@ def rec_labels(axs, bcknds, years_avg):
             axs[0].text((x_min_yr+x_max_yr)/2., ycoord, 'GUPPI', transform=tform, va=va, ha=ha)
     if has_yuppi and not has_guppi and not has_puppi:
         axs[0].text((x_min_yr+x_max_yr)/2., ycoord, 'YUPPI', transform=tform, va=va, ha=ha)
-            
+
 def rn_sub(testing, rn_subtract, fo_nb, fo_wb):
     if rn_subtract:
         if testing:
