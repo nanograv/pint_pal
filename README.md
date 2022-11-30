@@ -2,9 +2,9 @@
 
 A long-lived repository for NANOGrav Timing analysis work.
 
-`timing_analysis` includes tools and notebook templates to facilitate transparency and reproducibility in timing pulsars using PINT. Configuration (`.yaml`) files contain relatively compact metadata to capture decisions made during the timing process so that such information can naturally be version controlled. Config files can be plugged into standardized notebook templates to asses and update results. Many of the underlying tools are agnostic to TOA type (e.g. narrowband/wideband).
+`timing_analysis` includes tools and notebook templates to facilitate transparency and reproducibility in timing pulsars using PINT. Configuration (`.yaml`) files contain relatively compact metadata to capture decisions made during the timing process so that such information can naturally be version controlled. Configuration files can be "plugged into" standardized notebook templates to asses and update results.
 
-For more information about available tools and use cases, go here [under construction].
+More information about available tools and use cases coming soon!
 
 Getting started
 ---------------
@@ -16,7 +16,7 @@ PINT is necessary for core functionality of timing_analysis, but the following p
 - enterprise_outliers
 - pypulse
 
-There are instructions for installing these packages and set up your environment here: https://github.com/ipta/pulsar-env.
+There are instructions for installing these packages and setting up your environment here: https://github.com/ipta/pulsar-env.
 
 Installation
 ------------
@@ -35,4 +35,12 @@ $ cd timing_analysis
 $ pip install .
 ```
 
-There are more instructions for developing code here [under construction], including further suggestions for setting up a standard environment, preferred workflow for opening pull requests, etc.
+To further develop `timing_analysis` code, fork this repository, clone your fork, then:
+
+```
+$ cd timing_analysis
+$ pip install -e .
+$ git remote add upstream https://github.com/nanograv/timing_analysis
+```
+
+Before making changes, we highly recommend using `pulsar-env` (see above) to set up a consistent environment. Submit changes for review by opening a PR from your fork.
