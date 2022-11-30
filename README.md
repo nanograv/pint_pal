@@ -16,7 +16,7 @@ PINT is necessary for core functionality of timing_analysis, but the following p
 - enterprise_outliers
 - pypulse
 
-There are instructions for installing these packages and setting up your environment here: https://github.com/ipta/pulsar-env.
+There are instructions for installing these packages and setting up your environment here: https://github.com/ipta/pulsar-env. Note that installing `mamba` must be done from a clean (base) conda environment; you can make a fresh environment with, e.g.: `conda create --name myenv`.
 
 Installation
 ------------
