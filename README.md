@@ -1,6 +1,6 @@
 # Timing analysis
 
-A long-lived repository for NANOGrav Timing analysis work.
+A repository for standardizing timing analysis and data combination work with a Jupyter notebook framework and corresponding tools. 
 
 `timing_analysis` includes tools and notebook templates to facilitate transparency and reproducibility in timing pulsars using PINT. Configuration (`.yaml`) files contain relatively compact metadata to capture decisions made during the timing process so that such information can naturally be version controlled. Configuration files can be "plugged into" standardized notebook templates to asses and update results.
 
