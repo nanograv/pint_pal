@@ -56,7 +56,7 @@ def ipta_standard_reflag(toa, f_alt, fe_alt, be_alt, pta):
     #reflag_add_empty(toa, 'fe')
 
 
-def process_reflagging(timfile, outfile, alt_flag_dict, pta, bipm_ver='BIPM2019', eph='DE441'):
+def process_reflagging(timfile, outfile, alt_flag_dict, pta, bipm_ver='BIPM2019', eph='DE440'):
     t = toa.get_TOAs(timfile, bipm_version=bipm_ver,ephem=eph)
     ipta_standard_reflag(t, alt_flag_dict['f'], alt_flag_dict['fe'], alt_flag_dict['be'], pta)
 

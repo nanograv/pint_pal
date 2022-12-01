@@ -40,7 +40,7 @@ actions = [
 
 [defaults]
     # for loading the TOAs
-    ephemeris = 'DE441'
+    ephemeris = 'DE440'
     bipm = 'BIPM2019'
 
     # used by the reflagger everywhere the value is missing entirely
