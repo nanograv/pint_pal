@@ -2,7 +2,6 @@
 import argparse
 import asyncio
 
-
 import pathlib
 import pint.logging
 import pint.toa as toa
@@ -13,6 +12,9 @@ import tomli
 from loguru import logger as log
 #pint.logging.setup(level=pint.logging.script_level)
 
+
+# the orignal ###############################################################
+#
 # This is v0 of a script to load in a tim file and bring flags into alignment with the IPTA data standard
 # TO-DO
 # ------
@@ -59,6 +61,8 @@ def process_reflagging(timfile, outfile, alt_flag_dict, pta, bipm_ver='BIPM2019'
     ipta_standard_reflag(t, alt_flag_dict['f'], alt_flag_dict['fe'], alt_flag_dict['be'], pta)
 
     t.write_TOA_file(outfile, format='tempo2')
+
+#############################################################################
 
 
 # contains the logic for the new version
@@ -121,13 +125,13 @@ class HoldingClass():
 
 
 async def main(
-       *, 
+       *,
        config_file_path = None,
-       tim_file_path = None, 
+       tim_file_path = None,
        output_file_path = None,
        pulsar_timing_array = None
 ):
-   
+
     # use async here for parallel file i/o if helpful
     _config_d = tomli.load(open(config_file_path, 'rb'))
 
@@ -136,7 +140,6 @@ async def main(
         operations_l = _config_d['actions'],
         missing_flag = _config_d['defaults']['missing_flag']
     )
-
 
     # legacy
     process_reflagging(
@@ -155,7 +158,7 @@ async def main(
     potatoes.process_reflagging(t)
     t.write_TOA_file(f'{output_file_path}.new', format='tempo2')
 
-    # compare (lol, just run diff)
+    # compare (lol, just run diff and print the output)
     diff_output = subprocess.Popen(
         ['diff', '-u', '--color', output_file_path, f'{output_file_path}.new']
     ).stdout
@@ -191,12 +194,12 @@ if  __name__=="__main__":
 
     parser.add_argument(
         '--timfile',
-        '-t', 
+        '-t',
         nargs = 1,
         dest = 'tim_file_path',
         type = pathlib.Path,
         help = 'the Tim file to re-flag',
-        default = None, 
+        default = None,
         required = True
     )
 
@@ -213,12 +216,12 @@ if  __name__=="__main__":
 
     parser.add_argument(
         '--pta',
-        '-p', 
+        '-p',
         nargs = 1,
         dest = 'pulsar_timing_array',
         type = str,
         help = 'the PTA to which the orignal Tim file belongs',
-        default = None, 
+        default = None,
         required = True
     )
 

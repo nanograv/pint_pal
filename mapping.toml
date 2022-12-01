@@ -20,7 +20,7 @@ actions = [
 
     # backend
     ['clone', ['be', 'i']],
-    
+
     # processing version identifier
     ['add_if_missing', ['proc', '']],
 
@@ -38,11 +38,10 @@ actions = [
 ]
 
 
-
 [defaults]
     # for loading the TOAs
     ephemeris = 'DE441'
-    bipm = 'BIPM2019' 
+    bipm = 'BIPM2019'
 
     # used by the reflagger everywhere the value is missing entirely
     missing_flag = 'unknown'
