@@ -12,6 +12,11 @@ import shutil
 import argparse
 import glob
 import os
+import numpy as np
+from matplotlib import pyplot as plt
+import timing_analysis.lite_utils as lu
+import pint.utils
+import astropy.units as u
 
 # accessible to functions here, apparently
 TA_PATH = "/home/jovyan/work/timing_analysis/" # assume running from here?
