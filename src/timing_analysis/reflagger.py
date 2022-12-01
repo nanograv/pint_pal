@@ -185,7 +185,7 @@ if  __name__=="__main__":
         dest = 'config_file_path',
         type = pathlib.Path,
         help = 'the toml file defining the flag mapping',
-        default = pathlib.Path('mapping.toml'),
+        default = None,
         required = True
     )
 

@@ -1,0 +1,48 @@
+# NOTE that comments aren't actually allowed in toml files...
+# so while this file works fine with `tomli` in Python, problems may occur
+# elsewhere
+
+# USAGE
+# `['clone', [a,b]]` directives identify `a` with `b` in the case that one of
+# them is missing; if both are present, nothing is changed.  If both of `a`
+# and `b` are missing, they will be added with a default value.
+#
+# `['add_if_missing', [flag, value]]` directives check for the existence of a
+# flag `flag` and add it with value `value` if `value` exists as a variable in
+# the scope of the re-flagger class; otherwise, use a default value.
+
+actions = [
+    # frontend_backend
+    ['clone', ['f', 'sys']],
+
+    # frontend
+    ['clone', ['fe', 'r']],
+
+    # backend
+    ['clone', ['be', 'i']],
+    
+    # processing version identifier
+    ['add_if_missing', ['proc', '']],
+
+    # band description
+    ['add_if_missing', ['B', '']],
+
+    # bandwidth
+    ['add_if_missing', ['bw', '']],
+
+    # observation length, in seconds
+    ['add_if_missing', ['tobs', '']],
+
+    # the origin PTA
+    ['add_if_missing', ['pta', 'pulsar_timing_array']],
+]
+
+
+
+[defaults]
+    # for loading the TOAs
+    ephemeris = 'DE441'
+    bipm = 'BIPM2019' 
+
+    # used by the reflagger everywhere the value is missing entirely
+    missing_flag = 'unknown'
