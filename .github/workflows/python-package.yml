@@ -53,11 +53,4 @@ jobs:
         name: TestNB-OutputFiles
         path: |
           nb_outputs
-          !nb_outputs/**.pdf
-    - name: Archive Notebook's Timing Report
-      uses: actions/upload-artifact@v3
-      with:
-        name: TestNB-Report
-        path: |
-          nb_outputs/**.nb/**.summary.nb.pdf
         
