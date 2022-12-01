@@ -112,12 +112,28 @@ class HoldingClass():
         self.ipta_alt_flags = {'f': 'sys', 'fe': 'r', 'be': 'i'}
 
 
+def git_diff_color_words(orig_file_path, new_file_path):
+    diff_output = subprocess.Popen(
+        [
+            'git',
+            '--no-pager',
+            'diff',
+            '--color-words',
+            '--no-index',
+            orig_file_path,
+            new_file_path
+        ]
+    )
+    print(diff_output)
+
+
 async def main(
        *,
        config_file_path = None,
        tim_file_path = None,
        output_file_path = None,
-       pulsar_timing_array = None
+       pulsar_timing_array = None,
+       do_diff = False
 ):
 
     # use async here for parallel file i/o if helpful
@@ -146,19 +162,12 @@ async def main(
     t.write_TOA_file(f'{output_file_path}.new', format='tempo2')
 
     # compare (lol, just run diff and print the output)
-    diff_output = subprocess.Popen(
-        [
-            'git',
-            '--no-pager',
-            'diff',
-            '--color-words',
-            '--no-index',
+    if do_diff:
+        diff_output = git_diff_color_words(
             output_file_path,
             f'{output_file_path}.new'
-        ]
-    ).stdout
-
-    print(diff_output)
+        )
+        print(diff_output)
 
 
 def entry_point(*, args = None):
@@ -168,6 +177,7 @@ def entry_point(*, args = None):
             tim_file_path = args.tim_file_path[0],
             output_file_path = args.output_file_path[0],
             pulsar_timing_array = args.pulsar_timing_array[0],
+            do_diff = args.do_diff
         )
     )
 
@@ -218,6 +228,16 @@ if  __name__=="__main__":
         help = 'the PTA to which the orignal Tim file belongs',
         default = None,
         required = True
+    )
+
+    parser.add_argument(
+        '--diff',
+        '-d',
+        dest = 'do_diff',
+        help = 'output a colorized diff between the two versions',
+        action='store_const',
+        const=True,
+        default = False
     )
 
     args = parser.parse_args()
