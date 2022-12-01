@@ -74,33 +74,26 @@ class HoldingClass():
 
     # both flags set in the data originally is normal and okay?
     def action_clone(self, toa, source, dest):
-        both = [toa.get_flag_value(source)[0][0],
-                toa.get_flag_value(dest)[0][0]]
+        both = [
+            toa.get_flag_value(source)[0],
+            toa.get_flag_value(dest)[0]
+        ]
         a,b = both
+        print(both)
 
-        if a == b == None:
-            toa[source] = self.__missing_flag
-            toa[dest] = self.__missing_flag
+        flags = [
+            a[i]
+            if a[i] is not None
+            else b[i] if b[i] is not None
+            else self.__missing_flag
+            for i in range(len(a))
+        ]
 
-        # both flags should differ, and one should remain unset
-        if (not None in both) or a == b:
-           # raise ValueError(
-           #     'both flags should differ and one should remain unset; '
-           #     f' {a} {b}'
-           # )
-           print('returning', a, b)
-           return
-        # True: copied whichever was not None
-        result = {
-            i : all(j is not None for j in [i,i]) for i in [a,b]
-        }
-        print(result)
-
-        for k,v in result.items():
-            if k is not None:
-                print(k,v)
-                toa[dest] = k
-                toa[source] = k
+        print(toa[source])
+        print(source)
+        print(type(flags))
+        toa[source] = flags
+        toa[dest] = flags
 
 
     # need to accommodate the case where a variable is referred to
@@ -109,7 +102,6 @@ class HoldingClass():
             toa[flag] = (
                 locals()[value] if value in locals() else self.__missing_flag
             )
-
 
     def __init__(self, operations_l, missing_flag):
         self.__operations_l = operations_l
