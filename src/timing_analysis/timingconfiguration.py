@@ -149,10 +149,7 @@ class TimingConfiguration:
         assert np.all(t.table["index"]==np.arange(len(t)))
         t.orig_table = t.table.copy()
 
-        self.backendset = set([f['be'] for f in t.orig_table['flags']])
-        
-        #self.febe_set = self.get_febe_pairs(t)
-        self.febe_set = set([f['f'] for f in t.orig_table['flags']])
+        #self.febe_set = set([f['f'] for f in t.orig_table['flags']])  # if this is necessary, set to None if f doesn't exist
 
         # If reading an intermediate (pout/excised) tim file, can simply apply cuts
         if excised:
@@ -161,6 +158,7 @@ class TimingConfiguration:
 
         # Add 'cut' flags to TOAs according to config 'ignore' block.
         if apply_initial_cuts:
+            self.backendset = set([f['be'] for f in t.orig_table['flags']])
             self.check_for_orphaned_recs(t)
 
             # Apply simul flags/cuts if appropriate
