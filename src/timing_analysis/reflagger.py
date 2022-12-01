@@ -79,7 +79,6 @@ class HoldingClass():
             toa.get_flag_value(dest)[0]
         ]
         a,b = both
-        print(both)
 
         flags = [
             a[i]
@@ -89,9 +88,6 @@ class HoldingClass():
             for i in range(len(a))
         ]
 
-        print(toa[source])
-        print(source)
-        print(type(flags))
         toa[source] = flags
         toa[dest] = flags
 
