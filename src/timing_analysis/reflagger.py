@@ -135,7 +135,6 @@ async def main(
     # use async here for parallel file i/o if helpful
     _config_d = tomli.load(open(config_file_path, 'rb'))
 
-    print(_config_d)
     potatoes = HoldingClass(
         operations_l = _config_d['actions'],
         missing_flag = _config_d['defaults']['missing_flag']
@@ -160,7 +159,15 @@ async def main(
 
     # compare (lol, just run diff and print the output)
     diff_output = subprocess.Popen(
-        ['diff', '-u', '--color', output_file_path, f'{output_file_path}.new']
+        [
+            'git',
+            '--no-pager',
+            'diff',
+            '--color-words',
+            '--no-index',
+            output_file_path,
+            f'{output_file_path}.new'
+        ]
     ).stdout
 
     print(diff_output)
