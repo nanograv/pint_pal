@@ -1,7 +1,7 @@
 # Here we keep track of global default settings
 
 # Choice of clock, SSE
-LATEST_BIPM = "BIPM2019"    # latest clock realization to use
+LATEST_BIPM = "BIPM2021"    # latest clock realization to use
 LATEST_EPHEM = "DE440"      # latest solar system ephemeris to use
 
 # Toggle various corrections
