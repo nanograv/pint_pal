@@ -4,8 +4,6 @@
 name: "Notebook Pipeline (Ubuntu)"
 
 on:
-  push:
-    branches: [ "feature/**" ]
   pull_request:
     branches: 
       - main
