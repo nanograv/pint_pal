@@ -12,7 +12,7 @@ import warnings
 #from pint.models import (
 #    parameter as p,
 #)
-import timing_analysis.PINT_parameters as pparams
+import pint_pal.PINT_parameters as pparams
 from pint.models.timing_model import Component
 import copy
 import astropy.units as u

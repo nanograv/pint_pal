@@ -3,8 +3,8 @@ This module provides tools for checking the finality of yamls
 and gathering results for hand-off to DWG
 """
 
-from timing_analysis.yamlio import *
-from timing_analysis.timingconfiguration import TimingConfiguration
+from pint_pal.yamlio import *
+from pint_pal.timingconfiguration import TimingConfiguration
 from astropy import log
 from datetime import datetime
 import subprocess
@@ -14,12 +14,12 @@ import glob
 import os
 import numpy as np
 from matplotlib import pyplot as plt
-import timing_analysis.lite_utils as lu
+import pint_pal.lite_utils as lu
 import pint.utils
 import astropy.units as u
 
 # accessible to functions here, apparently
-TA_PATH = "/home/jovyan/work/timing_analysis/" # assume running from here?
+TA_PATH = "/home/jovyan/work/pint_pal/" # assume running from here?
 INTERMED_PATH = "/nanograv/share/15yr/timing/intermediate/"
 TA_RESULTS = os.path.join(TA_PATH,"results")
 TA_CONFIGS = os.path.join(TA_PATH,"configs")

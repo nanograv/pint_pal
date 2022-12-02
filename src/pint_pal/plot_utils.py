@@ -17,10 +17,10 @@ import pint.fitter as fitter
 import pint.utils as pu
 import subprocess
 # import extra util functions brent wrote
-from timing_analysis.utils import *
+from pint_pal.utils import *
 import os
-from timing_analysis.timingconfiguration import TimingConfiguration
-import timing_analysis.lite_utils as lu
+from pint_pal.timingconfiguration import TimingConfiguration
+import pint_pal.lite_utils as lu
 
 # color blind friends colors and markers?
 #CB_color_cycle = ['#377eb8', '#ff7f00', '#4daf4a', '#f781bf', '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00']
@@ -567,7 +567,7 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
             FD_delay, FD_delay_err_plus, FD_delay_err_minus, legend_text = get_FD_delay(fitter.model, freqs*1e-3)
             #print(FD_delay)
             psr_name = fitter.model.PSR.value
-            """For when new version of PINT is default on timing_analysis    
+            """For when new version of PINT is default on pint_pal    
         FD_delay = pint.models.frequency_dependent.FD.FD_delay(fitter.model,freqs)
         
             """
@@ -585,7 +585,7 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
         try:
             FD_delay, FD_delay_err_plus, FD_delay_err_minus, legend_text = get_FD_delay(model_object, freqs*1e-3)
             psr_name = model_object.PSR.value
-            """For when new version of PINT is default on timing_analysis    
+            """For when new version of PINT is default on pint_pal    
         FD_delay = pint.models.frequency_dependent.FD.FD_delay(fitter.model,freqs)
         
             """
@@ -1178,7 +1178,7 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
                          horizontalalignment='right', verticalalignment='bottom')
     if model:
         from pint.simulation import make_fake_toas_fromMJDs
-        from timing_analysis.lite_utils import remove_noise
+        from pint_pal.lite_utils import remove_noise
         fake_mjds = np.linspace(np.min(dmxmjd),np.max(dmxmjd),num=int(np.max(dmxmjd)-np.min(dmxmjd)))
         fake_mjdTime = Time(fake_mjds,format='mjd')
 

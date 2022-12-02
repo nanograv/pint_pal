@@ -9,7 +9,7 @@ import pint.models as models
 from pint.models.parameter import maskParameter
 from pint.models.timing_model import Component
 
-from timing_analysis.lite_utils import add_feJumps
+from pint_pal.lite_utils import add_feJumps
 
 class LiteUtilsTests(unittest.TestCase):
     """lite_utils.py testing class"""

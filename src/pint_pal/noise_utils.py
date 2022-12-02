@@ -448,7 +448,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
     model.noise_mtime = mtime.isot
 
     if convert_equad_to_t2:
-        from timing_analysis.lite_utils import convert_enterprise_equads
+        from pint_pal.lite_utils import convert_enterprise_equads
         model = convert_enterprise_equads(model)
 
     return model

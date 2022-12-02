@@ -11,7 +11,7 @@ from datetime import datetime
 from datetime import date
 import yaml
 import os
-import timing_analysis.par_checker as pc
+import pint_pal.par_checker as pc
 from ipywidgets import widgets
 import pypulse
 import glob
@@ -899,7 +899,7 @@ def cut_summary(toas, tc, print_summary=False, donut=True, legend=True, save=Fal
     Parameters
     ==========
     toas: `pint.toa.TOAs` object
-    tc: `timing_analysis.timingconfiguration.TimingConfiguration` object
+    tc: `pint_pal.timingconfiguration.TimingConfiguration` object
     print_summary: bool, optional
         Print reasons for cuts and respective nTOA/percentages
     donut: bool, optional
@@ -1245,7 +1245,7 @@ def display_auto_ex(tc, mo, cutkeys=['epochdrop', 'outlier10'], plot_type='profi
     
     Parameters
     ==========
-    tc: `timing_analysis.timingconfiguration.TimingConfiguration` object
+    tc: `pint_pal.timingconfiguration.TimingConfiguration` object
     mo: `pint.model.TimingModel` object
     cutkeys: any valid -cut keys (default = ['epochdrop', 'outlier10'])
     plot_type: str specifying plot type (profile [default], GTpd, or YFp)
@@ -1303,7 +1303,7 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],multi=Fa
     ==========
     toas: `pint.toa.TOAs` object 
     model: `pint.model.TimingModel` object 
-    tc_object: `timing_analysis.timingconfiguration` object
+    tc_object: `pint_pal.timingconfiguration` object
     cuts: list, optional
         cuts to highlight in residuals plot (default: manual cuts)
     multi: bool, optional
@@ -1377,7 +1377,7 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],multi=Fa
             plt.savefig(f'{model.PSR.value}_manual_hl_nb.png', dpi=150)
     
     # reset cuts for additional processing
-    from timing_analysis.utils import apply_cut_select
+    from pint_pal.utils import apply_cut_select
     apply_cut_select(toas,reason='resumption after highlighting cuts')
 
 def check_toa_version(toas):

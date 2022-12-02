@@ -3,8 +3,8 @@ This module provides tools for automatically updating results (yamls/pars)
 based on output from autoruns on Thorny Flats (or potentially elsewhere).
 """
 
-from timing_analysis.yamlio import *
-from timing_analysis.timingconfiguration import TimingConfiguration
+from pint_pal.yamlio import *
+from pint_pal.timingconfiguration import TimingConfiguration
 from astropy import log
 from datetime import datetime
 import subprocess
@@ -12,7 +12,7 @@ import argparse
 import os
 
 # accessible to functions here, apparently
-TA_PATH = "/home/jovyan/work/timing_analysis/" # assume running from here?
+TA_PATH = "/home/jovyan/work/pint_pal/" # assume running from here?
 INTERMED_PATH = "/nanograv/share/15yr/timing/intermediate/"
 TA_RESULTS = os.path.join(TA_PATH,"results")
 TA_ARCHIVE = os.path.join(TA_RESULTS,"archive")
@@ -29,10 +29,10 @@ def new_noise_results(input_pars,logs_only=False):
         show logs describing file manipulations without making any changes (default: False)
 
     Example usage (from TA base dir):
-    >>> python src/timing_analysis/update_results.py -p [par file(s)]
+    >>> python src/pint_pal/update_results.py -p [par file(s)]
 
     ...or to do a test run first without making any changes:
-    >>> python src/timing_analysis/update_results.py --logsonly -p [par file(s)]
+    >>> python src/pint_pal/update_results.py --logsonly -p [par file(s)]
     """
     for par_path in input_pars:
         # Compose yaml file corresponding to input par
@@ -109,10 +109,10 @@ def new_outlier_results(input_tims,logs_only=False):
         show logs describing file manipulations without making any changes (default: False)
 
     Example usage (from TA base dir):
-    >>> python src/timing_analysis/update_results.py -t [tim file(s)]
+    >>> python src/pint_pal/update_results.py -t [tim file(s)]
 
     ...or to do a test run first without making any changes:
-    >>> python src/timing_analysis/update_results.py --logsonly -t [tim file(s)]
+    >>> python src/pint_pal/update_results.py --logsonly -t [tim file(s)]
     """
     for tim_path in input_tims:
         # Compose yaml file corresponding to input par
@@ -143,7 +143,7 @@ def add_ready_for(input_yamls,version):
         data set version string (e.g. v1.1)
 
     Example usage (from TA base dir):
-    >>> python src/timing_analysis/update_results.py -y [yaml file(s)] --readyfor [version]
+    >>> python src/pint_pal/update_results.py -y [yaml file(s)] --readyfor [version]
     """
     time = datetime.now()
     date_string = time.strftime("%Y-%m-%d")

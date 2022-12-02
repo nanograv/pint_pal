@@ -9,7 +9,7 @@ NANOGrav 12.5-year data set (version 3) parameter files
 import unittest
 from astropy import log
 import pint.models as model
-from timing_analysis.par_checker import *
+from pint_pal.par_checker import *
 
 log.setLevel("ERROR") # do not show PINT warnings here to avoid clutter
 

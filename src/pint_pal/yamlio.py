@@ -8,7 +8,7 @@ import argparse
 import glob
 from astropy import log
 import numpy as np
-from timing_analysis.defaults import *
+from pint_pal.defaults import *
 import os
 
 yaml = YAML()
