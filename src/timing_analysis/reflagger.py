@@ -164,7 +164,8 @@ async def main(
     # compare (lol, just run diff and print the output)
     if do_diff:
         diff_output = git_diff_color_words(
-            output_file_path,
+            #output_file_path,
+            tim_file_path,
             f'{output_file_path}.new'
         )
         print(diff_output)
