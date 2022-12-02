@@ -39,6 +39,7 @@ def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdi
     default_transformations = {
         'config': f'"{config_file}"',
         'par_directory': f'"{os.path.join(base_dir, "results")}"',
+        'tim_directory': f'"{os.path.join(base_dir, "tim")}"',
     }
     if transformations is None:
         transformations = default_transformations

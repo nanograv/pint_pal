@@ -11,7 +11,7 @@ def test_git_branch_contains_right_changes():
     other_files = []
     for f in files:
         d, b = os.path.dirname(f), os.path.basename(f)
-        if d == "config" and (b.startswith("J") or b.startswith("B")):
+        if d == "configs" and (b.startswith("J") or b.startswith("B")):
             psr_files.append(f)
         elif d == "results" or d == "results/archive":
             psr_files.append(f)

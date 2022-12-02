@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "timing-analysis"
+version = "1.2.1"
+authors = [
+  { name="Joe Glaser", email="joe.glaser@nanograv.org" },
+  { name="Joe Swiggum", email="joe.swiggum@nanograv.org" },
+  { name="Thankful Cromartie", email="thanful.cromartie@nanograv.org" },
+  { name="Deborah Good", email="deborah.good@nanograv.org" },
+  { name="Anne Archibald", email="anne.archibald@nanograv.org" },
+  { name="Kevin Wilson", email="kevin.wilson@nanograv.org" },
+]
+description = "A long-lived repository for NANOGrav Pulsar Timing analysis work."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/nanograv/timing_analysis"
+"Bug Tracker" = "https://github.com/nanograv/timing_analysis/issues"
