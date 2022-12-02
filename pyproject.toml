@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "timing-analysis"
-version = "1.2.1"
+name = "pint_pal"
+version = "1.0.0"
 authors = [
   { name="Joe Glaser", email="joe.glaser@nanograv.org" },
   { name="Joe Swiggum", email="joe.swiggum@nanograv.org" },
@@ -23,5 +23,5 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/nanograv/timing_analysis"
-"Bug Tracker" = "https://github.com/nanograv/timing_analysis/issues"
+"Homepage" = "https://github.com/nanograv/pint_pal"
+"Bug Tracker" = "https://github.com/nanograv/pint_pal/issues"

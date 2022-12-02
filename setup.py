@@ -4,9 +4,9 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="timing_analysis",
+    name="pint_pal",
     version="1.0.0",
-    description="NANOGrav Timimg Analysis",
+    description="NANOGrav Pulsar Timimg Analysis Software",
     author="Joe Swiggum",
     author_email="swiggumj@gmail.com",
     url="",
@@ -29,5 +29,5 @@ setup(
         "jupyter",
         "seaborn"
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.8",
 )
