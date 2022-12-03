@@ -130,7 +130,7 @@ class TimingConfiguration:
         config_file_path = self.filename  # so that there is no confusion
         picklefilename =  f'{os.path.basename(config_file_path)}.pickle.gz'
         modification_times_d = {
-            f : os.stat(f).st_mtime
+            f : os.stat(f).st_mtime if os.path.exists(f) else -1
             for f in [
                 config_file_path,
                 os.path.join(self.tim_directory, picklefilename)
