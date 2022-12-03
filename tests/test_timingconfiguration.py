@@ -15,7 +15,7 @@ class TimingConfigurationTests(unittest.TestCase):
     def setUp(self):
         """ Load a TimingConfiguration object during setup """
         self.tc = TimingConfiguration("config/goodconfig.yaml")
-        self.badtc = TimingConfiguration("config/badconfig.yaml")
+        self.badtc = TimingConfiguration("configs/badconfig.yaml")
 
 
     def test_get_source(self):
