@@ -20,8 +20,6 @@ logs/
 *.log
 
 # Temporary pickle files and .tim files
-*.tim
-*.tim.pickle.gz
 temp/
 
 # other tex files
