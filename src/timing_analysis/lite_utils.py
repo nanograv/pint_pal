@@ -767,7 +767,7 @@ def log_notebook_to_file(source, toa_type, base_dir="."):
         # Start a new log file every time you reload the yaml
     log_file_name = os.path.join(
             base_dir, 
-            f"{source}.{toa_type.lower()}.{time.strftime('%Y-%m-%d_%H:%M:%S')}.log")
+            f"{source}.{toa_type.lower()}.{time.strftime('%Y-%m-%d_%H%M%S')}.log")
     fh = logging.FileHandler(log_file_name)
     fh.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
     log.addHandler(fh)
