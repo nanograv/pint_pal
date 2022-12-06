@@ -21,7 +21,7 @@ Getting started
 There are instructions for installing these packages and setting up your environment here: https://github.com/ipta/pulsar-env. Please note that installing `mamba` must be done from a clean (base) `conda` environment; you can make and activate a fresh environment with, e.g.: 
 
 ```
-$ conda create --name installer && conda activate installer`.
+$ conda create --name installer && conda activate installer
 ```
 
 Installation

@@ -5,8 +5,8 @@ with open("README.md", "r") as fh:
 
 setup(
     name="pint_pal",
-    version="1.0.0",
-    description="NANOGrav Pulsar Timimg Analysis Software",
+    version="0.1.0",
+    description="Notebook/PINT-based Pulsar Timimg Analysis Software",
     author="Joe Swiggum",
     author_email="swiggumj@gmail.com",
     url="",
