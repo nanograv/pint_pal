@@ -12,10 +12,10 @@ import argparse
 import os
 
 # accessible to functions here, apparently
-TA_PATH = "/home/jovyan/work/pint_pal/" # assume running from here?
+PAL_PATH = "/home/jovyan/work/pint_pal/" # assume running from here?
 INTERMED_PATH = "/nanograv/share/15yr/timing/intermediate/"
-TA_RESULTS = os.path.join(TA_PATH,"results")
-TA_ARCHIVE = os.path.join(TA_RESULTS,"archive")
+PAL_RESULTS = os.path.join(PAL_PATH,"results")
+PAL_ARCHIVE = os.path.join(PAL_RESULTS,"archive")
 
 def new_noise_results(input_pars,logs_only=False):
     """ Check in new par file, point to new noise results, edit yaml appropriately
@@ -40,7 +40,7 @@ def new_noise_results(input_pars,logs_only=False):
         src = p.split('_')[0]
         mode = p.split('.')[-2]
         y = f"{src}.{mode}.yaml" # yaml file only
-        yaml_path = os.path.join(TA_PATH,"configs",y)
+        yaml_path = os.path.join(PAL_PATH,"configs",y)
 
         # Determine noise-dir from par_path unless told to do otherwise (needs dev if so)
         noise_path = os.path.dirname(os.path.dirname(par_path)) # assumes etc./noise/results/*.par
@@ -51,15 +51,15 @@ def new_noise_results(input_pars,logs_only=False):
             log.info(f"Associating input par {p} with {y}")
 
             # Copy par file(s) and git add
-            log.info(f"Copying {p} to {TA_RESULTS}")
+            log.info(f"Copying {p} to {PAL_RESULTS}")
             # Could also add a check here for whether results are already up to date
             if not logs_only:
-                process_cpnew = subprocess.Popen(["cp",par_path,TA_RESULTS],
+                process_cpnew = subprocess.Popen(["cp",par_path,PAL_RESULTS],
                                                 stdout=subprocess.PIPE,
                                                 stderr=subprocess.PIPE)
                 # Ensures next process waits for this one to finish...
                 _stdout, _stderr = process_cpnew.communicate()
-                process_gitadd = subprocess.Popen(["git","add",os.path.join(TA_RESULTS,p)],
+                process_gitadd = subprocess.Popen(["git","add",os.path.join(PAL_RESULTS,p)],
                                                 stdout=subprocess.PIPE,
                                                 stderr=subprocess.PIPE)
                 _stdout, _stderr = process_gitadd.communicate()
@@ -71,9 +71,9 @@ def new_noise_results(input_pars,logs_only=False):
             log.info(f"Previous par file: {prev_par}")
 
             # git mv to archive
-            log.info(f"Moving {pp} to {TA_ARCHIVE}")
+            log.info(f"Moving {pp} to {PAL_ARCHIVE}")
             if not logs_only:
-                process_gitmv = subprocess.Popen(["git","mv",prev_par,TA_ARCHIVE],
+                process_gitmv = subprocess.Popen(["git","mv",prev_par,PAL_ARCHIVE],
                                                 stdout=subprocess.PIPE,
                                                 stderr=subprocess.PIPE)
                 _stdout, _stderr = process_gitmv.communicate()
@@ -120,7 +120,7 @@ def new_outlier_results(input_tims,logs_only=False):
         src = t.split('.')[0]
         mode = t.split('.')[1].split('_')[0]
         y = f"{src}.{mode}.yaml" # yaml file only
-        yaml_path = os.path.join(TA_PATH,"configs",y)
+        yaml_path = os.path.join(PAL_PATH,"configs",y)
 
         log.info(src)
         if os.path.exists(yaml_path):
