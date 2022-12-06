@@ -16,7 +16,7 @@ import glob
 import pint
 import astropy
 # import enterprise_extensions as e_e # NOTE - enterprise_extensions has no attribute __version__
-from timing_analysis.ftester import get_fblist, param_check, summarize_Ftest
+from pint_pal.ftester import get_fblist, param_check, summarize_Ftest
 import scipy.stats
 import copy
 

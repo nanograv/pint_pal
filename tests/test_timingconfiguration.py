@@ -6,7 +6,7 @@ These tests are performed on YAML configuration files
 
 
 import unittest
-from timing_analysis.timingconfiguration import TimingConfiguration
+from pint_pal.timingconfiguration import TimingConfiguration
 
 
 class TimingConfigurationTests(unittest.TestCase):

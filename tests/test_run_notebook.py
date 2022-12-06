@@ -3,7 +3,7 @@ from os.path import dirname, join, split, splitext
 from datetime import datetime
 from glob import glob
 import pytest
-from timing_analysis.notebook_runner import run_in_subdir
+from pint_pal.notebook_runner import run_in_subdir
 
 base_dir = dirname(dirname(__file__))
 

@@ -9,9 +9,9 @@ from multiprocessing import Pool
 from pint.fitter import ConvergenceFailure
 import copy
 from scipy.special import fdtr
-from timing_analysis.utils import apply_cut_flag, apply_cut_select
-from timing_analysis.lite_utils import write_tim
-from timing_analysis.dmx_utils import *
+from pint_pal.utils import apply_cut_flag, apply_cut_select
+from pint_pal.lite_utils import write_tim
+from pint_pal.dmx_utils import *
 
 def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     """Necessary set-up to run gibbs sampler, and run it. Return pout.
@@ -87,7 +87,7 @@ def calculate_pout(model, toas, tc_object):
     ==========
     model: `pint.model.TimingModel` object
     toas: `pint.toa.TOAs` object
-    tc_object: `timing_analysis.timingconfiguration` object
+    tc_object: `pint_pal.timingconfiguration` object
     """
     method = tc_object.get_outlier_method()
     results_dir = f'outlier/{tc_object.get_outfile_basename()}'
@@ -126,7 +126,7 @@ def make_pout_cuts(model,toas,tc_object,outpct_threshold=8.0):
     Parameters
     ==========
     toas: `pint.toa.TOAs` object
-    tc_object: `timing_analysis.timingconfiguration` object
+    tc_object: `pint_pal.timingconfiguration` object
     outpct_threshold: float, optional
        cut file's remaining TOAs (maxout) if X% were flagged as outliers (default set by 5/64=8%) 
     """
@@ -261,7 +261,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6,nproc=1):
     ===========
     model: `pint.model.TimingModel` object
     toas: `pint.toa.TOAs` object
-    tc_object: `timing_analysis.timingconfiguration` object
+    tc_object: `pint_pal.timingconfiguration` object
     ftest_threshold: float
         optional, threshold below which files will be dropped
     nproc: number of parallel processes to use for tests

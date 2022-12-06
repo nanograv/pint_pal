@@ -3,8 +3,8 @@ This module provides tools for checking the finality of yamls
 and gathering results for hand-off to DWG
 """
 
-from timing_analysis.yamlio import *
-from timing_analysis.timingconfiguration import TimingConfiguration
+from pint_pal.yamlio import *
+from pint_pal.timingconfiguration import TimingConfiguration
 from astropy import log
 from datetime import datetime
 import subprocess
@@ -14,15 +14,15 @@ import glob
 import os
 import numpy as np
 from matplotlib import pyplot as plt
-import timing_analysis.lite_utils as lu
+import pint_pal.lite_utils as lu
 import pint.utils
 import astropy.units as u
 
 # accessible to functions here, apparently
-TA_PATH = "/home/jovyan/work/timing_analysis/" # assume running from here?
+PAL_PATH = "/home/jovyan/work/pint_pal/" # assume running from here?
 INTERMED_PATH = "/nanograv/share/15yr/timing/intermediate/"
-TA_RESULTS = os.path.join(TA_PATH,"results")
-TA_CONFIGS = os.path.join(TA_PATH,"configs")
+PAL_RESULTS = os.path.join(PAL_PATH,"results")
+PAL_CONFIGS = os.path.join(PAL_PATH,"configs")
 
 def make_release_dir(type, overwrite=False):
     """
@@ -62,9 +62,9 @@ def check_cleared(type):
         narrowband (nb), wideband (wb), or both (nbwb)
     """
     if type == "nbwb":
-        yamls = glob.glob(f"{TA_CONFIGS}/*.yaml")
+        yamls = glob.glob(f"{PAL_CONFIGS}/*.yaml")
     else:
-        yamls = glob.glob(f"{TA_CONFIGS}/*.{type}.yaml")
+        yamls = glob.glob(f"{PAL_CONFIGS}/*.{type}.yaml")
     for y in yamls:
         tc = TimingConfiguration(y)
         if not tc.get_check_cleared():
@@ -114,7 +114,7 @@ def locate_copy_results(yamls,type,destination=None):
         source = tc.get_source()
         noise_dir = tc.get_noise_dir()
         latest_yaml = [y]
-        latest_par = [f"{TA_PATH}{tc.get_model_path()}"]
+        latest_par = [f"{PAL_PATH}{tc.get_model_path()}"]
         latest_tim = glob.glob(f"{noise_dir}results/{source}_*.tim") # underscore to avoid duplicating split-tel results
         noise_chains = glob.glob(f"{noise_dir}{source}_{type}/chain_1.txt")
         noise_pars = glob.glob(f"{noise_dir}{source}_{type}/pars.txt")

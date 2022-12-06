@@ -7,8 +7,8 @@ from nbconvert.preprocessors import ExecutePreprocessor, CellExecutionError
 import multiprocessing
 from glob import glob
 
-import timing_analysis
-from timing_analysis.notebook_templater import transform_notebook
+import pint_pal
+from pint_pal.notebook_templater import transform_notebook
 
 ansi_color = re.compile(r'\x1b\[([0-9]{1,3};)*[0-9]{1,3}m')
 

@@ -17,7 +17,7 @@ bad_files = [line.split()[0] for line in open(badfile).readlines() if not line.s
 # Where the data lives on the notebook server
 new_timing = "/nanograv/releases/15y/toagen/releases/2020.11.18-b8d329b"
 
-# Assumes current working dir is timing_analysis/configs/
+# Assumes current working dir is pint_pal/configs/
 ta_dir = ".."
 
 # If there are already .yaml files written

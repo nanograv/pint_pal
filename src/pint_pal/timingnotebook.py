@@ -97,9 +97,9 @@ class TimingNotebook:
         self.add_markdown_cell_skip('''\
         # \[set-up\], imports
 
-        Reminder (if working on the notebook server): grab current copies of relevant software before doing anything! Make sure your copy of `timing_analysis` is up to date and you're working on a development branch, e.g. `psr/J1234+5678/jks`. Then:
+        Reminder (if working on the notebook server): grab current copies of relevant software before doing anything! Make sure your copy of `pint_pal` is up to date and you're working on a development branch, e.g. `psr/J1234+5678/jks`. Then:
         ```
-        > cd ~/work/timing_analysis/
+        > cd ~/work/pint_pal/
         > pip install git+git://github.com/nanograv/pint --upgrade --user
         > pip install git+https://github.com/nanograv/enterprise.git --upgrade --user
         > pip install git+https://github.com/nanograv/enterprise_extensions.git --upgrade --user
@@ -107,14 +107,14 @@ class TimingNotebook:
         ```\
         ''',autorun)
         self.add_code_cell('''\
-        from timing_analysis.lite_utils import *
-        from timing_analysis.par_checker import *
-        from timing_analysis.plot_utils import *
-        from timing_analysis.utils import *
-        from timing_analysis.dmx_utils import *
-        import timing_analysis.noise_utils as nu
-        from timing_analysis.ftester import run_Ftests
-        from timing_analysis.timingconfiguration import TimingConfiguration
+        from pint_pal.lite_utils import *
+        from pint_pal.par_checker import *
+        from pint_pal.plot_utils import *
+        from pint_pal.utils import *
+        from pint_pal.dmx_utils import *
+        import pint_pal.noise_utils as nu
+        from pint_pal.ftester import run_Ftests
+        from pint_pal.timingconfiguration import TimingConfiguration
         import yaml
         from astropy import log
         import pint.fitter

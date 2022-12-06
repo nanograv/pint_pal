@@ -1,6 +1,6 @@
 import numpy as np
 from astropy import log
-from timing_analysis.utils import apply_cut_flag, apply_cut_select
+from pint_pal.utils import apply_cut_flag, apply_cut_select
 
 class DMXParameter:
     """

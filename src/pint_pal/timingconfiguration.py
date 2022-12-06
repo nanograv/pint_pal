@@ -18,10 +18,10 @@ from astropy import log
 from astropy.time import Time
 import yaml
 import glob
-from timing_analysis.utils import write_if_changed, apply_cut_flag, apply_cut_select
-from timing_analysis.lite_utils import new_changelog_entry
-from timing_analysis.lite_utils import check_toa_version, check_tobs
-from timing_analysis.defaults import *
+from pint_pal.utils import write_if_changed, apply_cut_flag, apply_cut_select
+from pint_pal.lite_utils import new_changelog_entry
+from pint_pal.lite_utils import check_toa_version, check_tobs
+from pint_pal.defaults import *
 
 class TimingConfiguration:
     """
