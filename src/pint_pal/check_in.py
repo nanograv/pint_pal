@@ -1,4 +1,4 @@
-from yamlio import read_yaml, write_yaml
+from timing_analysis.yamlio import read_yaml, write_yaml
 import os
 import glob
 import shutil
@@ -24,11 +24,12 @@ def shuffle_pars(tc):
 
     # Assummes the newest parfile in the working directory is the correct one
     new_par = max(glob.iglob("*.par"), key=os.path.getctime)
+    new_par_basename = os.path.split(new_par)[1]
 
     new_compare_model = os.path.join(archive_dir, timing_model_basename)
     shutil.copy(timing_model, new_compare_model)
-    repo.index.add(new_compare_model)
+    repo.index.add(os.path.join(os.getcwd(), new_compare_model))
 
     new_timing_model = os.path.join(par_dir, new_par_basename)
     shutil.copy(new_par, new_timing_model)
-    repo.index.add(new_timing_model)
+    repo.index.add(os.path.join(os.getcwd(), new_timing_model))
