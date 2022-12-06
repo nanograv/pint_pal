@@ -1,6 +1,8 @@
 # PINT Pal
 
 [![Notebook Pipeline (Ubuntu)](https://github.com/nanograv/pint_pal/actions/workflows/test_notebook.yml/badge.svg)](https://github.com/nanograv/pint_pal/actions/workflows/test_notebook.yml)
+[![PyPi Repository](https://img.shields.io/pypi/v/pint-pal.svg)](https://pypi.org/project/pint-pal/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/pint-pal.svg)](https://pypi.org/project/pint-pal/)
 
 A repository for standardizing timing analysis and data combination work with a Jupyter notebook framework and corresponding tools. 
 
