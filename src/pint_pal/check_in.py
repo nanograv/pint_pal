@@ -1,4 +1,4 @@
-from timing_analysis.yamlio import read_yaml, write_yaml
+from pint_pal.yamlio import read_yaml, write_yaml
 import os
 import glob
 import shutil
