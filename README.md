@@ -30,7 +30,7 @@ Installation
 `pint_pal` is now available on PyPI, so users who do not wish to develop code can grab the latest tagged version with:
 
 ```
-$ pip install pint_pal
+$ pip install pint-pal
 ```
 
 You may also access the latest development (not tagged) version of the repository by cloning it from GitHub, then installing:
