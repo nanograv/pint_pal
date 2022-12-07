@@ -27,7 +27,8 @@ setup(
         "weasyprint",
         "pytest-xdist[psutil]>=2.3.0",
         "jupyter",
-        "seaborn"
+        "seaborn",
+        "gitpython",
     ],
     python_requires=">=3.8",
 )
