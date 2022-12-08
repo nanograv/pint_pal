@@ -34,20 +34,12 @@ def shuffle_pars(tc):
     head = repo.commit("HEAD")
     tracked_files = set(item.path for item in head.tree.traverse())
     diff = head.diff(None) # diff between HEAD and current working directory state
-    # A file is changed if it's on either end of a diff entry
-    changed_files = set(item.a_path for item in diff)
-    changed_files |= set(item.b_path for item in diff)
-    
 
     if timing_model not in tracked_files:
         log.info(f"Par file to be archived ({timing_model}) is not tracked. "
                  f"Copying it to {archive_dir} and leaving the original.")
         shutil.copy(timing_model, new_compare_model)
         repo.index.add(os.path.join(os.getcwd(), new_compare_model))
-    elif timing_model in changed_files:
-        log.warning(f"Par file to be archived ({timing_model}) has uncommitted changes. "
-                    "Leaving it alone for now. Please resolve before committing "
-                    "the new timing solution.")
     else:
         log.info(f"Moving {timing_model} to {archive_dir}")
         shutil.move(timing_model, new_compare_model, copy_function=shutil.copy)
