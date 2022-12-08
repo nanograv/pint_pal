@@ -181,7 +181,7 @@ def convert_pint_to_tempo_parfile(path_to_par, op_path = "./", timing_pkg = 'tem
             
     return psr_name
 
-def write_par(fitter,toatype='',addext='',outfile=None, fmt=None):
+def write_par(fitter, toatype='', addext='', outfile=None, fmt=None, include_date=False):
     """Writes a timing model object to a par file in the working directory.
 
     Parameters
@@ -202,11 +202,13 @@ def write_par(fitter,toatype='',addext='',outfile=None, fmt=None):
 
     if outfile is None:
         source = fitter.get_allparams()['PSR'].value
-        date_str = date.today().strftime('%Y%m%d')
+        outfile = f'{source}_{fmt}'
+        if include_date:
+            outfile += f'_{date.today().strftime("%Y%m%d")}'
+        outfile += addext
         if toatype:
-            outfile = f'{source}_{fmt}_{date_str}{addext}.{toatype.lower()}.par'
-        else:
-            outfile = f'{source}_{fmt}_{date_str}{addext}.par'
+            outfile += f'.{toatype.lower()}'
+        outfile += '.par'
 
     with open(outfile, 'w') as fout:
         if fmt == 'PINT':
