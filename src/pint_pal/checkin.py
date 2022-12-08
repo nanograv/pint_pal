@@ -35,11 +35,11 @@ def shuffle_pars(tc):
     tracked_files = set(item.path for item in head.tree.traverse())
     diff = head.diff(None) # diff between HEAD and current working directory state
 
-    if timing_model not in tracked_files:
+    if os.path.relpath(timing_model, start=repo.working_tree_dir) not in tracked_files:
         log.info(f"Par file to be archived ({timing_model}) is not tracked. "
                  f"Copying it to {archive_dir} and leaving the original.")
         shutil.copy(timing_model, new_compare_model)
-        repo.index.add(os.path.join(os.getcwd(), new_compare_model))
+        repo.index.add(os.path.abspath(new_compare_model))
     else:
         log.info(f"Moving {timing_model} to {archive_dir}")
         shutil.move(timing_model, new_compare_model, copy_function=shutil.copy)
