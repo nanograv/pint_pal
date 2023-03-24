@@ -38,3 +38,6 @@ core.*
 /*.tim
 *.pickle.gz
 /*.out
+
+# dynamic version file
+_version.py
