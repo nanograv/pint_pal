@@ -1,11 +1,13 @@
 from setuptools import setup, find_packages
+import versioneer
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
     name="pint_pal",
-    version="0.1.0",
+    version=versioneer.get_version(),
+    cmdclass=versioneer.get_cmdclass(),
     description="Notebook/PINT-based Pulsar Timimg Analysis Software",
     author="Joe Swiggum",
     author_email="swiggumj@gmail.com",
