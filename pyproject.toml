@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "versioneer[toml]==0.28"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -25,3 +25,11 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/nanograv/pint_pal"
 "Bug Tracker" = "https://github.com/nanograv/pint_pal/issues"
+
+[tool.versioneer]
+VCS = "git"
+style = "pep440"
+versionfile_source = "src/pint_pal/_version.py"
+versionfile_build = "pint_pal/_version.py"
+tag_prefix = "v"
+parentdir_prefix = "pint-pal-"
