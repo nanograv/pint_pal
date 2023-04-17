@@ -38,6 +38,7 @@ def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdi
     if log_status_to is None:
         log_status_to = sys.stdout
 
+    config_file = os.path.abspath(config_file)
     with open(config_file) as f:
         config = yaml.load(f)
     par_directory = config['par-directory']
