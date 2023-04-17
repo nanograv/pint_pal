@@ -32,19 +32,31 @@ def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdi
     verbose:         Print a description of replacements made in the template notebook.
     transformations: Transformations to apply to the notebook.
     """
+    # base_dir = parent directory of directory containing config_file
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(config_file)))
+
+    # workdir = current working directory
     if workdir is None:
         workdir = os.getcwd()
     if log_status_to is None:
         log_status_to = sys.stdout
 
+    # Find absolute path to config_file (look in current working directory)
+    # os.path.abspath() and os.path.normpath() will leave absolute paths alone
     config_file = os.path.abspath(config_file)
+
+    # Find absolute paths to par_directory and tim_directory (look in base_dir)
     with open(config_file) as f:
         config = yaml.load(f)
     par_directory = config['par-directory']
     tim_directory = config['tim-directory']
     par_directory = os.path.normpath(os.path.join(base_dir, par_directory))
     tim_directory = os.path.normpath(os.path.join(base_dir, tim_directory))
+
+    # Find absolute path to template_nb (look in "pint_pal/nb_templates")
+    pint_pal_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    template_dir = os.path.join(pint_pal_dir, 'nb_templates')
+    template_nb = os.path.normpath(os.path.join(template_dir, template_nb))
 
     default_transformations = {
         'config': f'"{config_file}"',
