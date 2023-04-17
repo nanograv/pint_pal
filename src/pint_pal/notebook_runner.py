@@ -6,6 +6,8 @@ import re
 from nbconvert.preprocessors import ExecutePreprocessor, CellExecutionError
 import multiprocessing
 from glob import glob
+from ruamel.yaml import YAML
+yaml = YAML(typ='safe')
 
 import pint_pal
 from pint_pal.notebook_templater import transform_notebook
@@ -36,10 +38,17 @@ def run_notebook(template_nb, config_file, output_nb=None, err_file=None, workdi
     if log_status_to is None:
         log_status_to = sys.stdout
 
+    with open(config_file) as f:
+        config = yaml.load(f)
+    par_directory = config['par-directory']
+    tim_directory = config['tim-directory']
+    par_directory = os.path.normpath(os.path.join(base_dir, par_directory))
+    tim_directory = os.path.normpath(os.path.join(base_dir, tim_directory))
+
     default_transformations = {
         'config': f'"{config_file}"',
-        'par_directory': f'"{os.path.join(base_dir, "results")}"',
-        'tim_directory': f'"{os.path.join(base_dir, "tim")}"',
+        'par_directory': f'"{par_directory}"',
+        'tim_directory': f'"{tim_directory}"',
     }
     if transformations is None:
         transformations = default_transformations
