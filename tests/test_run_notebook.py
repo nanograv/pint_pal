@@ -3,7 +3,7 @@ from os.path import dirname, join, split, splitext
 from datetime import datetime
 from glob import glob
 import pytest
-from pint_pal.notebook_runner import run_in_subdir
+from pint_pal.notebook_runner import run_template_notebook
 
 base_dir = dirname(dirname(__file__))
 
@@ -40,9 +40,15 @@ def test_run_notebook(config_file, output_dir):
     """
     global_log = join(output_dir, f'test-run-notebook.log')
     with open(global_log, 'a') as f:
-        run_in_subdir(
-            join(base_dir, 'nb_templates/process_v1.2.ipynb'),
+        run_template_notebook(
+            'process_v1.2.ipynb',
             config_file,
-            output_dir,
-            log_status_to = f,
+            output_dir=output_dir,
+            log_status_to=f,
+            transformations = {
+                'write_prenoise': "True",
+                'write_results': "True",
+                'use_existing_noise_dir': "True",
+                'log_to_file': "True",
+            },
         )
