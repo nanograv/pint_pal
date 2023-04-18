@@ -1,6 +1,6 @@
 source: J0605+3757
-par-directory: tests/results/
-tim-directory: tests/tim/
+par-directory: results/
+tim-directory: tim/
 timing-model: J0605+3757_PINT_20220301.nb.par
 compare-model: archive/J0605+3757_PINT_20220223.nb.par
 toas:
