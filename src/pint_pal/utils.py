@@ -42,8 +42,12 @@ def whiten_resids(fitter, restype = 'postfit'):
         rs = fitter['time_resids']
         noise_rs = fitter['noise_resids']
         # Now check if red noise residuals
-        if "pl_red_noise" in noise_rs:
+        if "pl_red_noise" and "pl_DM_noise" in noise_rs:
+            wres = rs - noise_rs['pl_red_noise'] - noise_rs['pl_DM_noise']
+        elif "pl_red_noise" in noise_rs:
             wres = rs - noise_rs['pl_red_noise']
+        elif "pl_DM_noise" in noise_rs:
+            wres = rs - noise_rs['pl_DM_noise']
         else:
             log.warning("No red noise, residuals already white. Returning input residuals...")
             wres = rs
