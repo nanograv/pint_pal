@@ -1280,3 +1280,64 @@ def check_recentness_excision(tc):
     if used_excision != available_excision[-1]:
         log.warning(f"Using excision from {used_excision} but {available_excision[-1]} is available")
     return used_excision, available_excision
+
+
+def no_ecorr_average(toas, resids, use_noise_model=True):
+        """Create a dictionary to match those created by ecorr_avg for TOAs w/no-ecorr -- 
+        to be used with EPTA data for consistent IPTA averaged plots. 
+        
+        Use a toa object and residaul object as input as input instead of just residual object (oh well)
+        Also tell it pre/post fit.
+        
+        Arguments
+        ---------
+        toas[object]: PINT TOA object.
+        resids[object]: PINT residuals object
+        use_noise_model[boolean]: Default true.
+        
+        Returns a dictionary with the following entries:
+
+          mjds           Average MJD for each segment
+
+          freqs          Average topocentric frequency for each segment
+
+          time_resids    Average residual for each asegment, time units
+
+          noise_resids   Dictionary of per-noise-component average residual
+
+          errors         Uncertainty on averaged residuals
+
+          indices        List of lists giving the indices of TOAs in the original TOA table for each segment
+        """
+        
+        # We already know that TOAs do not have ecorr. Identify the indices where that's true.
+        inds= np.where(toas['pta']=='EPTA')[0]
+        
+        only_epta_toas = toas[inds]
+        
+        no_avg = {}
+        no_avg["mjds"] = only_epta_toas.get_mjds()
+
+        if use_noise_model:
+            err = resids.model.scaled_toa_uncertainty(only_epta_toas)
+        else:
+            err = only_epta_toas.get_errors()
+
+        # Weighted average of various quantities
+        no_avg = {}
+        no_avg["mjds"] = only_epta_toas.get_mjds()
+        no_avg["freqs"] = only_epta_toas.get_freqs()
+        no_avg["time_resids"] = resids.time_resids[inds]
+        no_avg["noise_resids"] = {}
+        for k in resids.noise_resids.keys():
+            no_avg["noise_resids"][k] = resids.noise_resids[k][inds]
+
+        # Uncertainties
+        no_avg["errors"] = err
+        
+        # Indices back into original TOA list
+        no_avg["indices"] = inds
+        
+
+        return no_avg
+    
