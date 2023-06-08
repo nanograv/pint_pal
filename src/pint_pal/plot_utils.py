@@ -27,7 +27,33 @@ import pint_pal.lite_utils as lu
 #MARKERS = ['.', 'v', 's', 'x', '^', 'D', 'p', 'P', '*']
 
 # Color scheme for consistent reciever-backend combos, same as published 12.5 yr
-colorschemes = {'thankful_2':{
+colorschemes = {'observatories':{
+              "ao":                    "#6BA9E2",
+              "gbt":                   "#61C853",
+              "vla":                   "#40635F",
+              "CHIME":                 "#ECE133",
+              "nancay":                "#407BD5",
+              "ncyobs":                "#407BD5",
+              "effelsberg_asterix":    "#407BD5",
+              "effelsberg":            "#407BD5",
+              "jodrell":               "#407BD5",
+              "jbroach":               "#407BD5",
+              "wsrt":                  "#E5A4CB",
+              "parkes":                "#BE0119",
+              "gmrt":                  "#855CA0",
+              "meerkat":               "#FD9927",
+              "None":                  "#808080"
+              },
+                
+           'pta':{
+              "InPTA":                  "#855CA0",
+              "EPTA":                   "#407BD5",
+              "NANOGrav":               "#61C853",
+              "PPTA":                   "#BE0119",
+              "MPTA":                   "#FD9927",
+              "None":                   "#808080"
+           },
+            'febe':{
               "327_ASP":         "#6BA9E2",
               "327_PUPPI":       "#6BA9E2",
               "430_ASP":         "#6BA9E2",
@@ -103,7 +129,33 @@ colorschemes = {'thankful_2':{
 
 
 # marker dictionary to be used if desired, currently all 'x'
-markers = {"327_ASP":        "x",
+markers = {'observatories':{
+              "ao":                    "x",
+              "gbt":                   "x",
+              "vla":                   "x",
+              "CHIME":                 "x",
+              "leap":                  "x",
+              "nancay":                "x",
+              "ncyobs":                "x",
+              "effelsberg_asterix":    "x",
+              "effelsberg":            "x",
+              "jodrell":               "x",
+              "jbroach":               "x",
+              "wsrt":                  "x",
+              "parkes":                "x",
+              "gmrt":                  "x",
+              "meerkat":               "x",
+              "None":                  "x"
+              },
+          'pta':{
+              "InPTA":                    "x",
+              "EPTA":                   "x",
+              "NANOGrav":                   "x",
+              "PPTA":                 "x",
+              "MPTA":                  "x",
+              "None":                  "x"
+           }, 
+        'febe': {"327_ASP":        "x",
           "327_PUPPI":       "x",
           "430_ASP":         "x",
           "430_PUPPI":       "x",
@@ -175,17 +227,18 @@ markers = {"327_ASP":        "x",
           "3GHz_YUPPI":      "x",
           "6GHz_YUPPI":      "x",
           "CHIME":           "x",
-            }
+            }}
 # Define the color map option
-colorscheme = colorschemes['thankful_2']
+#colorscheme = colorschemes['thankful_2']
 #colorscheme = thesis_colorschemes['thesis']
 
 
 def call(x):
     subprocess.call(x,shell=True)
 
-def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = False, whitened = False, \
-                        save = False, legend = True, title = True, axs = None, **kwargs):
+    
+def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = False, avg = False, whitened = False, \
+                        save = False, legend = True, title = True, axs = None, mixed_ecorr=False, **kwargs):
     """
     Make a plot of the residuals vs. time
 
@@ -197,6 +250,10 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
         'prefit' - plot the prefit residuals.
         'postfit' - plot the postfit residuals (default)
         'both' - overplot both the pre and post-fit residuals.
+    colorby ['string']: What to use to determine color/markers
+        'pta' - color residuals by PTA (default)
+        'obs' - color residuals by telescope 
+        'f'   - color residuals by frontend/backend pair (flag not used by all PTAs).
     plotsig [boolean] : If True plot number of measurements v. residuals/uncertainty, else v. residuals
         [default: False].
     avg [boolean] : If True and not wideband fitter, will compute and plot epoch-average residuals [default: False].
@@ -207,17 +264,19 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
     title [boolean] : If False, will not print plot title [default: True].
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
+        
 
     Optional Arguments:
     --------------------
     res [list/array] : List or array of residual values to plot. Will override values from fitter object.
     errs [list/array] : List or array of residual error values to plot. Will override values from fitter object.
     mjds [list/array] : List or array of TOA MJDs to plot. Will override values from toa object.
-    rcvr_bcknds[list/array] : List or array of TOA receiver-backend combinations. Will override values from toa object.
+    obs[list/array] : List or array of TOA observatories combinations. Will override values from toa object.
     figsize [tuple] : Size of the figure passed to matplotlib [default: (10,4)].
     fmt ['string'] : matplotlib format option for markers [default: ('x')]
     color ['string'] : matplotlib color option for plot [default: color dictionary in plot_utils.py file]
     alpha [float] : matplotlib alpha options for plot points [default: 0.5]
+    mixed_ecorr [boolean]: If True, allows avging with mixed ecorr/no ecorr TOAs.
     """
     # Check if wideband
     if fitter.is_wideband:
@@ -226,13 +285,24 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
             raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
     else:
         NB = True
-
+        
     # Check if want epoch averaged residuals
-    if avg == True and restype == 'prefit':
+    if avg == True and restype == 'prefit' and mixed_ecorr == True:
         avg_dict = fitter.resids_init.ecorr_average(use_noise_model=True)
-    elif avg == True and restype == 'postfit':
+        no_avg_dict = no_ecorr_average(fitter.toas, fitter.resids_init,use_noise_model=True)
+    elif avg == True and restype == 'postfit' and mixed_ecorr == True:
         avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
-    elif avg == True and restype == 'both':
+        no_avg_dict = no_ecorr_average(fitter.toas, fitter.resids,use_noise_model=True)
+    elif avg == True and restype == 'both' and mixed_ecorr == True:
+        avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
+        no_avg_dict = no_ecorr_average(fitter.toas, fitter.resids,use_noise_model=True)
+        avg_dict_pre = fitter.resids_init.ecorr_average(use_noise_model=True)
+        no_avg_dict_pre = no_ecorr_average(fitter.toas, fitter.resids_init,use_noise_model=True)
+    elif avg == True and restype == 'prefit' and mixed_ecorr == False:
+        avg_dict = fitter.resids_init.ecorr_average(use_noise_model=True)
+    elif avg == True and restype == 'postfit' and mixed_ecorr==False:
+        avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
+    elif avg == True and restype == 'both' and mixed_ecorr == False:
         avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
         avg_dict_pre = fitter.resids_init.ecorr_average(use_noise_model=True)
 
@@ -243,7 +313,10 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
     else:
         if restype == 'prefit':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    res = avg_dict['time_resids'].to(u.us)
+                    res_no_avg = no_avg_dict['time_resids'].to(u.us)
+                elif avg==True and mixed_ecorr == False:
                     res = avg_dict['time_resids'].to(u.us)
                 else:
                     res = fitter.resids_init.time_resids.to(u.us)
@@ -251,7 +324,10 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
                 res = fitter.resids_init.residual_objs['toa'].time_resids.to(u.us)
         elif restype == 'postfit':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    res = avg_dict['time_resids'].to(u.us)
+                    res_no_avg = no_avg_dict['time_resids'].to(u.us)
+                elif avg == True:
                     res = avg_dict['time_resids'].to(u.us)
                 else:
                     res = fitter.resids.time_resids.to(u.us)
@@ -259,7 +335,12 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
                 res = fitter.resids.residual_objs['toa'].time_resids.to(u.us)
         elif restype == 'both':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    res = avg_dict['time_resids'].to(u.us)
+                    res_no_avg = no_avg_dict['time_resids'].to(u.us)
+                    res_pre = avg_dict_pre['time_resids'].to(u.us)
+                    res_pre_no_avg = no_avg_dict_pre['time_resids'].to(u.us)
+                elif avg == True and mixed_ecorr == False:
                     res = avg_dict['time_resids'].to(u.us)
                     res_pre = avg_dict_pre['time_resids'].to(u.us)
                 else:
@@ -274,14 +355,27 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
 
     # Check if we want whitened residuals
     if whitened == True and ('res' not in kwargs.keys()):
-        if avg == True:
+        if avg == True and mixed_ecorr == True: 
+            if restype != 'both':
+                res = whiten_resids(avg_dict, restype=restype)
+                res_no_avg = whiten_resids(no_avg_dict, restype=restype)
+            else:
+                res = whiten_resids(avg_dict_pre, restype='prefit')
+                res_pre = whiten_resids(avg_dict, restype='postfit')
+                res_pre = res_pre.to(u.us)
+                res_no_avg = whiten_resids(avg_dict_pre, restype='prefit')
+                res_pre_no_avg = whiten_resids(avg_dict, restype='postfit')
+                res_pre_no_avg = res_pre_no_avg.to(u.us)
+            res = res.to(u.us)
+            res_no_avg = res_no_avg.to(u.us)
+        elif avg == True and mixed_ecorr == False: 
             if restype != 'both':
                 res = whiten_resids(avg_dict, restype=restype)
             else:
                 res = whiten_resids(avg_dict_pre, restype='prefit')
                 res_pre = whiten_resids(avg_dict, restype='postfit')
                 res_pre = res_pre.to(u.us)
-            res = res.to(u.us)
+            res = res.to(u.us)        
         else:
             if restype != 'both':
                 res = whiten_resids(fitter, restype=restype)
@@ -296,21 +390,32 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
         errs = kwargs['errs']
     else:
         if restype == 'prefit':
-            if avg == True:
+            if avg == True and mixed_ecorr == True:
+                errs = avg_dict['errors'].to(u.us)
+                errs_no_avg = no_avg_dict['errors'].to(u.us)
+            elif avg == True and mixed_ecorr == False:
                 errs = avg_dict['errors'].to(u.us)
             else:
                 errs = fitter.toas.get_errors().to(u.us)
         elif restype == 'postfit':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
                     errs = avg_dict['errors'].to(u.us)
+                    errs_no_avg = no_avg_dict['errors'].to(u.us)
+                elif avg == True and mixed_ecorr == False:
+                    errs = avg_dict['errors'].to(u.us) 
                 else:
                     errs = fitter.resids.get_data_error().to(u.us)
             else:
                 errs = fitter.resids.residual_objs['toa'].get_data_error().to(u.us)
         elif restype == 'both':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    errs = avg_dict['errors'].to(u.us)
+                    errs_pre = avg_dict_pre['errors'].to(u.us)
+                    errs_no_avg = no_avg_dict['errors'].to(u.us)
+                    errs_no_avg_pre = no_avg_dict_pre['errors'].to(u.us)
+                elif avg == True and mixed_ecorr == False:
                     errs = avg_dict['errors'].to(u.us)
                     errs_pre = avg_dict_pre['errors'].to(u.us)
                 else:
@@ -324,24 +429,60 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
         mjds = kwargs['mjds']
     else:
         mjds = fitter.toas.get_mjds().value
-        if avg == True:
+        if avg == True and mixed_ecorr == True :
+            mjds = avg_dict['mjds'].value
+            mjds_no_avg = no_avg_dict['mjds'].value
+            years_no_avg = (mjds_no_avg - 51544.0)/365.25 + 2000.0
+
+        elif avg == True and mixed_ecorr == False:
             mjds = avg_dict['mjds'].value
     # Convert to years
     years = (mjds - 51544.0)/365.25 + 2000.0
-
-    # Get receiver backends
-    if 'rcvr_bcknds' in kwargs.keys():
-        rcvr_bcknds = kwargs['rcvr_bcknds']
+    
+    # In the end, we'll want to plot both ecorr avg & not ecorr avg at the same time if we have mixed ecorr.
+    # Create combined arrays
+            
+    if avg == True and mixed_ecorr == True:    
+        combo_res = np.hstack((res, res_no_avg))
+        combo_errs = np.hstack((errs, errs_no_avg))
+        combo_years = np.hstack((years, years_no_avg))
+        if restype =='both':
+            combo_errs_pre = np.hstack((errs_pre, errs_no_avg_pre))     
+            combo_res_pre = np.hstack((res_pre, res_no_avg_pre))
+  
+    # Get colorby flag values (obs, PTA, febe, etc.)
+    if 'colorby' in kwargs.keys():
+        cb = kwargs['colorby']
     else:
-        rcvr_bcknds = np.array(fitter.toas.get_flag_value('f')[0])
+        cb = np.array(fitter.toas[colorby])
+#.      Seems to run a little faster but not robust to obs?
+#        cb = np.array(fitter.toas.get_flag_value(colorby)[0])
         if avg == True:
-            avg_rcvr_bcknds = []
+            avg_cb = []
             for iis in avg_dict['indices']:
-                avg_rcvr_bcknds.append(rcvr_bcknds[iis[0]])
-            rcvr_bcknds = np.array(avg_rcvr_bcknds)
-    # Get the set of unique receiver-bandend combos
-    RCVR_BCKNDS = set(rcvr_bcknds)
+                avg_cb.append(cb[iis[0]])
+            if mixed_ecorr == True:
+                no_avg_cb = []
+                for jjs in no_avg_dict['indices']:
+                    no_avg_cb.append(cb[jjs])
+                no_ecorr_cb = np.array(no_avg_cb)
+                
+            cb = np.array(avg_cb)
+            
+    # Get the set of unique flag values
+    if avg==True and mixed_ecorr==True:
+        cb = np.hstack((cb,no_ecorr_cb))
+    
+    CB = set(cb)
 
+    
+    if colorby== 'pta':
+        colorscheme = colorschemes['pta']
+    elif colorby == 'obs':
+        colorscheme = colorschemes['observatories']
+    elif colorby == 'f':
+        colorscheme = colorschemes['febe']
+  
 
     if 'figsize' in kwargs.keys():
         figsize = kwargs['figsize']
@@ -353,49 +494,68 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
     else:
         fig = plt.gcf()
         ax1 = axs
-    for i, r_b in enumerate(RCVR_BCKNDS):
-        inds = np.where(rcvr_bcknds==r_b)[0]
+        
+
+    for i, c in enumerate(CB):
+        inds = np.where(cb==c)[0]
         if not inds.tolist():
-            r_b_label = ""
+            cb_label = ""
         else:
-            r_b_label = rcvr_bcknds[inds][0]
+            cb_label = cb[inds][0]
         # Get plot preferences
         if 'fmt' in kwargs.keys():
             mkr = kwargs['fmt']
         else:
             try:
-                mkr = markers[r_b_label]
+                mkr = markers[cb_label]
                 if restype == 'both':
                     mkr_pre = '.'
             except Exception:
                 mkr = 'x'
-                log.log(1, "Rec/Bknd combo doesn't have a marker label!!")
+                log.log(1, "Color by Flag doesn't have a marker label!!")
         if 'color' in kwargs.keys():
             clr = kwargs['color']
         else:
             try:
-                clr = colorscheme[r_b_label]
+                clr = colorscheme[cb_label]
             except Exception:
                 clr = 'k'
-                log.log(1, "Rec/Bknd combo doesn't have a color!!")
+                log.log(1, "Color by Flag doesn't have a color!!")
         if 'alpha' in kwargs.keys():
             alpha = kwargs['alpha']
         else:
             alpha = 0.5
-        if plotsig:
-            sig = res[inds]/errs[inds]
-            ax1.errorbar(years[inds], sig, yerr=len(errs[inds])*[1], fmt=mkr, \
-                     color=clr, label=r_b_label, alpha = alpha, picker=True)
-            if restype == 'both':
-                sig_pre = res_pre[inds]/errs_pre[inds]
-                ax1.errorbar(years[inds], sig_pre, yerr=len(errs_pre[inds])*[1], fmt=mkr_pre, \
-                         color=clr, label=r_b_label+" Prefit", alpha = alpha, picker=True)
+        if avg == True and mixed_ecorr == True:
+            if plotsig:
+                combo_sig = combo_res[inds]/combo_[inds]
+                ax1.errorbar(combo_years[inds], combo_sig, yerr=len(combo_errs[inds])*[1], fmt=mkr, \
+                         color=clr, label=cb_label, alpha = alpha, picker=True)
+                if restype == 'both':
+                    combo_sig_pre = combo_res_pre[inds]/combo_errs_pre[inds]
+                    ax1.errorbar(combo_years[inds], combo_sig_pre, yerr=len(combo_errs_pre[inds])*[1], fmt=mkr_pre, \
+                             color=clr, label=cb_label+" Prefit", alpha = alpha, picker=True)
+            else:
+                ax1.errorbar(combo_years[inds], combo_res[inds], yerr=combo_errs[inds], fmt=mkr, \
+                         color=clr, label=cb_label, alpha = alpha, picker=True)
+                if restype == 'both':
+                    ax1.errorbar(combo_years[inds], combo_res_rpe[inds], yerr=combo_errs_pre[inds], fmt=mkr_pre, \
+                         color=clr, label=cb_label+" Prefit", alpha = alpha, picker=True)
+                  
         else:
-            ax1.errorbar(years[inds], res[inds], yerr=errs[inds], fmt=mkr, \
-                     color=clr, label=r_b_label, alpha = alpha, picker=True)
-            if restype == 'both':
-                ax1.errorbar(years[inds], res_pre[inds], yerr=errs_pre[inds], fmt=mkr_pre, \
-                     color=clr, label=r_b_label+" Prefit", alpha = alpha, picker=True)
+            if plotsig:
+                sig = res[inds]/errs[inds]
+                ax1.errorbar(years[inds], sig, yerr=len(errs[inds])*[1], fmt=mkr, \
+                         color=clr, label=r_b_label, alpha = alpha, picker=True)
+                if restype == 'both':
+                    sig_pre = res_pre[inds]/errs_pre[inds]
+                    ax1.errorbar(years[inds], sig_pre, yerr=len(errs_pre[inds])*[1], fmt=mkr_pre, \
+                             color=clr, label=cb_label+" Prefit", alpha = alpha, picker=True)
+            else:
+                ax1.errorbar(years[inds], res[inds], yerr=errs[inds], fmt=mkr, \
+                         color=clr, label=cb_label, alpha = alpha, picker=True)
+                if restype == 'both':
+                    ax1.errorbar(years[inds], res_pre[inds], yerr=errs_pre[inds], fmt=mkr_pre, \
+                         color=clr, label=cb_label+" Prefit", alpha = alpha, picker=True)
 
     # Set second axis
     ax1.set_xlabel(r'Year')
@@ -423,15 +583,15 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
         else:
             ax1.set_ylabel('Residual ($\mu$s)')
     if legend:
-        if len(RCVR_BCKNDS) > 5:
-            ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
+        if len(CB) > 5:
+            ncol = int(np.ceil(len(CB)/2))
             y_offset = 1.15
         else:
-            ncol = len(RCVR_BCKNDS)
+            ncol = len(CB)
             y_offset = 1.0
         ax1.legend(loc='upper center', bbox_to_anchor= (0.5, y_offset+1.0/figsize[1]), ncol=ncol)
     if title:
-        if len(RCVR_BCKNDS) > 5:
+        if len(CB) > 5:
             y_offset = 1.1
         else:
             y_offset = 1.0
@@ -461,10 +621,7 @@ def plot_residuals_time(fitter, restype = 'postfit', plotsig = False, avg = Fals
         text = ax2.text(0,0,"")
 
         # Define point highlight color
-        if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
-            stamp_color = "#61C853"
-        else:
-            stamp_color = "#FD9927"
+        stamp_color = "#FD9927"
 
         def onclick(event):
             # Get X and Y axis data
@@ -648,8 +805,8 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
 
     return 
 
-def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = False, whitened = False, \
-                        save = False, legend = True, title = True, axs = None, **kwargs):
+def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = False, avg = False, mixed_ecorr=False,\
+                        whitened = False, save = False, legend = True, title = True, axs = None, **kwargs):
     """
     Make a plot of the residuals vs. frequency
 
@@ -661,9 +818,14 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
         'prefit' - plot the prefit residuals.
         'postfit' - plot the postfit residuals (default)
         'both' - overplot both the pre and post-fit residuals.
+    colorby ['string']:  What to use to determine color/markers
+        'pta' - color residuals by PTA (default)
+        'obs' - color residuals by telescope 
+        'f'   - color residuals by frontend/backend pair (flag not used by all PTAs). 
     plotsig [boolean] : If True plot number of measurements v. residuals/uncertainty, else v. residuals
         [default: False].
     avg [boolean] : If True and not wideband fitter, will compute and plot epoch-average residuals [default: False].
+    mixed_ecorr [boolean]: If True, supports combining already-epoch-averaged residuals with epoch-averaging [default: False]
     whitened [boolean] : If True will compute and plot whitened residuals [default: False].
     save [boolean] : If True will save plot with the name "resid_v_freq.png" Will add averaged/whitened
          as necessary [default: False].
@@ -692,11 +854,22 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
         NB = True
 
     # Check if want epoch averaged residuals
-    if avg == True and restype == 'prefit':
+    if avg == True and restype == 'prefit' and mixed_ecorr == True:
         avg_dict = fitter.resids_init.ecorr_average(use_noise_model=True)
-    elif avg == True and restype == 'postfit':
+        no_avg_dict = no_ecorr_average(fitter.toas, fitter.resids_init,use_noise_model=True)
+    elif avg == True and restype == 'postfit' and mixed_ecorr == True:
         avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
-    elif avg == True and restype == 'both':
+        no_avg_dict = no_ecorr_average(fitter.toas, fitter.resids,use_noise_model=True)
+    elif avg == True and restype == 'both' and mixed_ecorr == True:
+        avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
+        no_avg_dict = no_ecorr_average(fitter.toas, fitter.resids,use_noise_model=True)
+        avg_dict_pre = fitter.resids_init.ecorr_average(use_noise_model=True)
+        no_avg_dict_pre = no_ecorr_average(fitter.toas, fitter.resids_init,use_noise_model=True)
+    elif avg == True and restype == 'prefit' and mixed_ecorr == False:
+        avg_dict = fitter.resids_init.ecorr_average(use_noise_model=True)
+    elif avg == True and restype == 'postfit' and mixed_ecorr==False:
+        avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
+    elif avg == True and restype == 'both' and mixed_ecorr == False:
         avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
         avg_dict_pre = fitter.resids_init.ecorr_average(use_noise_model=True)
 
@@ -707,7 +880,10 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
     else:
         if restype == 'prefit':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    res = avg_dict['time_resids'].to(u.us)
+                    res_no_avg = no_avg_dict['time_resids'].to(u.us)
+                elif avg==True and mixed_ecorr == False:
                     res = avg_dict['time_resids'].to(u.us)
                 else:
                     res = fitter.resids_init.time_resids.to(u.us)
@@ -715,7 +891,10 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
                 res = fitter.resids_init.residual_objs['toa'].time_resids.to(u.us)
         elif restype == 'postfit':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    res = avg_dict['time_resids'].to(u.us)
+                    res_no_avg = no_avg_dict['time_resids'].to(u.us)
+                elif avg == True:
                     res = avg_dict['time_resids'].to(u.us)
                 else:
                     res = fitter.resids.time_resids.to(u.us)
@@ -723,7 +902,12 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
                 res = fitter.resids.residual_objs['toa'].time_resids.to(u.us)
         elif restype == 'both':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    res = avg_dict['time_resids'].to(u.us)
+                    res_no_avg = no_avg_dict['time_resids'].to(u.us)
+                    res_pre = avg_dict_pre['time_resids'].to(u.us)
+                    res_pre_no_avg = no_avg_dict_pre['time_resids'].to(u.us)
+                elif avg == True and mixed_ecorr == False:
                     res = avg_dict['time_resids'].to(u.us)
                     res_pre = avg_dict_pre['time_resids'].to(u.us)
                 else:
@@ -736,16 +920,31 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
             raise ValueError("Unrecognized residual type: %s. Please choose from 'prefit', 'postfit', or 'both'."\
                              %(restype))
 
+    
+    
     # Check if we want whitened residuals
     if whitened == True and ('res' not in kwargs.keys()):
-        if avg == True:
+        if avg == True and mixed_ecorr == True: 
+            if restype != 'both':
+                res = whiten_resids(avg_dict, restype=restype)
+                res_no_avg = whiten_resids(no_avg_dict, restype=restype)
+            else:
+                res = whiten_resids(avg_dict_pre, restype='prefit')
+                res_pre = whiten_resids(avg_dict, restype='postfit')
+                res_pre = res_pre.to(u.us)
+                res_no_avg = whiten_resids(avg_dict_pre, restype='prefit')
+                res_pre_no_avg = whiten_resids(avg_dict, restype='postfit')
+                res_pre_no_avg = res_pre_no_avg.to(u.us)
+            res = res.to(u.us)
+            res_no_avg = res_no_avg.to(u.us)
+        elif avg == True and mixed_ecorr == False: 
             if restype != 'both':
                 res = whiten_resids(avg_dict, restype=restype)
             else:
                 res = whiten_resids(avg_dict_pre, restype='prefit')
                 res_pre = whiten_resids(avg_dict, restype='postfit')
                 res_pre = res_pre.to(u.us)
-            res = res.to(u.us)
+            res = res.to(u.us)        
         else:
             if restype != 'both':
                 res = whiten_resids(fitter, restype=restype)
@@ -760,21 +959,32 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
         errs = kwargs['errs']
     else:
         if restype == 'prefit':
-            if avg == True:
+            if avg == True and mixed_ecorr == True:
+                errs = avg_dict['errors'].to(u.us)
+                errs_no_avg = no_avg_dict['errors'].to(u.us)
+            elif avg == True and mixed_ecorr == False:
                 errs = avg_dict['errors'].to(u.us)
             else:
                 errs = fitter.toas.get_errors().to(u.us)
         elif restype == 'postfit':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
                     errs = avg_dict['errors'].to(u.us)
+                    errs_no_avg = no_avg_dict['errors'].to(u.us)
+                elif avg == True and mixed_ecorr == False:
+                    errs = avg_dict['errors'].to(u.us) 
                 else:
                     errs = fitter.resids.get_data_error().to(u.us)
             else:
                 errs = fitter.resids.residual_objs['toa'].get_data_error().to(u.us)
         elif restype == 'both':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    errs = avg_dict['errors'].to(u.us)
+                    errs_pre = avg_dict_pre['errors'].to(u.us)
+                    errs_no_avg = no_avg_dict['errors'].to(u.us)
+                    errs_no_avg_pre = no_avg_dict_pre['errors'].to(u.us)
+                elif avg == True and mixed_ecorr == False:
                     errs = avg_dict['errors'].to(u.us)
                     errs_pre = avg_dict_pre['errors'].to(u.us)
                 else:
@@ -784,24 +994,59 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
                 errs = fitter.resids.residual_objs['toa'].get_data_error().to(u.us)
                 errs_pre = fitter.toas.get_errors().to(u.us)
 
+                
+    # In the end, we'll want to plot both ecorr avg & not ecorr avg at the same time if we have mixed ecorr.
+    # Create combined arrays
+           
+    if avg == True and mixed_ecorr == True:    
+        combo_res = np.hstack((res, res_no_avg))
+        combo_errs = np.hstack((errs, errs_no_avg))
+        if restype =='both':
+            combo_errs_pre = np.hstack((errs_pre, errs_no_avg_pre))     
+            combo_res_pre = np.hstack((res_pre, res_no_avg_pre))
+
     # Get freqs
     if 'freqs' in kwargs.keys():
         freqs = kwargs['freqs']
     else:
         freqs = fitter.toas.get_freqs().value
-
-    # Get receiver backends
-    if 'rcvr_bcknds' in kwargs.keys():
-        rcvr_bcknds = kwargs['rcvr_bcknds']
+        
+      
+    # Get colorby flag values (obs, PTA, febe, etc.)
+    if 'colorby' in kwargs.keys():
+        cb = kwargs['colorby']
     else:
-        rcvr_bcknds = np.array(fitter.toas.get_flag_value('f')[0])
+        cb = np.array(fitter.toas[colorby])
+#.      Seems to run a little faster but not robust to obs?
+#        cb = np.array(fitter.toas.get_flag_value(colorby)[0])
         if avg == True:
-            avg_rcvr_bcknds = []
+            avg_cb = []
             for iis in avg_dict['indices']:
-                avg_rcvr_bcknds.append(rcvr_bcknds[iis[0]])
-            rcvr_bcknds = np.array(avg_rcvr_bcknds)
-    # Get the set of unique receiver-bandend combos
-    RCVR_BCKNDS = set(rcvr_bcknds)
+                avg_cb.append(cb[iis[0]])
+            if mixed_ecorr == True:
+                no_avg_cb = []
+                for jjs in no_avg_dict['indices']:
+                    no_avg_cb.append(cb[jjs])
+                no_ecorr_cb = np.array(no_avg_cb)
+                
+            cb = np.array(avg_cb)
+       
+    # Get the set of unique flag values
+    if avg==True and mixed_ecorr==True:
+        cb = np.hstack((cb,no_ecorr_cb))
+    
+    CB = set(cb)
+    
+    if colorby== 'pta':
+        colorscheme = colorschemes['pta']
+        markerscheme = markers['pta']
+    elif colorby == 'obs':
+        colorscheme = colorschemes['observatories']
+        markerscheme = markers['observatories']
+    elif colorby == 'f':
+        colorscheme = colorschemes['febe']
+        markerscheme = markers['febe']
+    
 
     if 'figsize' in kwargs.keys():
         figsize = kwargs['figsize']
@@ -813,41 +1058,65 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
     else:
         fig = plt.gcf()
         ax1 = axs
-    for i, r_b in enumerate(RCVR_BCKNDS):
-        inds = np.where(rcvr_bcknds==r_b)[0]
+
+    for i, c in enumerate(CB):
+        inds = np.where(cb==c)[0]
         if not inds.tolist():
-            r_b_label = ""
+            cb_label = ""
         else:
-            r_b_label = rcvr_bcknds[inds][0]
+            cb_label = cb[inds][0]
         # Get plot preferences
         if 'fmt' in kwargs.keys():
             mkr = kwargs['fmt']
         else:
-            mkr = markers[r_b_label]
-            if restype == 'both':
-                mkr_pre = '.'
+            try:
+                mkr = markerscheme[cb_label]
+                if restype == 'both':
+                    mkr_pre = '.'
+            except Exception:
+                mkr = 'x'
+                if restype == 'both':
+                    mkr_pre = '.'
+                log.log(1, "Color by Flag doesn't have a marker label!!")
         if 'color' in kwargs.keys():
             clr = kwargs['color']
         else:
-            clr = colorscheme[r_b_label]
+            clr = colorscheme[cb_label]
         if 'alpha' in kwargs.keys():
             alpha = kwargs['alpha']
         else:
             alpha = 0.5
-        if plotsig:
-            sig = res[inds]/errs[inds]
-            ax1.errorbar(freqs[inds], sig, yerr=len(errs[inds])*[1], fmt=mkr, \
-                     color=clr, label=r_b_label, alpha = alpha, picker=True)
-            if restype == 'both':
-                sig_pre = res_pre[inds]/errs_pre[inds]
-                ax1.errorbar(freqs[inds], sig_pre, yerr=len(errs_pre[inds])*[1], fmt=mkr_pre, \
-                         color=clr, label=r_b_label+" Prefit", alpha = alpha, picker=True)
+            
+        if avg and mixed_ecorr:
+            if plotsig:
+                combo_sig = combo_res[inds]/combo_errs[inds]
+                ax1.errorbar(freqs[inds], combo_sig, yerr=len(combo_errs[inds])*[1], fmt=mkr, \
+                         color=clr, label=cb_label, alpha = alpha, picker=True)
+                if restype == 'both':
+                    combo_sig_pre = combo_res_pre[inds]/combo_errs_pre[inds]
+                    ax1.errorbar(freqs[inds], combo_sig_pre, yerr=len(combo_errs_pre[inds])*[1], fmt=mkr_pre, \
+                             color=clr, label=cb_label+" Prefit", alpha = alpha, picker=True)
+            else:
+                ax1.errorbar(freqs[inds], combo_res[inds], yerr=combo_errs[inds], fmt=mkr, \
+                         color=clr, label=cb_label, alpha = alpha, picker=True)
+                if restype == 'both':
+                    ax1.errorbar(freqs[inds], combo_res_pre[inds], yerr=combo_errs_pre[inds], fmt=mkr_pre, \
+                         color=clr, label=cb_label+" Prefit", alpha = alpha, picker=True)
         else:
-            ax1.errorbar(freqs[inds], res[inds], yerr=errs[inds], fmt=mkr, \
-                     color=clr, label=r_b_label, alpha = alpha, picker=True)
-            if restype == 'both':
-                ax1.errorbar(freqs[inds], res_pre[inds], yerr=errs_pre[inds], fmt=mkr_pre, \
-                     color=clr, label=r_b_label+" Prefit", alpha = alpha, picker=True)
+            if plotsig:
+                sig = res[inds]/errs[inds]
+                ax1.errorbar(freqs[inds], sig, yerr=len(errs[inds])*[1], fmt=mkr, \
+                         color=clr, label=cb_label, alpha = alpha, picker=True)
+                if restype == 'both':
+                    sig_pre = res_pre[inds]/errs_pre[inds]
+                    ax1.errorbar(freqs[inds], sig_pre, yerr=len(errs_pre[inds])*[1], fmt=mkr_pre, \
+                             color=clr, label=cb_label+" Prefit", alpha = alpha, picker=True)
+            else:
+                ax1.errorbar(freqs[inds], res[inds], yerr=errs[inds], fmt=mkr, \
+                         color=clr, label=cb_label, alpha = alpha, picker=True)
+                if restype == 'both':
+                    ax1.errorbar(freqs[inds], res_pre[inds], yerr=errs_pre[inds], fmt=mkr_pre, \
+                         color=clr, label=cb_label+" Prefit", alpha = alpha, picker=True)
 
     # Set axis
     ax1.set_xlabel(r'Frequency (MHz)')
@@ -871,15 +1140,15 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
         else:
             ax1.set_ylabel('Residual ($\mu$s)')
     if legend:
-        if len(RCVR_BCKNDS) > 5:
-            ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
+        if len(CB) > 5:
+            ncol = int(np.ceil(len(CB)/2))
             y_offset = 1.15
         else:
-            ncol = len(RCVR_BCKNDS)
+            ncol = len(CB)
             y_offset = 1.0
         ax1.legend(loc='upper center', bbox_to_anchor= (0.5, y_offset+1.0/figsize[1]), ncol=ncol)
     if title:
-        if len(RCVR_BCKNDS) > 5:
+        if len(CB) > 5:
             y_offset = 1.1
         else:
             y_offset = 1.0
@@ -907,12 +1176,7 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
     if axs == None:
         # Define clickable points
         text = ax1.text(0,0,"")
-
-        # Define point highlight color
-        if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
-            stamp_color = "#61C853"
-        else:
-            stamp_color = "#FD9927"
+        stamp_color= "#FD9927"
 
         def onclick(event):
             # Get X and Y axis data
@@ -939,7 +1203,6 @@ def plot_residuals_freq(fitter, restype = 'postfit', plotsig = False, avg = Fals
         fig.canvas.mpl_connect('button_press_event', onclick)
 
     return
-
 
 
 def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
@@ -1914,8 +2177,8 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
     return
 
 
-def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False, whitened = False, \
-                        save = False, legend = True, title = True, axs = None, **kwargs):
+def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = False, avg = False, mixed_ecorr=False, \
+                       whitened = False, save = False, legend = True, title = True, axs = None, **kwargs):
     """
     Make a plot of the residuals vs. orbital phase.
 
@@ -1956,13 +2219,25 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
             raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
     else:
         NB = True
-
+        
+    
     # Check if want epoch averaged residuals
-    if avg == True and restype == 'prefit':
+    if avg == True and restype == 'prefit' and mixed_ecorr == True:
         avg_dict = fitter.resids_init.ecorr_average(use_noise_model=True)
-    elif avg == True and restype == 'postfit':
+        no_avg_dict = no_ecorr_average(fitter.toas, fitter.resids_init,use_noise_model=True)
+    elif avg == True and restype == 'postfit' and mixed_ecorr == True:
         avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
-    elif avg == True and restype == 'both':
+        no_avg_dict = no_ecorr_average(fitter.toas, fitter.resids,use_noise_model=True)
+    elif avg == True and restype == 'both' and mixed_ecorr == True:
+        avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
+        no_avg_dict = no_ecorr_average(fitter.toas, fitter.resids,use_noise_model=True)
+        avg_dict_pre = fitter.resids_init.ecorr_average(use_noise_model=True)
+        no_avg_dict_pre = no_ecorr_average(fitter.toas, fitter.resids_init,use_noise_model=True)
+    elif avg == True and restype == 'prefit' and mixed_ecorr == False:
+        avg_dict = fitter.resids_init.ecorr_average(use_noise_model=True)
+    elif avg == True and restype == 'postfit' and mixed_ecorr==False:
+        avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
+    elif avg == True and restype == 'both' and mixed_ecorr == False:
         avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
         avg_dict_pre = fitter.resids_init.ecorr_average(use_noise_model=True)
 
@@ -1973,7 +2248,10 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
     else:
         if restype == 'prefit':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    res = avg_dict['time_resids'].to(u.us)
+                    res_no_avg = no_avg_dict['time_resids'].to(u.us)
+                elif avg==True and mixed_ecorr == False:
                     res = avg_dict['time_resids'].to(u.us)
                 else:
                     res = fitter.resids_init.time_resids.to(u.us)
@@ -1981,7 +2259,10 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
                 res = fitter.resids_init.residual_objs['toa'].time_resids.to(u.us)
         elif restype == 'postfit':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    res = avg_dict['time_resids'].to(u.us)
+                    res_no_avg = no_avg_dict['time_resids'].to(u.us)
+                elif avg == True:
                     res = avg_dict['time_resids'].to(u.us)
                 else:
                     res = fitter.resids.time_resids.to(u.us)
@@ -1989,7 +2270,12 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
                 res = fitter.resids.residual_objs['toa'].time_resids.to(u.us)
         elif restype == 'both':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    res = avg_dict['time_resids'].to(u.us)
+                    res_no_avg = no_avg_dict['time_resids'].to(u.us)
+                    res_pre = avg_dict_pre['time_resids'].to(u.us)
+                    res_pre_no_avg = no_avg_dict_pre['time_resids'].to(u.us)
+                elif avg == True and mixed_ecorr == False:
                     res = avg_dict['time_resids'].to(u.us)
                     res_pre = avg_dict_pre['time_resids'].to(u.us)
                 else:
@@ -2002,16 +2288,31 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
             raise ValueError("Unrecognized residual type: %s. Please choose from 'prefit', 'postfit', or 'both'."\
                              %(restype))
 
+    
+    
     # Check if we want whitened residuals
     if whitened == True and ('res' not in kwargs.keys()):
-        if avg == True:
+        if avg == True and mixed_ecorr == True: 
+            if restype != 'both':
+                res = whiten_resids(avg_dict, restype=restype)
+                res_no_avg = whiten_resids(no_avg_dict, restype=restype)
+            else:
+                res = whiten_resids(avg_dict_pre, restype='prefit')
+                res_pre = whiten_resids(avg_dict, restype='postfit')
+                res_pre = res_pre.to(u.us)
+                res_no_avg = whiten_resids(avg_dict_pre, restype='prefit')
+                res_pre_no_avg = whiten_resids(avg_dict, restype='postfit')
+                res_pre_no_avg = res_pre_no_avg.to(u.us)
+            res = res.to(u.us)
+            res_no_avg = res_no_avg.to(u.us)
+        elif avg == True and mixed_ecorr == False: 
             if restype != 'both':
                 res = whiten_resids(avg_dict, restype=restype)
             else:
                 res = whiten_resids(avg_dict_pre, restype='prefit')
                 res_pre = whiten_resids(avg_dict, restype='postfit')
                 res_pre = res_pre.to(u.us)
-            res = res.to(u.us)
+            res = res.to(u.us)        
         else:
             if restype != 'both':
                 res = whiten_resids(fitter, restype=restype)
@@ -2026,21 +2327,32 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
         errs = kwargs['errs']
     else:
         if restype == 'prefit':
-            if avg == True:
+            if avg == True and mixed_ecorr == True:
+                errs = avg_dict['errors'].to(u.us)
+                errs_no_avg = no_avg_dict['errors'].to(u.us)
+            elif avg == True and mixed_ecorr == False:
                 errs = avg_dict['errors'].to(u.us)
             else:
                 errs = fitter.toas.get_errors().to(u.us)
         elif restype == 'postfit':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
                     errs = avg_dict['errors'].to(u.us)
+                    errs_no_avg = no_avg_dict['errors'].to(u.us)
+                elif avg == True and mixed_ecorr == False:
+                    errs = avg_dict['errors'].to(u.us) 
                 else:
                     errs = fitter.resids.get_data_error().to(u.us)
             else:
                 errs = fitter.resids.residual_objs['toa'].get_data_error().to(u.us)
         elif restype == 'both':
             if NB == True:
-                if avg == True:
+                if avg == True and mixed_ecorr == True:
+                    errs = avg_dict['errors'].to(u.us)
+                    errs_pre = avg_dict_pre['errors'].to(u.us)
+                    errs_no_avg = no_avg_dict['errors'].to(u.us)
+                    errs_no_avg_pre = no_avg_dict_pre['errors'].to(u.us)
+                elif avg == True and mixed_ecorr == False:
                     errs = avg_dict['errors'].to(u.us)
                     errs_pre = avg_dict_pre['errors'].to(u.us)
                 else:
@@ -2055,26 +2367,67 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
         mjds = fitter.toas.get_mjds().value
         if avg == True:
             mjds = avg_dict['mjds'].value
+            if mixed_ecorr == True:
+                mjds_no_avg = no_avg_dict['mjds'].value
 
-    # Get receiver backends
-    if 'rcvr_bcknds' in kwargs.keys():
-        rcvr_bcknds = kwargs['rcvr_bcknds']
-    else:
-        rcvr_bcknds = np.array(fitter.toas.get_flag_value('f')[0])
-        if avg == True:
-            avg_rcvr_bcknds = []
-            for iis in avg_dict['indices']:
-                avg_rcvr_bcknds.append(rcvr_bcknds[iis[0]])
-            rcvr_bcknds = np.array(avg_rcvr_bcknds)
-    # Get the set of unique receiver-bandend combos
-    RCVR_BCKNDS = set(rcvr_bcknds)
+               
 
     # Now we need to the orbital phases; start with binary model name
     if 'orbphase' in kwargs.keys():
         orbphase = kwargs['orbphase']
     else:
         orbphase = fitter.model.orbital_phase(mjds, radians = False)
-
+        if avg and mixed_ecorr:
+            no_avg_orbphase = fitter.model.orbital_phase(mjds_no_avg, radians = False)
+    
+                    
+    # In the end, we'll want to plot both ecorr avg & not ecorr avg at the same time if we have mixed ecorr.
+    # Create combined arrays
+           
+    if avg == True and mixed_ecorr == True:    
+        combo_res = np.hstack((res, res_no_avg))
+        combo_errs = np.hstack((errs, errs_no_avg))
+        combo_orbphase = np.hstack((orbphase, no_avg_orbphase))
+        if restype =='both':
+            combo_errs_pre = np.hstack((errs_pre, errs_no_avg_pre))     
+            combo_res_pre = np.hstack((res_pre, res_no_avg_pre))
+    
+      
+    # Get colorby flag values (obs, PTA, febe, etc.)
+    if 'colorby' in kwargs.keys():
+        cb = kwargs['colorby']
+    else:
+        cb = np.array(fitter.toas[colorby])
+        #.      Seems to run a little faster but not robust to obs
+        #        cb = np.array(fitter.toas.get_flag_value(colorby)[0])
+        if avg == True:
+            avg_cb = []
+            for iis in avg_dict['indices']:
+                avg_cb.append(cb[iis[0]])
+            if mixed_ecorr == True:
+                no_avg_cb = []
+                for jjs in no_avg_dict['indices']:
+                    no_avg_cb.append(cb[jjs])
+                no_ecorr_cb = np.array(no_avg_cb)
+                
+            cb = np.array(avg_cb)
+       
+    # Get the set of unique flag values
+    if avg==True and mixed_ecorr==True:
+        cb = np.hstack((cb,no_ecorr_cb))
+    
+    CB = set(cb)
+    
+    if colorby== 'pta':
+        colorscheme = colorschemes['pta']
+        markerscheme = markers['pta']
+    elif colorby == 'obs':
+        colorscheme = colorschemes['observatories']
+        markerscheme = markers['observatories']
+    elif colorby == 'f':
+        colorscheme = colorschemes['febe']
+        markerscheme = markers['febe']
+        
     if 'figsize' in kwargs.keys():
         figsize = kwargs['figsize']
     else:
@@ -2085,49 +2438,65 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
     else:
         fig = plt.gcf()
         ax1 = axs
-    for i, r_b in enumerate(RCVR_BCKNDS):
-        inds = np.where(rcvr_bcknds==r_b)[0]
+    for i, c in enumerate(CB):
+        inds = np.where(cb==c)[0]
         if not inds.tolist():
-            r_b_label = ""
+            cb_label = ""
         else:
-            r_b_label = rcvr_bcknds[inds][0]
+            cb_label = cb[inds][0]
         # Get plot preferences
         if 'fmt' in kwargs.keys():
             mkr = kwargs['fmt']
         else:
             try:
-                mkr = markers[r_b_label]
+                mkr = markerscheme[cb_label]
                 if restype == 'both':
                     mkr_pre = '.'
             except Exception:
                 mkr = 'x'
-                log.log(1, "Rec/Bknd combo doesn't have a marker label!!")
+                log.log(1, "Color by flag value doesn't have a marker label!!")
         if 'color' in kwargs.keys():
             clr = kwargs['color']
         else:
             try:
-                clr = colorscheme[r_b_label]
+                clr = colorscheme[cb_label]
             except Exception:
                 clr = 'k'
-                log.log(1, "Rec/Bknd combo doesn't have a color!!")
+                log.log(1, "Color by flag value doesn't have a color!!")
         if 'alpha' in kwargs.keys():
             alpha = kwargs['alpha']
         else:
             alpha = 0.5
-        if plotsig:
-            sig = res[inds]/errs[inds]
-            ax1.errorbar(orbphase[inds], sig, yerr=len(errs[inds])*[1], fmt=mkr, \
-                     color=clr, label=r_b_label, alpha = alpha)
-            if restype == 'both':
-                sig_pre = res_pre[inds]/errs_pre[inds]
-                ax1.errorbar(orbphase[inds], sig_pre, yerr=len(errs_pre[inds])*[1], fmt=mkr_pre, \
-                         color=clr, label=r_b_label+" Prefit", alpha = alpha)
+        if avg and mixed_ecorr:
+            if plotsig:
+                combo_sig = combo_res[inds]/combo_errs[inds]
+                ax1.errorbar(combo_orbphase[inds], combo_sig, yerr=len(combo_errs[inds])*[1], fmt=mkr, \
+                         color=clr, label=cb_label, alpha = alpha)
+                if restype == 'both':
+                    combo_sig_pre = combo_res_pre[inds]/combo_errs_pre[inds]
+                    ax1.errorbar(combo_orbphase[inds], combo_sig_pre, yerr=len(combo_errs_pre[inds])*[1], fmt=mkr_pre, \
+                             color=clr, label=cb_label+" Prefit", alpha = alpha)
+            else:
+                ax1.errorbar(combo_orbphase[inds], combo_res[inds], yerr = combo_errs[inds], fmt=mkr, \
+                         color=clr, label=cb_label, alpha = alpha)
+                if restype == 'both':
+                    ax1.errorbar(combo_orbphase[inds], combo_res_pre[inds], yerr=combo_errs_pre[inds], fmt=mkr_pre, \
+                         color=clr, label=cb_label+" Prefit", alpha = alpha)
         else:
-            ax1.errorbar(orbphase[inds], res[inds], yerr = errs[inds], fmt=mkr, \
-                     color=clr, label=r_b_label, alpha = alpha)
-            if restype == 'both':
-                ax1.errorbar(orbphase[inds], res_pre[inds], yerr=errs_pre[inds], fmt=mkr_pre, \
-                     color=clr, label=r_b_label+" Prefit", alpha = alpha)
+            if plotsig:
+                sig = res[inds]/errs[inds]
+                ax1.errorbar(orbphase[inds], sig, yerr=len(errs[inds])*[1], fmt=mkr, \
+                         color=clr, label=r_b_label, alpha = alpha)
+                if restype == 'both':
+                    sig_pre = res_pre[inds]/errs_pre[inds]
+                    ax1.errorbar(orbphase[inds], sig_pre, yerr=len(errs_pre[inds])*[1], fmt=mkr_pre, \
+                             color=clr, label=r_b_label+" Prefit", alpha = alpha)
+            else:
+                ax1.errorbar(orbphase[inds], res[inds], yerr = errs[inds], fmt=mkr, \
+                         color=clr, label=r_b_label, alpha = alpha)
+                if restype == 'both':
+                    ax1.errorbar(orbphase[inds], res_pre[inds], yerr=errs_pre[inds], fmt=mkr_pre, \
+                         color=clr, label=r_b_label+" Prefit", alpha = alpha)
     # Set second axis
     ax1.set_xlabel(r'Orbital Phase')
     ax1.grid(True)
@@ -2150,15 +2519,15 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
         else:
             ax1.set_ylabel('Residual ($\mu$s)')
     if legend:
-        if len(RCVR_BCKNDS) > 5:
-            ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
+        if len(CB) > 5:
+            ncol = int(np.ceil(len(CB)/2))
             y_offset = 1.15
         else:
-            ncol = len(RCVR_BCKNDS)
+            ncol = len(CB)
             y_offset = 1.0
         ax1.legend(loc='upper center', bbox_to_anchor= (0.5, y_offset+1.0/figsize[1]), ncol=ncol)
     if title:
-        if len(RCVR_BCKNDS) > 5:
+        if len(CB) > 5:
             y_offset = 1.1
         else:
             y_offset = 1.0
@@ -2186,11 +2555,12 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
     if axs == None:
         # Define clickable points
         text = ax1.text(0,0,"")
+        stamp_color = "#FD9927"
         # Define color for highlighting points
-        if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
-            stamp_color = "#61C853"
-        else:
-            stamp_color = "#FD9927"
+        #if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
+        #    stamp_color = "#61C853"
+        #else:
+        #    stamp_color = "#FD9927"
 
         def onclick(event):
             # Get X and Y axis data
@@ -2218,151 +2588,7 @@ def plot_residuals_orb(fitter, restype = 'postfit', plotsig = False, avg = False
 
     return
 
-def plot_toas_freq(fitter, save = False, legend = True, title = True, axs = None, **kwargs):
-    """
-    Make a plot of frequency v. toa
 
-
-    Arguments
-    ---------
-    fitter [object] : The PINT fitter object.
-    save [boolean] : If True will save plot with the name "resid_v_mjd.png" Will add averaged/whitened
-         as necessary [default: False].
-    legend [boolean] : If False, will not print legend with plot [default: True].
-    title [boolean] : If False, will not print plot title [default: True].
-    axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
-         larger figure [default: None].
-
-    Optional Arguments:
-    --------------------
-    freqs [list/array] : List or array of TOA frequencies to plot. Will override values from toa object.
-    mjds [list/array] : List or array of TOA MJDs to plot. Will override values from toa object.
-    rcvr_bcknds[list/array] : List or array of TOA receiver-backend combinations. Will override values from toa object.
-    figsize [tuple] : Size of the figure passed to matplotlib [default: (10,4)].
-    fmt ['string'] : matplotlib format option for markers [default: ('x')]
-    color ['string'] : matplotlib color option for plot [default: color dictionary in plot_utils.py file]
-    alpha [float] : matplotlib alpha options for plot points [default: 0.5]
-    """
-    # Check if wideband
-    if fitter.is_wideband:
-        NB = False
-    else:
-        NB = True
-
-    # frequencies
-    if 'freqs' in kwargs.keys():
-        freqs = kwargs['freqs']
-    else:
-        freqs = fitter.toas.get_freqs().value
-    # Get MJDs
-    if 'mjds' in kwargs.keys():
-        mjds = kwargs['mjds']
-    else:
-        mjds = fitter.toas.get_mjds().value
-    # Convert to years
-    years = (mjds - 51544.0)/365.25 + 2000.0
-
-    # Get receiver backends
-    if 'rcvr_bcknds' in kwargs.keys():
-        rcvr_bcknds = kwargs['rcvr_bcknds']
-    else:
-        rcvr_bcknds = np.array(fitter.toas.get_flag_value('f')[0])
-    # Get the set of unique receiver-bandend combos
-    RCVR_BCKNDS = set(rcvr_bcknds)
-
-    if 'figsize' in kwargs.keys():
-        figsize = kwargs['figsize']
-    else:
-        figsize = (10,4)
-    if axs == None:
-        fig = plt.figure(figsize=figsize)
-        ax1 = fig.add_subplot(111)
-    else:
-        fig = plt.gcf()
-        ax1 = axs
-    for i, r_b in enumerate(RCVR_BCKNDS):
-        inds = np.where(rcvr_bcknds==r_b)[0]
-        if not inds.tolist():
-            r_b_label = ""
-        else:
-            r_b_label = rcvr_bcknds[inds][0]
-        # Get plot preferences
-        if 'fmt' in kwargs.keys():
-            mkr = kwargs['fmt']
-        else:
-            mkr = markers[r_b_label]
-        if 'color' in kwargs.keys():
-            clr = kwargs['color']
-        else:
-            clr = colorscheme[r_b_label]
-        if 'alpha' in kwargs.keys():
-            alpha = kwargs['alpha']
-        else:
-            alpha = 1.0
-        # Actually make the plot
-        ax1.scatter(years[inds], freqs[inds], marker=mkr, color=clr,label=r_b_label, alpha = alpha)
-    
-    # Set second axis
-    ax1.set_xlabel(r'Year')
-    ax1.grid(True)
-    ax2 = ax1.twiny()
-    mjd0  = ((ax1.get_xlim()[0])-2004.0)*365.25+53005.
-    mjd1  = ((ax1.get_xlim()[1])-2004.0)*365.25+53005.
-    ax2.set_xlim(mjd0, mjd1)
-    ax1.set_ylabel(r"Frequency (MHz)")
-    if legend:
-        if len(RCVR_BCKNDS) > 5:
-            ncol = int(np.ceil(len(RCVR_BCKNDS)/2))
-            y_offset = 1.15
-        else:
-            ncol = len(RCVR_BCKNDS)
-            y_offset = 1.0
-        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, y_offset+1.0/figsize[1]), ncol=ncol)
-    if title:
-        if len(RCVR_BCKNDS) > 5:
-            y_offset = 1.1
-        else:
-            y_offset = 1.0
-        plt.title("%s toa frequency v. time" % (fitter.model.PSR.value), y=y_offset+1.0/figsize[1])
-    if axs == None:
-        plt.tight_layout()
-    if save:
-        ext = ""
-        if NB:
-            ext += "_NB"
-        else:
-            ext += "_WB"
-        plt.savefig("%s_freq_v_time%s.png" % (fitter.model.PSR.value, ext))
-    
-    if axs == None:
-        # Define clickable points
-        text = ax2.text(0,0,"")
-
-        # Define point highlight color
-        if "430_ASP" in RCVR_BCKNDS or "430_PUPPI" in RCVR_BCKNDS:
-            stamp_color = "#61C853"
-        else:
-            stamp_color = "#FD9927"
-
-        def onclick(event):
-            # Get X and Y axis data
-            xdata = mjds
-            ydata = freqs
-            # Get x and y data from click
-            xclick = event.xdata
-            yclick = event.ydata
-            # Calculate scaled distance, find closest point index
-            d = np.sqrt(((xdata - xclick)/10.0)**2 + (ydata - yclick)**2)
-            ind_close = np.where(np.min(d) == d)[0]
-            # highlight clicked point
-            ax2.scatter(xdata[ind_close], ydata[ind_close], marker = 'x', c = stamp_color)
-            # Print point info
-            text.set_position((xdata[ind_close], ydata[ind_close]))
-            text.set_text("TOA Params:\n MJD: %s \n Freq: %.2f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
-
-        fig.canvas.mpl_connect('button_press_event', onclick)
-    
-    return
 
 def plot_fd_res_v_freq(fitter, plotsig = False, comp_FD = True, avg = False, whitened = False, save = False, \
                         legend = True, title = True, axs = None, **kwargs):
