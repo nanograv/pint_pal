@@ -545,7 +545,7 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
             if plotsig:
                 sig = res[inds]/errs[inds]
                 ax1.errorbar(years[inds], sig, yerr=len(errs[inds])*[1], fmt=mkr, \
-                         color=clr, label=r_b_label, alpha = alpha, picker=True)
+                         color=clr, label=cb_label, alpha = alpha, picker=True)
                 if restype == 'both':
                     sig_pre = res_pre[inds]/errs_pre[inds]
                     ax1.errorbar(years[inds], sig_pre, yerr=len(errs_pre[inds])*[1], fmt=mkr_pre, \
@@ -2486,17 +2486,17 @@ def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = Fal
             if plotsig:
                 sig = res[inds]/errs[inds]
                 ax1.errorbar(orbphase[inds], sig, yerr=len(errs[inds])*[1], fmt=mkr, \
-                         color=clr, label=r_b_label, alpha = alpha)
+                         color=clr, label=cb_label, alpha = alpha)
                 if restype == 'both':
                     sig_pre = res_pre[inds]/errs_pre[inds]
                     ax1.errorbar(orbphase[inds], sig_pre, yerr=len(errs_pre[inds])*[1], fmt=mkr_pre, \
-                             color=clr, label=r_b_label+" Prefit", alpha = alpha)
+                             color=clr, label=cb_label+" Prefit", alpha = alpha)
             else:
                 ax1.errorbar(orbphase[inds], res[inds], yerr = errs[inds], fmt=mkr, \
-                         color=clr, label=r_b_label, alpha = alpha)
+                         color=clr, label=cb_label, alpha = alpha)
                 if restype == 'both':
                     ax1.errorbar(orbphase[inds], res_pre[inds], yerr=errs_pre[inds], fmt=mkr_pre, \
-                         color=clr, label=r_b_label+" Prefit", alpha = alpha)
+                         color=clr, label=cb_label+" Prefit", alpha = alpha)
     # Set second axis
     ax1.set_xlabel(r'Orbital Phase')
     ax1.grid(True)
