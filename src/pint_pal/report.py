@@ -80,7 +80,7 @@ class Report:
         *,
         dpi=300,
         width=1.0,
-        caption=None,
+        caption="",
         also_display=False,
         **savefig_kwargs,
     ):
@@ -90,8 +90,6 @@ class Report:
         if figure is None:
             figure = plt.gcf()
         figure.savefig(filename, dpi=dpi, **savefig_kwargs)
-        if caption is None:
-            caption = filename
         new_content = f"![{caption}]({filename}){{width={100*width:g}%}}\n\n"
         self.add_markdown(section, new_content, also_display=also_display)
 
