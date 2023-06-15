@@ -79,6 +79,7 @@ class Report:
         figure=None,
         *,
         dpi=300,
+        width=1.0,
         caption=None,
         also_display=False,
         **savefig_kwargs,
@@ -91,7 +92,7 @@ class Report:
         figure.savefig(filename, dpi=dpi, **savefig_kwargs)
         if caption is None:
             caption = filename
-        new_content = f"![{caption}]({filename}){{dpi={dpi}}}\n\n"
+        new_content = f"![{caption}]({filename}){{width={100*width:g}%}}\n\n"
         self.add_markdown(section, new_content, also_display=also_display)
 
     def generate(self, *, include_title=True):
