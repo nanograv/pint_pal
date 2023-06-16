@@ -836,6 +836,7 @@ def get_cut_colors(palette='pastel'):
         'outlier10':palette[4],
         'epochdrop':palette[5],
         'orphaned':palette[6],
+        'badgroup':palette[6],
         'maxout':palette[7],
         'simul':palette[8],
         'poorfebe':palette[9],
