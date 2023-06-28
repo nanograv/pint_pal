@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pint_pal"
-version = "0.1.0"
+dynamic = ["version"]
 authors = [
   { name="Joe Glaser", email="joe.glaser@nanograv.org" },
   { name="Joe Swiggum", email="joe.swiggum@nanograv.org" },
