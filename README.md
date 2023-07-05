@@ -3,6 +3,7 @@
 [![Notebook Pipeline (Ubuntu)](https://github.com/nanograv/pint_pal/actions/workflows/test_notebook.yml/badge.svg)](https://github.com/nanograv/pint_pal/actions/workflows/test_notebook.yml)
 [![PyPi Repository](https://img.shields.io/pypi/v/pint-pal.svg)](https://pypi.org/project/pint-pal/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/pint-pal.svg)](https://pypi.org/project/pint-pal/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.8092498.svg)](https://doi.org/10.5281/zenodo.8092498)
 
 A repository for standardizing timing analysis and data combination work with a Jupyter notebook framework and corresponding tools. 
 
