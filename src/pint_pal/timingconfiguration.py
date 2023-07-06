@@ -724,7 +724,7 @@ class TimingConfiguration:
             for flag, value in self.get_bad_group():
                 vals = np.array([f[flag] for f in toas.orig_table['flags']])
                 bad_inds = np.where(vals==value)[0]
-                apply_cut_flag(toas,orphinds,'badgroup',warn=warn)
+                apply_cut_flag(toas,bad_inds,'badgroup',warn=warn)
         if 'mjd-start' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             startinds = np.where(mjds < self.get_mjd_start())[0]
