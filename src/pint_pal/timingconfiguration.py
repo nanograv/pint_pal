@@ -722,7 +722,7 @@ class TimingConfiguration:
                 apply_cut_flag(toas,orphinds,'orphaned',warn=warn)
         if 'bad-group' in valid_valued:
             for flag, value in self.get_bad_group():
-                vals = np.array([f[flag] for f in toas.orig_table['flags']])
+                vals = np.array([f[flag] for f in toas.orig_table['flags'] if flag in list(f.keys())])
                 bad_inds = np.where(vals==value)[0]
                 apply_cut_flag(toas,bad_inds,'badgroup',warn=warn)
         if 'mjd-start' in valid_valued:
