@@ -29,6 +29,7 @@ import pint_pal.lite_utils as lu
 # Color scheme for consistent reciever-backend combos, same as published 12.5 yr
 colorschemes = {'observatories':{
               "ao":                    "#6BA9E2",
+              "arecibo":                    "#6BA9E2",
               "gbt":                   "#61C853",
               "vla":                   "#40635F",
               "CHIME":                 "#ECE133",
@@ -36,6 +37,7 @@ colorschemes = {'observatories':{
               "ncyobs":                "#407BD5",
               "effelsberg_asterix":    "#407BD5",
               "effelsberg":            "#407BD5",
+              "leap":                  "#ECE133",
               "jodrell":               "#407BD5",
               "jbroach":               "#407BD5",
               "wsrt":                  "#E5A4CB",
@@ -131,6 +133,7 @@ colorschemes = {'observatories':{
 # marker dictionary to be used if desired, currently all 'x'
 markers = {'observatories':{
               "ao":                    "x",
+              "arecibo":               "x",
               "gbt":                   "x",
               "vla":                   "x",
               "CHIME":                 "x",
