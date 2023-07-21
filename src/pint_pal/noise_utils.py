@@ -303,17 +303,13 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
         dmefac_params = []
         dmequad_params = []
 
-    ii = 0
-    idx = 0
+    efac_idx = 1
+    equad_idx = 1
+    ecorr_idx = 1
+    dmefac_idx = 1
+    dmequad_idx = 1
 
     for key, val in wn_dict.items():
-
-        if not using_wideband:
-            if ii % 3 == 0:
-                idx += 1
-        else:
-            if ii % 5 == 0:
-                idx += 1
 
         psr_name = key.split('_')[0]
 
@@ -321,9 +317,10 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
 
             param_name = key.split('_efac')[0].split(psr_name)[1][1:]
 
-            tp = maskParameter(name = 'EFAC', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'EFAC', index = efac_idx, key = '-f', key_value = param_name,
                                value = val, units = '')
             efac_params.append(tp)
+            efac_idx += 1
 
         # See https://github.com/nanograv/enterprise/releases/tag/v3.3.0
         # ..._t2equad uses PINT/Tempo2/Tempo convention, resulting in total variance EFAC^2 x (toaerr^2 + EQUAD^2)
@@ -331,53 +328,57 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
 
             param_name = key.split('_t2equad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'EQUAD', index = equad_idx, key = '-f', key_value = param_name,
                                value = 10 ** val / 1e-6, units = 'us')
             equad_params.append(tp)
+            equad_idx += 1
 
         # ..._tnequad uses temponest convention, resulting in total variance EFAC^2 toaerr^2 + EQUAD^2
         elif '_tnequad' in key:
 
             param_name = key.split('_tnequad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'EQUAD', index = equad_idx, key = '-f', key_value = param_name,
                                value = 10 ** val / 1e-6, units = 'us')
             equad_params.append(tp)
+            equad_idx += 1
 
         # ..._equad uses temponest convention; generated with enterprise pre-v3.3.0
         elif '_equad' in key:
 
             param_name = key.split('_equad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'EQUAD', index = equad_idx, key = '-f', key_value = param_name,
                                value = 10 ** val / 1e-6, units = 'us')
             equad_params.append(tp)
+            equad_idx += 1
 
         elif ('_ecorr' in key) and (not using_wideband):
 
             param_name = key.split('_ecorr')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'ECORR', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'ECORR', index = ecorr_idx, key = '-f', key_value = param_name,
                                value = 10 ** val / 1e-6, units = 'us')
             ecorr_params.append(tp)
+            ecorr_idx += 1
 
         elif ('_dmefac' in key) and (using_wideband):
 
             param_name = key.split('_dmefac')[0].split(psr_name)[1][1:]
 
-            tp = maskParameter(name = 'DMEFAC', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'DMEFAC', index = dmefac_idx, key = '-f', key_value = param_name,
                                value = val, units = '')
             dmefac_params.append(tp)
+            dmefac_idx += 1
 
         elif ('_dmequad' in key) and (using_wideband):
 
             param_name = key.split('_dmequad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'DMEQUAD', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'DMEQUAD', index = dmequad_idx, key = '-f', key_value = param_name,
                                value = 10 ** val, units = 'pc/cm3')
             dmequad_params.append(tp)
-
-        ii += 1
+            dmequad_idx += 1
 
     # Test EQUAD convention and decide whether to convert
     convert_equad_to_t2 = False
