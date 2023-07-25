@@ -29,13 +29,18 @@ jobs:
           mamba-version: "*"
           channels: conda-forge,defaults
           channel-priority: true
+    - name: Conda info
+      shell: bash -el {0}
+      run: conda info
     - name: Install Dependencies & Main Code
+      shell: bash -el {0}
       run: |
         pip install --upgrade pip
         pip install pytest
         mamba install -c conda-forge python=${{ matrix.python-version }} cython=0.29.36 tempo2 scikit-sparse
         pip install -e .
     - name: Test with Standard Pulsar
+      shell: bash -el {0}
       run: |
         export PULSAR_NAME='J0605+3757'
         export JUPYTER_PLATFORM_DIRS=1 && jupyter --paths
