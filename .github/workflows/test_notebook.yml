@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8"]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
 
     steps:
     - name: Install pdflatex
@@ -35,9 +35,7 @@ jobs:
     - name: Install Dependencies & Main Code
       shell: bash -el {0}
       run: |
-        pip install --upgrade pip
-        pip install pytest
-        mamba install -c conda-forge python=${{ matrix.python-version }} cython=0.29.36 tempo2 enterprise-pulsar enterprise_extensions scikit-sparse
+        mamba install -c conda-forge python=${{ matrix.python-version }} pytest cython=0.29.36 tempo2 enterprise-pulsar enterprise_extensions scikit-sparse
         pip install -e .
     - name: Test with Standard Pulsar
       shell: bash -el {0}
