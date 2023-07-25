@@ -25,7 +25,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
       uses: conda-incubator/setup-miniconda@v2
-        with:
+      with:
           python-version: ${{ matrix.python-version }}
           mamba-version: "*"
           channels: conda-forge,defaults
@@ -35,7 +35,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install pytest
-        mamba install -c conda-forge tempo2 scikit-sparse<3.0
+        mamba install -c conda-forge cython<=0.29.36 tempo2 scikit-sparse
         python -m pip install -e .
     - name: Test with Standard Pulsar
       run: |
