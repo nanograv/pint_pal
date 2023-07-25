@@ -37,7 +37,7 @@ jobs:
       run: |
         pip install --upgrade pip
         pip install pytest
-        mamba install -c conda-forge python=${{ matrix.python-version }} cython=0.29.36 tempo2 scikit-sparse
+        mamba install -c conda-forge python=${{ matrix.python-version }} cython=0.29.36 tempo2 enterprise enterprise_extensions scikit-sparse
         pip install -e .
     - name: Test with Standard Pulsar
       shell: bash -el {0}
