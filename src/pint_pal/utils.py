@@ -73,8 +73,12 @@ def whiten_resids(fitter, restype = 'postfit'):
             # Get number of residuals
         num_res = len(time_resids)
         # Check that the key is in the dictionary
-        if "pl_red_noise" in noise_resids:
+        if "pl_red_noise" and "pl_DM_noise" in noise_resids:
+            wres = time_resids - noise_resids['pl_red_noise'][:num_res] - noise_resids['pl_DM_noise'][:num_res]
+        elif "pl_red_noise" in noise_resids:
             wres = time_resids - noise_resids['pl_red_noise'][:num_res]
+        elif "pl_DM_noise" in noise_resids:
+            wres = time_resids - noise_resids['pl_DM_noise'][:num_res]
         else:
             log.warning("No red noise, residuals already white. Returning input residuals...")
             wres = time_resids
