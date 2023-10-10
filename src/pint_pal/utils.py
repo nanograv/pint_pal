@@ -566,7 +566,11 @@ def pdf_writer(fitter,
     # print list of tim file names, limit two tim files per line
     fsum.write(r'Input tim files:' + "\n")
     fsum.write(r'\begin{itemize}' + "\n")
-    for tf in fitter.toas.filename:
+    if isinstance(fitter.toas.filename, str):
+        tim_files = [fitter.toas.filename]
+    else:
+        tim_files = fitter.toas.filename
+    for tf in tim_files:
         fsum.write(r'\item ' + verb(tf.split('/')[-1]) + '\n')
     fsum.write(r'\end{itemize}' + "\n")
     fsum.write('Span: %.1f years (%.1f -- %.1f)\\\\\n ' % (span/365.24,
