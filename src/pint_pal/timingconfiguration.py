@@ -381,6 +381,12 @@ class TimingConfiguration:
         if 'orphaned-rec' in self.config['ignore'].keys():
             return self.config['ignore']['orphaned-rec']
         return None 
+
+    def get_bad_group(self):
+        """Return bad group(s)"""
+        if 'bad-group' in self.config['ignore'].keys():
+            return self.config['ignore']['bad-group']
+        return None
     
     def get_poor_febes(self):
         """Return poor frontend/backend combinations for removal"""
@@ -682,7 +688,7 @@ class TimingConfiguration:
     def apply_ignore(self,toas,specify_keys=None,warn=False,model=None):
         """ Basic checks and return TOA excision info. """
         OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa', 'bad-toa-averaged','bad-range','bad-file',
-                        'orphaned-rec','prob-outlier','poor-febe','orb-phase-range']
+                        'orphaned-rec','bad-group','prob-outlier','poor-febe','orb-phase-range']
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
 
@@ -714,6 +720,11 @@ class TimingConfiguration:
             for o in self.get_orphaned_rec():
                 orphinds = np.where(fs==o)[0]
                 apply_cut_flag(toas,orphinds,'orphaned',warn=warn)
+        if 'bad-group' in valid_valued:
+            for flag, value in self.get_bad_group():
+                vals = np.array([f[flag] for f in toas.orig_table['flags'] if flag in list(f.keys())])
+                bad_inds = np.where(vals==value)[0]
+                apply_cut_flag(toas,bad_inds,'badgroup',warn=warn)
         if 'mjd-start' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             startinds = np.where(mjds < self.get_mjd_start())[0]
