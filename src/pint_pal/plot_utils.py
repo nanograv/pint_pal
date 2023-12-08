@@ -1084,7 +1084,11 @@ def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = Fal
         if 'color' in kwargs.keys():
             clr = kwargs['color']
         else:
-            clr = colorscheme[cb_label]
+            try:
+                clr = colorscheme[cb_label]
+            except Exception:
+                clr = 'k'
+                log.log(1, "Color by Flag doesn't have a color!!")
         if 'alpha' in kwargs.keys():
             alpha = kwargs['alpha']
         else:
