@@ -1593,6 +1593,8 @@ def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False
     color ['string'] : matplotlib color option for plot [default: color dictionary in plot_utils.py file]
     alpha [float] : matplotlib alpha options for plot points [default: 0.5]
     """
+    markers, colorscheme = plot_settings()
+
     # Check if wideband
     if not fitter.is_wideband:
         raise RuntimeError("Error: Narrowband TOAs have no DM residuals, use `plot_dmx_time() instead.")
@@ -1817,6 +1819,8 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
     color ['string'] : matplotlib color option for plot [default: color dictionary in plot_utils.py file]
     alpha [float] : matplotlib alpha options for plot points [default: 0.5]
     """
+    markers, colorscheme = plot_settings()
+
     # Check if wideband
     if fitter.is_wideband:
         NB = False
@@ -2058,6 +2062,8 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
     fmt ['string'] : matplotlib format option for markers [default: ('x')]
     color ['string'] : matplotlib color option for plot [default: color dictionary in plot_utils.py file]
     """
+    markers, colorscheme = plot_settings()
+
     # Check if wideband
     if not fitter.is_wideband:
             raise ValueError("Narrowband Fitters have have no DM residuals, please use `plot_measurements_v_dmres` instead.")
