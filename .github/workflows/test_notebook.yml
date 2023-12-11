@@ -21,7 +21,7 @@ jobs:
     - name: Install pdflatex
       run: |
         sudo apt-get update
-        sudo apt-get install texlive-latex-base pdftk latex2html
+        sudo apt-get install texlive-latex-base cm-super-minimal pdftk latex2html
     - uses: actions/checkout@v3
     - uses: conda-incubator/setup-miniconda@v2
       with:
