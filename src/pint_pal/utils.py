@@ -73,8 +73,12 @@ def whiten_resids(fitter, restype = 'postfit'):
             # Get number of residuals
         num_res = len(time_resids)
         # Check that the key is in the dictionary
-        if "pl_red_noise" in noise_resids:
+        if "pl_red_noise" and "pl_DM_noise" in noise_resids:
+            wres = time_resids - noise_resids['pl_red_noise'][:num_res] - noise_resids['pl_DM_noise'][:num_res]
+        elif "pl_red_noise" in noise_resids:
             wres = time_resids - noise_resids['pl_red_noise'][:num_res]
+        elif "pl_DM_noise" in noise_resids:
+            wres = time_resids - noise_resids['pl_DM_noise'][:num_res]
         else:
             log.warning("No red noise, residuals already white. Returning input residuals...")
             wres = time_resids
@@ -562,7 +566,11 @@ def pdf_writer(fitter,
     # print list of tim file names, limit two tim files per line
     fsum.write(r'Input tim files:' + "\n")
     fsum.write(r'\begin{itemize}' + "\n")
-    for tf in fitter.toas.filename:
+    if isinstance(fitter.toas.filename, str):
+        tim_files = [fitter.toas.filename]
+    else:
+        tim_files = fitter.toas.filename
+    for tf in tim_files:
         fsum.write(r'\item ' + verb(tf.split('/')[-1]) + '\n')
     fsum.write(r'\end{itemize}' + "\n")
     fsum.write('Span: %.1f years (%.1f -- %.1f)\\\\\n ' % (span/365.24,

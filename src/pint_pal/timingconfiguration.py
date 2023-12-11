@@ -381,6 +381,12 @@ class TimingConfiguration:
         if 'orphaned-rec' in self.config['ignore'].keys():
             return self.config['ignore']['orphaned-rec']
         return None 
+
+    def get_bad_group(self):
+        """Return bad group(s)"""
+        if 'bad-group' in self.config['ignore'].keys():
+            return self.config['ignore']['bad-group']
+        return None
     
     def get_poor_febes(self):
         """Return poor frontend/backend combinations for removal"""
@@ -682,7 +688,7 @@ class TimingConfiguration:
     def apply_ignore(self,toas,specify_keys=None,warn=False,model=None):
         """ Basic checks and return TOA excision info. """
         OPTIONAL_KEYS = ['mjd-start','mjd-end','snr-cut','bad-toa', 'bad-toa-averaged','bad-range','bad-file',
-                        'orphaned-rec','prob-outlier','poor-febe','orb-phase-range']
+                        'orphaned-rec','bad-group','prob-outlier','poor-febe','orb-phase-range']
         EXISTING_KEYS = self.config['ignore'].keys()
         VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['ignore'][k] is not None]
 
@@ -710,10 +716,15 @@ class TimingConfiguration:
         # All info here about selecting various TOAs.
         # Select TOAs to cut, then use apply_cut_flag.
         if 'orphaned-rec' in valid_valued:
-            fs = np.array([f['f'] for f in toas.orig_table['flags']])
+            fs = np.array([(f['f'] if 'f' in f else None) for f in toas.orig_table['flags']])
             for o in self.get_orphaned_rec():
                 orphinds = np.where(fs==o)[0]
                 apply_cut_flag(toas,orphinds,'orphaned',warn=warn)
+        if 'bad-group' in valid_valued:
+            for flag, value in self.get_bad_group():
+                vals = np.array([f[flag] for f in toas.orig_table['flags'] if flag in list(f.keys())])
+                bad_inds = np.where(vals==value)[0]
+                apply_cut_flag(toas,bad_inds,'badgroup',warn=warn)
         if 'mjd-start' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
             startinds = np.where(mjds < self.get_mjd_start())[0]
@@ -723,7 +734,9 @@ class TimingConfiguration:
             endinds = np.where(mjds > self.get_mjd_end())[0]
             apply_cut_flag(toas,endinds,'mjdend',warn=warn)
         if 'snr-cut' in valid_valued:
-            snrs = np.array([float(f['snr']) for f in toas.orig_table['flags']])
+            if any('snr' not in f for f in toas.orig_table['flags']):
+                log.warning("Excision key 'snr-cut' in use, but some TOAs are missing the 'snr' flag.")
+            snrs = np.array([(float(f['snr']) if 'snr' in f else np.nan) for f in toas.orig_table['flags']])
             snrinds = np.where(snrs < self.get_snr_cut())[0]
             apply_cut_flag(toas,snrinds,'snr',warn=warn)
             if self.get_snr_cut() > 8.0 and self.get_toa_type() == 'NB':
@@ -731,7 +744,7 @@ class TimingConfiguration:
             if self.get_snr_cut() > 25.0 and self.get_toa_type() == 'WB':
                 log.warning('snr-cut should be set to 25; try excising TOAs using other methods.')
         if 'poor-febe' in valid_valued:
-            fs = np.array([f['f'] for f in toas.orig_table['flags']])
+            fs = np.array([(f['f'] if 'f' in f else None) in toas.orig_table['flags']])
             for febe in self.get_poor_febes():
                 febeinds = np.where(fs==febe)[0]
                 apply_cut_flag(toas,febeinds,'poorfebe',warn=warn)
@@ -788,7 +801,7 @@ class TimingConfiguration:
                 log.warning(f'One or more bad-file entries lack reasons for excision; please add them.')
         if 'bad-range' in valid_valued:
             mjds = np.array([m for m in toas.orig_table['mjd_float']])
-            backends = np.array([f['be'] for f in toas.orig_table['flags']])
+            backends = np.array([(f['be'] if 'be' in f else None) for f in toas.orig_table['flags']])
             for br in self.get_bad_ranges():
                 if len(br) > 2:
                     rangeinds = np.where((mjds>br[0]) & (mjds<br[1]) & (backends==br[2]))[0]
@@ -808,8 +821,9 @@ class TimingConfiguration:
         if 'bad-toa' in valid_valued:
             logwarntoa = False
             names = np.array([f['name'] for f in toas.orig_table['flags']])
-            subints = np.array([int(f['subint']) for f in toas.orig_table['flags']])
-            if self.get_toa_type() == 'NB': chans = np.array([int(f['chan']) for f in toas.orig_table['flags']])
+            subints = np.array([(int(f['subint']) if 'subint' in f else None) for f in toas.orig_table['flags']])
+            if self.get_toa_type() == 'NB':
+                chans = np.array([(int(f['chan']) if 'chan' in f else None) for f in toas.orig_table['flags']])
             btinds = []
             for bt in self.get_bad_toas():
                 if len(bt) < 4: logwarntoa = True

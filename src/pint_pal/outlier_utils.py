@@ -30,12 +30,12 @@ def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
 
     # white noise
     efac = parameter.Uniform(0.01,10.0)
-    equad = parameter.Uniform(-10, -4)
+    t2equad = parameter.Uniform(-10, -4)
     ecorr = parameter.Uniform(-10, -4)
     selection = selections.Selection(selections.by_backend)
 
-    ef = white_signals.MeasurementNoise(efac=efac, selection=selection)
-    eq = white_signals.EquadNoise(log10_equad=equad, selection=selection)
+    # white noise
+    mn = white_signals.MeasurementNoise(efac=efac, log10_t2equad=t2equad, selection=selection)
     ec = gp_signals.EcorrBasisModel(log10_ecorr=ecorr, selection=selection)
 
     # red noise
@@ -46,7 +46,7 @@ def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     tm = gp_signals.TimingModel()
 
     # combined signal
-    s = ef + eq + ec + rn + tm 
+    s = mn + ec + rn + tm 
 
     # PTA
     pta = signal_base.PTA([s(entPintPulsar)])

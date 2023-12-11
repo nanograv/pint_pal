@@ -283,8 +283,6 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
         if compare_dir is not None:
             chaindir_compare = os.path.join(compare_dir,f'{model.PSR.value}_wb/')
 
-            
-
     log.info(f'Using existing noise analysis results in {chaindir}')
     log.info('Adding new noise parameters to model.')
     wn_dict, rn_bf = analyze_noise(chaindir, burn_frac, save_corner, no_corner_plot, chaindir_compare=chaindir_compare)
@@ -296,24 +294,17 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
     efac_params = []
     equad_params = []
     rn_params = []
+    ecorr_params = []
+    dmefac_params = []
+    dmequad_params = []
 
-    if not using_wideband:
-        ecorr_params = []
-    else:
-        dmefac_params = []
-        dmequad_params = []
-
-    ii = 0
-    idx = 0
+    efac_idx = 1
+    equad_idx = 1
+    ecorr_idx = 1
+    dmefac_idx = 1
+    dmequad_idx = 1
 
     for key, val in wn_dict.items():
-
-        if not using_wideband:
-            if ii % 3 == 0:
-                idx += 1
-        else:
-            if ii % 5 == 0:
-                idx += 1
 
         psr_name = key.split('_')[0]
 
@@ -321,9 +312,10 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
 
             param_name = key.split('_efac')[0].split(psr_name)[1][1:]
 
-            tp = maskParameter(name = 'EFAC', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'EFAC', index = efac_idx, key = '-f', key_value = param_name,
                                value = val, units = '')
             efac_params.append(tp)
+            efac_idx += 1
 
         # See https://github.com/nanograv/enterprise/releases/tag/v3.3.0
         # ..._t2equad uses PINT/Tempo2/Tempo convention, resulting in total variance EFAC^2 x (toaerr^2 + EQUAD^2)
@@ -331,53 +323,57 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
 
             param_name = key.split('_t2equad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'EQUAD', index = equad_idx, key = '-f', key_value = param_name,
                                value = 10 ** val / 1e-6, units = 'us')
             equad_params.append(tp)
+            equad_idx += 1
 
         # ..._tnequad uses temponest convention, resulting in total variance EFAC^2 toaerr^2 + EQUAD^2
         elif '_tnequad' in key:
 
             param_name = key.split('_tnequad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'EQUAD', index = equad_idx, key = '-f', key_value = param_name,
                                value = 10 ** val / 1e-6, units = 'us')
             equad_params.append(tp)
+            equad_idx += 1
 
         # ..._equad uses temponest convention; generated with enterprise pre-v3.3.0
         elif '_equad' in key:
 
             param_name = key.split('_equad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'EQUAD', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'EQUAD', index = equad_idx, key = '-f', key_value = param_name,
                                value = 10 ** val / 1e-6, units = 'us')
             equad_params.append(tp)
+            equad_idx += 1
 
         elif ('_ecorr' in key) and (not using_wideband):
 
             param_name = key.split('_ecorr')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'ECORR', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'ECORR', index = ecorr_idx, key = '-f', key_value = param_name,
                                value = 10 ** val / 1e-6, units = 'us')
             ecorr_params.append(tp)
+            ecorr_idx += 1
 
         elif ('_dmefac' in key) and (using_wideband):
 
             param_name = key.split('_dmefac')[0].split(psr_name)[1][1:]
 
-            tp = maskParameter(name = 'DMEFAC', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'DMEFAC', index = dmefac_idx, key = '-f', key_value = param_name,
                                value = val, units = '')
             dmefac_params.append(tp)
+            dmefac_idx += 1
 
         elif ('_dmequad' in key) and (using_wideband):
 
             param_name = key.split('_dmequad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
-            tp = maskParameter(name = 'DMEQUAD', index = idx, key = '-f', key_value = param_name,
+            tp = maskParameter(name = 'DMEQUAD', index = dmequad_idx, key = '-f', key_value = param_name,
                                value = 10 ** val, units = 'pc/cm3')
             dmequad_params.append(tp)
-
-        ii += 1
+            dmequad_idx += 1
 
     # Test EQUAD convention and decide whether to convert
     convert_equad_to_t2 = False
@@ -389,36 +385,34 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
     elif test_equad_convention(wn_dict.keys()) == 't2equad':
         log.info('WN parameters use T2 convention; no conversion necessary')
 
+    # Create white noise components and add them to the model
     ef_eq_comp = pm.ScaleToaError()
-
-    if using_wideband:
-        dm_comp = pm.noise_model.ScaleDmError()
-    else:
-        ec_comp = pm.EcorrNoise()
-
-    #Remove the default parameters that come with these components
     ef_eq_comp.remove_param(param = 'EFAC1')
     ef_eq_comp.remove_param(param = 'EQUAD1')
     ef_eq_comp.remove_param(param = 'TNEQ1')
-    if using_wideband:
+    for efac_param in efac_params:
+        ef_eq_comp.add_param(param = efac_param, setup = True)
+    for equad_param in equad_params:
+        ef_eq_comp.add_param(param = equad_param, setup = True)
+    model.add_component(ef_eq_comp, validate = True, force = True)
+
+    if len(dmefac_params) > 0 or len(dmequad_params) > 0:
+        dm_comp = pm.noise_model.ScaleDmError()
         dm_comp.remove_param(param = 'DMEFAC1')
         dm_comp.remove_param(param = 'DMEQUAD1')
-    else:
+        for dmefac_param in dmefac_params:
+            dm_comp.add_param(param = dmefac_param, setup = True)
+        for dmequad_param in dmequad_params:
+            dm_comp.add_param(param = dmequad_param, setup = True)
+        model.add_component(dm_comp, validate = True, force = True)
+    if len(ecorr_params) > 0:
+        ec_comp = pm.EcorrNoise()
         ec_comp.remove_param('ECORR1')
+        for ecorr_param in ecorr_params:
+            ec_comp.add_param(param = ecorr_param, setup = True)
+        model.add_component(ec_comp, validate = True, force = True)
 
-    #Add the above ML WN parameters to their respective components
-    for ii in range(len(efac_params)):
-
-        ef_eq_comp.add_param(param = efac_params[ii], setup = True)
-        ef_eq_comp.add_param(param = equad_params[ii], setup = True)
-        if not using_wideband:
-            ec_comp.add_param(param = ecorr_params[ii], setup = True)
-        else:
-            dm_comp.add_param(param = dmefac_params[ii])
-            dm_comp.add_param(param = dmequad_params[ii], setup = True)
-
-    #Add the ML RN parameters to their component
-    
+    # Create red noise component and add it to the model
     log.info(f"The SD Bayes factor for red noise in this pulsar is: {rn_bf}")
     if (rn_bf >= rn_bf_thres or np.isnan(rn_bf)) and (not ignore_red_noise):
 
@@ -434,13 +428,6 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
         model.add_component(rn_comp, validate = True, force = True)
     else:
         log.info("Not including red noise for this pulsar")
-
-    #Add these components to the input timing model
-    model.add_component(ef_eq_comp, validate = True, force = True)
-    if not using_wideband:
-        model.add_component(ec_comp, validate = True, force = True)
-    else:
-        model.add_component(dm_comp, validate = True, force = True)
 
     #Setup and validate the timing model to ensure things are correct
     model.setup()
