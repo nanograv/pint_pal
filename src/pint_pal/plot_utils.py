@@ -3486,7 +3486,7 @@ def plot_settings():
     fig_height = fig_width*golden_mean*2       # height in inches
     fig_size = [fig_width,fig_height]
     fontsize = 20  # for xlabel, backend labels
-    plotting_params = {'backend': 'pdf', 'axes.labelsize': 12, 'lines.markersize': 4, 'font.size': 12, 'xtick.major.size': 6, 'xtick.minor.size': 3, 'ytick.major.size': 6, 'ytick.minor.size': 3, 'xtick.major.width': 0.5, 'ytick.major.width': 0.5, 'xtick.minor.width': 0.5, 'ytick.minor.width': 0.5, 'lines.markeredgewidth': 1, 'axes.linewidth': 1.2, 'legend.fontsize': 10, 'xtick.labelsize': 12, 'ytick.labelsize': 10, 'savefig.dpi': 400, 'path.simplify': True, 'font.family': 'serif', 'font.serif': 'Times', 'text.usetex': True, 'figure.figsize': fig_size, 'text.latex.preamble': [r'\usepackage{amsmath}', r'\usepackage{apjfonts}']}
+    plotting_params = {'backend': 'pdf', 'axes.labelsize': 12, 'lines.markersize': 4, 'font.size': 12, 'xtick.major.size': 6, 'xtick.minor.size': 3, 'ytick.major.size': 6, 'ytick.minor.size': 3, 'xtick.major.width': 0.5, 'ytick.major.width': 0.5, 'xtick.minor.width': 0.5, 'ytick.minor.width': 0.5, 'lines.markeredgewidth': 1, 'axes.linewidth': 1.2, 'legend.fontsize': 10, 'xtick.labelsize': 12, 'ytick.labelsize': 10, 'savefig.dpi': 400, 'path.simplify': True, 'font.family': 'serif', 'font.serif': 'Times', 'text.usetex': True, 'figure.figsize': fig_size, 'text.latex.preamble': r'\usepackage{amsmath}\n\usepackage{apjfonts}'}
 
     plt.rcParams.update(plotting_params)
 
