@@ -2985,7 +2985,7 @@ def summary_plots(fitter, title = None, legends = False, save = False, avg = Tru
 
     # And residual vs. Frequency
     ax5 = fig.add_subplot(gs[count+k, :])
-    plot_toas_freq(fitter, title = False, legend = False, axs =ax5,  figsize=(12,3))
+    plot_residuals_freq(fitter, title = False, legend = False, axs =ax5,  figsize=(12,3))
     k += 1
 
     # Now if whitened add the whitened residual plots
@@ -3214,7 +3214,7 @@ def summary_plots_ft(fitter, title = None, legends = False, save = False):
 
     # Now plot the frequencies of the TOAs vs. time
     ax5 = fig.add_subplot(gs[count+k, :])
-    plot_toas_freq(fitter, title = False, legend = False, axs =ax5, figsize=(12,3))
+    plot_residuals_freq(fitter, title = False, legend = False, axs =ax5, figsize=(12,3))
     k += 1
 
     plt.tight_layout()
@@ -3364,7 +3364,7 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
         elif ii == 3:
             gs = fig.add_gridspec(1,1)
             ax0 = fig.add_subplot(gs[0])
-            plot_toas_freq(fitter, title = False, legend = True, axs =ax0, figsize=(8,4))
+            plot_residuals_freq(fitter, title = False, legend = True, axs =ax0, figsize=(8,4))
             plt.tight_layout()
             plt.savefig("%s_summary_plot_4_nb.png" % (fitter.model.PSR.value))
             plt.close()
@@ -3470,7 +3470,7 @@ def plots_for_summary_pdf_wb(fitter, title = None, legends = False):
         elif ii == 3:
             gs = fig.add_gridspec(1,1)
             ax0 = fig.add_subplot(gs[0])
-            plot_toas_freq(fitter, title = False, legend = True, axs =ax0, figsize=(8,4))
+            plot_residuals_freq(fitter, title = False, legend = True, axs =ax0, figsize=(8,4))
             plt.tight_layout()
             plt.savefig("%s_summary_plot_4_wb.png" % (fitter.model.PSR.value))
             plt.close()
