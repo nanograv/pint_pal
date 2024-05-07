@@ -336,8 +336,11 @@ class TimingConfiguration:
     def construct_fitter(self, to, mo):
         """ Return the fitter, tracking pulse numbers if available """
         fitter_name = self.config['fitter']
-        fitter_class = getattr(pint.fitter, fitter_name)
-        return fitter_class(to, mo)
+        if fitter_name == 'Auto':
+            return pint.fitter.Fitter.auto(to, mo)
+        else:
+            fitter_class = getattr(pint.fitter, fitter_name)
+            return fitter_class(to, mo)
 
     def get_toa_type(self):
         """ Return the toa-type string """
