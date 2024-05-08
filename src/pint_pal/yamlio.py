@@ -8,7 +8,7 @@ import argparse
 import glob
 from astropy import log
 import numpy as np
-from pint_pal.defaults import *
+from pint_pal.config import LATEST_TOA_RELEASE
 import os
 
 yaml = YAML()

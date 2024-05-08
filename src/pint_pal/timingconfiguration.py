@@ -21,7 +21,7 @@ import glob
 from pint_pal.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from pint_pal.lite_utils import new_changelog_entry
 from pint_pal.lite_utils import check_toa_version, check_tobs
-from pint_pal.defaults import *
+from pint_pal.config import PLANET_SHAPIRO, FREQUENCY_RATIO, MAX_SOLARWIND_DELAY
 
 class TimingConfiguration:
     """

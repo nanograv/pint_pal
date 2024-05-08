@@ -39,6 +39,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[tool.setuptools.package-data]
+pint_pal = ["defaults.yaml"]
+
 [project.urls]
 "Homepage" = "https://github.com/nanograv/pint_pal"
 "Bug Tracker" = "https://github.com/nanograv/pint_pal/issues"
