@@ -21,7 +21,7 @@ import glob
 from pint_pal.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from pint_pal.lite_utils import new_changelog_entry
 from pint_pal.lite_utils import check_toa_version, check_tobs
-from pint_pal.config import PLANET_SHAPIRO, FREQUENCY_RATIO, MAX_SOLARWIND_DELAY
+from pint_pal.config import DATA_ROOT, PLANET_SHAPIRO, FREQUENCY_RATIO, MAX_SOLARWIND_DELAY
 
 class TimingConfiguration:
     """
@@ -48,8 +48,18 @@ class TimingConfiguration:
         self.filename = filename
         with open(filename) as FILE:
             self.config = yaml.load(FILE, Loader=yaml.FullLoader)
-        self.tim_directory = self.config['tim-directory'] if tim_directory is None else tim_directory
-        self.par_directory = self.config['par-directory'] if par_directory is None else par_directory
+        if tim_directory is None:
+            self.tim_directory = os.path.realpath(
+                os.path.join(DATA_ROOT, self.config['tim-directory'])
+            )
+        else:
+            self.tim_directory = tim_directory
+        if par_directory is None:
+            self.par_directory = os.path.realpath(
+                os.path.join(DATA_ROOT, self.config['par-directory'])
+            )
+        else:
+            self.par_directory = par_directory
         self.skip_check = self.config['skip-check'] if 'skip-check' in self.config.keys() else ''
 
     def get_source(self):
