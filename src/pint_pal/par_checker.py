@@ -4,7 +4,7 @@ import re
 import copy
 from astropy import log
 import astropy.units as u
-from pint_pal.defaults import (
+from pint_pal.config import (
     LATEST_BIPM,
     LATEST_EPHEM,
     PLANET_SHAPIRO,
