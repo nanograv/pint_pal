@@ -21,7 +21,7 @@ def set_data_root(path):
     (2) all scripts and notebooks are run from the root of the data repository.
     """
     global DATA_ROOT
-    DATA_ROOT = path
+    DATA_ROOT = os.path.realpath(path)
     try:
         read_config_file(os.path.join(DATA_ROOT, 'pint_pal_project.yaml'))
     except FileNotFoundError:
