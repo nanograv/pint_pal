@@ -21,7 +21,7 @@ import glob
 from pint_pal.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from pint_pal.lite_utils import new_changelog_entry
 from pint_pal.lite_utils import check_toa_version, check_tobs
-from pint_pal.defaults import *
+import pint_pal.config
 
 class TimingConfiguration:
     """
@@ -45,12 +45,50 @@ class TimingConfiguration:
         tim_directory (optional) : override the tim directory specified in the config
         par_directory (optional) : override the par directory specified in the config
         """
-        self.filename = filename
-        with open(filename) as FILE:
+        self.filename = os.path.realpath(os.path.expanduser(filename))
+        with open(self.filename) as FILE:
             self.config = yaml.load(FILE, Loader=yaml.FullLoader)
-        self.tim_directory = self.config['tim-directory'] if tim_directory is None else tim_directory
-        self.par_directory = self.config['par-directory'] if par_directory is None else par_directory
+        if tim_directory is not None:
+            self.config['tim-directory'] = tim_directory
+        if par_directory is not None:
+            self.config['par-directory'] = par_directory
         self.skip_check = self.config['skip-check'] if 'skip-check' in self.config.keys() else ''
+
+    @property
+    def tim_directory(self):
+        """
+        Location of tim files, as specified in the config.
+        This returns the absolute path to the tim directory.
+        """
+        return os.path.realpath(
+            os.path.join(pint_pal.config.DATA_ROOT, self.config['tim-directory'])
+        )
+
+    @tim_directory.setter
+    def set_tim_directory(self, tim_directory):
+        """
+        Set tim directory.
+        If a relative path is supplied, it will be turned into an absolute path.
+        """
+        self.config['tim-directory'] = tim_directory
+
+    @property
+    def par_directory(self):
+        """
+        Location of par files, as specified in the config.
+        This returns the absolute path to the par directory.
+        """
+        return os.path.realpath(
+            os.path.join(pint_pal.config.DATA_ROOT, self.config['par-directory'])
+        )
+
+    @par_directory.setter
+    def set_par_directory(self, par_directory):
+        """
+        Set par directory.
+        If a relative path is supplied, it will be turned into an absolute path.
+        """
+        self.config['par-directory'] = par_directory
 
     def get_source(self):
         """ Return the source name """
@@ -133,7 +171,7 @@ class TimingConfiguration:
                           usepickle=usepickle,
                           bipm_version=BIPM,
                           ephem=EPHEM,
-                          planets=PLANET_SHAPIRO,
+                          planets=pint_pal.config.PLANET_SHAPIRO,
                           model=m,
                           picklefilename=picklefilename,
                           include_pn=include_pn
@@ -644,13 +682,13 @@ class TimingConfiguration:
         """ Return desired frequency ratio """
         if 'fratio' in self.config['dmx'].keys():
             return self.config['dmx']['fratio']
-        return FREQUENCY_RATIO
+        return pint_pal.config.FREQUENCY_RATIO
 
     def get_sw_delay(self):
         """ Return desired max(solar wind delay) threshold """
         if 'max-sw-delay' in self.config['dmx'].keys():
             return self.config['dmx']['max-sw-delay']
-        return MAX_SOLARWIND_DELAY
+        return pint_pal.config.MAX_SOLARWIND_DELAY
 
     def get_custom_dmx(self):
         """ Return MJD/binning params for handling DM events, etc. """

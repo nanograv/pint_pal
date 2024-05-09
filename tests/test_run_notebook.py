@@ -3,15 +3,17 @@ from os.path import dirname, join, split, splitext
 from datetime import datetime
 from glob import glob
 import pytest
+import pint_pal
 from pint_pal.notebook_runner import run_template_notebook
-
-base_dir = dirname(dirname(__file__))
+test_dir = dirname(__file__)
+base_dir = dirname(test_dir)
+pint_pal.set_data_root(test_dir)
 
 def config_files():
-    config_files = (glob(join(base_dir, 'tests/configs/B*.nb.yaml'))
-                     + glob(join(base_dir, 'tests/configs/J*.nb.yaml'))
-                     + glob(join(base_dir, 'tests/configs/B*.wb.yaml'))
-                     + glob(join(base_dir, 'tests/configs/J*.wb.yaml')))
+    config_files = (glob(join(test_dir, 'configs', 'B*.nb.yaml'))
+                     + glob(join(test_dir, 'configs', 'J*.nb.yaml'))
+                     + glob(join(test_dir, 'configs', 'B*.wb.yaml'))
+                     + glob(join(test_dir, 'configs', 'J*.wb.yaml')))
     config_files = sorted(config_files)
     basenames = [splitext(split(filename)[1])[0] for filename in config_files]
     print(config_files)
@@ -38,6 +40,7 @@ def test_run_notebook(config_file, output_dir):
         `pytest -n <workers> tests/test_run_notebook.py`
         <workers> is the number of worker processes to launch (e.g. 4 to use 4 CPU threads)
     """
+    pint_pal.set_data_root(dirname(__file__))
     global_log = join(output_dir, f'test-run-notebook.log')
     with open(global_log, 'a') as f:
         run_template_notebook(
