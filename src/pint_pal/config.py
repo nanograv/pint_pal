@@ -21,11 +21,19 @@ def set_data_root(path):
     (2) all scripts and notebooks are run from the root of the data repository.
     """
     global DATA_ROOT
-    DATA_ROOT = os.path.realpath(path)
+    DATA_ROOT = os.path.realpath(os.path.expanduser(path))
     try:
         read_config_file(os.path.join(DATA_ROOT, 'pint_pal_project.yaml'))
     except FileNotFoundError:
         pass
+
+def reset_data_root():
+    """
+    Reset the data root and config variables to the default values.
+    """
+    global DATA_ROOT
+    DATA_ROOT = '.'
+    read_config_file(os.path.join(PACKAGE_DIR, 'defaults.yaml'))
 
 def read_config_file(config_file):
     """
