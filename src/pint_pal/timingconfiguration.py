@@ -45,8 +45,8 @@ class TimingConfiguration:
         tim_directory (optional) : override the tim directory specified in the config
         par_directory (optional) : override the par directory specified in the config
         """
-        self.filename = filename
-        with open(filename) as FILE:
+        self.filename = os.path.realpath(os.path.expanduser(filename))
+        with open(self.filename) as FILE:
             self.config = yaml.load(FILE, Loader=yaml.FullLoader)
         if tim_directory is not None:
             self.config['tim-directory'] = tim_directory
