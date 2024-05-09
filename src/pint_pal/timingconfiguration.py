@@ -21,7 +21,7 @@ import glob
 from pint_pal.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from pint_pal.lite_utils import new_changelog_entry
 from pint_pal.lite_utils import check_toa_version, check_tobs
-from pint_pal.config import DATA_ROOT, PLANET_SHAPIRO, FREQUENCY_RATIO, MAX_SOLARWIND_DELAY
+import pint_pal.config
 
 class TimingConfiguration:
     """
@@ -50,13 +50,13 @@ class TimingConfiguration:
             self.config = yaml.load(FILE, Loader=yaml.FullLoader)
         if tim_directory is None:
             self.tim_directory = os.path.realpath(
-                os.path.join(DATA_ROOT, self.config['tim-directory'])
+                os.path.join(pint_pal.config.DATA_ROOT, self.config['tim-directory'])
             )
         else:
             self.tim_directory = tim_directory
         if par_directory is None:
             self.par_directory = os.path.realpath(
-                os.path.join(DATA_ROOT, self.config['par-directory'])
+                os.path.join(pint_pal.config.DATA_ROOT, self.config['par-directory'])
             )
         else:
             self.par_directory = par_directory
@@ -143,7 +143,7 @@ class TimingConfiguration:
                           usepickle=usepickle,
                           bipm_version=BIPM,
                           ephem=EPHEM,
-                          planets=PLANET_SHAPIRO,
+                          planets=pint_pal.config.PLANET_SHAPIRO,
                           model=m,
                           picklefilename=picklefilename,
                           include_pn=include_pn
@@ -654,13 +654,13 @@ class TimingConfiguration:
         """ Return desired frequency ratio """
         if 'fratio' in self.config['dmx'].keys():
             return self.config['dmx']['fratio']
-        return FREQUENCY_RATIO
+        return pint_pal.config.FREQUENCY_RATIO
 
     def get_sw_delay(self):
         """ Return desired max(solar wind delay) threshold """
         if 'max-sw-delay' in self.config['dmx'].keys():
             return self.config['dmx']['max-sw-delay']
-        return MAX_SOLARWIND_DELAY
+        return pint_pal.config.MAX_SOLARWIND_DELAY
 
     def get_custom_dmx(self):
         """ Return MJD/binning params for handling DM events, etc. """

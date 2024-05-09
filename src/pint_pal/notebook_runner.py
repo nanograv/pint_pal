@@ -10,8 +10,8 @@ from ruamel.yaml import YAML
 yaml = YAML(typ='safe')
 
 import pint_pal
+import pint_pal.config
 from pint_pal.notebook_templater import transform_notebook
-from pint_pal.config import DATA_ROOT
 
 ansi_color = re.compile(r'\x1b\[([0-9]{1,3};)*[0-9]{1,3}m')
 
@@ -38,7 +38,7 @@ def run_template_notebook(template_nb, config_file, output_nb=None, err_file=Non
     transformations: Transformations to apply to the notebook.
     """
     # base_dir = root of data repository
-    base_dir = DATA_ROOT
+    base_dir = pint_pal.config.DATA_ROOT
 
     nb_name = os.path.splitext(os.path.split(template_nb)[1])[0]
     cfg_name = os.path.splitext(os.path.split(config_file)[1])[0]
