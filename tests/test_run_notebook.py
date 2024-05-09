@@ -40,6 +40,7 @@ def test_run_notebook(config_file, output_dir):
         `pytest -n <workers> tests/test_run_notebook.py`
         <workers> is the number of worker processes to launch (e.g. 4 to use 4 CPU threads)
     """
+    pint_pal.set_data_root(dirname(__file__))
     global_log = join(output_dir, f'test-run-notebook.log')
     with open(global_log, 'a') as f:
         run_template_notebook(
