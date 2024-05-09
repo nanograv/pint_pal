@@ -49,18 +49,34 @@ class TimingConfiguration:
         with open(filename) as FILE:
             self.config = yaml.load(FILE, Loader=yaml.FullLoader)
         if tim_directory is None:
-            self.tim_directory = os.path.realpath(
-                os.path.join(pint_pal.config.DATA_ROOT, self.config['tim-directory'])
-            )
+            self.config['tim-directory'] = tim_directory
         else:
             self.tim_directory = tim_directory
         if par_directory is None:
-            self.par_directory = os.path.realpath(
-                os.path.join(pint_pal.config.DATA_ROOT, self.config['par-directory'])
-            )
+            self.config['par-directory'] = par_directory
         else:
             self.par_directory = par_directory
         self.skip_check = self.config['skip-check'] if 'skip-check' in self.config.keys() else ''
+
+    @property
+    def tim_directory(self):
+        """
+        Location of tim files, as specified in the config.
+        This returns the absolute path to the tim directory.
+        """
+        return os.path.realpath(
+            os.path.join(pint_pal.config.DATA_ROOT, self.config['tim-directory'])
+        )
+
+    @property
+    def par_directory(self):
+        """
+        Location of par files, as specified in the config.
+        This returns the absolute path to the par directory.
+        """
+        return os.path.realpath(
+            os.path.join(pint_pal.config.DATA_ROOT, self.config['par-directory'])
+        )
 
     def get_source(self):
         """ Return the source name """
