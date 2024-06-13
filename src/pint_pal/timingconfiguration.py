@@ -400,7 +400,7 @@ class TimingConfiguration:
 
     def get_excised(self):
         """ Return excised-tim file if set and exists"""
-        if 'excised-tim' in self.config['intermediate-results'].keys():
+        if 'excised-tim' in self.config['intermediate-results'].keys() and self.config['intermediate-results']['excised-tim']:
             if os.path.exists(self.config['intermediate-results']['excised-tim']):
                 return self.config['intermediate-results']['excised-tim']
         return None
