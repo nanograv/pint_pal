@@ -532,7 +532,7 @@ def add_flag_jumps(mo,flag,flaglist,base=False):
                 JUMPn = maskParameter('JUMP',key=flagval,key_value=[j],value=0.0,units=u.second)
                 phasejump.add_param(JUMPn,setup=True)
 
-def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True):
+def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True, find_jump_flags=True):
     """Quick and dirty routine to find outlier residuals based on some threshold.
     Automatically deals with Wideband vs. Narrowband fitters.
 
@@ -553,6 +553,8 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
         If True, it will not flag/excise any TOAs from ASP or GASP data based on DM criteria
     print_bad: bool
         If True, prints bad-toa lines that can be copied directly into a yaml file
+    find_jump_flags: bool
+        If True, prints a list of potential Jump flags that only appear in the toas with large residuals, alongside the percent of such toas that share that flag.
 
     Returns
     =======
@@ -610,11 +612,36 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
     names = fo.toas.get_flag_value('name')[0]
     chans = fo.toas.get_flag_value('chan')[0]
     subints = fo.toas.get_flag_value('subint')[0]
-    for ibad in badlist[0]:
-        name = names[ibad]
-        chan = chans[ibad]
-        subint = subints[ibad]
-        if print_bad: print(f"  - [{name}, {chan}, {subint}]")
+
+    if find_jump_flags:
+        bad_length = sum(~c)
+        jump_flag_names = ['pta', 'h', 'g', 'j', 'f', 'group', 'fe', 'sys',
+                            'medusa_59200_jump', 'medusa_58925_jump']
+        bad_jump_flags = {}
+        for flag in jump_flag_names:
+            flag_values = fo.toas.get_flag_value(flag)[0]
+            for ibad in badlist[0]:
+                if flag_values[ibad] != None:
+                    key = '-' + flag + ' ' + flag_values[ibad]
+                    if key not in bad_jump_flags.keys():
+                        bad_jump_flags[key] = 0
+                    bad_jump_flags[key] += 1
+
+        likely_flags = sorted(bad_jump_flags.items(), reverse=True, key=lambda item: item[1])
+        print("Jumps you might be missing and their percent coverage: ")
+        for likely_flag in likely_flags:
+            if likely_flag[1] <= bad_length:
+                print(likely_flag[0] + ': {:.2f}'.format(100 * (likely_flag[1] / bad_length)) + "%")
+        print("\n Large Residual TOAs:")
+
+    if print_bad:
+        for ibad in badlist[0]:
+            name = names[ibad]
+            chan = chans[ibad]
+            subint = subints[ibad]
+            print(f"  - [{name}, {chan}, {subint}]")
+
+        
     mask = ~c
     log.info(f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(c)} removed) based on large_residual() criteria.')
     return fo.toas[mask]
