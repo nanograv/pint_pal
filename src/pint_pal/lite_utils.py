@@ -532,7 +532,7 @@ def add_flag_jumps(mo,flag,flaglist,base=False):
                 JUMPn = maskParameter('JUMP',key=flagval,key_value=[j],value=0.0,units=u.second)
                 phasejump.add_param(JUMPn,setup=True)
 
-def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True, find_jump_flags=True):
+def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True, find_jump_flags=False):
     """Quick and dirty routine to find outlier residuals based on some threshold.
     Automatically deals with Wideband vs. Narrowband fitters.
 
