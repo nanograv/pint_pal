@@ -608,11 +608,6 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
     else:
         c = c_toa
 
-    badlist = np.where(c)
-    names = fo.toas.get_flag_value('name')[0]
-    chans = fo.toas.get_flag_value('chan')[0]
-    subints = fo.toas.get_flag_value('subint')[0]
-
     if find_jump_flags:
         bad_length = sum(~c)
         jump_flag_names = ['pta', 'h', 'g', 'j', 'f', 'group', 'fe', 'sys',
@@ -635,6 +630,10 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
         print("\n Large Residual TOAs:")
 
     if print_bad:
+        badlist = np.where(c)
+        names = fo.toas.get_flag_value('name')[0]
+        chans = fo.toas.get_flag_value('chan')[0]
+        subints = fo.toas.get_flag_value('subint')[0]
         for ibad in badlist[0]:
             name = names[ibad]
             chan = chans[ibad]
