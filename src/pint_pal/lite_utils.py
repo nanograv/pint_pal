@@ -611,7 +611,7 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
     badlist = np.where(c)
     good_list = np.where(~c)
     
-    if find_jump_flags:
+    if check_jumps:
         bad_length = sum(c)
         jump_flag_names = ['pta', 'sys', 'fe', 'h', 'g', 'j', 'f', 'group',
                             'medusa_59200_jump', 'medusa_58925_jump']
