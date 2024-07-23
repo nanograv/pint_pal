@@ -554,7 +554,7 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
     print_bad: bool
         If True, prints bad-toa lines that can be copied directly into a yaml file
     check_jumps: bool
-        If True, prints a list of likely and potential Jump flags that only appear in the toas with large residuals, alongside the percent of such toas from each PTA that share that flag.
+        If True, prints a list of likely and potential Jump flags that appear in the toas with large residuals, alongside the percent of such toas from each PTA that share that flag.
 
     Returns
     =======
@@ -611,7 +611,7 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
     badlist = np.where(c)
     good_list = np.where(~c)
     
-    if check_jumps:
+    if find_jump_flags:
         bad_length = sum(c)
         jump_flag_names = ['pta', 'sys', 'fe', 'h', 'g', 'j', 'f', 'group',
                             'medusa_59200_jump', 'medusa_58925_jump']
