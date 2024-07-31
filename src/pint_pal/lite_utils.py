@@ -1426,18 +1426,26 @@ def check_convergence(fitter):
     fitter: `pint.fitter` object
     """
     chi2_decrease = fitter.resids_init.chi2-fitter.resids.chi2
-    print(f"chi-squared decreased during fit by {chi2_decrease}")
+    decrease = str(f"chi-squared decreased during fit by {chi2_decrease}")
+    print(decrease)
+    convergence = ""
     if hasattr(fitter, "converged") and fitter.converged:
-        print("Fitter has converged")
+        convergence = "Fitter has converged"
+        print(convergence)
     else:
         if abs(chi2_decrease)<0.01:
-            print("Fitter has probably converged")
+            convergence = "Fitter has probably converged"
+            print(convergence)
         elif chi2_decrease<0:
             log.warning("Fitter has increased chi2!")
+            convergence = "Fitter has increased chi2!"
         else:
             log.warning("Fitter may not have converged")
+            convergence = "Fitter may not have converged"
     if chi2_decrease > 0.01:
         log.warning("Input par file is not fully fitted")
+        convergence = "Input par file is not fully fitted"
+    return decrease,convergence
 
 def file_look(filenm, plot_type = 'profile'):
     """ Plots profile, GTpd, or YFp for a single file
