@@ -1430,24 +1430,29 @@ def check_convergence(fitter):
     output_val: string object that corresponds to the printed outputs of the checker
     """
     chi2_decrease = fitter.resids_init.chi2-fitter.resids.chi2
-    output_val = str(f"chi-squared decreased during fit by {chi2_decrease}")
-    print(f"chi-squared decreased during fit by {chi2_decrease}")
+    message = str(f"chi-squared decreased during fit by {chi2_decrease}")
+    output_val = message
+    print(message)
     if hasattr(fitter, "converged") and fitter.converged:
-        print("Fitter has converged")
-        output_val.append("\nFitter has converged")
+        message = "Fitter has converged"
+        print(message)
+        output_val.append("\n" + message)
     else:
         if abs(chi2_decrease)<0.01:
-            print("Fitter has probably converged")
+            message = "Fitter has probably converged"
             output_val.append("\nFitter has probably converged")
         elif chi2_decrease<0:
-            log.warning("Fitter has increased chi2!")
-            output_val.append("\nFitter has increased chi2!")
+            message = "Fitter has increased chi2!"
+            log.warning(message)
+            output_val.append("\n" + message)
         else:
-            log.warning("Fitter may not have converged")
-            output_val.append("\nFitter may not have converged")
+            message = "Fitter may not have converged"
+            log.warning(message)
+            output_val.append("\n" + message)
     if chi2_decrease > 0.01:
-        log.warning("Input par file is not fully fitted")
-        output_val.append("\nInput par file is not fully fitted")
+        message = "Input par file is not fully fitted"
+        log.warning(message)
+        output_val.append("\n" + message)
     return output_val
 
 def file_look(filenm, plot_type = 'profile'):
