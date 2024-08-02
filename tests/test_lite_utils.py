@@ -101,14 +101,14 @@ class LiteUtilsTests(unittest.TestCase):
         tc = TimingConfiguration(config, par_directory=par_directory, tim_directory=tim_directory)
         mo,to = tc.get_model_and_toas(apply_initial_cuts=False,usepickle=False)
         fo = tc.construct_fitter(to,mo)
-        with open("output_files/lite_utils_large_residuals.txt", "r") as text_file:
+        with open("results/lite_utils_large_residuals.txt", "r") as text_file:
             ground_truth = text_file.read()
         good_toas = ' '.join(large_residuals(fo,100).get_flag_value('name')[:][0])
         self.assertEqual(good_toas, ground_truth)
 
     def test_compare_model(self):
         """ Check the output of the compare_model method """
-        with open("output_files/lite_utils_compare_model.txt", "r") as text_file:
+        with open("results/lite_utils_compare_model.txt", "r") as text_file:
             ground_truth = text_file.read()
         config = "configs/luconfig.yaml"  
         par_directory = None  
