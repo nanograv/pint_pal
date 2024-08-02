@@ -5,7 +5,6 @@ from pint_pal.report import Report
 import unittest
 '''
 Unit testing for report.py
-These tests are performed on YAML configuration files
 '''
 
 
