@@ -532,7 +532,7 @@ def add_flag_jumps(mo,flag,flaglist,base=False):
                 JUMPn = maskParameter('JUMP',key=flagval,key_value=[j],value=0.0,units=u.second)
                 phasejump.add_param(JUMPn,setup=True)
 
-def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True):
+def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True, check_jumps=False):
     """Quick and dirty routine to find outlier residuals based on some threshold.
     Automatically deals with Wideband vs. Narrowband fitters.
 
@@ -553,6 +553,8 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
         If True, it will not flag/excise any TOAs from ASP or GASP data based on DM criteria
     print_bad: bool
         If True, prints bad-toa lines that can be copied directly into a yaml file
+    check_jumps: bool
+        If True, prints a list of likely and potential Jump flags that appear in the toas with large residuals, alongside the percent of such toas from each PTA that share that flag.
 
     Returns
     =======
@@ -607,14 +609,72 @@ def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=N
         c = c_toa
 
     badlist = np.where(c)
-    names = fo.toas.get_flag_value('name')[0]
-    chans = fo.toas.get_flag_value('chan')[0]
-    subints = fo.toas.get_flag_value('subint')[0]
-    for ibad in badlist[0]:
-        name = names[ibad]
-        chan = chans[ibad]
-        subint = subints[ibad]
-        if print_bad: print(f"  - [{name}, {chan}, {subint}]")
+    good_list = np.where(~c)
+    
+    if check_jumps:
+        bad_length = sum(c)
+        jump_flag_names = ['pta', 'sys', 'fe', 'h', 'g', 'j', 'f', 'group',
+                            'medusa_59200_jump', 'medusa_58925_jump']
+        pta_flags = [['sys'],['sys'],['pta'],['fe'],
+                     ['h', 'g', 'j', 'f', 'group','medusa_59200_jump', 'medusa_58925_jump']]
+        pta_nums = {'EPTA':0, 'InPTA':1, 'MPTA':2, 'NANOGrav':3, 'PPTA':4}
+        pta_names = ['EPTA', 'InPTA', 'MPTA', 'NANOGrav', 'PPTA']
+        pta_toas = [0,0,0,0,0]
+        bad_jump_flags = {}
+        dubious_jump_flags = {}
+        
+        flag_values = []
+        for i1 in range(len(jump_flag_names)):
+            flag_values.append(fo.toas.get_flag_value(jump_flag_names[i1])[0])
+
+        for ibad in badlist[0]:
+            pta = flag_values[0][ibad]
+            pta_num = pta_nums[pta]
+            for i1 in range(len(jump_flag_names)):
+                flag = jump_flag_names[i1]
+                if (flag in pta_flags[pta_num]) and (flag_values[i1][ibad] != None):
+                    key = '({}) -'.format(pta) + flag + ' ' + flag_values[i1][ibad]
+                    if key not in bad_jump_flags.keys():
+                        bad_jump_flags[key] = 0
+                    bad_jump_flags[key] += 1
+                    pta_toas[pta_num] += 1
+
+        for i1 in range(len(jump_flag_names)):
+            flag = jump_flag_names[i1]
+            for igood in good_list[0]:
+                pta = flag_values[0][igood]
+                if flag_values[i1][igood] != None:
+                    key = '({}) -'.format(pta) + flag + ' ' + flag_values[i1][igood]
+                    if key in bad_jump_flags.keys():
+                        dubious_jump_flags[key] = bad_jump_flags[key]
+                        bad_jump_flags.pop(key)
+
+        likely_flags = sorted(bad_jump_flags.items(), reverse=True, key=lambda item: item[1])
+        possible_flags = sorted(dubious_jump_flags.items(), reverse=True, key=lambda item: item[1])
+        print("Jumps that are likely improperly fit: ")
+        for likely_flag in likely_flags:
+            if (likely_flag[1] > 0) and (likely_flag[1] <= bad_length):
+                pta_num = pta_nums[likely_flag[0].split(')')[0][1:]]
+                print(likely_flag[0] + ': {:.2f}'.format(100 * (likely_flag[1] / pta_toas[pta_num])) + "%")
+        
+        if len(possible_flags) != 0:
+            print("\nJumps that are possibly improperly fit: ")
+        for possible_flag in possible_flags:
+            pta_num = pta_nums[possible_flag[0].split(')')[0][1:]]
+            print(possible_flag[0] + ': {:.2f}'.format(100 * (possible_flag[1] / pta_toas[pta_num])) + "%")
+        print("\n Large Residual TOAs:")
+
+    if print_bad:
+        names = fo.toas.get_flag_value('name')[0]
+        chans = fo.toas.get_flag_value('chan')[0]
+        subints = fo.toas.get_flag_value('subint')[0]
+        for ibad in badlist[0]:
+            name = names[ibad]
+            chan = chans[ibad]
+            subint = subints[ibad]
+            print(f"  - [{name}, {chan}, {subint}]")
+
+        
     mask = ~c
     log.info(f'Selecting {sum(mask)} TOAs of {fo.toas.ntoas} ({sum(c)} removed) based on large_residual() criteria.')
     return fo.toas[mask]
