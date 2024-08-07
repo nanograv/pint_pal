@@ -1,0 +1,44 @@
+# Created: 2024-07-31T11:11:36.834613
+# PINT_version: 1.0
+# User: jamisontalley
+# Host: Victor.local
+# OS: macOS-11.3.1-x86_64-i386-64bit
+# Python: 3.9.19 | packaged by conda-forge | (main, Mar 20 2024, 12:53:33) 
+# [Clang 16.0.6 ]
+# Format: pint
+PSR                            J2022+2534
+EPHEM                               DE430
+CLK                              TT(BIPM)
+UNITS                                 TDB
+START              57535.2720000000000000
+FINISH             57851.6990000000000000
+TIMEEPH                              FB90
+T2CMETHOD                        IAU2000B
+DILATEFREQ                              N
+DMDATA                                  N
+NTOA                                  190
+TRES                                19.67
+RAJ                     20:22:33.25826112 0 0.00065973999999999991
+DECJ                    25:34:42.50031300 0 0.00718270000000000020
+PMRA                                  0.0
+PMDEC                                 0.0
+PX                                    0.0
+F0                   377.9381239098922833 1 2.8962832e-09
+F1                     -4.92199870093e-16 1 2.096949902995e-16
+PEPOCH             57535.2747620000000000
+TZRMJD             57535.2753891687557408
+TZRSITE                                 1
+TZRFRQ                            350.012
+CORRECT_TROPOSPHERE                         N
+PLANET_SHAPIRO                          N
+SOLARN0                              10.0
+SWM                                   0.0
+DM                              53.662659 1 0.001691
+BINARY                               ELL1
+PB                       1.28370281533669 0 1.388949e-08
+A1                            0.609241973 0 2.172e-06
+TASC               57535.5638704350000000 0 2.314e-06
+EPS1                           4.4183e-06 0 7.0044e-06
+EPS2                           7.6314e-06 0 8.3646e-06
+# ECC              8.818142709777382595e-06
+# OM                  30.069263512576933632
