@@ -313,7 +313,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
             param_name = key.split('_efac')[0].split(psr_name)[1][1:]
 
             tp = maskParameter(name = 'EFAC', index = efac_idx, key = '-f', key_value = param_name,
-                               value = val, units = '')
+                               value = val, units = '', convert_tcb2tdb=False)
             efac_params.append(tp)
             efac_idx += 1
 
@@ -324,7 +324,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
             param_name = key.split('_t2equad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
             tp = maskParameter(name = 'EQUAD', index = equad_idx, key = '-f', key_value = param_name,
-                               value = 10 ** val / 1e-6, units = 'us')
+                               value = 10 ** val / 1e-6, units = 'us', convert_tcb2tdb=False)
             equad_params.append(tp)
             equad_idx += 1
 
@@ -334,7 +334,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
             param_name = key.split('_tnequad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
             tp = maskParameter(name = 'EQUAD', index = equad_idx, key = '-f', key_value = param_name,
-                               value = 10 ** val / 1e-6, units = 'us')
+                               value = 10 ** val / 1e-6, units = 'us', convert_tcb2tdb=False)
             equad_params.append(tp)
             equad_idx += 1
 
@@ -344,7 +344,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
             param_name = key.split('_equad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
             tp = maskParameter(name = 'EQUAD', index = equad_idx, key = '-f', key_value = param_name,
-                               value = 10 ** val / 1e-6, units = 'us')
+                               value = 10 ** val / 1e-6, units = 'us', convert_tcb2tdb=False)
             equad_params.append(tp)
             equad_idx += 1
 
@@ -353,7 +353,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
             param_name = key.split('_ecorr')[0].split(psr_name)[1].split('_log10')[0][1:]
 
             tp = maskParameter(name = 'ECORR', index = ecorr_idx, key = '-f', key_value = param_name,
-                               value = 10 ** val / 1e-6, units = 'us')
+                               value = 10 ** val / 1e-6, units = 'us', convert_tcb2tdb=False)
             ecorr_params.append(tp)
             ecorr_idx += 1
 
@@ -362,7 +362,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
             param_name = key.split('_dmefac')[0].split(psr_name)[1][1:]
 
             tp = maskParameter(name = 'DMEFAC', index = dmefac_idx, key = '-f', key_value = param_name,
-                               value = val, units = '')
+                               value = val, units = '', convert_tcb2tdb=False)
             dmefac_params.append(tp)
             dmefac_idx += 1
 
@@ -371,7 +371,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
             param_name = key.split('_dmequad')[0].split(psr_name)[1].split('_log10')[0][1:]
 
             tp = maskParameter(name = 'DMEQUAD', index = dmequad_idx, key = '-f', key_value = param_name,
-                               value = 10 ** val, units = 'pc/cm3')
+                               value = 10 ** val, units = 'pc/cm3', convert_tcb2tdb=False)
             dmequad_params.append(tp)
             dmequad_idx += 1
 
