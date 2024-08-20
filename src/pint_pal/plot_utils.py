@@ -46,7 +46,7 @@ colorschemes = {'observatories':{
               "meerkat":               "#FD9927",
               "None":                  "#808080"
               },
-                
+
            'pta':{
               "InPTA":                  "#855CA0",
               "EPTA":                   "#407BD5",
@@ -64,8 +64,10 @@ colorschemes = {'observatories':{
               "L-wide_PUPPI":    "#6BA9E2",
               "Rcvr1_2_GASP":    "#61C853",
               "Rcvr1_2_GUPPI":   "#61C853",
+              "Rcvr1_2_VEGAS":   "#61C853",
               "Rcvr_800_GASP":   "#61C853",
               "Rcvr_800_GUPPI":  "#61C853",
+              "Rcvr_800_VEGAS":  "#61C853",
               "S-wide_ASP":      "#6BA9E2",
               "S-wide_PUPPI":    "#6BA9E2",
               "1.5GHz_YUPPI":    "#40635F",
@@ -157,7 +159,7 @@ markers = {'observatories':{
               "PPTA":                 "x",
               "MPTA":                  "x",
               "None":                  "x"
-           }, 
+           },
         'febe': {"327_ASP":        "x",
           "327_PUPPI":       "x",
           "430_ASP":         "x",
@@ -166,8 +168,10 @@ markers = {'observatories':{
           "L-wide_PUPPI":    "x",
           "Rcvr1_2_GASP":    "x",
           "Rcvr1_2_GUPPI":   "x",
+          "Rcvr1_2_VEGAS":   "x",
           "Rcvr_800_GASP":   "o",
           "Rcvr_800_GUPPI":  "o",
+          "Rcvr_800_VEGAS":  "o",
           "S-wide_ASP":      "o",
           "S-wide_PUPPI":    "o",
           "1.5GHz_YUPPI":    "x",
@@ -239,7 +243,7 @@ markers = {'observatories':{
 def call(x):
     subprocess.call(x,shell=True)
 
-    
+
 def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = False, avg = False, whitened = False, \
                         save = False, legend = True, title = True, axs = None, mixed_ecorr=False, **kwargs):
     """
@@ -255,7 +259,7 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
         'both' - overplot both the pre and post-fit residuals.
     colorby ['string']: What to use to determine color/markers
         'pta' - color residuals by PTA (default)
-        'obs' - color residuals by telescope 
+        'obs' - color residuals by telescope
         'f'   - color residuals by frontend/backend pair (flag not used by all PTAs).
     plotsig [boolean] : If True plot number of measurements v. residuals/uncertainty, else v. residuals
         [default: False].
@@ -267,7 +271,7 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
     title [boolean] : If False, will not print plot title [default: True].
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
-        
+
 
     Optional Arguments:
     --------------------
@@ -288,7 +292,7 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
             raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
     else:
         NB = True
-        
+
     # Check if want epoch averaged residuals
     if avg == True and restype == 'prefit' and mixed_ecorr == True:
         avg_dict = fitter.resids_init.ecorr_average(use_noise_model=True)
@@ -358,7 +362,7 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
 
     # Check if we want whitened residuals
     if whitened == True and ('res' not in kwargs.keys()):
-        if avg == True and mixed_ecorr == True: 
+        if avg == True and mixed_ecorr == True:
             if restype != 'both':
                 res = whiten_resids(avg_dict, restype=restype)
                 res_no_avg = whiten_resids(no_avg_dict, restype=restype)
@@ -371,14 +375,14 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
                 res_pre_no_avg = res_pre_no_avg.to(u.us)
             res = res.to(u.us)
             res_no_avg = res_no_avg.to(u.us)
-        elif avg == True and mixed_ecorr == False: 
+        elif avg == True and mixed_ecorr == False:
             if restype != 'both':
                 res = whiten_resids(avg_dict, restype=restype)
             else:
                 res = whiten_resids(avg_dict_pre, restype='prefit')
                 res_pre = whiten_resids(avg_dict, restype='postfit')
                 res_pre = res_pre.to(u.us)
-            res = res.to(u.us)        
+            res = res.to(u.us)
         else:
             if restype != 'both':
                 res = whiten_resids(fitter, restype=restype)
@@ -406,7 +410,7 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
                     errs = avg_dict['errors'].to(u.us)
                     errs_no_avg = no_avg_dict['errors'].to(u.us)
                 elif avg == True and mixed_ecorr == False:
-                    errs = avg_dict['errors'].to(u.us) 
+                    errs = avg_dict['errors'].to(u.us)
                 else:
                     errs = fitter.resids.get_data_error().to(u.us)
             else:
@@ -441,18 +445,18 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
             mjds = avg_dict['mjds'].value
     # Convert to years
     years = (mjds - 51544.0)/365.25 + 2000.0
-    
+
     # In the end, we'll want to plot both ecorr avg & not ecorr avg at the same time if we have mixed ecorr.
     # Create combined arrays
-            
-    if avg == True and mixed_ecorr == True:    
+
+    if avg == True and mixed_ecorr == True:
         combo_res = np.hstack((res, res_no_avg))
         combo_errs = np.hstack((errs, errs_no_avg))
         combo_years = np.hstack((years, years_no_avg))
         if restype =='both':
-            combo_errs_pre = np.hstack((errs_pre, errs_no_avg_pre))     
+            combo_errs_pre = np.hstack((errs_pre, errs_no_avg_pre))
             combo_res_pre = np.hstack((res_pre, res_no_avg_pre))
-  
+
     # Get colorby flag values (obs, PTA, febe, etc.)
     if 'colorby' in kwargs.keys():
         cb = kwargs['colorby']
@@ -469,23 +473,23 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
                 for jjs in no_avg_dict['indices']:
                     no_avg_cb.append(cb[jjs])
                 no_ecorr_cb = np.array(no_avg_cb)
-                
+
             cb = np.array(avg_cb)
-            
+
     # Get the set of unique flag values
     if avg==True and mixed_ecorr==True:
         cb = np.hstack((cb,no_ecorr_cb))
-    
+
     CB = set(cb)
 
-    
+
     if colorby== 'pta':
         colorscheme = colorschemes['pta']
     elif colorby == 'obs':
         colorscheme = colorschemes['observatories']
     elif colorby == 'f':
         colorscheme = colorschemes['febe']
-  
+
 
     if 'figsize' in kwargs.keys():
         figsize = kwargs['figsize']
@@ -497,7 +501,7 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
     else:
         fig = plt.gcf()
         ax1 = axs
-        
+
 
     for i, c in enumerate(CB):
         inds = np.where(cb==c)[0]
@@ -543,7 +547,7 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
                 if restype == 'both':
                     ax1.errorbar(combo_years[inds], combo_res_rpe[inds], yerr=combo_errs_pre[inds], fmt=mkr_pre, \
                          color=clr, label=cb_label+" Prefit", alpha = alpha, picker=True)
-                  
+
         else:
             if plotsig:
                 sig = res[inds]/errs[inds]
@@ -618,7 +622,7 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
         elif restype == "both":
             ext += "_pre_post_fit"
         plt.savefig("%s_resid_v_mjd%s.png" % (fitter.model.PSR.value, ext))
-    
+
     if axs == None:
         # Define clickable points
         text = ax2.text(0,0,"")
@@ -654,25 +658,25 @@ def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = Fa
 
 def plot_FD_delay(fitter = None, model_object = None, save = False, title= True, axs = None, legend=True, show_bin=True, **kwargs):
     """
-    Make a plot of frequency (MHz) vs the time delay (us) implied by FD parameters. 
+    Make a plot of frequency (MHz) vs the time delay (us) implied by FD parameters.
     Z. Arzoumanian, The NANOGrav Nine-year Data Set: Observations, Arrival
         Time Measurements, and Analysis of 37 Millisecond Pulsars, The
         Astrophysical Journal, Volume 813, Issue 1, article id. 65, 31 pp.(2015).
         Eq.(2):
         FDdelay = sum(c_i * (log(obs_freq/1GHz))^i)
-        
-    This can be run with EITHER a PINT fitter object OR PINT model object. If run with a model object, the user will need to specify which frequencies they would like to plot FD delays over. 
-    
+
+    This can be run with EITHER a PINT fitter object OR PINT model object. If run with a model object, the user will need to specify which frequencies they would like to plot FD delays over.
+
     Arguments
     ----------
-    
+
     fitter[object] : The PINT fitter object.
     model[object] : The PINT model object. Can be used instead of fitter
     save [boolean] : If True will save plot with the name "FD_delay.png"[default: False].
     title [boolean] : If False, will not print plot title [default: True].
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
-    
+
     Optional Arguments:
     --------------------
     freqs [list/array] : List or array of frequencies (MHz) to plot. Will override values from toa object.
@@ -683,11 +687,11 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
     alpha [float] : matplotlib alpha options for error regions [default: 0.2]
     loc ['string'] : matplotlib legend location [default: 'upper right'] Only used when legend = True
     """
-    
-   #Make sure that either a fitter or model object has been specified 
+
+   #Make sure that either a fitter or model object has been specified
     if fitter == None and model_object == None:
         raise Exception("Need to specify either a fitter or model object")
-        
+
     #Get frequencies
     if 'freqs' in kwargs.keys():
         freqs = kwargs['freqs']
@@ -696,7 +700,7 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
     else:
         freqs = fitter.toas.get_freqs().value
         freqs = np.sort(freqs)
-        
+
     #Get FD delay in units of milliseconds as a function of frequency. This will eventually by available in PINT and become redundant. PINT version may need to be modified to allow for calculation of error regions
     def get_FD_delay(pint_model_object,freqs):
         FD_map = model.TimingModel.get_prefix_mapping(pint_model_object,"FD")
@@ -719,7 +723,7 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
         else:
             FD_phrase = "FD1"
         return delay *1e6, delta_delay_plus * 1e6, delta_delay_minus * 1e6 , FD_phrase
-    
+
     #Get FD params if fitter object is given
     if fitter is not None:
     #Check if the fitter object has FD parameters
@@ -727,9 +731,9 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
             FD_delay, FD_delay_err_plus, FD_delay_err_minus, legend_text = get_FD_delay(fitter.model, freqs*1e-3)
             #print(FD_delay)
             psr_name = fitter.model.PSR.value
-            """For when new version of PINT is default on pint_pal    
+            """For when new version of PINT is default on pint_pal
         FD_delay = pint.models.frequency_dependent.FD.FD_delay(fitter.model,freqs)
-        
+
             """
             if show_bin:
                 nbins = fitter.toas['nbin'].astype(int).min()
@@ -738,26 +742,26 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
         except:
             print("No FD parameters in this model! Exitting...")
             #sys.exit()
-            
-    #Get FD params if model object is given       
+
+    #Get FD params if model object is given
     if model_object is not None:
     #Check if the model object has FD parameters
         try:
             FD_delay, FD_delay_err_plus, FD_delay_err_minus, legend_text = get_FD_delay(model_object, freqs*1e-3)
             psr_name = model_object.PSR.value
-            """For when new version of PINT is default on pint_pal    
+            """For when new version of PINT is default on pint_pal
         FD_delay = pint.models.frequency_dependent.FD.FD_delay(fitter.model,freqs)
-        
+
             """
             if show_bin:
                 print("show_bin requires a fitter object, cannot be used with the model alone")
                 show_bin = False
         except:
             print("No FD parameters in this model! Exitting...")
-            #sys.exit() 
-        
+            #sys.exit()
 
-    #Get plotting preferences. 
+
+    #Get plotting preferences.
     if 'figsize' in kwargs.keys():
         figsize = kwargs['figsize']
     else:
@@ -800,13 +804,13 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
     if title:
         ax1.set_title("%s FD Delay" % psr_name)
     if legend:
-        ax1.legend(loc=loc) 
+        ax1.legend(loc=loc)
     if axs == None:
         plt.tight_layout()
     if save:
         plt.savefig("%s_fd_delay.png" % psr_name)
 
-    return 
+    return
 
 def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = False, avg = False, mixed_ecorr=False,\
                         whitened = False, save = False, legend = True, title = True, axs = None, **kwargs):
@@ -823,8 +827,8 @@ def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = Fal
         'both' - overplot both the pre and post-fit residuals.
     colorby ['string']:  What to use to determine color/markers
         'pta' - color residuals by PTA (default)
-        'obs' - color residuals by telescope 
-        'f'   - color residuals by frontend/backend pair (flag not used by all PTAs). 
+        'obs' - color residuals by telescope
+        'f'   - color residuals by frontend/backend pair (flag not used by all PTAs).
     plotsig [boolean] : If True plot number of measurements v. residuals/uncertainty, else v. residuals
         [default: False].
     avg [boolean] : If True and not wideband fitter, will compute and plot epoch-average residuals [default: False].
@@ -923,11 +927,11 @@ def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = Fal
             raise ValueError("Unrecognized residual type: %s. Please choose from 'prefit', 'postfit', or 'both'."\
                              %(restype))
 
-    
-    
+
+
     # Check if we want whitened residuals
     if whitened == True and ('res' not in kwargs.keys()):
-        if avg == True and mixed_ecorr == True: 
+        if avg == True and mixed_ecorr == True:
             if restype != 'both':
                 res = whiten_resids(avg_dict, restype=restype)
                 res_no_avg = whiten_resids(no_avg_dict, restype=restype)
@@ -940,14 +944,14 @@ def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = Fal
                 res_pre_no_avg = res_pre_no_avg.to(u.us)
             res = res.to(u.us)
             res_no_avg = res_no_avg.to(u.us)
-        elif avg == True and mixed_ecorr == False: 
+        elif avg == True and mixed_ecorr == False:
             if restype != 'both':
                 res = whiten_resids(avg_dict, restype=restype)
             else:
                 res = whiten_resids(avg_dict_pre, restype='prefit')
                 res_pre = whiten_resids(avg_dict, restype='postfit')
                 res_pre = res_pre.to(u.us)
-            res = res.to(u.us)        
+            res = res.to(u.us)
         else:
             if restype != 'both':
                 res = whiten_resids(fitter, restype=restype)
@@ -975,7 +979,7 @@ def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = Fal
                     errs = avg_dict['errors'].to(u.us)
                     errs_no_avg = no_avg_dict['errors'].to(u.us)
                 elif avg == True and mixed_ecorr == False:
-                    errs = avg_dict['errors'].to(u.us) 
+                    errs = avg_dict['errors'].to(u.us)
                 else:
                     errs = fitter.resids.get_data_error().to(u.us)
             else:
@@ -997,15 +1001,15 @@ def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = Fal
                 errs = fitter.resids.residual_objs['toa'].get_data_error().to(u.us)
                 errs_pre = fitter.toas.get_errors().to(u.us)
 
-                
+
     # In the end, we'll want to plot both ecorr avg & not ecorr avg at the same time if we have mixed ecorr.
     # Create combined arrays
-           
-    if avg == True and mixed_ecorr == True:    
+
+    if avg == True and mixed_ecorr == True:
         combo_res = np.hstack((res, res_no_avg))
         combo_errs = np.hstack((errs, errs_no_avg))
         if restype =='both':
-            combo_errs_pre = np.hstack((errs_pre, errs_no_avg_pre))     
+            combo_errs_pre = np.hstack((errs_pre, errs_no_avg_pre))
             combo_res_pre = np.hstack((res_pre, res_no_avg_pre))
 
     # Get freqs
@@ -1013,8 +1017,8 @@ def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = Fal
         freqs = kwargs['freqs']
     else:
         freqs = fitter.toas.get_freqs().value
-        
-      
+
+
     # Get colorby flag values (obs, PTA, febe, etc.)
     if 'colorby' in kwargs.keys():
         cb = kwargs['colorby']
@@ -1031,15 +1035,15 @@ def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = Fal
                 for jjs in no_avg_dict['indices']:
                     no_avg_cb.append(cb[jjs])
                 no_ecorr_cb = np.array(no_avg_cb)
-                
+
             cb = np.array(avg_cb)
-       
+
     # Get the set of unique flag values
     if avg==True and mixed_ecorr==True:
         cb = np.hstack((cb,no_ecorr_cb))
-    
+
     CB = set(cb)
-    
+
     if colorby== 'pta':
         colorscheme = colorschemes['pta']
         markerscheme = markers['pta']
@@ -1049,7 +1053,7 @@ def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = Fal
     elif colorby == 'f':
         colorscheme = colorschemes['febe']
         markerscheme = markers['febe']
-    
+
 
     if 'figsize' in kwargs.keys():
         figsize = kwargs['figsize']
@@ -1093,7 +1097,7 @@ def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = Fal
             alpha = kwargs['alpha']
         else:
             alpha = 0.5
-            
+
         if avg and mixed_ecorr:
             if plotsig:
                 combo_sig = combo_res[inds]/combo_errs[inds]
@@ -1179,7 +1183,7 @@ def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = Fal
         elif restype == "both":
             ext += "_pre_post_fit"
         plt.savefig("%s_resid_v_freq%s.png" % (fitter.model.PSR.value, ext))
-    
+
     if axs == None:
         # Define clickable points
         text = ax1.text(0,0,"")
@@ -1292,7 +1296,7 @@ def plot_dmx_time(fitter, savedmx = False, save = False, legend = True,\
                 dmx_epochs, nb_dmx, nb_dmx_var, nb_dmx_r1, nb_dmx_r2 = np.loadtxt("%s_dmxparse.nb.out"%(psrname),\
                                                     unpack=True, usecols=(0,1,2,3,4))
         dmx_mid_yr = (dmx_epochs- 51544.0)/365.25 + 2000.0
-    
+
     # Define the plotting function
     if axs == None:
         if 'figsize' in kwargs.keys():
@@ -1418,7 +1422,7 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
     from astropy.time import Time
     if isinstance(dmxout_files, str): dmxout_files = [dmxout_files]
     if isinstance(labels, str): labels = [labels]
-    
+
     figsize = (10,4)
     fig = plt.figure(figsize=figsize)
     ax1 = fig.add_subplot(111)
@@ -1431,7 +1435,7 @@ def plot_dmxout(dmxout_files, labels, psrname=None, outfile=None, model = None):
     dmxDict = {}
     for ii,(df,lab) in enumerate(zip(dmxout_files,labels)):
         dmxmjd, dmxval, dmxerr, dmxr1, dmxr2 = np.loadtxt(df, unpack=True, usecols=range(0,5))
-        idmxDict = {'mjd':dmxmjd,'val':dmxval,'err':dmxerr,'r1':dmxr1,'r2':dmxr2}        
+        idmxDict = {'mjd':dmxmjd,'val':dmxval,'err':dmxerr,'r1':dmxr1,'r2':dmxr2}
         ax2.errorbar(dmxmjd, dmxval*10**3, yerr=dmxerr*10**3, label=lab, marker='o', ls='', markerfacecolor='none')
         dmxDict[lab] = idmxDict
 
@@ -1622,14 +1626,14 @@ def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False
         elif restype == 'both':
             dm_error = fitter.resids.residual_objs['dm'].get_data_error().value
             dm_error_init = fitter.resids_init.residual_objs['dm'].get_data_error().value
-        
+
     # Get the MJDs
     if 'mjds' in kwargs.keys():
         mjds = kwargs['mjds']
     else:
         mjds = fitter.toas.get_mjds().value
     years = (mjds - 51544.0)/365.25 + 2000.0
-    
+
     # Get the receiver-backend combos
     if 'rcvr_bcknds' in kwargs.keys():
         rcvr_bcknds = kwargs['rcvr_bcknds']
@@ -1661,7 +1665,7 @@ def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False
             ylabel = r"$\Delta$DM/Uncertainty"
         else:
             ylabel = r"$\Delta$DM [cm$^{-3}$ pc]"
-    
+
     if axs == None:
         if 'figsize' in kwargs.keys():
             figsize = kwargs['figsize']
@@ -1781,7 +1785,7 @@ def plot_dm_residuals(fitter, restype = 'postfit', plotsig = False, save = False
             text.set_text("DM Params:\n MJD: %s \n Res: %.6f \n Index: %s" % (xdata[ind_close][0], ydata[ind_close], ind_close[0]))
 
         fig.canvas.mpl_connect('button_press_event', onclick)
-    
+
     return
 
 def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin = 50, avg = False, whitened = False, \
@@ -1808,7 +1812,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
     title [boolean] : If False, will not print plot title [default: True].
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
-    
+
     Optional Arguments:
     --------------------
     res [list/array] : List or array of residual values to plot. Will override values from fitter object.
@@ -1828,7 +1832,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
             raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
     else:
         NB = True
-    
+
     # Check if want epoch averaged residuals
     if avg == True and restype == 'prefit':
         avg_dict = fitter.resids_init.ecorr_average(use_noise_model=True)
@@ -1837,8 +1841,8 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
     elif avg == True and restype == 'both':
         avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
         avg_dict_pre = fitter.resids_init.ecorr_average(use_noise_model=True)
-        
-        
+
+
     # Get residuals
     if 'res' in kwargs.keys():
         res = kwargs['res']
@@ -1873,7 +1877,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
         else:
             raise ValueError("Unrecognized residual type: %s. Please choose from 'prefit', 'postfit', or 'both'."\
                              %(restype))
-    
+
     # Check if we want whitened residuals
     if whitened == True and ('res' not in kwargs.keys()):
         if avg == True:
@@ -1883,7 +1887,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
                 res = whiten_resids(avg_dict_pre, restype='prefit')
                 res_pre = whiten_resids(avg_dict, restype='postfit')
                 res_pre = res_pre.to(u.us)
-            res = res.to(u.us)    
+            res = res.to(u.us)
         else:
             if restype != 'both':
                 res = whiten_resids(fitter, restype=restype)
@@ -1892,7 +1896,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
                 res_pre = whiten_resids(fitter, restype='postfit')
                 res_pre = res_pre.to(u.us)
             res = res.to(u.us)
-    
+
     # Get errors
     if 'errs' in kwargs.keys():
         errs = kwargs['errs']
@@ -1921,7 +1925,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
             else:
                 errs = fitter.resids.residual_objs['toa'].get_data_error().to(u.us)
                 errs_pre = fitter.toas.get_errors().to(u.us)
-    
+
     # Get receiver backends
     if 'rcvr_bcknds' in kwargs.keys():
         rcvr_bcknds = kwargs['rcvr_bcknds']
@@ -1934,7 +1938,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
             rcvr_bcknds = np.array(avg_rcvr_bcknds)
     # Get the set of unique receiver-bandend combos
     RCVR_BCKNDS = set(rcvr_bcknds)
-    
+
     if axs == None:
         if 'figsize' in kwargs.keys():
             figsize = kwargs['figsize']
@@ -1944,7 +1948,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
         ax1 = fig.add_subplot(111)
     else:
         ax1 = axs
-    
+
     xmax=0
     for i, r_b in enumerate(RCVR_BCKNDS):
         inds = np.where(rcvr_bcknds==r_b)[0]
@@ -1971,7 +1975,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
             if restype == 'both':
                 ax1.hist(res[inds], nbin, histtype='step', color=colorscheme[r_b_label], linestyle = '--',\
                          label=r_b_label+" Prefit")
-            
+
     ax1.grid(True)
     ax1.set_ylabel("Number of measurements")
     if plotsig:
@@ -2026,7 +2030,7 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
         elif restype == "both":
             ext += "_pre_post_fit"
         plt.savefig("%s_resid_measurements%s.png" % (fitter.model.PSR.value, ext))
-        
+
     return
 
 def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin = 50, \
@@ -2052,7 +2056,7 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
     mean_sub [boolean] : If False, will not mean subtract the DM residuals to be centered on zero [default: True]
-    
+
     Optional Arguments:
     --------------------
     dmres [list/array] : List or array of residual values to plot. Will override values from fitter object.
@@ -2067,7 +2071,7 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
     # Check if wideband
     if not fitter.is_wideband:
             raise ValueError("Narrowband Fitters have have no DM residuals, please use `plot_measurements_v_dmres` instead.")
-    
+
     # Get the DM residuals
     if 'dmres' in kwargs.keys():
         dm_resids = kwargs['dmres']
@@ -2079,7 +2083,7 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
         elif restype == 'both':
             dm_resids = fitter.resids.residual_objs['dm'].resids.value
             dm_resids_init = fitter.resids_init.residual_objs['dm'].resids.value
-    
+
     # Get the DM residual errors
     if "errs" in kwargs.keys():
         dm_error = kwargs['errs']
@@ -2091,7 +2095,7 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
         elif restype == 'both':
             dm_error = fitter.resids.residual_objs['dm'].get_data_error().value
             dm_error_init = fitter.resids_init.residual_objs['dm'].get_data_error().value
-    
+
     # Get the receiver-backend combos
     if 'rcvr_bcknds' in kwargs.keys():
         rcvr_bcknds = kwargs['rcvr_bcknds']
@@ -2123,7 +2127,7 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
             xlabel = r"$\Delta$DM/Uncertainty"
         else:
             xlabel = r"$\Delta$DM [cm$^{-3}$ pc]"
-    
+
     if axs == None:
         if 'figsize' in kwargs.keys():
             figsize = kwargs['figsize']
@@ -2144,7 +2148,7 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
             clr = kwargs['color']
         else:
             clr = colorscheme[r_b_label]
-        
+
         if plotsig:
             sig = dm_resids[inds]/dm_error[inds]
             ax1.hist(sig, nbin, histtype='step', color=colorscheme[r_b_label], label=r_b_label)
@@ -2157,7 +2161,7 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
             if restype == 'both':
                 ax1.hist(dm_resids_init[inds], nbin, histtype='step', color=colorscheme[r_b_label], linestyle = '--',\
                          label=r_b_label+" Prefit")
-            
+
     ax1.grid(True)
     ax1.set_ylabel("Number of measurements")
     ax1.set_xlabel(xlabel)
@@ -2186,7 +2190,7 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
         elif restype == "both":
             ext += "_pre_post_fit"
         plt.savefig("%s_DM_resid_measurements%s.png" % (fitter.model.PSR.value, ext))
-        
+
     return
 
 
@@ -2232,8 +2236,8 @@ def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = Fal
             raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
     else:
         NB = True
-        
-    
+
+
     # Check if want epoch averaged residuals
     if avg == True and restype == 'prefit' and mixed_ecorr == True:
         avg_dict = fitter.resids_init.ecorr_average(use_noise_model=True)
@@ -2301,11 +2305,11 @@ def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = Fal
             raise ValueError("Unrecognized residual type: %s. Please choose from 'prefit', 'postfit', or 'both'."\
                              %(restype))
 
-    
-    
+
+
     # Check if we want whitened residuals
     if whitened == True and ('res' not in kwargs.keys()):
-        if avg == True and mixed_ecorr == True: 
+        if avg == True and mixed_ecorr == True:
             if restype != 'both':
                 res = whiten_resids(avg_dict, restype=restype)
                 res_no_avg = whiten_resids(no_avg_dict, restype=restype)
@@ -2318,14 +2322,14 @@ def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = Fal
                 res_pre_no_avg = res_pre_no_avg.to(u.us)
             res = res.to(u.us)
             res_no_avg = res_no_avg.to(u.us)
-        elif avg == True and mixed_ecorr == False: 
+        elif avg == True and mixed_ecorr == False:
             if restype != 'both':
                 res = whiten_resids(avg_dict, restype=restype)
             else:
                 res = whiten_resids(avg_dict_pre, restype='prefit')
                 res_pre = whiten_resids(avg_dict, restype='postfit')
                 res_pre = res_pre.to(u.us)
-            res = res.to(u.us)        
+            res = res.to(u.us)
         else:
             if restype != 'both':
                 res = whiten_resids(fitter, restype=restype)
@@ -2353,7 +2357,7 @@ def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = Fal
                     errs = avg_dict['errors'].to(u.us)
                     errs_no_avg = no_avg_dict['errors'].to(u.us)
                 elif avg == True and mixed_ecorr == False:
-                    errs = avg_dict['errors'].to(u.us) 
+                    errs = avg_dict['errors'].to(u.us)
                 else:
                     errs = fitter.resids.get_data_error().to(u.us)
             else:
@@ -2383,7 +2387,7 @@ def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = Fal
             if mixed_ecorr == True:
                 mjds_no_avg = no_avg_dict['mjds'].value
 
-               
+
 
     # Now we need to the orbital phases; start with binary model name
     if 'orbphase' in kwargs.keys():
@@ -2392,20 +2396,20 @@ def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = Fal
         orbphase = fitter.model.orbital_phase(mjds, radians = False)
         if avg and mixed_ecorr:
             no_avg_orbphase = fitter.model.orbital_phase(mjds_no_avg, radians = False)
-    
-                    
+
+
     # In the end, we'll want to plot both ecorr avg & not ecorr avg at the same time if we have mixed ecorr.
     # Create combined arrays
-           
-    if avg == True and mixed_ecorr == True:    
+
+    if avg == True and mixed_ecorr == True:
         combo_res = np.hstack((res, res_no_avg))
         combo_errs = np.hstack((errs, errs_no_avg))
         combo_orbphase = np.hstack((orbphase, no_avg_orbphase))
         if restype =='both':
-            combo_errs_pre = np.hstack((errs_pre, errs_no_avg_pre))     
+            combo_errs_pre = np.hstack((errs_pre, errs_no_avg_pre))
             combo_res_pre = np.hstack((res_pre, res_no_avg_pre))
-    
-      
+
+
     # Get colorby flag values (obs, PTA, febe, etc.)
     if 'colorby' in kwargs.keys():
         cb = kwargs['colorby']
@@ -2422,15 +2426,15 @@ def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = Fal
                 for jjs in no_avg_dict['indices']:
                     no_avg_cb.append(cb[jjs])
                 no_ecorr_cb = np.array(no_avg_cb)
-                
+
             cb = np.array(avg_cb)
-       
+
     # Get the set of unique flag values
     if avg==True and mixed_ecorr==True:
         cb = np.hstack((cb,no_ecorr_cb))
-    
+
     CB = set(cb)
-    
+
     if colorby== 'pta':
         colorscheme = colorschemes['pta']
         markerscheme = markers['pta']
@@ -2440,7 +2444,7 @@ def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = Fal
     elif colorby == 'f':
         colorscheme = colorschemes['febe']
         markerscheme = markers['febe']
-        
+
     if 'figsize' in kwargs.keys():
         figsize = kwargs['figsize']
     else:
@@ -2612,7 +2616,7 @@ def plot_fd_res_v_freq(fitter, plotsig = False, comp_FD = True, avg = False, whi
     Middle: Best fit residuals with no FD parameters.
     Bottom: Residuals with FD correction included.
     Note - This function may take a while to run if there are many TOAs.
-    
+
     Arguments
     ---------
     fitter [object] : The PINT fitter object.
@@ -2647,11 +2651,11 @@ def plot_fd_res_v_freq(fitter, plotsig = False, comp_FD = True, avg = False, whi
             raise ValueError("Cannot epoch average wideband residuals, please change 'avg' to False.")
     else:
         NB = True
-    
+
     # Check if want epoch averaged residuals
     if avg:
         avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
-    
+
     # Get residuals
     if 'res' in kwargs.keys():
         res = kwargs['res']
@@ -2663,7 +2667,7 @@ def plot_fd_res_v_freq(fitter, plotsig = False, comp_FD = True, avg = False, whi
                 res = fitter.resids.time_resids.to(u.us)
         else:
             res = fitter.resids.residual_objs['toa'].time_resids.to(u.us)
-    
+
     # Check if we want whitened residuals
     if whitened == True and ('res' not in kwargs.keys()):
         if avg == True:
@@ -2672,7 +2676,7 @@ def plot_fd_res_v_freq(fitter, plotsig = False, comp_FD = True, avg = False, whi
         else:
             res = whiten_resids(fitter)
             res = res.to(u.us)
-    
+
     # Get errors
     if 'errs' in kwargs.keys():
         errs = kwargs['errs']
@@ -2697,7 +2701,7 @@ def plot_fd_res_v_freq(fitter, plotsig = False, comp_FD = True, avg = False, whi
             rcvr_bcknds = np.array(avg_rcvr_bcknds)
     # Get the set of unique receiver-bandend combos
     RCVR_BCKNDS = set(rcvr_bcknds)
-    
+
     # get frequencies
     if 'freqs' in kwargs.keys():
         freqs = kwargs['freqs']
@@ -2706,7 +2710,7 @@ def plot_fd_res_v_freq(fitter, plotsig = False, comp_FD = True, avg = False, whi
             freqs = avg_dict['freqs'].value
         else:
             freqs = fitter.toas.get_freqs().value
-    
+
     # Check if comparing the FD parameters
     if comp_FD:
         if axs != None:
@@ -3229,7 +3233,7 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
     Function to make a composite set of summary plots for sets of TOAs to be put into a summary pdf.
     This is for Narrowband timing only. For Wideband timing, use `plots_for_summary_pdf_wb`.
     By definition, this function will save all plots as "psrname"_summary_plot_#.nb.png, where # is
-    and integer from 1-4. 
+    and integer from 1-4.
 
     Arguments
     ---------
@@ -3237,7 +3241,7 @@ def plots_for_summary_pdf_nb(fitter, title = None, legends = False):
     title [boolean] : If True, will add titles to ALL plots [default: False].
     legend [boolean] : If True, will add legends to ALL plots [default: False].
     """
-    
+
     if fitter.is_wideband:
         raise ValueError("Cannot use this function with WidebandTOAFitter, please use `plots_for_summary_pdf_wb` instead.")
     # Need to make four sets of plots
@@ -3374,7 +3378,7 @@ def plots_for_summary_pdf_wb(fitter, title = None, legends = False):
     Function to make a composite set of summary plots for sets of TOAs to be put into a summary pdf.
     This is for Wideband timing only. For Narrowband timing, use `plots_for_summary_pdf_nb`.
     By definition, this function will save all plots as "psrname"_summary_plot_#.wb.png, where # is
-    and integer from 1-4. 
+    and integer from 1-4.
 
     Arguments
     ---------
@@ -3537,12 +3541,12 @@ def plot_settings():
 def get_fitter(yaml):
     """
     Get the fitter and model from a given YAML
-    
+
     Parameters
     ==========
     yaml: str
         yaml to use for locating latest results
-    
+
     """
     tc = TimingConfiguration(yaml)
     mo, to = tc.get_model_and_toas(excised=True, usepickle=True)
@@ -3558,17 +3562,17 @@ def get_fitter(yaml):
 def get_avg_years(fo_nb, fo_wb, avg_dict):
     """
     Get MJDS for each data set in years
-    
+
     Parameters
     ==========
     fo: fitter object
     mo: model object
     avg_dict: from fo.resids.ecorr_average()
-    
+
     """
     mjd_nb = fo_nb.toas.get_mjds().value
     years_nb = (mjd_nb - 51544.0)/365.25 + 2000.0
-    mjd_wb = fo_wb.toas.get_mjds().value 
+    mjd_wb = fo_wb.toas.get_mjds().value
     years_wb = (mjd_wb - 51544.0)/365.25 + 2000.0
     mjds_avg = avg_dict['mjds'].value
     years_avg = (mjds_avg - 51544.0)/365.25 + 2000.0
@@ -3577,13 +3581,13 @@ def get_avg_years(fo_nb, fo_wb, avg_dict):
 def get_backends(fo_nb, fo_wb, avg_dict):
     """
     Grab backends via flags to make plotting easier
-    
+
     Parameters
     ==========
     fo: fitter object
     mo: model object
     avg_dict: from fo.resids.ecorr_average()
-    
+
     """
     rcvr_bcknds_nb = np.array(fo_nb.toas.get_flag_value('f')[0])
     rcvr_set_nb = set(rcvr_bcknds_nb)
@@ -3599,11 +3603,11 @@ def get_backends(fo_nb, fo_wb, avg_dict):
 def get_DMX_info(fo):
     """
     Get DMX timeseries info from dmxparse
-    
+
     Parameters
     ==========
     fo: fitter object
-    
+
     """
     dmx_dict = pint.utils.dmxparse(fo)
     DMXs = dmx_dict['dmxs'].value
@@ -3615,7 +3619,7 @@ def get_DMX_info(fo):
 def plot_by_color(ax, x, y, err, bknds, rn_off, be_legend, be_format):
     """
     Plot color-divided-by-receiver/BE points on any axis
-    
+
     Parameters
     ==========
     ax: axis for plotting
@@ -3624,7 +3628,7 @@ def plot_by_color(ax, x, y, err, bknds, rn_off, be_legend, be_format):
     err: error bars to plot
     bknds: list of backend flags associated with TOAs
     rn_off: the DC red noise offset to subtract (prior to PINT fix)
-    
+
     """
     markers, colorscheme = plot_settings()
     for i, r_b in enumerate(set(bknds)):
@@ -3642,7 +3646,7 @@ def plot_by_color(ax, x, y, err, bknds, rn_off, be_legend, be_format):
 
     if be_legend:
         handles, labels = ax.get_legend_handles_labels()
-        labels, handles = zip(*sorted(zip(labels, handles), key=lambda t: t[0]))        
+        labels, handles = zip(*sorted(zip(labels, handles), key=lambda t: t[0]))
         label_names = {"327_ASP":        "ASP 327 MHz",
           "327_PUPPI":       "PUPPI 327 MHz",
           "430_ASP":         "ASP 430 MHz",
@@ -3670,7 +3674,7 @@ def plot_by_color(ax, x, y, err, bknds, rn_off, be_legend, be_format):
 def rec_labels(axs, bcknds, years_avg):
     """
     Mark transitions between backends
-    
+
     Parameters
     ==========
     axs: axis for plotting
@@ -3679,7 +3683,7 @@ def rec_labels(axs, bcknds, years_avg):
     err: error bars to plot
     bknds: list of backend flags associated with TOAs
     rn_off: the DC red noise offset to subtract (prior to PINT fix)
-    
+
     """
     guppi = 2010.1
     puppi = 2012.1
@@ -3726,13 +3730,13 @@ def rec_labels(axs, bcknds, years_avg):
         else:
             axs[0].text((puppi+x_max_yr)/2., ycoord, 'PUPPI/GUPPI', transform=tform, va=va, ha=ha)
         axs[0].text((guppi+x_min_yr)/2., ycoord, 'ASP/GASP', transform=tform, va=va, ha=ha)
-        axs[0].text((guppi+puppi)/2., ycoord, 'ASP/GUPPI', transform=tform, va=va, ha=ha)        
+        axs[0].text((guppi+puppi)/2., ycoord, 'ASP/GUPPI', transform=tform, va=va, ha=ha)
     elif has_ao and not has_gbt:
         if has_yuppi:
             axs[0].text((puppi+x_max_yr)/2., ycoord, 'PUPPI/YUPPI', transform=tform, va=va, ha=ha)
         else:
             axs[0].text((puppi+x_max_yr)/2., ycoord, 'PUPPI', transform=tform, va=va, ha=ha)
-        axs[0].text((puppi+x_min_yr)/2. - 0.2, ycoord, 'ASP', transform=tform, va=va, ha=ha)        
+        axs[0].text((puppi+x_min_yr)/2. - 0.2, ycoord, 'ASP', transform=tform, va=va, ha=ha)
     elif not has_ao and has_gbt:
         if has_yuppi:
             axs[0].text((puppi+x_max_yr)/2., ycoord, 'GUPPI/YUPPI', transform=tform, va=va, ha=ha)
