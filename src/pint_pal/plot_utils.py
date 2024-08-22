@@ -244,7 +244,7 @@ def call(x):
     subprocess.call(x,shell=True)
 
 
-def plot_residuals_time(fitter, restype = 'postfit', colorby='pta', plotsig = False, avg = False, whitened = False, \
+def plot_residuals_time(fitter, restype = 'postfit', colorby='f', plotsig = False, avg = False, whitened = False, \
                         save = False, legend = True, title = True, axs = None, mixed_ecorr=False, **kwargs):
     """
     Make a plot of the residuals vs. time
@@ -812,7 +812,7 @@ def plot_FD_delay(fitter = None, model_object = None, save = False, title= True,
 
     return
 
-def plot_residuals_freq(fitter, restype = 'postfit', colorby='pta',plotsig = False, avg = False, mixed_ecorr=False,\
+def plot_residuals_freq(fitter, restype = 'postfit', colorby='f',plotsig = False, avg = False, mixed_ecorr=False,\
                         whitened = False, save = False, legend = True, title = True, axs = None, **kwargs):
     """
     Make a plot of the residuals vs. frequency
@@ -1960,6 +1960,8 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
         if 'color' in kwargs.keys():
             clr = kwargs['color']
         else:
+            print(colorscheme)
+            print(r_b_label)
             clr = colorscheme[r_b_label]
         if plotsig:
             sig = res[inds]/errs[inds]
@@ -2194,7 +2196,7 @@ def plot_measurements_v_dmres(fitter, restype = 'postfit', plotsig = False, nbin
     return
 
 
-def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = False, avg = False, mixed_ecorr=False, \
+def plot_residuals_orb(fitter, restype = 'postfit', colorby='f', plotsig = False, avg = False, mixed_ecorr=False, \
                        whitened = False, save = False, legend = True, title = True, axs = None, **kwargs):
     """
     Make a plot of the residuals vs. orbital phase.
@@ -3504,8 +3506,10 @@ def plot_settings():
         "L-wide_PUPPI":    "#6BA9E2",
         "Rcvr1_2_GASP":    "#407BD5",
         "Rcvr1_2_GUPPI":   "#407BD5",
+        "Rcvr1_2_VEGAS":   "#61C853",
         "Rcvr_800_GASP":   "#61C853",
         "Rcvr_800_GUPPI":  "#61C853",
+        "Rcvr_800_VEGAS":  "#61C853",
         "S-wide_ASP":      "#855CA0",
         "S-wide_PUPPI":    "#855CA0",
         "1.5GHz_YUPPI":    "#45062E",
@@ -3523,8 +3527,10 @@ def plot_settings():
           "L-wide_PUPPI":    "x",
           "Rcvr1_2_GASP":    "x",
           "Rcvr1_2_GUPPI":   "x",
+          "Rcvr1_2_VEGAS":   "x",
           "Rcvr_800_GASP":   "x",
           "Rcvr_800_GUPPI":  "x",
+          "Rcvr_800_VEGAS":  "x",
           "S-wide_ASP":      "x",
           "S-wide_PUPPI":    "x",
           "1.5GHz_YUPPI":    "x",
@@ -3655,8 +3661,10 @@ def plot_by_color(ax, x, y, err, bknds, rn_off, be_legend, be_format):
           "L-wide_PUPPI":    "PUPPI L-wide",
           "Rcvr1_2_GASP":    "GASP L-band",
           "Rcvr1_2_GUPPI":   "GUPPI L-band",
+          "Rcvr1_2_VEGAS":   "VEGAS L-band",
           "Rcvr_800_GASP":   "GASP 820 MHz",
           "Rcvr_800_GUPPI":  "GUPPI 820 MHz",
+          "Rcvr_800_VEGAS":  "VEGAS 820 MHz",
           "S-wide_ASP":      "ASP S-wide",
           "S-wide_PUPPI":    "PUPPI S-wide",
           "1.5GHz_YUPPI":    "YUPPI 1.5 GHz",
