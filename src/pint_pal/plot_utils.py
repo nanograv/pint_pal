@@ -1960,8 +1960,6 @@ def plot_measurements_v_res(fitter, restype = 'postfit', plotsig = False, nbin =
         if 'color' in kwargs.keys():
             clr = kwargs['color']
         else:
-            print(colorscheme)
-            print(r_b_label)
             clr = colorscheme[r_b_label]
         if plotsig:
             sig = res[inds]/errs[inds]
