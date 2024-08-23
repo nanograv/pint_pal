@@ -1,5 +1,7 @@
+from typing import Any, Optional, Tuple, Union
 import numpy as np
 from astropy import log
+import pint
 from pint_pal.utils import apply_cut_flag, apply_cut_select
 
 class DMXParameter:
@@ -9,7 +11,7 @@ class DMXParameter:
     aliases = {'idx':'index', 'val':'dmx_val', 'err':'dmx_err', 'ep':'epoch',
                'r1':'low_mjd', 'r2':'high_mjd', 'f1':'low_freq',
                'f2':'high_freq', 'mask':'toa_mask'}
-    def __init__(self):
+    def __init__(self) -> None:
         """
         """
         self.idx = 0  # index label [int]
@@ -22,17 +24,17 @@ class DMXParameter:
         self.f2 = 0.0 # highest frequency [MHz]
         self.mask = []  # Boolean index array for selecting TOAs
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         name = self.aliases.get(name, name)
         object.__setattr__(self, name, value)
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         if name == 'aliases':
             raise AttributeError  # http://nedbatchelder.com/blog/201010/surprising_getattr_recursion.html
         name = self.aliases.get(name, name)
         return object.__getattribute__(self, name)
 
-    def print_dmx(self, range_only=False, fit_flag=True, fortran=False):
+    def print_dmx(self, range_only: bool = False, fit_flag: bool = True, fortran: bool = False) -> None:
         """
         Print TEMPO-style DMX parameter.
 
@@ -60,7 +62,7 @@ class DMXParameter:
             print(DMX_str)
 
 
-def group_dates(toas, group_width=0.1):
+def group_dates(toas: pint.toa.TOAs, group_width: float = 0.1) -> list:
     """
     Returns MJDs of groups of TOAs no wider than a specified amount.
 
@@ -93,8 +95,13 @@ def group_dates(toas, group_width=0.1):
     return group_mjds
 
 
-def get_dmx_ranges(toas, bin_width=1.0, pad=0.0, strict_inclusion=True,
-        check=True):
+def get_dmx_ranges(
+    toas: pint.toa.TOAs,
+    bin_width: float = 1.0, 
+    pad: float = 0.0, 
+    strict_inclusion: bool = True,
+    check: bool = True
+) -> list:
     """
     Returns a list of low and high MJDs defining DMX ranges, covering all TOAs.
 
@@ -151,8 +158,14 @@ def get_dmx_ranges(toas, bin_width=1.0, pad=0.0, strict_inclusion=True,
     return dmx_ranges
 
 
-def get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0, pad=0.0,
-        strict_inclusion=True, check=True):
+def get_gasp_dmx_ranges(
+    toas: pint.toa.TOAs,
+    group_width: float = 0.1, 
+    bin_width: float = 15.0,
+    pad: float = 0.0,
+    strict_inclusion: bool = True,
+    check: bool = True
+) -> list:
     """
     Return a list of DMX ranges that group GASP TOAs into bins.
 
@@ -221,8 +234,15 @@ def get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0, pad=0.0,
     return dmx_ranges
 
 
-def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
-        strict_inclusion=True, add_new_ranges=False, check=True):
+def expand_dmx_ranges(
+    toas: pint.toa.TOAs,
+    dmx_ranges: list,
+    bin_width: float = 1.0,
+    pad: float = 0.0,
+    strict_inclusion: bool = True,
+    add_new_ranges: bool = False,
+    check: bool = True
+) -> list:
     """
     Expands DMX ranges to accommodate new TOAs up to a maximum bin width.
 
@@ -297,7 +317,12 @@ def expand_dmx_ranges(toas, dmx_ranges, bin_width=1.0, pad=0.0,
     return dmx_ranges
 
 
-def check_dmx_ranges(toas, dmx_ranges, full_return=False, quiet=False):
+def check_dmx_ranges(
+    toas: pint.toa.TOAs,
+    dmx_ranges: list,
+    full_return: bool = False,
+    quiet: bool = False
+) -> Union[Tuple[list, list, list, list, list, list],None]:
     """
     Ensures all TOAs match only one DMX bin and all bins have at least one TOA.
 
@@ -392,7 +417,7 @@ def check_dmx_ranges(toas, dmx_ranges, full_return=False, quiet=False):
         return masks, ibad, iover, iempty, inone, imult
 
 
-def get_dmx_mask(toas, low_mjd, high_mjd, strict_inclusion=True):
+def get_dmx_mask(toas: pint.toa.TOAs, low_mjd: float, high_mjd: float, strict_inclusion: bool = True) -> np.ndarray:
     """
     Return a Boolean index array for selecting TOAs from toas in a DMX range.
 
@@ -413,7 +438,7 @@ def get_dmx_mask(toas, low_mjd, high_mjd, strict_inclusion=True):
     return mask
 
 
-def get_dmx_epoch(toas, weighted_average=True):
+def get_dmx_epoch(toas: pint.toa.TOAs, weighted_average: bool = True) -> float:
     """
     Return the epoch of a DMX bin.
 
@@ -435,7 +460,7 @@ def get_dmx_epoch(toas, weighted_average=True):
     return epoch
 
 
-def get_dmx_freqs(toas, allow_wideband=True):
+def get_dmx_freqs(toas: pint.toa.TOAs, allow_wideband: bool = True) -> Tuple[float, float]:
     """
     Return the lowest and highest frequency of the TOAs in a DMX bin.
 
@@ -470,8 +495,15 @@ def get_dmx_freqs(toas, allow_wideband=True):
     return low_freq, high_freq
 
 
-def check_frequency_ratio(toas, dmx_ranges, frequency_ratio=1.1,
-        strict_inclusion=True, allow_wideband=True, invert=False, quiet=False):
+def check_frequency_ratio(
+    toas: pint.toa.TOAs,
+    dmx_ranges: list,
+    frequency_ratio: float = 1.1,
+    strict_inclusion: bool = True,
+    allow_wideband: bool = True,
+    invert: bool = False,
+    quiet: bool = False
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Check that the TOAs in a DMX bin pass a frequency ratio criterion.
 
@@ -522,9 +554,20 @@ def check_frequency_ratio(toas, dmx_ranges, frequency_ratio=1.1,
                 np.arange(len(dmx_ranges))[np.logical_not(dmx_range_mask)]
 
 
-def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, bin_width=1.0,
-        solar_n0=5.0, allow_wideband=True, strict_inclusion=True, pad=0.0,
-        check=True, return_only=False, quiet=False):
+def check_solar_wind(
+    toas: pint.toa.TOAs,
+    dmx_ranges: list,
+    model: pint.models.timing_model.TimingModel, 
+    max_delta_t: float = 0.1,
+    bin_width: float = 1.0,
+    solar_n0: float = 5.0,
+    allow_wideband: bool = True,
+    strict_inclusion: bool = True,
+    pad: float = 0.0,
+    check: bool = True,
+    return_only: bool = False,
+    quiet: bool = False
+) -> list:
     """
     Split DMX ranges based on influence of the solar wind.
 
@@ -608,7 +651,7 @@ def check_solar_wind(toas, dmx_ranges, model, max_delta_t=0.1, bin_width=1.0,
         return dmx_ranges
 
 
-def add_dmx(model, bin_width=1.0):
+def add_dmx(model: pint.models.timing_model.TimingModel, bin_width: float = 1.0) -> None:
     """
     Checks for DispersionDMX and ensures the bin width is the only parameter.
 
@@ -628,7 +671,7 @@ def add_dmx(model, bin_width=1.0):
         dmx.DMX.set(bin_width)
 
 
-def model_dmx_params(model):
+def model_dmx_params(model: pint.models.timing_model.TimingModel) -> Tuple[list, np.ndarray, np.ndarray]:
     """
     Get DMX ranges, values, and uncertainties from a PINT model object.
 
@@ -655,7 +698,7 @@ def model_dmx_params(model):
     return dmx_ranges, dmx_vals, dmx_errs
 
 
-def remove_all_dmx_ranges(model, quiet=False):
+def remove_all_dmx_ranges(model: pint.models.timing_model.TimingModel, quiet: bool = False) -> None:
     """
     Uses PINT to remove all DMX parameter ranges from a timing model.
 
@@ -675,8 +718,15 @@ def remove_all_dmx_ranges(model, quiet=False):
         pass
 
 
-def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
-        freeze_DM=True):
+def setup_dmx(
+    model: pint.models.timing_model.TimingModel,
+    toas: pint.toa.TOAs,
+    quiet: bool = True,
+    frequency_ratio: float = 1.1,
+    max_delta_t: float = 0.1,
+    bin_width: Optional[float] = None,
+    freeze_DM: bool = True
+) -> pint.toa.TOAs:
     """
     Sets up and checks a DMX model using a number of defaults.
 
@@ -688,6 +738,7 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
         the frequencies used are returned by get_dmx_freqs().
     max_delta_t is the time delay [us] above which a DMX range will be split.
     quiet=True turns off some of the logged warnings and info.
+    bin_width=constant bin width if provided, otherwise use observatory defaults if None
     freeze_DM=True ensures the mean DM parameter is not fit.
     """
 
@@ -714,8 +765,12 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
         adjust_old_dmx = False
 
     # Set up DMX model
-    if toas.observatories == set(['arecibo']): bin_width = 0.5  # day
-    else: bin_width = 6.5  #day
+    if bin_width is None: #use observatory defaults
+        if toas.observatories == set(['arecibo']): 
+            bin_width = 0.5  # day
+        else:
+            bin_width = 6.5  #day
+
     # Calculate GASP-era ranges, if applicable
     dmx_ranges = get_gasp_dmx_ranges(toas, group_width=0.1, bin_width=15.0,
             pad=0.05, check=False)
@@ -813,9 +868,17 @@ def setup_dmx(model, toas, quiet=True, frequency_ratio=1.1, max_delta_t=0.1,
     return toas
 
 
-def make_dmx(toas, dmx_ranges, dmx_vals=None, dmx_errs=None,
-        strict_inclusion=True, weighted_average=True, allow_wideband=True,
-        start_idx=1, print_dmx=False):
+def make_dmx(
+    toas: pint.toa.TOAs,
+    dmx_ranges: list,
+    dmx_vals: Optional[np.ndarray] = None,
+    dmx_errs: Optional[np.ndarray] = None,
+    strict_inclusion: bool = True,
+    weighted_average: bool = True,
+    allow_wideband: bool = True,
+    start_idx: int = 1,
+    print_dmx: bool = False
+):
     """
     Uses convenience functions to assemble a TEMPO-style DMX parameters.
 
