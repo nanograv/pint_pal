@@ -322,7 +322,7 @@ def check_dmx_ranges(
     dmx_ranges: list,
     full_return: bool = False,
     quiet: bool = False
-) -> Tuple[list, list, list, list, list, list] | None:
+) -> Union[Tuple[list, list, list, list, list, list],None]:
     """
     Ensures all TOAs match only one DMX bin and all bins have at least one TOA.
 
