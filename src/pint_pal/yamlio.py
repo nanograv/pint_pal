@@ -8,11 +8,11 @@ import argparse
 import glob
 from astropy import log
 import numpy as np
-from pint_pal.defaults import *
+from pint_pal import config
 import os
 
 yaml = YAML()
-RELEASE = f'/nanograv/timing/releases/15y/toagen/releases/{LATEST_TOA_RELEASE}/' 
+RELEASE = f'/nanograv/timing/releases/15y/toagen/releases/{config.LATEST_TOA_RELEASE}/' 
 
 def fix_toa_info(yaml_file,current_release=RELEASE,overwrite=True,extension='fix'):
     """Checks/fixes tim-directory, toas, toa-type from existing yaml; writes new one.
