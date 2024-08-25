@@ -8,6 +8,7 @@ import corner
 
 import pint.models as pm
 from pint.models.parameter import maskParameter
+from pint_pal.gibbs_sampler import GibbsSampler
 
 import matplotlib as mpl
 import matplotlib.pyplot as pl
@@ -178,7 +179,13 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
 
     return wn_dict, rn_bf
 
-def model_noise(mo, to, vary_red_noise = True, n_iter = int(1e5), using_wideband = False, resume = False, run_noise_analysis = True, wb_efac_sigma = 0.25, base_op_dir = "./"):
+def model_noise(mo, to, sampler = 'PTMCMCSampler',
+                vary_red_noise = True, n_iter = int(1e5),
+                using_wideband = False, resume = False,
+                run_noise_analysis = True,
+                wb_efac_sigma = 0.25, base_op_dir = "./",
+                noise_kwargs = {}, sampler_kwargs = {},
+                ):
     """
     Setup enterprise PTA and perform MCMC noise analysis
 
@@ -186,6 +193,7 @@ def model_noise(mo, to, vary_red_noise = True, n_iter = int(1e5), using_wideband
     ==========
     mo: PINT (or tempo2) timing model
     to: PINT (or tempo2) TOAs
+    sampler: either 'PTMCMCSampler' or 'gibbs'
     red_noise: include red noise in the model
     n_iter: number of MCMC iterations; Default: 1e5; Recommended > 5e4
     using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
@@ -219,28 +227,38 @@ def model_noise(mo, to, vary_red_noise = True, n_iter = int(1e5), using_wideband
     #Create enterprise Pulsar object for supplied pulsar timing model (mo) and toas (to)
     e_psr = Pulsar(mo, to)
 
-    #Setup a single pulsar PTA using enterprise_extensions
-    if not using_wideband:
-        pta = models.model_singlepsr_noise(e_psr, white_vary = True, red_var = vary_red_noise, is_wideband = False, use_dmdata = False, dmjump_var = False, wb_efac_sigma = wb_efac_sigma)
-    else:
-        pta = models.model_singlepsr_noise(e_psr, is_wideband = True, use_dmdata = True, white_vary = True, red_var = vary_red_noise, dmjump_var = False, wb_efac_sigma = wb_efac_sigma, ng_twg_setup = True)
-        dmjump_params = {}
-        for param in mo.params:
-            if param.startswith('DMJUMP'):
-                dmjump_param = getattr(mo,param)
-                dmjump_param_name = f"{pta.pulsars[0]}_{dmjump_param.key_value[0]}_dmjump"
-                dmjump_params[dmjump_param_name] = dmjump_param.value
-        pta.set_default_params(dmjump_params)
+    if sampler == 'PTMCMCSampler':
+        log.info(f"INFO: Running noise analysis with {sampler} for {e_psr.name}")
+        #Setup a single pulsar PTA using enterprise_extensions
+        if not using_wideband:
+            pta = models.model_singlepsr_noise(e_psr, white_vary = True, red_var = vary_red_noise, is_wideband = False, use_dmdata = False, dmjump_var = False, wb_efac_sigma = wb_efac_sigma, **noise_kwargs)
+        else:
+            pta = models.model_singlepsr_noise(e_psr, is_wideband = True, use_dmdata = True, white_vary = True, red_var = vary_red_noise, dmjump_var = False, wb_efac_sigma = wb_efac_sigma, ng_twg_setup = True, **noise_kwargs)
+            dmjump_params = {}
+            for param in mo.params:
+                if param.startswith('DMJUMP'):
+                    dmjump_param = getattr(mo,param)
+                    dmjump_param_name = f"{pta.pulsars[0]}_{dmjump_param.key_value[0]}_dmjump"
+                    dmjump_params[dmjump_param_name] = dmjump_param.value
+            pta.set_default_params(dmjump_params)
+        # FIXME: set groups here
+        #######
+        #setup sampler using enterprise_extensions
+        samp = sampler.setup_sampler(pta, outdir = outdir, resume = resume)
 
-    #setup sampler using enterprise_extensions
-    samp = sampler.setup_sampler(pta, outdir = outdir, resume = resume)
+        #Initial sample
+        x0 = np.hstack([p.sample() for p in pta.params])
 
-    #Initial sample
-    x0 = np.hstack([p.sample() for p in pta.params])
+        #Start sampling
 
-    #Start sampling
-
-    samp.sample(x0, n_iter, SCAMweight=30, AMweight=15, DEweight=50,)
+        samp.sample(x0, n_iter, SCAMweight=30, AMweight=15, DEweight=50, **sampler_kwargs)
+    elif sampler == 'gibbs':
+        log.info(f"INFO: Running noise analysis with {sampler} for {e_psr.name}")
+        samp = GibbsSampler(e_psr,
+                            **noise_kwargs,
+                            )
+        samp.sample(niter=n_iter, save_path=outdir, **sampler_kwargs)
+        pass 
     
 def convert_to_RNAMP(value):
     """

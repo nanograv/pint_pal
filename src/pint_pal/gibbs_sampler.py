@@ -47,8 +47,8 @@ class GibbsSampler(object):
         vary_rn=True,
         rn_components=30,
         tnequad=True,
-        log10rhomin=-9.0,
-        log10rhomax=-4.0,
+        #log10rhomin=-9.0, i think these would only apply to HD correlations
+        #log10rhomax=-4.0, on gibbs sampling. IRN and DM/CHROM are diagonal ??
         vary_dm=False,
         dm_components=50,
         vary_chrom=False,
@@ -123,8 +123,6 @@ class GibbsSampler(object):
         self.vary_wn = vary_wn
         self.tm_marg = tm_marg
         self.wn_names = ["efac", "equad", "ecorr"]
-        self.rhomin = log10rhomin
-        self.rhomax = log10rhomax
         self.rn_components = rn_components
         self.dm_components = dm_components
         self.chrom_components = chrom_components
@@ -167,8 +165,6 @@ class GibbsSampler(object):
                 psd="spectrum",
                 prior="log-uniform",
                 Tspan=self.Tspan,
-                #logmin=self.rhomin,
-                #logmax=self.rhomax,
                 components=self.rn_components,
                 gamma_val=None,
             )
