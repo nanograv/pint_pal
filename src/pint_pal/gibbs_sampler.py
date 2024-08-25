@@ -12,7 +12,7 @@ from scipy.linalg import solve_triangular as st_solve
 from scipy.linalg import cho_factor, cho_solve
 
 
-class BayesPowerSingle(object):
+class GibbsSampler(object):
 
     """
     The Gibbs Method class used for single-pulsar noise analyses.
@@ -31,6 +31,7 @@ class BayesPowerSingle(object):
 
         S. R. Taylor
         N. Laal
+        J. G. Baier
     """
 
     def __init__(
@@ -38,19 +39,21 @@ class BayesPowerSingle(object):
         psr=None,
         Tspan=None,
         select="backend",
-        white_vary=False,
+        vary_wn=False,
         inc_ecorr=False,
         ecorr_type="kernel",
         noise_dict=None,
         tm_marg=False,
+        vary_rn=True,
         rn_components=30,
-        dm_components=None,
-        chrom_components=None,
-        dm_type = "gibbs",
-        chrom_type = "gibbs",
         tnequad=True,
         log10rhomin=-9.0,
         log10rhomax=-4.0,
+        vary_dm=False,
+        dm_components=50,
+        vary_chrom=False,
+        chrom_components=50,
+        include_quadratic=False,
     ):
         """
         Parameters
@@ -66,7 +69,7 @@ class BayesPowerSingle(object):
         select: str
             the selection of backend ('backend' or 'none') for the white-noise parameters
 
-        white_vary: bool
+        self.vary_wn: bool
             whether to vary the white noise
 
         inc_ecorr: bool
@@ -76,7 +79,7 @@ class BayesPowerSingle(object):
             the type of ecorr to use. Choose between 'basis' or 'kernel'
 
         noise_dict: dict
-            white noise dictionary in case 'white_vary' is set to False
+            white noise dictionary in case 'self.vary_wn' is set to False
 
         tm_marg: bool
             whether to marginalize over timing model parameters (do not use this if you are varying the white noise!)
@@ -90,12 +93,15 @@ class BayesPowerSingle(object):
         chrom_components: int
             number of chromatic noise Fourier modes to include
             
-        dm_type: str
-            the type of DM noise to use. Choose between 'gibbs' or 'mcmc' or None (for DMX)
+        dm_var: bool
+            wheter to include a free spectrum gibbs dm_gp
         
-        chrom_type: str
-            the type of chromatic noise to use. Choose between 'gibbs' or 'mcmc' or None (for no chromatic noise)
-
+        chrom_var: bool
+            whether to include a free spectrum gibbs chrom_gp
+            
+        include_quadratic: bool
+            whether or not to fit out a quadratic trend in chrom_gp (think DM2)
+            
         log10rhomin: float
             lower bound for the log10 of the rho parameter.
 
@@ -114,7 +120,7 @@ class BayesPowerSingle(object):
         self.name = self.psr[0].name
         self.inc_ecorr = inc_ecorr
         self.ecorr_type = ecorr_type
-        self.white_vary = white_vary
+        self.vary_wn = vary_wn
         self.tm_marg = tm_marg
         self.wn_names = ["efac", "equad", "ecorr"]
         self.rhomin = log10rhomin
@@ -122,15 +128,17 @@ class BayesPowerSingle(object):
         self.rn_components = rn_components
         self.dm_components = dm_components
         self.chrom_components = chrom_components
-        self.dm_type = dm_type
-        self.chrom_type = chrom_type
+        self.vary_rn = vary_rn
+        self.vary_dm = vary_dm
+        self.vary_chrom = vary_chrom
+        self.include_quadratic = include_quadratic
         self.low = 10 ** (2 * self.rhomin)
         self.high = 10 ** (2 * self.rhomax)
 
         # Making the pta object
         if self.tm_marg:
             tm = gp_signals.MarginalizingTimingModel(use_svd=True)
-            if self.white_vary:
+            if self.vary_wn:
                 warnings.warn(
                     "***FYI: the timing model is marginalized for. This will slow down the WN sampling!!***"
                 )
@@ -139,7 +147,7 @@ class BayesPowerSingle(object):
 
         if self.ecorr_type == "basis":
             wn = blocks.white_noise_block(
-                vary=self.white_vary,
+                vary=self.vary_wn,
                 inc_ecorr=self.inc_ecorr,
                 gp_ecorr=True,
                 select=select,
@@ -147,29 +155,62 @@ class BayesPowerSingle(object):
             )
         else:
             wn = blocks.white_noise_block(
-                vary=self.white_vary,
+                vary=self.vary_wn,
                 inc_ecorr=self.inc_ecorr,
                 gp_ecorr=False,
                 select=select,
                 tnequad=tnequad,
             )
 
-        rn = blocks.common_red_noise_block(
-            psd="spectrum",
-            prior="log-uniform",
-            Tspan=self.Tspan,
-            logmin=self.rhomin,
-            logmax=self.rhomax,
-            components=rn_components,
-            gamma_val=None,
-            name="gw",
-        )
-        s = tm + wn + rn
+        if self.vary_rn:
+            rn = blocks.red_noise_block(
+                psd="spectrum",
+                prior="log-uniform",
+                Tspan=self.Tspan,
+                #logmin=self.rhomin,
+                #logmax=self.rhomax,
+                components=self.rn_components,
+                gamma_val=None,
+            )
+        
+        if self.vary_dm:
+            dm = blocks.dm_noise_block(
+                gp_kernel='diag',
+                psd='spectrum',
+                prior='log-uniform',
+                Tspan=self.Tspan,
+                components=self.dm_components,
+                gamma_val=None,
+                coefficients=False
+            )
+        
+        if self.vary_chrom:
+            chrom = blocks.chromatic_noise_block(
+                gp_kernel='diag',
+                psd='spectrum',
+                prior='log-uniform',
+                idx=4,
+                include_quadratic=self.include_quadratic,
+                Tspan=self.Tspan,
+                name='chrom',
+                components=self.chrom_components,
+            )
+                
+        s = tm + wn
+        
+        if self.vary_rn:
+            s += rn
+        if self.vary_dm:
+            s += dm
+        if self.vary_chrom:
+            s += chrom
+        
         self.pta = signal_base.PTA(
             [s(p) for p in self.psr],
             lnlikelihood=signal_base.LogLikelihoodDenseCholesky,
         )
-        if not white_vary:
+        #print(self.pta.signals.keys())
+        if not self.vary_wn:
             self.pta.set_default_params(noise_dict)
             self.Nmat = self.pta.get_ndiag(params={})[0]
             self.TNr = self.pta.get_TNr(params={})[0]
@@ -177,7 +218,7 @@ class BayesPowerSingle(object):
         else:
             self.Nmat = None
 
-        if self.inc_ecorr and "basis" in self.ecorr_type:
+        if self.inc_ecorr and "basis" in self.ecorr_type and self.vary_wn:
             # grabbing priors on ECORR params
             for ct, par in enumerate(self.pta.params):
                 if "ecorr" in str(par):
@@ -188,30 +229,58 @@ class BayesPowerSingle(object):
                 10 ** (2 * float(ecorr_priors[0].split("=")[1])),
                 10 ** (2 * float(ecorr_priors[1].split("=")[1])),
             )
+            #print(self.ecorrmin, self.ecorrmax)
 
         # Getting residuals
         self._residuals = self.pta.get_residuals()[0]
+        ## FIXME : maybe don't cache this -- could lead to memory issues.
         # Intial guess for the model params
         self._xs = np.array([p.sample()
                             for p in self.pta.params], dtype=object)
-        # Initializign the b-coefficients. The shape is 2*freq_bins if tm_marg
-        # = True.
+        # Initializign the b-coefficients.
+        # The shape is 2*rn_comp+2*dm_comp+2*chrom_comp if tm_marg = True
+        # if tm_marg = False, 
+        # then the shape is more because there are some tm params in there?
         self._b = np.zeros(self.pta.get_basis(self._xs)[0].shape[1])
+        # when including dm and chromatic models, the b's are 
+        # the concantenation of the red noise, dm, and chromatic noise fourier coefficients
+        #print("len b: ", len(self._b))
+        #print(self.pta.get_basis(self._xs)[0].shape)
         self.Tmat = self.pta.get_basis(params={})[0]
         self.phiinv = None
-
+        # print(self._xs.shape)
+        # print(self.pta.params)
+        # print("dm", self.get_dm_param_indices)
+        # print("chrom", self.get_chrom_param_indices)
+        # print("rn:", self.get_rn_param_indices)
         # find basis indices of GW process
-        self.gwid = []
+        ### jeremy : changing the below from gwid to rn_id and adding dm_id and chrom_id
+        self.rn_id = []
+        self.dm_id = []
+        self.chrom_id = []
         ct = 0
         psigs = [sig for sig in self.pta.signals.keys() if self.name in sig]
         for sig in psigs:
             Fmat = self.pta.signals[sig].get_basis()
-            if "gw" in self.pta.signals[sig].name:
-                self.gwid.append(ct + np.arange(0, Fmat.shape[1]))
+            if "red_noise" in self.pta.signals[sig].name:
+                self.rn_id.append(ct + np.arange(0, Fmat.shape[1]))
+                ct+=Fmat.shape[1]
+            if "dm_gp" in self.pta.signals[sig].name:
+                self.dm_id.append(ct + np.arange(0, Fmat.shape[1]))
+                ct+=Fmat.shape[1]
+            if "chrom_gp" in self.pta.signals[sig].name:
+                self.chrom_id.append(ct + np.arange(0, Fmat.shape[1]))
+                ct+=Fmat.shape[1]
+            ### jeremy : chaning the above to red_noise and adding dm and chrom as well
             # Avoid None-basis processes.
             # Also assume red + GW signals share basis.
-            if Fmat is not None and "red" not in sig:
+            if Fmat is not None and "red" not in sig and 'dm_gp' not in sig and 'chrom_gp' not in sig:
                 ct += Fmat.shape[1]
+            #print(sig)
+            #print(ct)
+            #print("rn", self.rn_id)
+            #print("dm", self.dm_id)
+            #print("chrom", self.chrom_id)
 
     @cached_property
     def params(self):
@@ -225,10 +294,26 @@ class BayesPowerSingle(object):
         return self.pta.map_params(xs)
 
     @cached_property
-    def get_red_param_indices(self):
+    def get_rn_param_indices(self):
         ind = []
         for ct, par in enumerate(self.param_names):
-            if "log10_A" in par or "gamma" in par or "rho" in par:
+            if "red_noise" in par:
+                ind.append(ct)
+        return np.array(ind)
+    
+    @cached_property
+    def get_dm_param_indices(self):
+        ind = []
+        for ct, par in enumerate(self.param_names):
+            if "dm_gp" in par:
+                ind.append(ct)
+        return np.array(ind)
+    
+    @cached_property
+    def get_chrom_param_indices(self):
+        ind = []
+        for ct, par in enumerate(self.param_names):
+            if "chrom_gp" in par:
                 ind.append(ct)
         return np.array(ind)
 
@@ -255,15 +340,44 @@ class BayesPowerSingle(object):
 
     def update_red_params(self, xs):
         """
-        Function to perform log10_rho updates given the Fourier coefficients.
+        Function to perform red_noise_log10_rho updates given 
+        the red noise Fourier coefficients.
         """
-        tau = self._b[tuple(self.gwid)] ** 2
+        tau = self._b[tuple(self.rn_id)] ** 2
         tau = (tau[0::2] + tau[1::2]) / 2
 
         Norm = 1 / (np.exp(-tau / self.high) - np.exp(-tau / self.low))
         x = np.random.default_rng().uniform(0, 1, size=tau.shape)
         rhonew = -tau / np.log(x / Norm + np.exp(-tau / self.low))
         xs[-1] = 0.5 * np.log10(rhonew)
+        return xs
+
+    def update_dm_params(self, xs):
+        """
+        Function to perform dm_gp_log10_rho updates given 
+        the dm gp Fourier coefficients.
+        """
+        tau = self._b[tuple(self.dm_id)] ** 2
+        tau = (tau[0::2] + tau[1::2]) / 2
+
+        Norm = 1 / (np.exp(-tau / self.high) - np.exp(-tau / self.low))
+        x = np.random.default_rng().uniform(0, 1, size=tau.shape)
+        rhonew = -tau / np.log(x / Norm + np.exp(-tau / self.low))
+        xs[-2] = 0.5 * np.log10(rhonew)
+        return xs
+    
+    def update_chrom_params(self, xs):
+        """
+        Function to perform chrom_gp_log10_rho updates given 
+        the chromatic gp Fourier coefficients.
+        """
+        tau = self._b[tuple(self.chrom_id)] ** 2
+        tau = (tau[0::2] + tau[1::2]) / 2
+
+        Norm = 1 / (np.exp(-tau / self.high) - np.exp(-tau / self.low))
+        x = np.random.default_rng().uniform(0, 1, size=tau.shape)
+        rhonew = -tau / np.log(x / Norm + np.exp(-tau / self.low))
+        xs[-3] = 0.5 * np.log10(rhonew)
         return xs
 
     def update_b(self, xs):
@@ -306,6 +420,7 @@ class BayesPowerSingle(object):
                 trans=1,
             )
         except np.linalg.LinAlgError:
+            print("oh sh******t; a spiiiiiddddeeeerrrrrr")
             if self.bchain.any():
                 self._b = self.bchain[
                     np.random.default_rng().integers(0, len(self.bchain))
@@ -455,8 +570,8 @@ class BayesPowerSingle(object):
     def sample(
         self,
         niter=int(1e4),
-        wniters=30,
-        eciters=10,
+        wniters=100,
+        eciters=15,
         savepath=None,
         SCAMweight=30,
         AMweight=15,
@@ -502,7 +617,7 @@ class BayesPowerSingle(object):
 
         os.makedirs(savepath, exist_ok=True)
 
-        if self.white_vary:
+        if self.vary_wn:
             # large number to avoid saving the white noise choice in a txt file
             isave = int(4e9)
             thin = 1
@@ -533,7 +648,7 @@ class BayesPowerSingle(object):
                 **kwargs
             )
 
-            if "basis" in self.ecorr_type and self.white_vary:
+            if "basis" in self.ecorr_type and self.vary_wn and self.inc_ecorr:
                 x0 = self._xs[self.get_basis_ecorr_indices]
                 ndim = len(x0)
                 cov = np.diag(np.ones(ndim) * 0.01**2)
@@ -564,19 +679,20 @@ class BayesPowerSingle(object):
             list(map(lambda x: str(x.__repr__()), self.pta.params)),
             fmt="%s",
         )
-        rn_freqs = np.arange(
-            1 / self.Tspan,
-            (self.rn_components + 0.001) / self.Tspan,
-            1 / self.Tspan)
-        np.save(savepath + "/rn_freqs.npy", rn_freqs)
+        if self.vary_rn:
+            rn_freqs = np.arange(
+                1 / self.Tspan,
+                (self.rn_components + 0.001) / self.Tspan,
+                1 / self.Tspan)
+            np.save(savepath + "/rn_freqs.npy", rn_freqs)
         
-        if self.dm_components is not None:
+        if self.vary_dm:
             dm_freqs = np.arange(
                 1 / self.Tspan,
                 (self.dm_components + 0.001) / self.Tspan,
                 1 / self.Tspan)
             np.save(savepath + "/dm_freqs.npy", dm_freqs)
-        if self.chrom_components is not None:
+        if self.vary_chrom:
             chrom_freqs = np.arange(
                 1 / self.Tspan,
                 (self.chrom_components + 0.001) / self.Tspan,
@@ -600,16 +716,25 @@ class BayesPowerSingle(object):
 
         pbar = tqdm(range(niter), colour="GREEN")
         pbar.set_description("Sampling %s" % self.name)
+#        num_gibbs = np.sum([int(self.vary_rn), int(self.vary_dm), int(self.vary_chrom)])
         for ii in pbar:
-            if self.white_vary:
+            if self.vary_wn:
                 xnew = self.update_white_params(xnew, iters=wniters)
 
             if self.inc_ecorr and "basis" in self.ecorr_type:
                 xnew = self.update_basis_ecorr_params(xnew, iters=eciters)
 
+#            turn = ii % num_gibbs
+            #if self.vary_rn and turn == 0:
             self.update_b(xs=xnew)
             xnew = self.update_red_params(xs=xnew)
-
+            #if self.vary_dm and turn == 1:
+                #self.update_b(xs=xnew)
+            xnew = self.update_dm_params(xs=xnew)
+            #if self.vary_chrom and turn == 2:
+                #self.update_b(xs=xnew)
+            xnew = self.update_chrom_params(xs=xnew)
+            
             fp[ii, -len_b:] = self._b
             fp[ii, 0:len_x] = np.hstack(xnew)
 
