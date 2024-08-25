@@ -130,10 +130,15 @@ class GibbsSampler(object):
         self.vary_dm = vary_dm
         self.vary_chrom = vary_chrom
         self.include_quadratic = include_quadratic
-        self.low = 10 ** (2 * self.rhomin)
-        self.high = 10 ** (2 * self.rhomax)
-
+        #self.low = 10 ** (2 * self.rhomin)
+        #self.high = 10 ** (2 * self.rhomax)
         # Making the pta object
+        # need to keep track of which parameters are being varied
+        # they appear alphebetically in signal_collections
+        # FIXME: this would probably break if you added a solar wind model
+        self.rn_idx = -1
+        self.dm_idx = -1 - int(self.vary_rn)
+        self.chrom_idx = -1 - int(self.vary_rn) - int(self.vary_dm)
         if self.tm_marg:
             tm = gp_signals.MarginalizingTimingModel(use_svd=True)
             if self.vary_wn:
@@ -191,6 +196,7 @@ class GibbsSampler(object):
                 name='chrom',
                 components=self.chrom_components,
             )
+            
                 
         s = tm + wn
         
@@ -277,6 +283,7 @@ class GibbsSampler(object):
             #print("rn", self.rn_id)
             #print("dm", self.dm_id)
             #print("chrom", self.chrom_id)
+        
 
     @cached_property
     def params(self):
@@ -345,7 +352,7 @@ class GibbsSampler(object):
         Norm = 1 / (np.exp(-tau / self.high) - np.exp(-tau / self.low))
         x = np.random.default_rng().uniform(0, 1, size=tau.shape)
         rhonew = -tau / np.log(x / Norm + np.exp(-tau / self.low))
-        xs[-1] = 0.5 * np.log10(rhonew)
+        xs[self.rn_idx] = 0.5 * np.log10(rhonew)
         return xs
 
     def update_dm_params(self, xs):
@@ -359,7 +366,7 @@ class GibbsSampler(object):
         Norm = 1 / (np.exp(-tau / self.high) - np.exp(-tau / self.low))
         x = np.random.default_rng().uniform(0, 1, size=tau.shape)
         rhonew = -tau / np.log(x / Norm + np.exp(-tau / self.low))
-        xs[-2] = 0.5 * np.log10(rhonew)
+        xs[self.dm_idx] = 0.5 * np.log10(rhonew)
         return xs
     
     def update_chrom_params(self, xs):
@@ -373,7 +380,7 @@ class GibbsSampler(object):
         Norm = 1 / (np.exp(-tau / self.high) - np.exp(-tau / self.low))
         x = np.random.default_rng().uniform(0, 1, size=tau.shape)
         rhonew = -tau / np.log(x / Norm + np.exp(-tau / self.low))
-        xs[-3] = 0.5 * np.log10(rhonew)
+        xs[self.chrom_idx] = 0.5 * np.log10(rhonew)
         return xs
 
     def update_b(self, xs):
