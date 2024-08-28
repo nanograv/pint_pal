@@ -179,7 +179,7 @@ def analyze_noise(chaindir = './noise_run_chains/', burn_frac = 0.25, save_corne
 
     return wn_dict, rn_bf
 
-def model_noise(mo, to, sampler = 'PTMCMCSampler',
+def model_noise(mo, to, which_sampler = 'PTMCMCSampler',
                 vary_red_noise = True, n_iter = int(1e5),
                 using_wideband = False, resume = False,
                 run_noise_analysis = True,
@@ -227,7 +227,7 @@ def model_noise(mo, to, sampler = 'PTMCMCSampler',
     #Create enterprise Pulsar object for supplied pulsar timing model (mo) and toas (to)
     e_psr = Pulsar(mo, to)
 
-    if sampler == 'PTMCMCSampler':
+    if which_sampler == 'PTMCMCSampler':
         log.info(f"INFO: Running noise analysis with {sampler} for {e_psr.name}")
         #Setup a single pulsar PTA using enterprise_extensions
         if not using_wideband:
@@ -252,7 +252,7 @@ def model_noise(mo, to, sampler = 'PTMCMCSampler',
         #Start sampling
 
         samp.sample(x0, n_iter, SCAMweight=30, AMweight=15, DEweight=50, **sampler_kwargs)
-    elif sampler == 'gibbs':
+    elif which_sampler == 'gibbs':
         log.info(f"INFO: Running noise analysis with {sampler} for {e_psr.name}")
         samp = GibbsSampler(e_psr,
                             **noise_kwargs,
