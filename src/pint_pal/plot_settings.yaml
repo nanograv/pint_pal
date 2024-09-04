@@ -1,3 +1,6 @@
+# This YAML contains various marker colors and shapes for the three plotting schemes
+# Changes here will be applied to notebook plotting immediately (after restarting the kernel)
+
 obs_c: {
     "ao": "#6BA9E2",
     "arecibo": "#6BA9E2",
@@ -111,25 +114,17 @@ ng20_c: {
     "430_PUPPI": "#FD9927",
     "L-wide_ASP": "#BDB6F6",
     "L-wide_PUPPI": "#BDB6F6",
-    # "L-wide_ASP": "#C3BEF7",
-    # "L-wide_PUPPI": "#A393BF",
-    # "Rcvr1_2_GASP": "#81BDEE",
     "Rcvr1_2_GASP": "#79A3E2",
     "Rcvr1_2_GUPPI": "#79A3E2",
     "Rcvr1_2_VEGAS": "#79A3E2",
     "Rcvr_800_GASP": "#8DD883",
     "Rcvr_800_GUPPI": "#8DD883",
     "Rcvr_800_VEGAS": "#8DD883",
-    # "VEGAS": "#465922",
-    # "S-wide_ASP": "#D81159",
-    # "S-wide_PUPPI": "#D81159",
     "S-wide_ASP": "#C4457A",
     "S-wide_PUPPI": "#C4457A",
     "1.5GHz_YUPPI": "#EBADCB",
     "3GHz_YUPPI": "#E79CC1",
     "6GHz_YUPPI": "#DB6BA1",
-    # "CHIME": "#F3689B",
-    # "Rcvr_CHIME": "#F3689B",
 }
 
 obs_m: {
