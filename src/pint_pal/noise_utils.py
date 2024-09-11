@@ -8,7 +8,6 @@ import corner
 
 import pint.models as pm
 from pint.models.parameter import maskParameter
-from pint_pal.gibbs_sampler import GibbsSampler
 
 import matplotlib as mpl
 import matplotlib.pyplot as pl
@@ -193,7 +192,7 @@ def model_noise(mo, to, which_sampler = 'PTMCMCSampler',
     ==========
     mo: PINT (or tempo2) timing model
     to: PINT (or tempo2) TOAs
-    sampler: either 'PTMCMCSampler' or 'gibbs'
+    sampler: either 'PTMCMCSampler' or 'GibbsSampler' or 'discovery'
     red_noise: include red noise in the model
     n_iter: number of MCMC iterations; Default: 1e5; Recommended > 5e4
     using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
@@ -220,7 +219,7 @@ def model_noise(mo, to, which_sampler = 'PTMCMCSampler',
 
     #Ensure n_iter is an integer
     n_iter = int(n_iter)
-
+    
     if n_iter < 1e4:
         log.warning("Such a small number of iterations is unlikely to yield accurate posteriors. STRONGLY recommend increasing the number of iterations to at least 5e4")
 
@@ -228,7 +227,7 @@ def model_noise(mo, to, which_sampler = 'PTMCMCSampler',
     e_psr = Pulsar(mo, to)
 
     if which_sampler == 'PTMCMCSampler':
-        log.info(f"INFO: Running noise analysis with {sampler} for {e_psr.name}")
+        log.info(f"INFO: Running noise analysis with {which_sampler} for {e_psr.name}")
         #Setup a single pulsar PTA using enterprise_extensions
         if not using_wideband:
             pta = models.model_singlepsr_noise(e_psr, white_vary = True, red_var = vary_red_noise, is_wideband = False, use_dmdata = False, dmjump_var = False, wb_efac_sigma = wb_efac_sigma, **noise_kwargs)
@@ -248,17 +247,20 @@ def model_noise(mo, to, which_sampler = 'PTMCMCSampler',
 
         #Initial sample
         x0 = np.hstack([p.sample() for p in pta.params])
-
         #Start sampling
-
         samp.sample(x0, n_iter, SCAMweight=30, AMweight=15, DEweight=50, **sampler_kwargs)
-    elif which_sampler == 'gibbs':
-        log.info(f"INFO: Running noise analysis with {sampler} for {e_psr.name}")
+    elif which_sampler == 'GibbsSampler':
+        log.info(f"INFO: Running noise analysis with {which_sampler} for {e_psr.name}")
         samp = GibbsSampler(e_psr,
                             **noise_kwargs,
                             )
         samp.sample(niter=n_iter, save_path=outdir, **sampler_kwargs)
-        pass 
+        pass
+    elif which_sampler == 'discovery':
+        log.info(f"INFO: Running noise analysis with {which_sampler} for {e_psr.name}")
+        pass
+    else:
+        log.error("Invalid sampler specified. Please use \'PTMCMCSampler\' or \'GibbsSampler\' or \'discovery\' ")
     
 def convert_to_RNAMP(value):
     """
@@ -457,6 +459,32 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
         model = convert_enterprise_equads(model)
 
     return model
+
+def setup_gibbs_sampler():
+    """
+    Setup the Gibbs sampler for noise analysis from enterprise extensions
+    """
+    # check that a sufficiently up-to-date version of enterprise_extensions is installed
+    try:
+        from enterprise_extensions.gibbs_sampling import gibbs
+    except ImportError:
+        log.error("Please install the latest version of enterprise_extensions")
+        return None
+    
+    pass
+
+def setup_discovery_sampler():
+    """
+    Setup the discovery sampler for noise analysis from enterprise extensions
+    """
+    # check that a sufficiently up-to-date version of enterprise_extensions is installed
+    try:
+        import discovery as ds
+    except ImportError:
+        log.error("Please install the latest version of discovery")
+        return None
+    
+    pass
 
 def test_equad_convention(pars_list):
     """
