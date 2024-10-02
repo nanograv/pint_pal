@@ -134,7 +134,7 @@ class TimingConfiguration:
         if excised:
             if self.get_excised():
                 toas = self.get_excised()
-                self.tim_directory = ''
+                self.set_tim_directory = ''
             else: # unset or file does not exist... 
                 log.warning(f"excised-tim is unset or file does not exist")
                 return None, None
