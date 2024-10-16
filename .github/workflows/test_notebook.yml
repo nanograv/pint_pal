@@ -49,6 +49,7 @@ jobs:
         export JUPYTER_PLATFORM_DIRS=1 && jupyter --paths
         tree tests
         pytest tests/test_run_notebook.py -n auto -k $PULSAR_NAME
+        ls -lah
         mv tmp-* nb_outputs
     - name: Archive Notebook Output Files
       uses: actions/upload-artifact@v3
