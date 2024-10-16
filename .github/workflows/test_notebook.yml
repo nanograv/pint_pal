@@ -42,13 +42,14 @@ jobs:
       run: |
         pip install -e .
     - name: Test with Standard Pulsar
-      shell: bash {0}
+      shell: bash -el {0}
       run: |
         export PULSAR_NAME='J0605+3757'
         export JUPYTER_PLATFORM_DIRS=1
+        tree tests
         pytest tests/test_run_notebook.py -n auto -k $PULSAR_NAME
         ls -lah
-        mv temp* nb_outputs
+        #mv temp* nb_outputs
     - name: Find Files
       run: ls -lah 
     - name: Archive Notebook Output Files
