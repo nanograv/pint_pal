@@ -38,7 +38,7 @@ jobs:
             enterprise_extensions
             scikit-sparse
     - name: Install Main Code
-      shell: micromamba shell {0}
+      shell: bash -el {0}
       run: |
         pip install -e .
     - name: Test with Standard Pulsar
