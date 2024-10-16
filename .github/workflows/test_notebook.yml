@@ -26,7 +26,6 @@ jobs:
     - uses: mamba-org/setup-micromamba@v1
       with:
           init-shell: bash
-          mamba-version: "latest"
           environment-name: pulsar
           create-args: >-
             -c conda-forge
@@ -50,7 +49,9 @@ jobs:
         tree tests
         pytest tests/test_run_notebook.py -n auto -k $PULSAR_NAME
         ls -lah
-        mv tmp-* nb_outputs
+        mv temp* nb_outputs
+    - name: Find Files
+      run: ls -lah 
     - name: Archive Notebook Output Files
       uses: actions/upload-artifact@v3
       with:
