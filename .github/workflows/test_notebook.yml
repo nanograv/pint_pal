@@ -10,12 +10,12 @@ on:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10"]
+        os: [ubuntu-latest, macos-13]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
 
     steps:
     - name: Install pdflatex
@@ -23,22 +23,30 @@ jobs:
         sudo apt-get update
         sudo apt-get install texlive-latex-base cm-super-minimal pdftk latex2html
     - uses: actions/checkout@v3
-    - uses: conda-incubator/setup-miniconda@v2
+    - uses: mamba-org/setup-micromamba@v1
       with:
+          init-shell: bash
           python-version: ${{ matrix.python-version }}
-          mamba-version: "*"
-          channels: conda-forge,defaults
+          mamba-version: "latest"
+          environment-name: pulsar
+          channels: conda-forge
           channel-priority: true
-    - name: Conda info
-      shell: bash -el {0}
-      run: conda info
-    - name: Install Dependencies & Main Code
-      shell: bash -el {0}
+          create-args: >-
+            python=${{ matrix.python-version }}
+            pytest
+            cython=0.29.36
+            tempo2
+            pint
+            enterprise-pulsar
+            enterprise_extensions
+            enterprise_outliers
+            scikit-sparse
+    - name: Install Main Code
+      shell: micromamba shell {0}
       run: |
-        mamba install -c conda-forge python=${{ matrix.python-version }} pytest cython=0.29.36 tempo2 enterprise-pulsar enterprise_extensions scikit-sparse
         pip install -e .
     - name: Test with Standard Pulsar
-      shell: bash -el {0}
+      shell: micromamba shell {0}
       run: |
         export PULSAR_NAME='J0605+3757'
         export JUPYTER_PLATFORM_DIRS=1 && jupyter --paths
