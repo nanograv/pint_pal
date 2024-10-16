@@ -36,9 +36,11 @@ jobs:
             cython
             pint-pulsar
             tempo2
+            libstempo
             enterprise-pulsar
             enterprise_extensions
             scikit-sparse
+            scikit-learn
             ruamel.yaml
             nbconvert
             ipywidgets>=7.6.3
