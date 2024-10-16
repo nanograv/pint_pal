@@ -64,7 +64,10 @@ jobs:
     - name: Archive Notebook Output Files
       uses: actions/upload-artifact@v4
       with:
-        name: TestNB-OutputFiles
+        name: TestNB-OutputFiles_${{ matrix.python-version }}_${{ matrix.os }}_${{ steps.date.outputs.date }}
         path: |
-          nb_outputs
+          nb_outputs/*/*.pdf
+          nb_outputs/*/*.tim
+          nb_outputs/*/*.par
+        compression-level: 6
         
