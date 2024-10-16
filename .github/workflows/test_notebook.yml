@@ -47,7 +47,7 @@ jobs:
         export PULSAR_NAME='J0605+3757'
         export JUPYTER_PLATFORM_DIRS=1
         tree tests
-        pytest tests/test_run_notebook.py -n auto -k $PULSAR_NAME
+        pytest tests/test_run_notebook.py -k $PULSAR_NAME
         ls -lah
         #mv temp* nb_outputs
     - name: Find Files
