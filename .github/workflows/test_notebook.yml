@@ -22,7 +22,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install texlive-latex-base cm-super-minimal pdftk latex2html
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - uses: mamba-org/setup-micromamba@v1
       with:
           init-shell: bash
@@ -53,7 +53,7 @@ jobs:
     - name: Find Files
       run: ls -lah 
     - name: Archive Notebook Output Files
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: TestNB-OutputFiles
         path: |
