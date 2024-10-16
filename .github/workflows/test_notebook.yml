@@ -18,7 +18,7 @@ jobs:
         python-version: ["3.10"] #["3.8", "3.9", "3.10", "3.11", "3.12"]
 
     steps:
-    - name: Install pdflatex
+    - name: Install Required Ubuntu Packages
       run: |
         sudo apt-get update
         sudo apt-get install texlive-latex-base cm-super-minimal pdftk latex2html
@@ -27,6 +27,8 @@ jobs:
       with:
           init-shell: bash
           environment-name: pulsar
+          cache-environment: true
+          cache-downloads: true
           create-args: >-
             -c conda-forge
             python=${{ matrix.python-version }}
@@ -37,6 +39,14 @@ jobs:
             enterprise-pulsar
             enterprise_extensions
             scikit-sparse
+            ruamel.yaml
+            nbconvert
+            ipywidgets>=7.6.3
+            weasyprint
+            pytest-xdist>=2.3.0
+            jupyter
+            seaborn
+            gitpython
     - name: Install Main Code
       shell: bash -el {0}
       run: |
@@ -46,12 +56,9 @@ jobs:
       run: |
         export PULSAR_NAME='J0605+3757'
         export JUPYTER_PLATFORM_DIRS=1
-        tree tests
         pytest tests/test_run_notebook.py -k $PULSAR_NAME
         ls -lah
-        #mv temp* nb_outputs
-    - name: Find Files
-      run: ls -lah 
+        mv tmp* nb_outputs
     - name: Archive Notebook Output Files
       uses: actions/upload-artifact@v4
       with:
