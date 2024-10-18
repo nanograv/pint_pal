@@ -1,4 +1,5 @@
 import numpy as np, os
+import arviz as az
 from astropy import log
 from astropy.time import Time
 
@@ -72,10 +73,14 @@ def analyze_noise(
     except:
         log.error(f"Could not load noise run from {chaindir}")
         return None
-    noise_core.burn(burn_frac)
+    noise_core.set_burn(burn_frac)
     chain = noise_core.chain
-    psr_name = noise_core.pars[0].split("_")[0]
-    pars = noise_core.pars
+    psr_name = noise_core.params[0].split("_")[0]
+    pars = np.array(noise_core.params)
+    if chain.shape[1] != len(pars):
+        a = -4
+    elif chain.shape[1] == len(pars):
+        a = len(chain.shape[1])
     
     # load in same for comparison noise model
     if chaindir_compare is not None:
@@ -110,12 +115,12 @@ def analyze_noise(
                 chaindir_compare = None
             else:
                 normalization_factor = (
-                    np.ones(len(chain_compare[:, :-4]))
-                    * len(chain[:, :-4])
-                    / len(chain_compare[:, :-4])
+                    np.ones(len(chain_compare[:, :a]))
+                    * len(chain[:, :a])
+                    / len(chain_compare[:, :a])
                 )
                 fig = corner.corner(
-                    chain_compare[:, :-4],
+                    chain_compare[:, :a],
                     color="orange",
                     alpha=0.5,
                     weights=normalization_factor,
@@ -123,10 +128,10 @@ def analyze_noise(
                 )
                 # normal corner plot
                 corner.corner(
-                    chain[:, :-4], fig=fig, color="black", labels=pars_short
+                    chain[:, :a], fig=fig, color="black", labels=pars_short
                 )
         if chaindir_compare is None:
-            corner.corner(chain[:, :-4], labels=pars_short)
+            corner.corner(chain[:, :a], labels=pars_short)
 
         if "_wb" in chaindir:
             figname = f"./{psr_name}_noise_corner_wb.pdf"
@@ -169,9 +174,9 @@ def analyze_noise(
                 chaindir_compare = None
             else:
                 normalization_factor = (
-                    np.ones(len(chain_compare[:, :-4]))
-                    * len(chain[:, :-4])
-                    / len(chain_compare[:, :-4])
+                    np.ones(len(chain_compare[:, :a]))
+                    * len(chain[:, :a])
+                    / len(chain_compare[:, :a])
                 )
 
         # Set the shape of the subplots
@@ -184,9 +189,9 @@ def analyze_noise(
 
         nrows = 5  # number of rows per page
 
-        mp_idx = np.argmax(chain[:, -4])
+        mp_idx = np.argmax(chain[:, a])
         if chaindir_compare is not None:
-            mp_compare_idx = np.argmax(chain_compare[:, -4])
+            mp_compare_idx = np.argmax(chain_compare[:, a])
 
         nbins = 20
         pp = 0
@@ -231,9 +236,9 @@ def analyze_noise(
         # ax[nr][nc].legend(loc = 'best')
         pl.show()
 
-    ml_idx = np.argmax(chain[:, -4])
+    ml_idx = np.argmax(chain[:, a])
 
-    wn_vals = chain[:, :-4][ml_idx]
+    wn_vals = chain[:, :a][ml_idx]
 
     wn_dict = dict(zip(pars, wn_vals))
 
@@ -381,18 +386,18 @@ def model_noise(
         except ImportError:
             log.error("Please install latest version of jax and/or xarray")
             ValueError("Please install lastest version of jax and/or xarray")
-        samp = setup_discovery_noise(f_psr)
+        samp, log_x = setup_discovery_noise(f_psr)
         # run the sampler
         samp.run(jax.random.key(42))
-    
-        # Get samples
-        samples = samp.get_samples()
-
-        # Convert samples to xarray.Dataset
-        data = samp.Dataset({var: (["chain", "draw"], np.expand_dims(samples[var], axis=0)) for var in samples})
-
-        # Save to NetCDF file
-        data.to_netcdf(f"{base_op_dir}/discovery_chain.nc")
+        # convert to a DataFrame
+        df = log_x.to_df(samp.get_samples()['par'])
+        # convert DataFrame to dictionary
+        samples_dict = df.to_dict(orient='list')
+        # convert dictionary to ArviZ InferenceData object
+        inference_data = az.from_dict(samples_dict)
+        # Save to NetCDF file which can be loaded into la_forge
+        os.mkdir(outdir, parents=True, exist_ok=True)
+        inference_data.to_netcdf(outdir+"chain.nc")
     else:
         log.error(
             "Invalid sampler specified. Please use 'PTMCMCSampler' or 'GibbsSampler' or 'discovery' "
@@ -725,9 +730,9 @@ def setup_discovery_noise(psr):
         psr.residuals
     )
     psl = ds.PulsarLikelihood(args)
-    prior = prior.makelogprior_uniform(psl.logL.params, {'(.*_)?extra_parameter': [9, 10]})
+    prior = prior.makelogprior_uniform(psl.logL.params, {})
     log_x = makelogtransform_uniform(psl.logL)
-    x0 = sample_uniform(psl.logL.params)
+    # x0 = sample_uniform(psl.logL.params)
     def numpyro_model():
         params = jnp.array(numpyro.sample("par", dist.Normal(0,10).expand([len(log_x.params)])))
         numpyro.factor("ll", log_x(params))
@@ -741,7 +746,7 @@ def setup_discovery_noise(psr):
         chain_method='vectorized'
         )
     
-    return sampler
+    return sampler, log_x
 
 
 
