@@ -9,6 +9,7 @@ import corner
 
 import pint.models as pm
 from pint.models.parameter import maskParameter
+from pint.models.timing_model import Component
 
 import matplotlib as mpl
 import matplotlib.pyplot as pl
@@ -137,12 +138,19 @@ def analyze_noise(
     noise_dict: Dictionary of maximum a posterior noise values
     rn_bf: Savage-Dickey BF for achromatic RN for given pulsar
     """
-    try:
-        noise_core = co.Core(chaindir=chaindir)
-    except:
-        log.error(f"Could not load noise run from {chaindir}")
-        ValueError(f"Could not load noise run from {chaindir}")
     if which_sampler == 'PTMCMCSampler':
+        try:
+            noise_core = co.Core(chaindir=chaindir)
+        except:
+            log.error(f"Could not load noise run from {chaindir}")
+            ValueError(f"Could not load noise run from {chaindir}")
+    elif which_sampler == 'GibbsSampler':
+        try:
+            noise_core = co.Core(corepath=chaindir+'/chain')
+        except:
+            log.error(f"Could not load noise run from {chaindir}")
+            ValueError(f"Could not load noise run from {chaindir}")
+    if which_sampler == 'PTMCMCSampler' or which_sampler == "GibbsSampler":
         noise_core.set_burn(burn_frac)
     elif which_sampler == 'discovery':
         noise_core.set_burn(0)
@@ -359,7 +367,12 @@ def model_noise(
     None or
     samp: sampler object
     """
-
+    # get the default settings
+    model_defaults, sampler_defaults = get_model_and_sampler_default_settings()
+    # update with args passed in
+    model_kwargs = model_defaults.update(noise_kwargs)
+    sampler_kwargs = sampler_defaults.update(sampler_kwargs)
+    
     if not using_wideband:
         outdir = base_op_dir + mo.PSR.value + "_nb/"
     else:
@@ -394,7 +407,9 @@ def model_noise(
 
     # Create enterprise Pulsar object for supplied pulsar timing model (mo) and toas (to)
     e_psr = Pulsar(mo, to)
-
+    ##########################################################
+    ################     PTMCMCSampler      ##################
+    ##########################################################
     if which_sampler == "PTMCMCSampler":
         log.info(f"INFO: Running noise analysis with {which_sampler} for {e_psr.name}")
         # Setup a single pulsar PTA using enterprise_extensions
@@ -407,7 +422,17 @@ def model_noise(
                 use_dmdata=False,
                 dmjump_var=False,
                 wb_efac_sigma=wb_efac_sigma,
-                **noise_kwargs,
+                # DM GP
+                dm_var=model_kwargs['inc_dmgp'],
+                dm_Nfreqs=model_kwargs['dmgp_nfreqs'],
+                # CHROM GP
+                chrom_gp=model_kwargs['inc_chromgp'],
+                chrom_Nfreqs=model_kwargs['chromgp_nfreqs'],
+                # DM SOLAR WIND
+                dm_sw_deter=model_kwargs['inc_sw_deter'],
+                ACE_prior=model_kwargs['ACE_prior'],
+                # can pass extra signals in here
+                extra_sigs=model_kwargs['extra_sigs'],
             )
         else:
             pta = models.model_singlepsr_noise(
@@ -419,7 +444,6 @@ def model_noise(
                 dmjump_var=False,
                 wb_efac_sigma=wb_efac_sigma,
                 ng_twg_setup=True,
-                **noise_kwargs,
             )
             dmjump_params = {}
             for param in mo.params:
@@ -444,6 +468,9 @@ def model_noise(
         samp.sample(
             x0, n_iter, SCAMweight=30, AMweight=15, DEweight=50, **sampler_kwargs
         )
+    ##############################################################
+    ##################     GibbsSampler   ########################
+    ##############################################################
     elif which_sampler == "GibbsSampler":
         try: 
             from enterprise_extensions import GibbsSampler
@@ -452,24 +479,39 @@ def model_noise(
             ValueError("Please install the latest enterprise_extensions")
         log.info(f"INFO: Running noise analysis with {which_sampler} for {e_psr.name}")
         samp = GibbsSampler(
-            e_psr,
-            **noise_kwargs,
+                    e_psr,
+                    vary_wn=True,
+                    tm_marg=False,
+                    inc_ecorr=True,
+                    ecorr_type='kernel',
+                    vary_rn=model_kwargs['inc_rn'],
+                    rn_components=model_kwargs['rn_nfreqs'],
+                    vary_dm=model_kwargs['inc_dmgp'],
+                    dm_components=model_kwargs['dm_nfreqs'],
+                    vary_chrom=model_kwargs['inc_chromgp'],
+                    chrom_components=model_kwargs['chrom_nfreqs'],
+                    noise_dict={},
+                    tnequad=True,
+                    #**noise_kwargs,
         )
         samp.sample(niter=n_iter, save_path=outdir, **sampler_kwargs)
-        pass
+        # sorta redundant to have both, but la_forge doesn't look for .npy files
+        chain = np.load(f'{outdir}/chain_1.npy')
+        np.savetxt(f'{outdir}/chain_1.txt', chain,)
+    #################################################################
+    ##################     discovery likelihood   ###################
+    #################################################################
     elif which_sampler == "discovery":
         log.info(f"INFO: Running noise analysis with {which_sampler} for {e_psr.name}")
         try:
             import jax
             import xarray as xr
+            from numpyro import distributions as dist
+            from numpyro.infer import log_likelihood
+            
         except ImportError:
             log.error("Please install latest version of jax and/or xarray")
             ValueError("Please install lastest version of jax and/or xarray")
-        # get the default settings
-        model_defaults, sampler_defaults = get_model_and_sampler_default_settings()
-        # update with args passed in
-        model_kwargs = model_defaults.update(noise_kwargs)
-        sampler_kwargs = sampler_defaults.update(sampler_kwargs)
         os.mkdir(outdir, parents=True, exist_ok=True)
         with open(outdir+"model_kwargs.json", "w") as f:
             json.dump(model_kwargs, f)
@@ -522,7 +564,7 @@ def add_noise_to_model(
     compare_dir=None,
 ):
     """
-    Add WN and RN parameters to timing model.
+    Add WN, RN, DMGP, and  parameters to timing model.
 
     Parameters
     ==========
@@ -580,11 +622,12 @@ def add_noise_to_model(
     ecorr_idx = 1
     dmefac_idx = 1
     dmequad_idx = 1
-
-    for key, val in noise_dict.items():
-
-        psr_name = key.split("_")[0]
-
+    
+    psr_name = list(noise_dict.keys())[0].split("_")[0]
+    noise_pars = np.array(list(noise_dict.keys()))
+    wn_dict = {key: val for key, val in noise_dict.items() if "efac" in key or "equad" in key or "ecorr" in key}
+    for key, val in wn_dict.items():
+        
         if "_efac" in key:
 
             param_name = key.split("_efac")[0].split(psr_name)[1][1:]
@@ -770,7 +813,7 @@ def add_noise_to_model(
         log.info("Not including red noise for this pulsar")
         
     # Check to see if dm noise is present
-    dm_pars = [key for key in list(noise_dict.keys()) if "_dm_gp" in key]
+    dm_pars = [key for key in noise_pars if "_dm_gp" in key]
     if len(dm_pars) > 0:
         ###### POWERLAW DM NOISE ######
         if f'{psr_name}_dm_gp_log10_A' in dm_pars:
@@ -794,7 +837,7 @@ def add_noise_to_model(
             NotImplementedError('DMWaveXNoise not yet implemented')
 
     # Check to see if higher order chromatic noise is present
-    chrom_pars = [key for key in list(noise_dict.keys()) if "_chrom_gp" in key]
+    chrom_pars = [key for key in noise_pars if "_chrom_gp" in key]
     if len(chrom_pars) > 0:
         ###### POWERLAW CHROMATIC NOISE ######
         if f'{psr_name}_chrom_gp_log10_A' in chrom_pars:
@@ -814,24 +857,19 @@ def add_noise_to_model(
         elif f'{psr_name}_chrom_gp_log10_rho_0' in chrom_pars:
             log.info('Adding Free Spectral CHROM GP as CMWaveXnoise to par file')
             NotImplementedError('CMWaveXNoise not yet implemented')
-    
-    log.info(f"The SD Bayes factor for dm noise in this pulsar is: {rn_bf}")
-    if (rn_bf >= rn_bf_thres or np.isnan(rn_bf)) and (not ignore_red_noise):
+            
+    # Check to see if solar wind is present
+    sw_pars = [key for key in noise_pars if "sw_r2" in key]
+    if len(sw_pars) > 0:
+        log.info('Adding Solar Wind Dispersion to par file')
+        all_components = Component.component_types
+        noise_class = all_components["SolarWindDispersion"]
+        noise = noise_class()  # Make the dispersion instance.
+        model.add_component(noise, validate=False)
+        # add parameters
+        model['NE_SW'].quantity = noise_dict[f'{psr_name}_NE_SW']
+        model['NE_SW'].frozen = True
 
-        log.info("Including red noise for this pulsar")
-        # Add the ML RN parameters to their component
-        rn_comp = pm.PLRedNoise()
-
-        rn_keys = np.array([key for key, val in noise_dict.items() if "_red_" in key])
-        rn_comp.RNAMP.quantity = convert_to_RNAMP(
-            noise_dict[psr_name + "_red_noise_log10_A"]
-        )
-        rn_comp.RNIDX.quantity = -1 * noise_dict[psr_name + "_red_noise_gamma"]
-
-        # Add red noise to the timing model
-        model.add_component(rn_comp, validate=True, force=True)
-    else:
-        log.info("Not including red noise for this pulsar")
 
     # Setup and validate the timing model to ensure things are correct
     model.setup()
@@ -846,17 +884,67 @@ def add_noise_to_model(
     return model
 
 
-def setup_gibbs_sampler():
+def plot_free_specs(sampler_kwargs={},
+                        model_kwargs={},
+                        noise_dict={}):
     """
     Setup the Gibbs sampler for noise analysis from enterprise extensions
     """
     # check that a sufficiently up-to-date version of enterprise_extensions is installed
-    try:
-        from enterprise_extensions.gibbs_sampling import gibbs
-    except ImportError:
-        log.error("Please install the latest version of enterprise_extensions")
-        return None
-    NotImplementedError("Gibbs sampler not yet implemented")
+  
+
+    print("attempting to sample...")
+    savepath = f'/home/baierj/projects/ng20yr/noise_testing/test_J0613-0200/{psr_pkls[pidx].name}_prenoise/'
+    bps.sample(niter=30000, savepath = savepath,)
+    chain = np.load(f'{savepath}/chain_1.npy')
+    rn_freqs = np.load(f'{savepath}/rn_freqs.npy')
+    dm_freqs = np.load(f'{savepath}/dm_freqs.npy')
+    chrom_freqs = np.load(f'{savepath}/chrom_freqs.npy')
+    print(chain.shape)
+    outdir=savepath
+    np.savetxt(f'{savepath}/chain_1.txt', chain,)
+    c0 = co.Core(chaindir=savepath)
+    c0.chain = chain
+
+
+    wn_params = [par for par in c0.params if any([p in par for p in ['efac', 'equad', 'ecor']])]
+    if len(wn_params) > 0:
+        dg.plot_chains(c0, pars = wn_params)
+        plt.savefig(f'{outdir}/wn_hists.png')
+        plt.close()
+    dg.plot_grubin(c0)
+    plt.savefig(f'{outdir}/grubin.png')
+    plt.close()
+
+    fig, axes = plt.subplots(1,1,figsize=(8,4))
+    tspan = max(psr_pkls[pidx].toas)-min(psr_pkls[pidx].toas)
+    c0.rn_freqs = rn_freqs
+    rn.plot_free_spec(c0, axis=axes, parname_root=f'{psr_pkls[pidx].name}_red_noise_log10_rho', violin=True, Color='red',Tspan=tspan)
+    axes.set_xscale('log')
+    plt.title(f"{psr_pkls[pidx].name} | red noise | nfreqs={len(rn_freqs)}" )
+    plt.savefig(f"{outdir}/rn.png")
+    plt.close()
+
+    fig, axes = plt.subplots(1,1,figsize=(8,4))
+    tspan = max(psr_pkls[pidx].toas)-min(psr_pkls[pidx].toas)
+    c0.rn_freqs = dm_freqs
+    rn.plot_free_spec(c0, axis=axes, parname_root=f'{psr_pkls[pidx].name}_dm_gp_log10_rho',
+                    violin=True, Color='blue',Tspan=tspan)
+    axes.set_xscale('log')
+    plt.title(f"{psr_pkls[pidx].name} | DM GP | nfreqs={len(dm_freqs)} " )
+    plt.savefig(f'{outdir}/dm_gp.png')
+    plt.close()
+
+    fig, axes = plt.subplots(1,1,figsize=(8,4))
+    c0.rn_freqs = chrom_freqs
+    tspan = max(psr_pkls[pidx].toas)-min(psr_pkls[pidx].toas)
+    rn.plot_free_spec(c0, axis=axes, parname_root=f'{psr_pkls[pidx].name}_chrom_gp_log10_rho', 
+                    violin=True, Color='orange',Tspan=tspan)
+    axes.set_xscale('log')
+    plt.title(f"{psr_pkls[pidx].name} | chrom gp | nfreqs={len(chrom_freqs)}" )
+    plt.ylim(-9,-5)
+    plt.savefig(f'{outdir}/chrom_gp.png')
+    plt.close()
 
 
 def setup_discovery_noise(psr,
@@ -979,19 +1067,27 @@ def test_equad_convention(pars_list):
 
 def get_model_and_sampler_default_settings():
     model_defaults = {
+        # acrhomatic red noise
         'inc_rn': True,
         'rn_psd': 'powerlaw',
         'rn_nfreqs': 30,
+        # dm gp
         'inc_dmgp': False,
         'dmgp_psd': 'powerlaw',
         'dmgp_nfreqs': 100,
+        # higher order chromatic gp
         'inc_chromgp': False,
         'chromgp_psd': 'powerlaw',
         'chromgp_nfreqs': 100,
-        'vary_chrom_idx': False,
+        'chrom_idx': 4,
+        'chrom_quad': False,
+        # solar wind
+        'inc_sw_deter': False,
+        # GP perturbations ontop of the deterministic model
         'inc_swgp': False,
-        'swgp_psd': 'powerlaw',
-        'swgp_nfreqs': 100,
+        'ACE_prior': False,
+        # 
+        'extra_sigs': None,
         }
     sampler_defaults = {
         'numpyro_sampler': 'HMC',
