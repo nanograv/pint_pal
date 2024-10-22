@@ -4,7 +4,8 @@ from astropy import log
 from astropy.time import Time
 
 from enterprise.pulsar import Pulsar
-from enterprise_extensions import models, model_utils, sampler
+from enterprise_extensions import models, model_utils
+from enterprise_extensions import sampler as ee_sampler
 import corner
 
 import pint.models as pm
@@ -51,6 +52,11 @@ try:
 
 except ImportError:
     log.error("Please install the latest version of discovery, numpyro, and/or jax")
+    ValueError("Please install the latest version of discovery, numpyro, and/or jax")
+try:
+    from enterprise_extensions.gibbs_sampling.gibbs_chromatic import GibbsSampler
+except:
+    log.warning("Please upgrade to the latest version of enterprise_extensions to use GibbsSampler.")
     ValueError("Please install the latest version of discovery, numpyro, and/or jax")
 
 # from enterprise_extensions.blocks import (white_noise_block, red_noise_block)
@@ -136,7 +142,8 @@ def analyze_noise(
     save_corner=True,
     no_corner_plot=False,
     chaindir_compare=None,
-    which_sampler = 'PTMCMCSampler',
+    model_kwargs={},
+    sampler_kwargs={},
 ):
     """
     Reads enterprise chain file; produces and saves corner plot; returns WN dictionary and RN (SD) BF
@@ -148,7 +155,6 @@ def analyze_noise(
     save_corner: Flag to toggle saving of corner plots; Default: True
     no_corner_plot: Flag to toggle saving of corner plots; Default: False
     chaindir_compare: path to noise run chain wish to plot in corner plot for comparison; Default: None
-    which_sampler: choose from ['PTMCMCSampler' or 'GibbsSampler' or 'discovery']
 
     Returns
     =======
@@ -156,21 +162,25 @@ def analyze_noise(
     noise_dict: Dictionary of maximum a posterior noise values
     rn_bf: Savage-Dickey BF for achromatic RN for given pulsar
     """
-    if which_sampler == 'PTMCMCSampler' or which_sampler == 'discovery':
-        try:
-            noise_core = co.Core(chaindir=chaindir)
-        except:
-            log.error(f"Could not load noise run from {chaindir}")
-            ValueError(f"Could not load noise run from {chaindir}")
-    elif which_sampler == 'GibbsSampler':
-        try:
-            noise_core = co.Core(corepath=chaindir+'/chain')
-        except:
-            log.error(f"Could not load noise run from {chaindir}")
-            ValueError(f"Could not load noise run from {chaindir}")
-    if which_sampler == 'PTMCMCSampler' or which_sampler == "GibbsSampler":
+    # get the default settings
+    model_defaults, sampler_defaults = get_model_and_sampler_default_settings()
+    # update with args passed in
+    model_defaults.update(model_kwargs)
+    sampler_defaults.update(sampler_kwargs)
+    model_kwargs = model_defaults.copy()
+    sampler_kwargs = sampler_defaults.copy()
+    sampler = sampler_kwargs['sampler']
+    likelihood = sampler_kwargs['likelihood']
+    try:
+        noise_core = co.Core(chaindir=chaindir)
+    except:
+        log.error(f"Could not load noise run from {chaindir}. Make sure the path is correct. Also make sure you have an up-to-date la_forge installation. ")
+        ValueError(f"Could not load noise run from {chaindir}")
+    if sampler == 'PTMCMCSampler' or sampler == "GibbsSampler":
+        # standard burn ins
         noise_core.set_burn(burn_frac)
-    elif which_sampler == 'discovery':
+    elif likelihood == 'discovery':
+        # the numpyro sampler already deals with the burn in
         noise_core.set_burn(0)
     else:
         noise_core.set_burn(burn_frac)
@@ -196,6 +206,7 @@ def analyze_noise(
             )
             chaindir_compare = None
 
+            
     if save_corner and not no_corner_plot:
         pars_short = [p.split("_", 1)[1] for p in pars]
         log.info(f"Chain parameter names are {pars_short}")
@@ -349,8 +360,6 @@ def analyze_noise(
 def model_noise(
     mo,
     to,
-    which_sampler="PTMCMCSampler",
-    vary_red_noise=True,
     n_iter=int(1e5),
     using_wideband=False,
     resume=False,
@@ -362,17 +371,17 @@ def model_noise(
     return_sampler=False,
 ):
     """
-    Setup enterprise PTA and perform MCMC noise analysis
+    Setup enterprise or discovery likelihood and perform Bayesian inference on noise model
 
     Parameters
     ==========
     mo: PINT (or tempo2) timing model
     to: PINT (or tempo2) TOAs
-    sampler: choose from ['PTMCMCSampler' or 'GibbsSampler' or 'discovery']
-        PTMCMCSampler -- MCMC sampling with the Enterprise likelihood
-        GibbsSampler -- enterprise_extension's GibbsSampler with PTMCMC and Enterprise white noise
+    likelihood: choose from ['Enterprise', 'discovery']
+        enterprise -- Enterprise likelihood
         discovery -- various numpyro samplers with a discovery likelihood
-    red_noise: include red noise in the model
+    sampler: for Enterprise choose from ['PTMCMCSampler','GibbsSampler']
+             for discovery choose from  ['HMC', 'NUTS', 'HMC-GIBBS']
     n_iter: number of MCMC iterations; Default: 1e5; Recommended > 5e4
     using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
     run_noise_analysis: Flag to toggle execution of noise modeling; Default: True
@@ -392,23 +401,23 @@ def model_noise(
     sampler_defaults.update(sampler_kwargs)
     model_kwargs = model_defaults.copy()
     sampler_kwargs = sampler_defaults.copy()
-    
-    
+    likelihood = sampler_kwargs['likelihood']
+    sampler = sampler_kwargs['sampler']
     
     if not using_wideband:
         outdir = base_op_dir + mo.PSR.value + "_nb/"
     else:
         outdir = base_op_dir + mo.PSR.value + "_wb/"
-
+    os.makedirs(outdir, exits_ok=True)
     if os.path.exists(outdir) and (run_noise_analysis) and (not resume):
         log.info(
-            "INFO: A noise directory for pulsar {} already exists! Re-running noise modeling from scratch".format(
+            "A noise directory for pulsar {} already exists! Re-running noise modeling from scratch".format(
                 mo.PSR.value
             )
         )
     elif os.path.exists(outdir) and (run_noise_analysis) and (resume):
         log.info(
-            "INFO: A noise directory for pulsar {} already exists! Re-running noise modeling starting from previous chain".format(
+            "A noise directory for pulsar {} already exists! Re-running noise modeling starting from previous chain".format(
                 mo.PSR.value
             )
         )
@@ -428,18 +437,19 @@ def model_noise(
         )
 
     # Create enterprise Pulsar object for supplied pulsar timing model (mo) and toas (to)
+    log.info(f"Creating Enterprise.Pulsar object from model with {mo.NTOA.value} toas...")
     e_psr = Pulsar(mo, to)
     ##########################################################
     ################     PTMCMCSampler      ##################
     ##########################################################
-    if which_sampler == "PTMCMCSampler":
-        log.info(f"INFO: Running noise analysis with {which_sampler} for {e_psr.name}")
+    if likelihood == "Enterprise" and sampler == 'PTMCMCSampler':
+        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         # Setup a single pulsar PTA using enterprise_extensions
         if not using_wideband:
             pta = models.model_singlepsr_noise(
                 e_psr,
                 white_vary=True,
-                red_var=vary_red_noise,
+                red_var=model_kwargs['inc_rn'], # defaults True
                 is_wideband=False,
                 use_dmdata=False,
                 dmjump_var=False,
@@ -450,9 +460,10 @@ def model_noise(
                 # CHROM GP
                 chrom_gp=model_kwargs['inc_chromgp'],
                 chrom_Nfreqs=model_kwargs['chromgp_nfreqs'],
+                chrom_gp_kernel='diag', # Fourier basis chromg_gp
                 # DM SOLAR WIND
-                dm_sw_deter=model_kwargs['inc_sw_deter'],
-                ACE_prior=model_kwargs['ACE_prior'],
+                #dm_sw_deter=model_kwargs['inc_sw_deter'],
+                #ACE_prior=model_kwargs['ACE_prior'],
                 # can pass extra signals in here
                 extra_sigs=model_kwargs['extra_sigs'],
             )
@@ -462,7 +473,7 @@ def model_noise(
                 is_wideband=True,
                 use_dmdata=True,
                 white_vary=True,
-                red_var=vary_red_noise,
+                red_var=model_kwargs['inc_rn'],
                 dmjump_var=False,
                 wb_efac_sigma=wb_efac_sigma,
                 ng_twg_setup=True,
@@ -480,26 +491,23 @@ def model_noise(
         groups = setup_sampling_groups(pta, write_groups=True, outdir=outdir)
         #######
         # setup sampler using enterprise_extensions
-        samp = sampler.setup_sampler(pta,
+        samp = ee_sampler.setup_sampler(pta,
                                      outdir=outdir,
                                      resume=resume,
                                      groups=groups)
         # Initial sample
         x0 = np.hstack([p.sample() for p in pta.params])
         # Start sampling
+        log.info("Beginnning to sample...")
         samp.sample(
-            x0, n_iter, SCAMweight=30, AMweight=15, DEweight=50, **sampler_kwargs
+            x0, 1_000_000, SCAMweight=30, AMweight=15, DEweight=50, #**sampler_kwargs
         )
+        log.info("Finished sampling.")
     ##############################################################
     ##################     GibbsSampler   ########################
     ##############################################################
-    elif which_sampler == "GibbsSampler":
-        try: 
-            from enterprise_extensions import GibbsSampler
-        except:
-            log.error("Please install the latest enterprise_extensions")
-            ValueError("Please install the latest enterprise_extensions")
-        log.info(f"INFO: Running noise analysis with {which_sampler} for {e_psr.name}")
+    elif likelihood == "Enterprise" and sampler == "GibbsSampler":
+        log.info(f"INFO: Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         samp = GibbsSampler(
                     e_psr,
                     vary_wn=True,
@@ -509,22 +517,24 @@ def model_noise(
                     vary_rn=model_kwargs['inc_rn'],
                     rn_components=model_kwargs['rn_nfreqs'],
                     vary_dm=model_kwargs['inc_dmgp'],
-                    dm_components=model_kwargs['dm_nfreqs'],
+                    dm_components=model_kwargs['dmgp_nfreqs'],
                     vary_chrom=model_kwargs['inc_chromgp'],
-                    chrom_components=model_kwargs['chrom_nfreqs'],
+                    chrom_components=model_kwargs['chromgp_nfreqs'],
                     noise_dict={},
-                    tnequad=True,
+                    tnequad=model_kwargs['tnequad'],
                     #**noise_kwargs,
         )
-        samp.sample(niter=n_iter, save_path=outdir, **sampler_kwargs)
+        log.info("Beginnning to sample...")
+        samp.sample(niter=n_iter, savepath=outdir)
+        log.info("Finished sampling.")
         # sorta redundant to have both, but la_forge doesn't look for .npy files
         chain = np.load(f'{outdir}/chain_1.npy')
         np.savetxt(f'{outdir}/chain_1.txt', chain,)
     #################################################################
     ##################     discovery likelihood   ###################
     #################################################################
-    elif which_sampler == "discovery":
-        log.info(f"INFO: Running noise analysis with {which_sampler} for {e_psr.name}")
+    elif likelihood == "discovery":
+        log.info(f"INFO: Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         os.makedirs(outdir, exist_ok=True)
         with open(outdir+"model_kwargs.json", "w") as f:
             json.dump(model_kwargs, f)
@@ -532,12 +542,15 @@ def model_noise(
             json.dump(sampler_kwargs, f)
         samp, log_x, numpyro_model = setup_discovery_noise(e_psr, model_kwargs, sampler_kwargs)
         # run the sampler
+        log.info("Beginnning to sample...")
         samp.run(jax.random.key(42))
+        log.info("Finished sampling.")
         # convert to a DataFrame
         df = log_x.to_df(samp.get_samples()['par'])
         # convert DataFrame to dictionary
         samples_dict = df.to_dict(orient='list')
-        if sampler_kwargs['numpyro_sampler'] != 'HMC_GIBBS':
+        if sampler_kwargs['sampler'] != 'HMC-GIBBS':
+            log.info("Reconstructing Log Likelihood and Posterior from samples...")
             ln_like = log_likelihood(numpyro_model, samp.get_samples())['ll']
             ln_prior = dist.Normal(0, 10).log_prob(samp.get_samples()['par']).sum(axis=-1)
             ln_post = ln_like + ln_prior
@@ -552,7 +565,8 @@ def model_noise(
         inference_data.to_netcdf(outdir+"chain.nc")
     else:
         log.error(
-            "Invalid sampler specified. Please use 'PTMCMCSampler' or 'GibbsSampler' or 'discovery' "
+            f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination." \
+            + "\nCan only use Enterprise with PTMCMCSampler or GibbsSampler."
         )
     if return_sampler:
         return samp
@@ -575,10 +589,9 @@ def add_noise_to_model(
     rn_bf_thres=1e2,
     base_dir=None,
     compare_dir=None,
-    which_sampler='PTMCMCSampler'
 ):
     """
-    Add WN, RN, DMGP, and  parameters to timing model.
+    Add WN, RN, DMGP, ChromGP, and SW parameters to timing model.
 
     Parameters
     ==========
@@ -619,7 +632,6 @@ def add_noise_to_model(
         save_corner,
         no_corner_plot,
         chaindir_compare=chaindir_compare,
-        which_sampler=which_sampler,
     )
     chainfile = chaindir + "chain_1.txt"
     mtime = Time(os.path.getmtime(chainfile), format="unix")
@@ -969,6 +981,7 @@ def setup_discovery_noise(psr,
     Setup the discovery likelihood with numpyro sampling for noise analysis
     """
     # set up the model
+    sampler = sampler_kwargs['sampler']
     time_span = ds.getspan([psr])
     # this updates the ds.stand_priordict object
     ds.priordict_standard.update(prior_dictionary_updates())
@@ -997,7 +1010,7 @@ def setup_discovery_noise(psr,
     prior = ds_prior.makelogprior_uniform(psl.logL.params, ds.priordict_standard)
     log_x = makelogtransform_uniform(psl.logL)
     # x0 = sample_uniform(psl.logL.params)
-    if sampler_kwargs['numpyro_sampler'] == 'HMC_Gibbs':
+    if sampler == 'HMC-Gibbs':
         def numpyro_model():
             return None
         gibbs_hmc_kernel = setup_single_psr_hmc_gibbs(
@@ -1011,7 +1024,7 @@ def setup_discovery_noise(psr,
                     chain_method=sampler_kwargs['chain_method'],
                     progress_bar=True,
                 )
-    elif sampler_kwargs['numpyro_sampler'] == 'NUTS':
+    elif sampler == 'NUTS':
         def numpyro_model():
             params = jnp.array(numpyro.sample("par", dist.Normal(0,10).expand([len(log_x.params)])))
             numpyro.factor("ll", log_x(params))
@@ -1024,7 +1037,7 @@ def setup_discovery_noise(psr,
                     chain_method=sampler_kwargs['chain_method'],
                     progress_bar=True,
                 )
-    elif sampler_kwargs['numpyro_sampler'] == 'HMC':
+    elif sampler == 'HMC':
         def numpyro_model():
             params = jnp.array(numpyro.sample("par", dist.Normal(0,10).expand([len(log_x.params)])))
             numpyro.factor("ll", log_x(params))
@@ -1036,6 +1049,12 @@ def setup_discovery_noise(psr,
                     chain_method=sampler_kwargs['chain_method'],
                     progress_bar=True,
                 )
+    else:
+        log.error(
+            f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination." \
+            + "\nCan only use discovery with 'HMC', 'HMC-Gibbs', or 'NUTS'."
+        )
+        
     
     return sampler, log_x, numpyro_model
 
@@ -1077,6 +1096,9 @@ def prior_dictionary_updates():
     
 def get_model_and_sampler_default_settings():
     model_defaults = {
+        # white noise
+        'inc_wn': True, 
+        'tnequad': True,
         # acrhomatic red noise
         'inc_rn': True,
         'rn_psd': 'powerlaw',
@@ -1100,7 +1122,8 @@ def get_model_and_sampler_default_settings():
         'extra_sigs': None,
         }
     sampler_defaults = {
-        'numpyro_sampler': 'HMC',
+        'likelihood': 'Enterprise',
+        'sampler': 'HMC',
         'num_steps': 5,
         'num_warmup': 500,
         'num_samples': 2500,
