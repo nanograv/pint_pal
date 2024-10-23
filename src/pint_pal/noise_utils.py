@@ -408,7 +408,7 @@ def model_noise(
         outdir = base_op_dir + mo.PSR.value + "_nb/"
     else:
         outdir = base_op_dir + mo.PSR.value + "_wb/"
-    os.makedirs(outdir, exits_ok=True)
+    os.makedirs(outdir, exist_ok=True)
     if os.path.exists(outdir) and (run_noise_analysis) and (not resume):
         log.info(
             "A noise directory for pulsar {} already exists! Re-running noise modeling from scratch".format(
@@ -507,7 +507,7 @@ def model_noise(
     ##################     GibbsSampler   ########################
     ##############################################################
     elif likelihood == "Enterprise" and sampler == "GibbsSampler":
-        log.info(f"INFO: Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
+        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         samp = GibbsSampler(
                     e_psr,
                     vary_wn=True,
@@ -534,7 +534,7 @@ def model_noise(
     ##################     discovery likelihood   ###################
     #################################################################
     elif likelihood == "discovery":
-        log.info(f"INFO: Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
+        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         os.makedirs(outdir, exist_ok=True)
         with open(outdir+"model_kwargs.json", "w") as f:
             json.dump(model_kwargs, f)
@@ -551,7 +551,7 @@ def model_noise(
         samples_dict = df.to_dict(orient='list')
         if sampler_kwargs['sampler'] != 'HMC-GIBBS':
             log.info("Reconstructing Log Likelihood and Posterior from samples...")
-            ln_like = log_likelihood(numpyro_model, samp.get_samples())['ll']
+            ln_like = log_likelihood(numpyro_model, samp.get_samples(), parallel=True)['ll']
             ln_prior = dist.Normal(0, 10).log_prob(samp.get_samples()['par']).sum(axis=-1)
             ln_post = ln_like + ln_prior
             samples_dict['lnlike'] = ln_like
@@ -634,8 +634,14 @@ def add_noise_to_model(
         chaindir_compare=chaindir_compare,
     )
     chainfile = chaindir + "chain_1.txt"
-    mtime = Time(os.path.getmtime(chainfile), format="unix")
-    log.info(f"Noise chains loaded from {chainfile} created at {mtime.isot}")
+    try:
+        mtime = Time(os.path.getmtime(chainfile), format="unix")
+        log.info(f"Noise chains loaded from {chainfile} created at {mtime.isot}")
+    except:
+        chainfile = chaindir+"chain.nc"
+        mtime = Time(os.path.getmtime(chainfile), format="unix")
+        log.info(f"Noise chains loaded from {chainfile} created at {mtime.isot}")
+        
 
     # Create the maskParameter for EFACS
     efac_params = []
@@ -848,12 +854,12 @@ def add_noise_to_model(
             #log.info(f"The SD Bayes factor for dm noise in this pulsar is: {dm_bf}") 
             log.info('Adding Powerlaw DM GP noise as PLDMNoise to par file')
             # Add the ML RN parameters to their component
-            dm_comp = pm.PLDMNoise()
+            dm_comp = pm.noise_model.PLDMNoise()
             dm_keys = np.array([key for key, val in noise_dict.items() if "_red_" in key])
             dm_comp.TNDMAMP.quantity = convert_to_RNAMP(
                 noise_dict[psr_name + "_dm_gp_log10_A"]
             )
-            dm_comp.TNDMIDX.quantity = -1 * noise_dict[psr_name + "_dm_gp_gamma"]
+            dm_comp.TNDMGAM.quantity = -1 * noise_dict[psr_name + "_dm_gp_gamma"]
             ##### FIXMEEEEEEE : need to figure out some way to softcode this
             dm_comp.TNDMC.quantitity = 100
             # Add red noise to the timing model
@@ -870,16 +876,16 @@ def add_noise_to_model(
         if f'{psr_name}_chrom_gp_log10_A' in chrom_pars:
             log.info('Adding Powerlaw CHROM GP noise as PLCMNoise to par file')
             # Add the ML RN parameters to their component
-            chrom_comp = pm.PLCMNoise()
+            chrom_comp = pm.noise_model.PLCMNoise()
             chrom_keys = np.array([key for key, val in noise_dict.items() if "_chrom_gp_" in key])
-            dm_comp.TNDMAMP.quantity = convert_to_RNAMP(
+            chrom_comp.TNCMAMP.quantity = convert_to_RNAMP(
                 noise_dict[psr_name + "_chrom_gp_log10_A"]
             )
-            chrom_comp.TNCMIDX.quantity = -1 * noise_dict[psr_name + "_dm_gp_gamma"]
+            chrom_comp.TNCMGAM.quantity = -1 * noise_dict[psr_name + "_chrom_gp_gamma"]
             ##### FIXMEEEEEEE : need to figure out some way to softcode this
             chrom_comp.TNCMC.quantitity = 100
             # Add red noise to the timing model
-            model.add_component(dm_comp, validate=True, force=True)
+            model.add_component(chrom_comp, validate=True, force=True)
         ###### FREE SPECTRAL (WaveX) DM NOISE ######
         elif f'{psr_name}_chrom_gp_log10_rho_0' in chrom_pars:
             log.info('Adding Free Spectral CHROM GP as CMWaveXnoise to par file')
@@ -901,6 +907,7 @@ def add_noise_to_model(
     # Setup and validate the timing model to ensure things are correct
     model.setup()
     model.validate()
+    #FIXME:::not sure why this is broken
     model.noise_mtime = mtime.isot
 
     if convert_equad_to_t2:
@@ -911,67 +918,12 @@ def add_noise_to_model(
     return model
 
 
-def plot_free_specs(sampler_kwargs={},
-                        model_kwargs={},
-                        noise_dict={}):
+def plot_free_specs(c0, freqs, fs_type='Red Noise'):
     """
-    Setup the Gibbs sampler for noise analysis from enterprise extensions
+    Plot free specs when using free spectral model
     """
-    # check that a sufficiently up-to-date version of enterprise_extensions is installed
-  
-
-    print("attempting to sample...")
-    savepath = f'/home/baierj/projects/ng20yr/noise_testing/test_J0613-0200/{psr_pkls[pidx].name}_prenoise/'
-    bps.sample(niter=30000, savepath = savepath,)
-    chain = np.load(f'{savepath}/chain_1.npy')
-    rn_freqs = np.load(f'{savepath}/rn_freqs.npy')
-    dm_freqs = np.load(f'{savepath}/dm_freqs.npy')
-    chrom_freqs = np.load(f'{savepath}/chrom_freqs.npy')
-    print(chain.shape)
-    outdir=savepath
-    np.savetxt(f'{savepath}/chain_1.txt', chain,)
-    c0 = co.Core(chaindir=savepath)
-    c0.chain = chain
-
-
-    wn_params = [par for par in c0.params if any([p in par for p in ['efac', 'equad', 'ecor']])]
-    if len(wn_params) > 0:
-        dg.plot_chains(c0, pars = wn_params)
-        plt.savefig(f'{outdir}/wn_hists.png')
-        plt.close()
-    dg.plot_grubin(c0)
-    plt.savefig(f'{outdir}/grubin.png')
-    plt.close()
-
-    fig, axes = plt.subplots(1,1,figsize=(8,4))
-    tspan = max(psr_pkls[pidx].toas)-min(psr_pkls[pidx].toas)
-    c0.rn_freqs = rn_freqs
-    rn.plot_free_spec(c0, axis=axes, parname_root=f'{psr_pkls[pidx].name}_red_noise_log10_rho', violin=True, Color='red',Tspan=tspan)
-    axes.set_xscale('log')
-    plt.title(f"{psr_pkls[pidx].name} | red noise | nfreqs={len(rn_freqs)}" )
-    plt.savefig(f"{outdir}/rn.png")
-    plt.close()
-
-    fig, axes = plt.subplots(1,1,figsize=(8,4))
-    tspan = max(psr_pkls[pidx].toas)-min(psr_pkls[pidx].toas)
-    c0.rn_freqs = dm_freqs
-    rn.plot_free_spec(c0, axis=axes, parname_root=f'{psr_pkls[pidx].name}_dm_gp_log10_rho',
-                    violin=True, Color='blue',Tspan=tspan)
-    axes.set_xscale('log')
-    plt.title(f"{psr_pkls[pidx].name} | DM GP | nfreqs={len(dm_freqs)} " )
-    plt.savefig(f'{outdir}/dm_gp.png')
-    plt.close()
-
-    fig, axes = plt.subplots(1,1,figsize=(8,4))
-    c0.rn_freqs = chrom_freqs
-    tspan = max(psr_pkls[pidx].toas)-min(psr_pkls[pidx].toas)
-    rn.plot_free_spec(c0, axis=axes, parname_root=f'{psr_pkls[pidx].name}_chrom_gp_log10_rho', 
-                    violin=True, Color='orange',Tspan=tspan)
-    axes.set_xscale('log')
-    plt.title(f"{psr_pkls[pidx].name} | chrom gp | nfreqs={len(chrom_freqs)}" )
-    plt.ylim(-9,-5)
-    plt.savefig(f'{outdir}/chrom_gp.png')
-    plt.close()
+    ImpelmentationError("not yet implemented")
+    return None
 
 
 def setup_discovery_noise(psr,
@@ -984,6 +936,8 @@ def setup_discovery_noise(psr,
     sampler = sampler_kwargs['sampler']
     time_span = ds.getspan([psr])
     # this updates the ds.stand_priordict object
+    # need 64-bit precision for PTA inference
+    numpyro.enable_x64()
     ds.priordict_standard.update(prior_dictionary_updates())
     model_components = [
         psr.residuals,
@@ -1028,8 +982,11 @@ def setup_discovery_noise(psr,
         def numpyro_model():
             params = jnp.array(numpyro.sample("par", dist.Normal(0,10).expand([len(log_x.params)])))
             numpyro.factor("ll", log_x(params))
-        nuts_kernel = infer.NUTS(numpyro_model, max_tree_depth=5, dense_mass=True,
-                                 forward_mode_differentiation=False, target_accept_prob=0.99)
+        nuts_kernel = infer.NUTS(numpyro_model,
+                                 max_tree_depth=sampler_kwargs['max_tree_depth'],
+                                 dense_mass=sampler_kwargs['dense_mass'],
+                                 forward_mode_differentiation=False,
+                                 target_accept_prob=0.99)
         sampler = infer.MCMC(nuts_kernel,
                     num_warmup=sampler_kwargs['num_warmup'],
                     num_samples=sampler_kwargs['num_samples'],
@@ -1129,5 +1086,7 @@ def get_model_and_sampler_default_settings():
         'num_samples': 2500,
         'num_chains': 4,
         'chain_method': 'vectorized',
+        'max_tree_depth': 5,
+        'dense_mass': False,
         }
     return model_defaults, sampler_defaults
