@@ -2602,9 +2602,12 @@ def plot_residuals_orb(fitter, restype = 'postfit', colorby='pta', plotsig = Fal
     return
 
 def plot_residuals_serial(fitter, restype = 'postfit', colorby='pta', plotsig = False, avg = False, whitened = False, \
-                        save = False, legend = True, title = True, axs = None, mixed_ecorr=False, epoch_lines=False, milli=False, **kwargs):
+                        save = False, legend = True, title = True, axs = None, mixed_ecorr=False, epoch_lines=False, \
+                        milli=False, mjd_order=False, **kwargs):
     """
-    Make a plot of the residuals vs. time
+    Make a serial plot of the residuals. (TOAs are evenly spaced along the x-axis)
+    In the default setup this will emulate pintk/tempo2 and TOAs appear in the order they are listed in the par file
+    If mjd_order=True, TOAs are first sorted according to MJD.
 
 
     Arguments
@@ -2643,6 +2646,7 @@ def plot_residuals_serial(fitter, restype = 'postfit', colorby='pta', plotsig = 
     mixed_ecorr [boolean]: If True, allows avging with mixed ecorr/no ecorr TOAs.
     epoch_lines [boolean]: If True, plot a vertical line at the first TOA of each observation file.
     milli [boolean]: If True, plot y-axis in milliseconds rather than microseconds.
+    mjd_order [boolean]: If True, the TOAs are sorted by MJD before being plotted.
     """
     # Check if wideband
     if fitter.is_wideband:
@@ -2870,9 +2874,11 @@ def plot_residuals_serial(fitter, restype = 'postfit', colorby='pta', plotsig = 
         ax1 = axs
 
     # if want tempo2 version, where serial = order in tim file
-    #x = range(len(inds))
+    if not mjd_order:
+        x = range(len(inds))
     # if want serial = order in mjd
-    x = np.argsort(mjds) 
+    else:
+        x = np.argsort(mjds) 
 
     # plot vertical line at the first TOA of each observation file
     if epoch_lines and not avg:
