@@ -65,7 +65,7 @@ class TimingConfiguration:
         )
 
     @tim_directory.setter
-    def set_tim_directory(self, tim_directory):
+    def tim_directory(self, tim_directory):
         """
         Set tim directory.
         If a relative path is supplied, it will be turned into an absolute path.
@@ -83,7 +83,7 @@ class TimingConfiguration:
         )
 
     @par_directory.setter
-    def set_par_directory(self, par_directory):
+    def par_directory(self, par_directory):
         """
         Set par directory.
         If a relative path is supplied, it will be turned into an absolute path.
