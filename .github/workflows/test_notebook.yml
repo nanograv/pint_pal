@@ -71,4 +71,3 @@ jobs:
           nb_outputs/*/*.tim
           nb_outputs/*/*.par
         compression-level: 6
-        
