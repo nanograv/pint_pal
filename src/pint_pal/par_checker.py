@@ -4,7 +4,7 @@ import re
 import copy
 from astropy import log
 import astropy.units as u
-from pint_pal.defaults import *
+import pint_pal.config
 from pint.modelutils import model_equatorial_to_ecliptic
 
 def check_if_fit(model, *param):
@@ -284,8 +284,9 @@ def check_ephem(toa):
     UserWarning
         If ephemeris is not set to the latest version.
     """
-    if toa.ephem != LATEST_EPHEM:
-        msg = f"Wrong Solar System ephemeris in use ({toa.ephem}); should be {LATEST_EPHEM}."
+    if toa.ephem != pint_pal.config.LATEST_EPHEM:
+        msg = (f"Wrong Solar System ephemeris in use ({toa.ephem});"
+               f" should be {pint_pal.config.LATEST_EPHEM}.")
         log.warning(msg)
     else:
         msg = f"Current Solar System ephemeris in use is {toa.ephem}."
@@ -304,8 +305,9 @@ def check_bipm(toa):
     UserWarning
         If BIPM correction is not set to the latest version.
     """
-    if toa.clock_corr_info['bipm_version'] != LATEST_BIPM:
-        msg = f"Wrong bipm_version ({toa.clock_corr_info['bipm_version']}); should be {LATEST_BIPM}."
+    if toa.clock_corr_info['bipm_version'] != pint_pal.config.LATEST_BIPM:
+        msg = (f"Wrong bipm_version ({toa.clock_corr_info['bipm_version']});"
+               f" should be {pint_pal.config.LATEST_BIPM}.")
         log.warning(msg)
     else:
         msg = f"BIPM version in use is {toa.clock_corr_info['bipm_version']}."
@@ -356,9 +358,10 @@ def check_troposphere(model):
         msg = "Added TroposphereDelay to model components."
         log.warning(msg)
     tropo = model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.value
-    if tropo != CORRECT_TROPOSPHERE:
-        model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.set( \
-                CORRECT_TROPOSPHERE)
+    if tropo != pint_pal.config.CORRECT_TROPOSPHERE:
+        model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.set(
+            pint_pal.config.CORRECT_TROPOSPHERE
+        )
         msg = "Switching CORRECT_TROPOSPHERE setting."
         log.warning(msg)
     tropo = model.components['TroposphereDelay'].CORRECT_TROPOSPHERE.value
@@ -385,9 +388,10 @@ def check_planet_shapiro(model):
         msg = "Added SolarSystemShapiro to model components."
         log.warning(msg)
     sss = model.components['SolarSystemShapiro'].PLANET_SHAPIRO.value
-    if sss != PLANET_SHAPIRO:
-        model.components['SolarSystemShapiro'].PLANET_SHAPIRO.set( \
-                PLANET_SHAPIRO)
+    if sss != pint_pal.config.PLANET_SHAPIRO:
+        model.components['SolarSystemShapiro'].PLANET_SHAPIRO.set(
+            pint_pal.config.PLANET_SHAPIRO
+        )
         msg = "Switching PLANET_SHAPIRO setting."
         log.warning(msg)
     sss = model.components['SolarSystemShapiro'].PLANET_SHAPIRO.value
@@ -449,7 +453,9 @@ def check_toa_release(toas):
     if len(set(release_flags)) > 1:
         log.error(f'TOAs from multiple releases should not be combined: {set(release_flags)}')
     else:
-        if release_flags[0] == LATEST_TOA_RELEASE:
-            log.info(f'All TOAs are from the latest release ({LATEST_TOA_RELEASE}).')
+        if release_flags[0] == pint_pal.config.LATEST_TOA_RELEASE:
+            log.info(f'All TOAs are from the latest release ({pint_pal.config.LATEST_TOA_RELEASE}).')
         else:
-            log.warning(f'TOAs in use are from an old release {release_flags[0]}, not {LATEST_TOA_RELEASE}; update tim-directory in the .yaml accordingly.')
+            log.warning(f'TOAs in use are from an old release {release_flags[0]}, '
+                        f'not {pint_pal.config.LATEST_TOA_RELEASE}; '
+                        f'update tim-directory in the .yaml accordingly.')

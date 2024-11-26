@@ -21,7 +21,7 @@ import glob
 from pint_pal.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from pint_pal.lite_utils import new_changelog_entry
 from pint_pal.lite_utils import check_toa_version, check_tobs
-from pint_pal.defaults import *
+import pint_pal.config
 
 class TimingConfiguration:
     """
@@ -45,12 +45,50 @@ class TimingConfiguration:
         tim_directory (optional) : override the tim directory specified in the config
         par_directory (optional) : override the par directory specified in the config
         """
-        self.filename = filename
-        with open(filename) as FILE:
+        self.filename = os.path.realpath(os.path.expanduser(filename))
+        with open(self.filename) as FILE:
             self.config = yaml.load(FILE, Loader=yaml.FullLoader)
-        self.tim_directory = self.config['tim-directory'] if tim_directory is None else tim_directory
-        self.par_directory = self.config['par-directory'] if par_directory is None else par_directory
+        if tim_directory is not None:
+            self.config['tim-directory'] = tim_directory
+        if par_directory is not None:
+            self.config['par-directory'] = par_directory
         self.skip_check = self.config['skip-check'] if 'skip-check' in self.config.keys() else ''
+
+    @property
+    def tim_directory(self):
+        """
+        Location of tim files, as specified in the config.
+        This returns the absolute path to the tim directory.
+        """
+        return os.path.realpath(
+            os.path.join(pint_pal.config.DATA_ROOT, self.config['tim-directory'])
+        )
+
+    @tim_directory.setter
+    def tim_directory(self, tim_directory):
+        """
+        Set tim directory.
+        If a relative path is supplied, it will be turned into an absolute path.
+        """
+        self.config['tim-directory'] = tim_directory
+
+    @property
+    def par_directory(self):
+        """
+        Location of par files, as specified in the config.
+        This returns the absolute path to the par directory.
+        """
+        return os.path.realpath(
+            os.path.join(pint_pal.config.DATA_ROOT, self.config['par-directory'])
+        )
+
+    @par_directory.setter
+    def par_directory(self, par_directory):
+        """
+        Set par directory.
+        If a relative path is supplied, it will be turned into an absolute path.
+        """
+        self.config['par-directory'] = par_directory
 
     def get_source(self):
         """ Return the source name """
@@ -133,7 +171,7 @@ class TimingConfiguration:
                           usepickle=usepickle,
                           bipm_version=BIPM,
                           ephem=EPHEM,
-                          planets=PLANET_SHAPIRO,
+                          planets=pint_pal.config.PLANET_SHAPIRO,
                           model=m,
                           picklefilename=picklefilename,
                           include_pn=include_pn
@@ -336,8 +374,11 @@ class TimingConfiguration:
     def construct_fitter(self, to, mo):
         """ Return the fitter, tracking pulse numbers if available """
         fitter_name = self.config['fitter']
-        fitter_class = getattr(pint.fitter, fitter_name)
-        return fitter_class(to, mo)
+        if fitter_name == 'Auto':
+            return pint.fitter.Fitter.auto(to, mo)
+        else:
+            fitter_class = getattr(pint.fitter, fitter_name)
+            return fitter_class(to, mo)
 
     def get_toa_type(self):
         """ Return the toa-type string """
@@ -359,7 +400,7 @@ class TimingConfiguration:
 
     def get_excised(self):
         """ Return excised-tim file if set and exists"""
-        if 'excised-tim' in self.config['intermediate-results'].keys():
+        if 'excised-tim' in self.config['intermediate-results'].keys() and self.config['intermediate-results']['excised-tim']:
             if os.path.exists(self.config['intermediate-results']['excised-tim']):
                 return self.config['intermediate-results']['excised-tim']
         return None
@@ -641,13 +682,13 @@ class TimingConfiguration:
         """ Return desired frequency ratio """
         if 'fratio' in self.config['dmx'].keys():
             return self.config['dmx']['fratio']
-        return FREQUENCY_RATIO
+        return pint_pal.config.FREQUENCY_RATIO
 
     def get_sw_delay(self):
         """ Return desired max(solar wind delay) threshold """
         if 'max-sw-delay' in self.config['dmx'].keys():
             return self.config['dmx']['max-sw-delay']
-        return MAX_SOLARWIND_DELAY
+        return pint_pal.config.MAX_SOLARWIND_DELAY
 
     def get_custom_dmx(self):
         """ Return MJD/binning params for handling DM events, etc. """
@@ -744,7 +785,7 @@ class TimingConfiguration:
             if self.get_snr_cut() > 25.0 and self.get_toa_type() == 'WB':
                 log.warning('snr-cut should be set to 25; try excising TOAs using other methods.')
         if 'poor-febe' in valid_valued:
-            fs = np.array([(f['f'] if 'f' in f else None) in toas.orig_table['flags']])
+            fs = np.array([(f['f'] if 'f' in f else None) for f in toas.orig_table['flags']])
             for febe in self.get_poor_febes():
                 febeinds = np.where(fs==febe)[0]
                 apply_cut_flag(toas,febeinds,'poorfebe',warn=warn)

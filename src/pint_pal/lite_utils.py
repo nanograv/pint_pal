@@ -410,7 +410,7 @@ def add_feJumps(mo,rcvrs):
     if len(missing_fe_jumps) > 1:
         for j in missing_fe_jumps[:-1]:
             log.info(f"Adding frontend JUMP {j}")
-            JUMPn = maskParameter('JUMP',key='-fe',key_value=[j],value=0.0,units=u.second)
+            JUMPn = maskParameter('JUMP',key='-fe',key_value=[j],value=0.0,units=u.second,convert_tcb2tdb=False)
             phasejump.add_param(JUMPn,setup=True)
 
 def add_feDMJumps(mo,rcvrs):
@@ -447,7 +447,7 @@ def add_feDMJumps(mo,rcvrs):
     if len(missing_fe_dmjumps):
         for j in missing_fe_dmjumps:
             log.info(f"Adding frontend DMJUMP {j}")
-            DMJUMPn = maskParameter('DMJUMP',key='-fe',key_value=[j],value=0.0,units=u.pc*u.cm**-3)
+            DMJUMPn = maskParameter('DMJUMP',key='-fe',key_value=[j],value=0.0,units=u.pc*u.cm**-3,convert_tcb2tdb=False)
             dmjump.add_param(DMJUMPn,setup=True)
             
 def get_flag_val_list(toas, flag):
@@ -516,7 +516,7 @@ def add_flag_jumps(mo,flag,flaglist,base=False):
         if len(missing_jumps) > 1:
             for j in missing_jumps[:-1]:
                 log.info(f"Adding frontend JUMP {j}")
-                JUMPn = maskParameter('JUMP',key=flagval,key_value=[j],value=0.0,units=u.second)
+                JUMPn = maskParameter('JUMP',key=flagval,key_value=[j],value=0.0,units=u.second,convert_tcb2tdb=False)
                 phasejump.add_param(JUMPn,setup=True)
     else:
         if len(missing_jumps):
@@ -529,7 +529,7 @@ def add_flag_jumps(mo,flag,flaglist,base=False):
         if len(missing_jumps) >= 1:
             for j in missing_jumps[:-1]:
                 log.info(f"Adding frontend JUMP {j}")
-                JUMPn = maskParameter('JUMP',key=flagval,key_value=[j],value=0.0,units=u.second)
+                JUMPn = maskParameter('JUMP',key=flagval,key_value=[j],value=0.0,units=u.second,convert_tcb2tdb=False)
                 phasejump.add_param(JUMPn,setup=True)
 
 def large_residuals(fo,threshold_us,threshold_dm=None,*,n_sigma=None,max_sigma=None,prefit=False,ignore_ASP_dms=True,print_bad=True, check_jumps=False):

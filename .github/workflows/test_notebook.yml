@@ -7,6 +7,7 @@ on:
   pull_request:
     branches: 
       - main
+      - NG20
 
 jobs:
   build:
@@ -70,4 +71,3 @@ jobs:
           nb_outputs/*/*.tim
           nb_outputs/*/*.par
         compression-level: 6
-        
