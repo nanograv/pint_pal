@@ -65,7 +65,7 @@ class TimingConfiguration:
         )
 
     @tim_directory.setter
-    def set_tim_directory(self, tim_directory):
+    def tim_directory(self, tim_directory):
         """
         Set tim directory.
         If a relative path is supplied, it will be turned into an absolute path.
@@ -83,7 +83,7 @@ class TimingConfiguration:
         )
 
     @par_directory.setter
-    def set_par_directory(self, par_directory):
+    def par_directory(self, par_directory):
         """
         Set par directory.
         If a relative path is supplied, it will be turned into an absolute path.
@@ -785,7 +785,7 @@ class TimingConfiguration:
             if self.get_snr_cut() > 25.0 and self.get_toa_type() == 'WB':
                 log.warning('snr-cut should be set to 25; try excising TOAs using other methods.')
         if 'poor-febe' in valid_valued:
-            fs = np.array([(f['f'] if 'f' in f else None) in toas.orig_table['flags']])
+            fs = np.array([(f['f'] if 'f' in f else None) for f in toas.orig_table['flags']])
             for febe in self.get_poor_febes():
                 febeinds = np.where(fs==febe)[0]
                 apply_cut_flag(toas,febeinds,'poorfebe',warn=warn)

@@ -11,45 +11,63 @@ on:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10"]
+        os: [ubuntu-latest] # Once we get the tex packages changed, we should include "macos-13"
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
-    - name: Install pdflatex
+    - name: Install Required Ubuntu Packages
       run: |
         sudo apt-get update
         sudo apt-get install texlive-latex-base cm-super-minimal pdftk latex2html
-    - uses: actions/checkout@v3
-    - uses: conda-incubator/setup-miniconda@v2
+    - uses: actions/checkout@v4
+    - uses: mamba-org/setup-micromamba@v1
       with:
-          python-version: ${{ matrix.python-version }}
-          mamba-version: "*"
-          channels: conda-forge,defaults
-          channel-priority: true
-    - name: Conda info
-      shell: bash -el {0}
-      run: conda info
-    - name: Install Dependencies & Main Code
+          init-shell: bash
+          environment-name: pulsar
+          cache-environment: true
+          cache-downloads: true
+          create-args: >-
+            -c conda-forge
+            python=${{ matrix.python-version }}
+            pytest
+            cython
+            pint-pulsar
+            tempo2
+            libstempo
+            enterprise-pulsar
+            enterprise_extensions
+            scikit-sparse
+            scikit-learn
+            ruamel.yaml
+            nbconvert
+            ipywidgets>=7.6.3
+            weasyprint
+            pytest-xdist>=2.3.0
+            jupyter
+            seaborn
+            gitpython
+    - name: Install Main Code
       shell: bash -el {0}
       run: |
-        mamba install -c conda-forge python=${{ matrix.python-version }} pytest cython=0.29.36 tempo2 enterprise-pulsar enterprise_extensions scikit-sparse
         pip install -e .
     - name: Test with Standard Pulsar
       shell: bash -el {0}
       run: |
         export PULSAR_NAME='J0605+3757'
-        export JUPYTER_PLATFORM_DIRS=1 && jupyter --paths
-        tree tests
-        pytest tests/test_run_notebook.py -n auto -k $PULSAR_NAME
-        mv tmp-* nb_outputs
+        export JUPYTER_PLATFORM_DIRS=1
+        pytest tests/test_run_notebook.py -k $PULSAR_NAME
+        ls -lah
+        mv tmp* nb_outputs
     - name: Archive Notebook Output Files
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: TestNB-OutputFiles
+        name: TestNB-OutputFiles_${{ matrix.python-version }}_${{ matrix.os }}_${{ steps.date.outputs.date }}
         path: |
-          nb_outputs
-        
+          nb_outputs/*/*.pdf
+          nb_outputs/*/*.tim
+          nb_outputs/*/*.par
+        compression-level: 6
