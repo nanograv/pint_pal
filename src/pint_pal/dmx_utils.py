@@ -471,26 +471,21 @@ def get_dmx_freqs(toas: pint.toa.TOAs, mask: np.ndarray, allow_wideband: bool = 
     """
 
     freqs = toas.get_freqs()[mask].value  # MHz
-    high_freq = 0.0
-    low_freq = np.inf
+    high_freq = np.max(freqs)
+    low_freq = np.min(freqs)
 
-    # indices of wideband TOAs
-    wb_mask = mask & (np.array(toas.get_flag_value('pp_dm')[0]) != None)
-    if allow_wideband:  # the following arrays will be empty if narrowband TOAs
+    if allow_wideband:
+        # indices of wideband TOAs
+        wb_mask = mask & (np.array(toas.get_flag_value('pp_dm')[0]) != None)
+        # the following arrays will be empty if all TOAs are narrowband
         fratios = toas.get_flag_value('fratio')[0] # frequency ratio / WB TOA
         fratios = np.array(fratios)[wb_mask]
         bws = toas.get_flag_value('bw')[0]  # bandwidth [MHz] / WB TOA
         bws = np.array(bws)[wb_mask]
         low_freqs = bws.astype('float32') / (fratios.astype('float32') - 1)
+        low_freq = min(low_freq, np.min(low_freqs))
         high_freqs = bws.astype('float32') + low_freqs
-
-    for itoa in range(len(toas)):
-        if itoa in iwb and allow_wideband:
-            if low_freqs[itoa] < low_freq: low_freq = low_freqs[itoa]
-            if high_freqs[itoa] > high_freq: high_freq = high_freqs[itoa]
-        else:
-            if freqs[itoa] < low_freq: low_freq = freqs[itoa]
-            if freqs[itoa] > high_freq: high_freq = freqs[itoa]
+        high_freq = max(high_freq, np.max(high_freqs))
 
     return low_freq, high_freq
 
