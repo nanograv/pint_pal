@@ -530,7 +530,7 @@ def check_frequency_ratio(
         low_mjd, high_mjd = dmx_range[0], dmx_range[1]
         mask = get_dmx_mask(toas, low_mjd, high_mjd,
                 strict_inclusion=strict_inclusion)
-        low_freq, high_freq = get_dmx_freqs(toas[mask],
+        low_freq, high_freq = get_dmx_freqs(toas, mask,
             allow_wideband=allow_wideband)
         if high_freq / low_freq >= frequency_ratio:  # passes
             toa_mask += mask
@@ -612,7 +612,7 @@ def check_solar_wind(
         low_mjd, high_mjd = dmx_range[0], dmx_range[1]
         mask = get_dmx_mask(toas, low_mjd, high_mjd,
                 strict_inclusion=strict_inclusion)
-        low_freq, high_freq = get_dmx_freqs(toas[mask],
+        low_freq, high_freq = get_dmx_freqs(toas, mask,
             allow_wideband=allow_wideband)
         # Convert to time delay, using calc from David's code (fixed)
         theta = np.pi - phis[mask]  # rad
@@ -911,7 +911,7 @@ def make_dmx(
         high_mjd = max(dmx_ranges[irange])
         mask = get_dmx_mask(toas, low_mjd, high_mjd, strict_inclusion)
         epoch = get_dmx_epoch(toas[mask], weighted_average)
-        low_freq, high_freq = get_dmx_freqs(toas[mask], allow_wideband)
+        low_freq, high_freq = get_dmx_freqs(toas, mask, allow_wideband)
         dmx_parameter = DMXParameter()
         dmx_parameter.idx = idx
         dmx_parameter.val = dmx_vals[irange]
