@@ -460,27 +460,27 @@ def get_dmx_epoch(toas: pint.toa.TOAs, weighted_average: bool = True) -> float:
     return epoch
 
 
-def get_dmx_freqs(toas: pint.toa.TOAs, allow_wideband: bool = True) -> Tuple[float, float]:
+def get_dmx_freqs(toas: pint.toa.TOAs, mask: np.ndarray, allow_wideband: bool = True) -> Tuple[float, float]:
     """
     Return the lowest and highest frequency of the TOAs in a DMX bin.
 
-    toas is a PINT TOA object of TOAs in the DMX bin.
+    toas is a PINT TOA object containing all the relevant TOAs.
+    mask is a boolean mask that identifies the TOAs in this DMX bin.
     allow_wideband=True will consider the -fratio and -bw flags in the
         determination of these frequencies, if toas contains wideband TOAs.
     """
 
-    freqs = toas.get_freqs().value  # MHz
+    freqs = toas.get_freqs()[mask].value  # MHz
     high_freq = 0.0
     low_freq = np.inf
 
     # indices of wideband TOAs
-    iwb = np.arange(len(toas))[np.array(toas.get_flag_value('pp_dm')[0]) \
-            != None]
+    wb_mask = mask & (np.array(toas.get_flag_value('pp_dm')[0]) != None)
     if allow_wideband:  # the following arrays will be empty if narrowband TOAs
-        fratios = toas[iwb].get_flag_value('fratio') # frequency ratio / WB TOA
-        fratios = np.array(fratios[0])
-        bws = toas[iwb].get_flag_value('bw')  # bandwidth [MHz] / WB TOA
-        bws = np.array(bws[0])
+        fratios = toas.get_flag_value('fratio')[0] # frequency ratio / WB TOA
+        fratios = np.array(fratios[wb_mask])
+        bws = toas.get_flag_value('bw')[0]  # bandwidth [MHz] / WB TOA
+        bws = np.array(bws[wb_mask])
         low_freqs = bws.astype('float32') / (fratios.astype('float32') - 1)
         high_freqs = bws.astype('float32') + low_freqs
 
