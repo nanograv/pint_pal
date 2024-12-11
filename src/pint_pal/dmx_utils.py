@@ -478,9 +478,9 @@ def get_dmx_freqs(toas: pint.toa.TOAs, mask: np.ndarray, allow_wideband: bool = 
     wb_mask = mask & (np.array(toas.get_flag_value('pp_dm')[0]) != None)
     if allow_wideband:  # the following arrays will be empty if narrowband TOAs
         fratios = toas.get_flag_value('fratio')[0] # frequency ratio / WB TOA
-        fratios = np.array(fratios[wb_mask])
+        fratios = np.array(fratios)[wb_mask]
         bws = toas.get_flag_value('bw')[0]  # bandwidth [MHz] / WB TOA
-        bws = np.array(bws[wb_mask])
+        bws = np.array(bws)[wb_mask]
         low_freqs = bws.astype('float32') / (fratios.astype('float32') - 1)
         high_freqs = bws.astype('float32') + low_freqs
 
