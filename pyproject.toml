@@ -19,7 +19,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "ruamel.yaml",
-    "pint_pulsar==1.0.1",
+    "pint_pulsar>=1.0.1",
     "enterprise-pulsar>=3.3.2",
     "enterprise-extensions>=v2.4.1",
     "pytest",
