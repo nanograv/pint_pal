@@ -531,9 +531,9 @@ def check_frequency_ratio(
             toa_mask += mask
             dmx_range_mask[irange] = True
         else:  # fails
-            nfail_toas += len(toas[mask])
+            nfail_toas += np.sum(mask)
             if not quiet:
-                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that do not pass the frequency ratio test (TOAs with MJDs {toas[mask].get_mjds().value})."
+                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that do not pass the frequency ratio test (TOAs with MJDs {toas.get_mjds()[mask].value})."
                 log.info(msg)
 
     nfail_ranges = sum(np.logical_not(dmx_range_mask))
@@ -621,7 +621,7 @@ def check_solar_wind(
             toa_mask += mask
             dmx_range_mask[irange] = True
             if not quiet:
-                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that are affected by the solar wind (TOAs with MJDs {toas[mask].get_mjds().value})."
+                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that are affected by the solar wind (TOAs with MJDs {toas.get_mjds()[mask].value})."
                 log.info(msg)
     nsolar = sum(dmx_range_mask)
     if not quiet and nsolar:
