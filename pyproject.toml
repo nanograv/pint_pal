@@ -13,6 +13,7 @@ authors = [
   { name="Anne Archibald", email="anne.archibald@nanograv.org" },
   { name="Kevin Wilson", email="kevin.wilson@nanograv.org" },
   { name="Ross Jennings", email="ross.jennings@nanograv.org" },
+  { name="Jeremy Baier", email="jeremy.baier@nanograv.org"}
 ]
 description = "A long-lived repository for NANOGrav Pulsar Timing analysis work."
 readme = "README.md"
@@ -32,6 +33,8 @@ dependencies = [
     "jupyter",
     "seaborn",
     "gitpython",
+    "laforge",
+    "arviz",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
