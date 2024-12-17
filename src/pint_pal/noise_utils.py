@@ -35,29 +35,6 @@ from enterprise_extensions.sampler import group_from_params, get_parameter_group
 from enterprise_extensions import model_utils
 from enterprise_extensions import deterministic
 from enterprise_extensions.timing import timing_block
-try:
-    import xarray as xr
-    import jax
-    from jax import numpy as jnp
-    import numpyro
-    from numpyro.infer import log_likelihood
-    from numpyro import distributions as dist
-    from numpyro import infer
-    import discovery as ds
-    from discovery import prior as ds_prior
-    from discovery.prior import (makelogtransform_uniform,
-                                 makelogprior_uniform,
-                                 sample_uniform)
-    from discovery.gibbs import setup_single_psr_hmc_gibbs
-
-except ImportError:
-    log.error("Please install the latest version of discovery, numpyro, and/or jax")
-    ValueError("Please install the latest version of discovery, numpyro, and/or jax")
-try:
-    from enterprise_extensions.gibbs_sampling.gibbs_chromatic import GibbsSampler
-except:
-    log.warning("Please upgrade to the latest version of enterprise_extensions to use GibbsSampler.")
-    ValueError("Please install the latest version of discovery, numpyro, and/or jax")
 
 # from enterprise_extensions.blocks import (white_noise_block, red_noise_block)
 
@@ -175,7 +152,7 @@ def analyze_noise(
         noise_core = co.Core(chaindir=chaindir)
     except:
         log.error(f"Could not load noise run from {chaindir}. Make sure the path is correct. Also make sure you have an up-to-date la_forge installation. ")
-        ValueError(f"Could not load noise run from {chaindir}")
+        raise ValueError(f"Could not load noise run from {chaindir}. Check path and la_forge installation.")
     if sampler == 'PTMCMCSampler' or sampler == "GibbsSampler":
         # standard burn ins
         noise_core.set_burn(burn_frac)
@@ -360,7 +337,6 @@ def analyze_noise(
 def model_noise(
     mo,
     to,
-    n_iter=int(1e5),
     using_wideband=False,
     resume=False,
     run_noise_analysis=True,
@@ -377,17 +353,21 @@ def model_noise(
     ==========
     mo: PINT (or tempo2) timing model
     to: PINT (or tempo2) TOAs
-    likelihood: choose from ['Enterprise', 'discovery']
-        enterprise -- Enterprise likelihood
-        discovery -- various numpyro samplers with a discovery likelihood
-    sampler: for Enterprise choose from ['PTMCMCSampler','GibbsSampler']
-             for discovery choose from  ['HMC', 'NUTS', 'HMC-GIBBS']
-    n_iter: number of MCMC iterations; Default: 1e5; Recommended > 5e4
     using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
+    resume: Flag to resume overwrite previous run or not.
     run_noise_analysis: Flag to toggle execution of noise modeling; Default: True
     noise_kwargs: dictionary of noise model parameters; Default: {}
     sampler_kwargs: dictionary of sampler parameters; Default: {}
     return_sampler: Flag to return the sampler object; Default: False
+    
+    Recommended to pass model_kwargs and sampler_kwargs from the config file.
+    Default kwargs given by function `get_model_and_sampler_default_settings`.
+    Import configuration parameters:
+        likelihood: choose from ['Enterprise', 'discovery']
+            enterprise -- Enterprise likelihood
+            discovery -- various numpyro samplers with a discovery likelihood
+        sampler: for Enterprise choose from ['PTMCMCSampler','GibbsSampler']
+             for discovery choose from  ['HMC', 'NUTS', 'HMC-GIBBS']
 
     Returns
     =======
@@ -428,13 +408,6 @@ def model_noise(
         )
         return None
 
-    # Ensure n_iter is an integer
-    n_iter = int(n_iter)
-
-    if n_iter < 1e4:
-        log.warning(
-            "Such a small number of iterations is unlikely to yield accurate posteriors. STRONGLY recommend increasing the number of iterations to at least 5e4"
-        )
 
     # Create enterprise Pulsar object for supplied pulsar timing model (mo) and toas (to)
     log.info(f"Creating Enterprise.Pulsar object from model with {mo.NTOA.value} toas...")
@@ -445,6 +418,13 @@ def model_noise(
     if likelihood == "Enterprise" and sampler == 'PTMCMCSampler':
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         # Setup a single pulsar PTA using enterprise_extensions
+        # Ensure n_iter is an integer
+        sampler_kwargs['n_iter'] = int(sampler_kwargs['n_iter'])
+
+        if sampler_kwargs['n_iter'] < 1e4:
+            log.warning(
+            f"Such a small number of iterations with {sampler} is unlikely to yield accurate posteriors. STRONGLY recommend increasing the number of iterations to at least 5e4"
+            )
         if not using_wideband:
             pta = models.model_singlepsr_noise(
                 e_psr,
@@ -467,6 +447,7 @@ def model_noise(
                 # can pass extra signals in here
                 extra_sigs=model_kwargs['extra_sigs'],
             )
+            pta.set_default_params({})
         else:
             pta = models.model_singlepsr_noise(
                 e_psr,
@@ -488,25 +469,37 @@ def model_noise(
                     dmjump_params[dmjump_param_name] = dmjump_param.value
             pta.set_default_params(dmjump_params)
         # set groups here
-        groups = setup_sampling_groups(pta, write_groups=True, outdir=outdir)
+        groups = setup_sampling_groups(pta, write_groups=False, outdir=outdir)
         #######
         # setup sampler using enterprise_extensions
         samp = ee_sampler.setup_sampler(pta,
-                                     outdir=outdir,
-                                     resume=resume,
-                                     groups=groups)
+                                        outdir=outdir,
+                                        resume=resume,
+                                        groups=groups,
+                                        empirical_distr = sampler_kwargs['empirical_distr']
+        xx)
+        if sampler_kwargs['empirical_distr'] is not None:
+            try:
+                samp.addProposalToCycle(samp.jp.draw_from_empirical_distr, 50)
+            except:
+                log.warning("Failed to add draws from empirical distribution.")
         # Initial sample
         x0 = np.hstack([p.sample() for p in pta.params])
         # Start sampling
         log.info("Beginnning to sample...")
         samp.sample(
-            x0, 1_000_000, SCAMweight=30, AMweight=15, DEweight=50, #**sampler_kwargs
+            x0, sampler_kwargs['n_iter'], SCAMweight=30, AMweight=15, DEweight=50, #**sampler_kwargs
         )
         log.info("Finished sampling.")
     ##############################################################
     ##################     GibbsSampler   ########################
     ##############################################################
     elif likelihood == "Enterprise" and sampler == "GibbsSampler":
+        try:
+            from enterprise_extensions.gibbs_sampling.gibbs_chromatic import GibbsSampler
+        except:
+            log.error("Please upgrade to the latest version of enterprise_extensions to use GibbsSampler.")
+            raise ValueError("Please install a version of enterprise extensions which contains the `gibbs_sampling` module.")
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         samp = GibbsSampler(
                     e_psr,
@@ -534,6 +527,22 @@ def model_noise(
     ##################     discovery likelihood   ###################
     #################################################################
     elif likelihood == "discovery":
+        try: # make sure requisite packages are installed
+            import xarray as xr
+            import jax
+            from jax import numpy as jnp
+            import numpyro
+            from numpyro.infer import log_likelihood
+            from numpyro import distributions as dist
+            from numpyro import infer
+            import discovery as ds
+            from discovery import prior as ds_prior
+            from discovery.prior import (makelogtransform_uniform,
+                                         makelogprior_uniform,
+                                         sample_uniform)
+        except ImportError:
+            log.error("Please install the latest version of discovery, numpyro, and/or jax")
+            raise ValueError("Please install the latest version of discovery, numpyro, and/or jax")
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         os.makedirs(outdir, exist_ok=True)
         with open(outdir+"model_kwargs.json", "w") as f:
@@ -935,9 +944,9 @@ def setup_discovery_noise(psr,
     # set up the model
     sampler = sampler_kwargs['sampler']
     time_span = ds.getspan([psr])
-    # this updates the ds.stand_priordict object
     # need 64-bit precision for PTA inference
     numpyro.enable_x64()
+    # this updates the ds.stand_priordict object
     ds.priordict_standard.update(prior_dictionary_updates())
     model_components = [
         psr.residuals,
@@ -965,8 +974,12 @@ def setup_discovery_noise(psr,
     log_x = makelogtransform_uniform(psl.logL)
     # x0 = sample_uniform(psl.logL.params)
     if sampler == 'HMC-Gibbs':
-        def numpyro_model():
-            return None
+        try:
+            from discovery.gibbs import setup_single_psr_hmc_gibbs
+        except ImportError:
+            log.error("Need to have most up-to-date version of discovery installed.")
+            raise ValueError("Make sure proper version of discovery is imported")
+        numpyro_model = None # this doesnt get used for HMC-Gibbs
         gibbs_hmc_kernel = setup_single_psr_hmc_gibbs(
                     psrl=psl, psrs=psr,
                     priordict=ds.priordict_standard,
@@ -1008,7 +1021,7 @@ def setup_discovery_noise(psr,
                 )
     else:
         log.error(
-            f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination." \
+            f"Invalid likelihood ({sampler_kwargs['likelihood']}) and sampler ({sampler_kwargs['sampler']}) combination." \
             + "\nCan only use discovery with 'HMC', 'HMC-Gibbs', or 'NUTS'."
         )
         
@@ -1077,15 +1090,20 @@ def get_model_and_sampler_default_settings():
         'ACE_prior': False,
         # 
         'extra_sigs': None,
+        # path to empirical distribution
         }
     sampler_defaults = {
         'likelihood': 'Enterprise',
-        'sampler': 'HMC',
-        'num_steps': 5,
+        'sampler': 'PTMCMCSampler',
+        # ptmcmc kwargs
+        'n_iter': 2e5,
+        'empirical_distr': None,
+        # numpyro kwargs
+        'num_steps': 25,
         'num_warmup': 500,
         'num_samples': 2500,
         'num_chains': 4,
-        'chain_method': 'vectorized',
+        'chain_method': 'parallel',
         'max_tree_depth': 5,
         'dense_mass': False,
         }
