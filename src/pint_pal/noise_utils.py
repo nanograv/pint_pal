@@ -848,7 +848,6 @@ def add_noise_to_model(
             noise_dict[psr_name + "_red_noise_log10_A"]
         )
         rn_comp.RNIDX.quantity = -1 * noise_dict[psr_name + "_red_noise_gamma"]
-
         # Add red noise to the timing model
         model.add_component(rn_comp, validate=True, force=True)
     else:
@@ -909,14 +908,18 @@ def add_noise_to_model(
         noise = noise_class()  # Make the dispersion instance.
         model.add_component(noise, validate=False)
         # add parameters
-        model['NE_SW'].quantity = noise_dict[f'{psr_name}_NE_SW']
-        model['NE_SW'].frozen = True
+        if f'{psr_name}_n_earth' in sw_pars:
+            model['NE_SW'].quantity = noise_dict[f'{psr_name}_n_earth']
+            model['NE_SW'].frozen = True
+        elif f'{psr_name}_sw_gp_log10_A' in sw_pars:
+            raise NotImplementedError('Solar Wind Dispersion power-law GP not yet implemented')
+        elif f'{psr_name}_sw_gp_log10_rho' in sw_pars:
+            raise NotImplementedError('Solar Wind Dispersion free spec GP not yet implemented')
 
 
     # Setup and validate the timing model to ensure things are correct
     model.setup()
     model.validate()
-    #FIXME:::not sure why this is broken
     model.noise_mtime = mtime.isot
 
     if convert_equad_to_t2:
@@ -931,7 +934,7 @@ def plot_free_specs(c0, freqs, fs_type='Red Noise'):
     """
     Plot free specs when using free spectral model
     """
-    ImpelmentationError("not yet implemented")
+    raise NotImplementedError("not yet implemented")
     return None
 
 
