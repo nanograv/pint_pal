@@ -477,7 +477,7 @@ def model_noise(
                                         resume=resume,
                                         groups=groups,
                                         empirical_distr = sampler_kwargs['empirical_distr']
-        xx)
+        )
         if sampler_kwargs['empirical_distr'] is not None:
             try:
                 samp.addProposalToCycle(samp.jp.draw_from_empirical_distr, 50)
