@@ -518,7 +518,7 @@ def model_noise(
                     #**noise_kwargs,
         )
         log.info("Beginnning to sample...")
-        samp.sample(niter=n_iter, savepath=outdir)
+        samp.sample(niter=sampler_kwargs['n_iter'], savepath=outdir)
         log.info("Finished sampling.")
         # sorta redundant to have both, but la_forge doesn't look for .npy files
         chain = np.load(f'{outdir}/chain_1.npy')
@@ -973,6 +973,7 @@ def setup_discovery_noise(psr,
         elif model_kwargs['rn_psd'] == 'free_spectral':
             model_components.append(ds.makegp_fourier(psr, ds.free_spectral, model_kwargs['chromgp_nfreqs'], T=time_span, name='dm_gp'))
     psl = ds.PulsarLikelihood(model_components)
+    ## this prior transform is no longer required and should be removed
     prior = ds_prior.makelogprior_uniform(psl.logL.params, ds.priordict_standard)
     log_x = makelogtransform_uniform(psl.logL)
     # x0 = sample_uniform(psl.logL.params)
