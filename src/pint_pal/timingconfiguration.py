@@ -159,7 +159,7 @@ class TimingConfiguration:
         if match:
             m.meta['created_time'] = match.group(1)
             log.info(f"Par file created: {m.meta['created_time']}")
-        m.file_mtime = Time(os.path.getmtime(par_path), format="unix").isot
+        m.meta['file_mtime'] = Time(os.path.getmtime(par_path), format="unix").isot
 
 
         if m.PSR.value != self.get_source():
