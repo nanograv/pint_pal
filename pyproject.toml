@@ -33,7 +33,7 @@ dependencies = [
     "jupyter",
     "seaborn",
     "gitpython",
-    "laforge",
+    "la-forge",
     "arviz",
 ]
 classifiers = [
