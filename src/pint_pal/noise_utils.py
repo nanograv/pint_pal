@@ -432,7 +432,7 @@ def add_noise_to_model(model, burn_frac = 0.25, save_corner = True, no_corner_pl
     #Setup and validate the timing model to ensure things are correct
     model.setup()
     model.validate()
-    model.noise_mtime = mtime.isot
+    model.meta['noise_mtime'] = mtime.isot
 
     if convert_equad_to_t2:
         from pint_pal.lite_utils import convert_enterprise_equads
