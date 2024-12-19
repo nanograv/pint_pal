@@ -363,10 +363,10 @@ def model_noise(
     Recommended to pass model_kwargs and sampler_kwargs from the config file.
     Default kwargs given by function `get_model_and_sampler_default_settings`.
     Import configuration parameters:
-        likelihood: choose from ['Enterprise', 'discovery']
-            enterprise -- Enterprise likelihood
+        likelihood: choose from ['enterprise', 'discovery']
+            enterprise -- enterprise likelihood
             discovery -- various numpyro samplers with a discovery likelihood
-        sampler: for Enterprise choose from ['PTMCMCSampler','GibbsSampler']
+        sampler: for enterprise choose from ['PTMCMCSampler','GibbsSampler']
              for discovery choose from  ['HMC', 'NUTS', 'HMC-GIBBS']
 
     Returns
@@ -410,12 +410,12 @@ def model_noise(
 
 
     # Create enterprise Pulsar object for supplied pulsar timing model (mo) and toas (to)
-    log.info(f"Creating Enterprise.Pulsar object from model with {mo.NTOA.value} toas...")
+    log.info(f"Creating enterprise.Pulsar object from model with {mo.NTOA.value} toas...")
     e_psr = Pulsar(mo, to)
     ##########################################################
     ################     PTMCMCSampler      ##################
     ##########################################################
-    if likelihood == "Enterprise" and sampler == 'PTMCMCSampler':
+    if likelihood == "enterprise" and sampler == 'PTMCMCSampler':
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         # Setup a single pulsar PTA using enterprise_extensions
         # Ensure n_iter is an integer
@@ -494,7 +494,7 @@ def model_noise(
     ##############################################################
     ##################     GibbsSampler   ########################
     ##############################################################
-    elif likelihood == "Enterprise" and sampler == "GibbsSampler":
+    elif likelihood == "enterprise" and sampler == "GibbsSampler":
         try:
             from enterprise_extensions.gibbs_sampling.gibbs_chromatic import GibbsSampler
         except:
@@ -575,7 +575,7 @@ def model_noise(
     else:
         log.error(
             f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination." \
-            + "\nCan only use Enterprise with PTMCMCSampler or GibbsSampler."
+            + "\nCan only use enterprise with PTMCMCSampler or GibbsSampler."
         )
     if return_sampler:
         return samp
@@ -968,10 +968,10 @@ def setup_discovery_noise(psr,
         elif model_kwargs['dmgp_psd'] == 'free_spectral':
             model_components.append(ds.makegp_fourier(psr, ds.free_spectral, model_kwargs['dmgp_nfreqs'], T=time_span, name='dm_gp'))
     if model_kwargs['inc_chromgp']:
-        if model_kwargs['rn_psd'] == 'powerlaw':
-            model_components.append(ds.makegp_fourier(psr, ds.powerlaw, model_kwargs['chromgp_nfreqs'], T=time_span, name='dm_gp'))
-        elif model_kwargs['rn_psd'] == 'free_spectral':
-            model_components.append(ds.makegp_fourier(psr, ds.free_spectral, model_kwargs['chromgp_nfreqs'], T=time_span, name='dm_gp'))
+        if model_kwargs['chrom_psd'] == 'powerlaw':
+            model_components.append(ds.makegp_fourier(psr, ds.powerlaw, model_kwargs['chromgp_nfreqs'], T=time_span, name='chrom_gp'))
+        elif model_kwargs['chrom_psd'] == 'free_spectral':
+            model_components.append(ds.makegp_fourier(psr, ds.free_spectral, model_kwargs['chromgp_nfreqs'], T=time_span, name='chrom_gp'))
     psl = ds.PulsarLikelihood(model_components)
     ## this prior transform is no longer required and should be removed
     prior = ds_prior.makelogprior_uniform(psl.logL.params, ds.priordict_standard)
@@ -1097,7 +1097,7 @@ def get_model_and_sampler_default_settings():
         # path to empirical distribution
         }
     sampler_defaults = {
-        'likelihood': 'Enterprise',
+        'likelihood': 'enterprise',
         'sampler': 'PTMCMCSampler',
         # ptmcmc kwargs
         'n_iter': 2e5,
