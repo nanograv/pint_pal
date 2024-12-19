@@ -875,7 +875,7 @@ def add_noise_to_model(
         ###### FREE SPECTRAL (WaveX) DM NOISE ######
         elif f'{psr_name}_dm_gp_log10_rho_0' in dm_pars:
             log.info('Adding Free Spectral DM GP as DMWaveXnoise to par file')
-            NotImplementedError('DMWaveXNoise not yet implemented')
+            raise NotImplementedError('DMWaveXNoise not yet implemented')
 
     # Check to see if higher order chromatic noise is present
     chrom_pars = [key for key in noise_pars if "_chrom_gp" in key]
@@ -885,7 +885,7 @@ def add_noise_to_model(
             log.info('Adding Powerlaw CHROM GP noise as PLCMNoise to par file')
             # Add the ML RN parameters to their component
             chrom_comp = pm.noise_model.PLCMNoise()
-            chrom_keys = np.array([key for key, val in noise_dict.items() if "_chrom_gp_" in key])
+            # chrom_keys = np.array([key for key, val in noise_dict.items() if "_chrom_gp_" in key])
             chrom_comp.TNCMAMP.quantity = convert_to_RNAMP(
                 noise_dict[psr_name + "_chrom_gp_log10_A"]
             )
@@ -897,7 +897,7 @@ def add_noise_to_model(
         ###### FREE SPECTRAL (WaveX) DM NOISE ######
         elif f'{psr_name}_chrom_gp_log10_rho_0' in chrom_pars:
             log.info('Adding Free Spectral CHROM GP as CMWaveXnoise to par file')
-            NotImplementedError('CMWaveXNoise not yet implemented')
+            raise NotImplementedError('CMWaveXNoise not yet implemented')
             
     # Check to see if solar wind is present
     sw_pars = [key for key in noise_pars if "sw_r2" in key]
@@ -906,14 +906,22 @@ def add_noise_to_model(
         all_components = Component.component_types
         noise_class = all_components["SolarWindDispersion"]
         noise = noise_class()  # Make the dispersion instance.
-        model.add_component(noise, validate=False)
+        model.add_component(noise, validate=False, force=False)
         # add parameters
         if f'{psr_name}_n_earth' in sw_pars:
             model['NE_SW'].quantity = noise_dict[f'{psr_name}_n_earth']
             model['NE_SW'].frozen = True
-        elif f'{psr_name}_sw_gp_log10_A' in sw_pars:
-            raise NotImplementedError('Solar Wind Dispersion power-law GP not yet implemented')
-        elif f'{psr_name}_sw_gp_log10_rho' in sw_pars:
+        if f'{psr_name}_sw_gp_log10_A' in sw_pars:
+            sw_comp = pm.noise_model.PLSWNoise()
+            sw_comp.TNSWAMP.quantity = convert_to_RNAMP(noise_dict[f'{psr_name}_sw_gp_log10_A'])
+            sw_comp.TNSWAMP.frozen = True
+            sw_comp.TNSWGAM.quantity = -1.*noise_dict[f'{psr_name}_sw_gp_gamma']
+            sw_comp.TNSWGAM.frozen = True
+            # FIXMEEEEEEE : need to figure out some way to softcode this
+            sw_comp.TNSWC.quantity = 10
+            sw_comp.TNSWC.frozen = True
+            model.add_component(sw_comp, validate=False, force=True)
+        if f'{psr_name}_sw_gp_log10_rho' in sw_pars:
             raise NotImplementedError('Solar Wind Dispersion free spec GP not yet implemented')
 
 
