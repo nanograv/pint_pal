@@ -23,6 +23,16 @@ dmx:  # control dmx windowing/fixing
   max-sw-delay: 0.1 # finer binning when solar wind delay > threshold (us)
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 
+noise_run:
+  model:
+      inc_rn: true
+      inc_dmgp: false
+      inc_chromgp: false
+  inference:
+     likelihood: enterprise
+     sampler: PTMCMCSampler
+     n_iter: 200000
+
 intermediate-results: # use results from previous runs
   #noise-dir: /nanograv/share/15yr/timing/intermediate/20221021.Noise.wb.a8ff4ddc/
   #compare-noise-dir: /nanograv/share/15yr/timing/intermediate/20220822.Noise.wb.a77c37bb/
@@ -49,3 +59,4 @@ changelog:
 - '2021-09-24 joe.swiggum NOTE: updated AO/GBO coords (pint v0.8.3) and refit'
 - '2021-09-30 joe.swiggum NOTE: par file handed off to DWG for v1.0 is J0605+3757_PINT_20210928.wb.par'
 - '2022-08-24 thankful.cromartie NOISE: changed to 20220822.Noise.wb.a77c37bb'
+- '2024-12-19 jeremy.baier NOTE: adding noise_run to config'
