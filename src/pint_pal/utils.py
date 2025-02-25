@@ -544,7 +544,9 @@ def pdf_writer(fitter,
 
     # Get some values from the fitter
     start = fitter.toas.first_MJD.value
+    start_ymd = fitter.toas.first_MJD.to_value(format='iso')
     finish = fitter.toas.last_MJD.value
+    finish_ymd = fitter.toas.last_MJD.to_value(format='iso')
     span = finish - start
 
     label = f"{psr} {'narrowband' if NB else 'wideband'}"
@@ -573,8 +575,8 @@ def pdf_writer(fitter,
     for tf in tim_files:
         fsum.write(r'\item ' + verb(tf.split('/')[-1]) + '\n')
     fsum.write(r'\end{itemize}' + "\n")
-    fsum.write('Span: %.1f years (%.1f -- %.1f)\\\\\n ' % (span/365.24,
-        year(float(start)), year(float(finish))))
+    fsum.write('Span: %.1f years (%s -- %s)\\\\\n ' % (span/365.24,
+        str(start_ymd).split(' ')[0], str(finish_ymd).split(' ')[0]))
 
     if NB:
         try:
@@ -716,7 +718,7 @@ def pdf_writer(fitter,
             and pm.frozen
             and pm.value is not None
             and pm.value != 0):
-            if p in {"START", "FINISH", "POSEPOCH", "DMEPOCH", "PEPOCH", "TZRMJD", "DM", "DMX", "NTOA", "CHI2", "DMDATA", "TZRFRQ", "RNAMP", "RNIDX"}:
+            if p in {"START", "FINISH", "POSEPOCH", "DMEPOCH", "PEPOCH", "TZRMJD", "DM", "DMX", "NTOA", "CHI2", "DMDATA", "TZRFRQ", "RNAMP", "RNIDX", "CHI2R", "TRES", "SWP"}:
                 ignoring.append(p)
                 continue
             skip = False
@@ -1240,14 +1242,25 @@ def check_recentness_noise(tc):
         return None, None
 
     d = os.path.abspath(tc.get_noise_dir())
+    if glob.glob(os.path.join(d,"chain*.txt")):
+        log.warning(f'Ignoring chains directly in {d}. Chains should be in a subdirectory of {os.path.split(d)[1]} called {tc.get_source()}_{tc.get_toa_type().lower()}')
     noise_runs = [os.path.dirname(os.path.dirname(os.path.abspath(p))) 
                   for p in sorted(glob.glob(os.path.join(d,
                                                     "..",
-                                                    "*.Noise.*",
+                                                    "????-??-*",
                                                     tc.get_source()+"_"+tc.get_toa_type().lower(),
                                                     "chain*.txt")))]
     used_chains = os.path.basename(d)
     available_chains = [os.path.basename(n) for n in noise_runs]
+    
+    if not noise_runs:
+        log.warning('Looking for noise chains in working directory.')
+        noise_runs = [os.path.dirname(os.path.dirname(os.path.abspath(p))) for p in sorted(glob.glob(os.path.join(d, tc.get_source()+"_"+tc.get_toa_type().lower()+"*", "chain*.txt")))]
+        if len(noise_runs) > 1:
+            log.warning(f'{len(noise_runs)} noise chains found in the working directory. Using first in sorted list.')
+        used_chains = os.path.basename(noise_runs[-1])
+        available_chains = [os.path.basename(n) for n in noise_runs]
+
     log.info(f"Using: {used_chains}")
     log.info(f"Available: {' '.join(available_chains)}")
     try:
