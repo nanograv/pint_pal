@@ -1252,6 +1252,15 @@ def check_recentness_noise(tc):
                                                     "chain*.txt")))]
     used_chains = os.path.basename(d)
     available_chains = [os.path.basename(n) for n in noise_runs]
+    
+    if not noise_runs:
+        log.warning('Looking for noise chains in working directory.')
+        noise_runs = [os.path.dirname(os.path.dirname(os.path.abspath(p))) for p in sorted(glob.glob(os.path.join(d, tc.get_source()+"_"+tc.get_toa_type().lower()+"*", "chain*.txt")))]
+        if len(noise_runs) > 1:
+            log.warning(f'{len(noise_runs)} noise chains found in the working directory. Using first in sorted list.')
+        used_chains = os.path.basename(noise_runs[-1])
+        available_chains = [os.path.basename(n) for n in noise_runs]
+
     log.info(f"Using: {used_chains}")
     log.info(f"Available: {' '.join(available_chains)}")
     try:
