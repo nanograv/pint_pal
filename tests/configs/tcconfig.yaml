@@ -1,0 +1,25 @@
+source: B1855+09
+timing-model: B1855+09_NANOGrav_12yv4.gls.par
+tim-directory: tim/
+par-directory: par/
+toas:
+  - B1855+09_NANOGrav_12yv4.tim
+
+free-params: [
+              PX, ELONG, ELAT, PMELONG, PMELAT, F0, F1,
+              ]
+
+free-dmx: false
+toa-type: NB
+fitter: DownhillGLSFitter
+n-iterations: 20
+ephem: DE440
+bipm: BIPM2021
+
+ignore:
+  bad-toa:
+  - [53358.000051.3.000.000.9y.x.ff, False, False]
+  bad-toa-averaged:
+  - [puppi_55989_1855+09_0047.12y.x.ff, False, False]
+  bad-file:
+  - [53358.000053.3.000.000.9y.x.ff]
