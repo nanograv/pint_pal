@@ -32,6 +32,7 @@ dependencies = [
     "notebook",
     "seaborn",
     "gitpython",
+    "fastshermanmorrison-pulsar",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
