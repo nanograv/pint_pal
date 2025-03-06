@@ -88,9 +88,30 @@ def setup_sampling_groups(pta,
     return groups
 
 
+def get_mean_large_likelihoods(core, N=10):
+    '''
+    Calculate the mean of the top N likelihood samples from the chain.
+    This is an alternate to fixing the noise values in the timing model to
+    the MAP or the median.
+
+    Params
+    ======
+    core: la_forge.core object
+    N: int, number of top likelihood samples to average
+    Returns
+    =======
+    mean_data: np.array, mean of the top N likelihood samples
+    '''
+    chain = core.chain[core.burn:,:]
+    lnlike_idx = core.params.index('lnlike')
+    sorted_data = chain[chain[:, lnlike_idx].argsort()[::-1]]
+    return np.mean(sorted_data[:N,:],axis=0)
+
+
 def analyze_noise(
     chaindir="./noise_run_chains/",
-    use_noise_point='MAP',
+    use_noise_point='mean_large_likelihood',
+    likelihoods_to_average=10,
     burn_frac=0.25,
     save_corner=True,
     no_corner_plot=False,
@@ -105,8 +126,10 @@ def analyze_noise(
     ==========
     chaindir: path to enterprise noise run chain; Default: './noise_run_chains/'
     use_noise_point: point to use for noise analysis; Default: 'MAP'.
-        Options: 'MAP', 'median',
+        Options: 'MAP', 'median', 'mean_large_likelihood',
         Note that the MAP is the the same as the maximum likelihood value when all the priors are uniform. 
+    likelihoods_to_average: number of top likelihood samples to average; Default: 10
+        Only applicable if use_noise_point is 'mean_large_likelihood'.
     burn_frac: fraction of chain to use for burn-in; Default: 0.25
     save_corner: Flag to toggle saving of corner plots; Default: True
     no_corner_plot: Flag to toggle saving of corner plots; Default: False
@@ -309,6 +332,8 @@ def analyze_noise(
         noise_dict = noise_core.get_map_dict()
     elif use_noise_point == 'median':
         noise_dict = param_medians_dict
+    elif use_noise_point == 'mean_large_likelihood':
+        noise_dict = get_mean_large_likelihoods(noise_core, N=likelihoods_to_average)
     else:
         log.error(f"Invalid noise point {use_noise_point}. Must be 'MAP' or 'median' ")
         raise ValueError(f"Invalid noise point {use_noise_point}. Must be 'MAP' or 'median' ")
@@ -482,6 +507,12 @@ def model_noise(
                 x0, sampler_kwargs['n_iter'], SCAMweight=30, AMweight=15, DEweight=50, #**sampler_kwargs
             )
             log.info("Finished sampling.")
+    elif likelihood == "enterprise" and sampler == 'GibbsSampler':
+        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
+        raise NotImplementedError("GibbsSampler not yet implemented for enterprise likelihood")
+    elif likelihood == "discovery":
+        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
+        raise NotImplementedError("Discovery likelihood not yet implemented")
     else:
         log.error(
             f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination." \
