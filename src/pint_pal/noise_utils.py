@@ -130,8 +130,8 @@ def analyze_noise(
     try:
         noise_core = co.Core(chaindir=chaindir)
     except:
-        log.error(f"Could not load noise run from {chaindir}. Make sure the path is correct.
-                  Also make sure you have an up-to-date la_forge installation. ")
+        log.error(f"Could not load noise run from {chaindir}. Make sure the path is correct." \
+                  +"Also make sure you have an up-to-date la_forge installation. ")
         raise ValueError(f"Could not load noise run from {chaindir}. Check path and la_forge installation.")
     if sampler == 'PTMCMCSampler':
         # standard burn ins
