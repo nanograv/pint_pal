@@ -460,37 +460,32 @@ def get_dmx_epoch(toas: pint.toa.TOAs, weighted_average: bool = True) -> float:
     return epoch
 
 
-def get_dmx_freqs(toas: pint.toa.TOAs, allow_wideband: bool = True) -> Tuple[float, float]:
+def get_dmx_freqs(toas: pint.toa.TOAs, mask: np.ndarray, allow_wideband: bool = True) -> Tuple[float, float]:
     """
     Return the lowest and highest frequency of the TOAs in a DMX bin.
 
-    toas is a PINT TOA object of TOAs in the DMX bin.
+    toas is a PINT TOA object containing all the relevant TOAs.
+    mask is a boolean mask that identifies the TOAs in this DMX bin.
     allow_wideband=True will consider the -fratio and -bw flags in the
         determination of these frequencies, if toas contains wideband TOAs.
     """
 
-    freqs = toas.get_freqs().value  # MHz
-    high_freq = 0.0
-    low_freq = np.inf
+    freqs = toas.get_freqs()[mask].value  # MHz
+    high_freq = np.max(freqs, initial=0.)
+    low_freq = np.min(freqs, initial=np.inf)
 
-    # indices of wideband TOAs
-    iwb = np.arange(len(toas))[np.array(toas.get_flag_value('pp_dm')[0]) \
-            != None]
-    if allow_wideband:  # the following arrays will be empty if narrowband TOAs
-        fratios = toas[iwb].get_flag_value('fratio') # frequency ratio / WB TOA
-        fratios = np.array(fratios[0])
-        bws = toas[iwb].get_flag_value('bw')  # bandwidth [MHz] / WB TOA
-        bws = np.array(bws[0])
+    if allow_wideband:
+        # indices of wideband TOAs
+        wb_mask = mask & (np.array(toas.get_flag_value('pp_dm')[0]) != None)
+        # the following arrays will be empty if all TOAs are narrowband
+        fratios = toas.get_flag_value('fratio')[0] # frequency ratio / WB TOA
+        fratios = np.array(fratios)[wb_mask]
+        bws = toas.get_flag_value('bw')[0]  # bandwidth [MHz] / WB TOA
+        bws = np.array(bws)[wb_mask]
         low_freqs = bws.astype('float32') / (fratios.astype('float32') - 1)
+        low_freq = min(low_freq, np.min(low_freqs, initial=np.inf))
         high_freqs = bws.astype('float32') + low_freqs
-
-    for itoa in range(len(toas)):
-        if itoa in iwb and allow_wideband:
-            if low_freqs[itoa] < low_freq: low_freq = low_freqs[itoa]
-            if high_freqs[itoa] > high_freq: high_freq = high_freqs[itoa]
-        else:
-            if freqs[itoa] < low_freq: low_freq = freqs[itoa]
-            if freqs[itoa] > high_freq: high_freq = freqs[itoa]
+        high_freq = max(high_freq, np.max(high_freqs, initial=0.))
 
     return low_freq, high_freq
 
@@ -530,15 +525,15 @@ def check_frequency_ratio(
         low_mjd, high_mjd = dmx_range[0], dmx_range[1]
         mask = get_dmx_mask(toas, low_mjd, high_mjd,
                 strict_inclusion=strict_inclusion)
-        low_freq, high_freq = get_dmx_freqs(toas[mask],
+        low_freq, high_freq = get_dmx_freqs(toas, mask,
             allow_wideband=allow_wideband)
         if high_freq / low_freq >= frequency_ratio:  # passes
             toa_mask += mask
             dmx_range_mask[irange] = True
         else:  # fails
-            nfail_toas += len(toas[mask])
+            nfail_toas += np.sum(mask)
             if not quiet:
-                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that do not pass the frequency ratio test (TOAs with MJDs {toas[mask].get_mjds().value})."
+                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that do not pass the frequency ratio test (TOAs with MJDs {toas.get_mjds()[mask].value})."
                 log.info(msg)
 
     nfail_ranges = sum(np.logical_not(dmx_range_mask))
@@ -612,7 +607,7 @@ def check_solar_wind(
         low_mjd, high_mjd = dmx_range[0], dmx_range[1]
         mask = get_dmx_mask(toas, low_mjd, high_mjd,
                 strict_inclusion=strict_inclusion)
-        low_freq, high_freq = get_dmx_freqs(toas[mask],
+        low_freq, high_freq = get_dmx_freqs(toas, mask,
             allow_wideband=allow_wideband)
         # Convert to time delay, using calc from David's code (fixed)
         theta = np.pi - phis[mask]  # rad
@@ -626,7 +621,7 @@ def check_solar_wind(
             toa_mask += mask
             dmx_range_mask[irange] = True
             if not quiet:
-                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that are affected by the solar wind (TOAs with MJDs {toas[mask].get_mjds().value})."
+                msg = f"DMX range with pythonic index {irange}, correponding to the DMX range {dmx_ranges[irange]}, contains TOAs that are affected by the solar wind (TOAs with MJDs {toas.get_mjds()[mask].value})."
                 log.info(msg)
     nsolar = sum(dmx_range_mask)
     if not quiet and nsolar:
@@ -911,7 +906,7 @@ def make_dmx(
         high_mjd = max(dmx_ranges[irange])
         mask = get_dmx_mask(toas, low_mjd, high_mjd, strict_inclusion)
         epoch = get_dmx_epoch(toas[mask], weighted_average)
-        low_freq, high_freq = get_dmx_freqs(toas[mask], allow_wideband)
+        low_freq, high_freq = get_dmx_freqs(toas, mask, allow_wideband)
         dmx_parameter = DMXParameter()
         dmx_parameter.idx = idx
         dmx_parameter.val = dmx_vals[irange]

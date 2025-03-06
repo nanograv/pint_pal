@@ -157,9 +157,9 @@ class TimingConfiguration:
         m = model.get_model(par_path,allow_name_mixing=True)
         match = re.search(r"#\s+Created:\s+(\S+)", open(par_path).read())
         if match:
-            m.created_time = match.group(1)
-            log.info(f"Par file created: {m.created_time}")
-        m.file_mtime = Time(os.path.getmtime(par_path), format="unix").isot
+            m.meta['created_time'] = match.group(1)
+            log.info(f"Par file created: {m.meta['created_time']}")
+        m.meta['file_mtime'] = Time(os.path.getmtime(par_path), format="unix").isot
 
 
         if m.PSR.value != self.get_source():
