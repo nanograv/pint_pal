@@ -1,5 +1,4 @@
 import numpy as np, os, json
-import arviz as az
 from astropy import log
 from astropy.time import Time
 
@@ -12,36 +11,12 @@ import pint.models as pm
 from pint.models.parameter import maskParameter
 from pint.models.timing_model import Component
 
-import matplotlib as mpl
 import matplotlib.pyplot as pl
 
 import la_forge.core as co
-import la_forge.diagnostics as dg
-import la_forge.utils as lu
-
-# Imports necessary for e_e noise modeling functions
-import functools
-from collections import OrderedDict
-
-from enterprise.signals import parameter
-from enterprise.signals import selections
-from enterprise.signals import signal_base
-from enterprise.signals import white_signals
-from enterprise.signals import gp_signals
-from enterprise.signals import deterministic_signals
-from enterprise import constants as const
 
 from enterprise_extensions.sampler import group_from_params, get_parameter_groups
 from enterprise_extensions import model_utils
-from enterprise_extensions import deterministic
-from enterprise_extensions.timing import timing_block
-
-# from enterprise_extensions.blocks import (white_noise_block, red_noise_block)
-
-import types
-
-from enterprise.signals import utils
-from enterprise.signals import gp_priors as gpp
 
 
 def setup_sampling_groups(pta,
@@ -115,6 +90,7 @@ def setup_sampling_groups(pta,
 
 def analyze_noise(
     chaindir="./noise_run_chains/",
+    use_noise_point='MAP',
     burn_frac=0.25,
     save_corner=True,
     no_corner_plot=False,
@@ -128,6 +104,9 @@ def analyze_noise(
     Parameters
     ==========
     chaindir: path to enterprise noise run chain; Default: './noise_run_chains/'
+    use_noise_point: point to use for noise analysis; Default: 'MAP'.
+        Options: 'MAP', 'median',
+        Note that the MAP is the the same as the maximum likelihood value when all the priors are uniform. 
     burn_frac: fraction of chain to use for burn-in; Default: 0.25
     save_corner: Flag to toggle saving of corner plots; Default: True
     no_corner_plot: Flag to toggle saving of corner plots; Default: False
@@ -151,17 +130,15 @@ def analyze_noise(
     try:
         noise_core = co.Core(chaindir=chaindir)
     except:
-        log.error(f"Could not load noise run from {chaindir}. Make sure the path is correct. Also make sure you have an up-to-date la_forge installation. ")
+        log.error(f"Could not load noise run from {chaindir}. Make sure the path is correct.
+                  Also make sure you have an up-to-date la_forge installation. ")
         raise ValueError(f"Could not load noise run from {chaindir}. Check path and la_forge installation.")
-    if sampler == 'PTMCMCSampler' or sampler == "GibbsSampler":
+    if sampler == 'PTMCMCSampler':
         # standard burn ins
         noise_core.set_burn(burn_frac)
-    elif likelihood == 'discovery':
-        # the numpyro sampler already deals with the burn in
-        noise_core.set_burn(0)
     else:
         noise_core.set_burn(burn_frac)
-    chain = noise_core.chain
+    chain = noise_core.chain[int(burn_frac * len(noise_core.chain)) :, :]
     psr_name = noise_core.params[0].split("_")[0]
     pars =  np.array([p for p in noise_core.params if p not in ['lnlike', 'lnpost']])
     if len(pars)+2 != chain.shape[1]:
@@ -171,7 +148,7 @@ def analyze_noise(
     if chaindir_compare is not None:
         compare_core = co.Core(chaindir=chaindir) 
         compare_core.set_burn(noise_core.burn)
-        chain_compare = compare_core.chain
+        chain_compare = compare_core.chain[int(burn_frac * len(noise_core.chain)) :, :]
         pars_compare = np.array([p for p in compare_core.params if p not in ['lnlike', 'lnpost']])
         if len(pars_compare)+2 != chain_compare.shape[1]:
             chain_compare = chain_compare[:, :len(pars_compare)+2]
@@ -278,6 +255,8 @@ def analyze_noise(
         nrows = 5  # number of rows per page
 
         mp_idx = noise_core.map_idx
+        param_medians = [noise_core.get_param_median(p) for p in noise_core.params if p not in ['lnlike', 'lnpost']]
+        param_medians_dict = {p: noise_core.get_param_median(p) for p in noise_core.params if p not in ['lnlike', 'lnpost']}
         #mp_idx = np.argmax(chain[:, a])
         if chaindir_compare is not None:
             mp_compare_idx = compare_core.map_idx
@@ -298,7 +277,8 @@ def analyze_noise(
                 color="black",
                 label="Current",
             )
-            ax.axvline(chain[:, idx][mp_idx], ls="--", color="black")
+            ax.axvline(chain[:, idx][mp_idx], ls="--", color="black", label="MAP")
+            ax.axvline(param_medians[idx], ls="--", color="green", label="median")
             if chaindir_compare is not None:
                 ax.hist(
                     chain_compare[:, idx],
@@ -325,7 +305,13 @@ def analyze_noise(
         # ax[nr][nc].legend(loc = 'best')
         pl.show()
     
-    noise_dict = noise_core.get_map_dict()
+    if use_noise_point == 'MAP':
+        noise_dict = noise_core.get_map_dict()
+    elif use_noise_point == 'median':
+        noise_dict = param_medians_dict
+    else:
+        log.error(f"Invalid noise point {use_noise_point}. Must be 'MAP' or 'median' ")
+        raise ValueError(f"Invalid noise point {use_noise_point}. Must be 'MAP' or 'median' ")
 
     # Print bayes factor for red noise in pulsar
     rn_amp_nm = psr_name+"_red_noise_log10_A"
@@ -344,7 +330,7 @@ def model_noise(
     base_op_dir="./",
     model_kwargs={},
     sampler_kwargs={},
-    return_sampler=False,
+    return_sampler_without_sampling=False,
 ):
     """
     Setup enterprise or discovery likelihood and perform Bayesian inference on noise model
@@ -486,100 +472,22 @@ def model_noise(
             except:
                 log.warning("Failed to add draws from empirical distribution.")
         # Initial sample
-        x0 = np.hstack([p.sample() for p in pta.params])
-        # Start sampling
-        log.info("Beginnning to sample...")
-        samp.sample(
-            x0, sampler_kwargs['n_iter'], SCAMweight=30, AMweight=15, DEweight=50, #**sampler_kwargs
-        )
-        log.info("Finished sampling.")
-    ##############################################################
-    ##################     GibbsSampler   ########################
-    ##############################################################
-    elif likelihood == "enterprise" and sampler == "GibbsSampler":
-        try:
-            from enterprise_extensions.gibbs_sampling.gibbs_chromatic import GibbsSampler
-        except:
-            log.error("Please upgrade to the latest version of enterprise_extensions to use GibbsSampler.")
-            raise ValueError("Please install a version of enterprise extensions which contains the `gibbs_sampling` module.")
-        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
-        samp = GibbsSampler(
-                    e_psr,
-                    vary_wn=True,
-                    tm_marg=False,
-                    inc_ecorr=True,
-                    ecorr_type='kernel',
-                    vary_rn=model_kwargs['inc_rn'],
-                    rn_components=model_kwargs['rn_nfreqs'],
-                    vary_dm=model_kwargs['inc_dmgp'],
-                    dm_components=model_kwargs['dmgp_nfreqs'],
-                    vary_chrom=model_kwargs['inc_chromgp'],
-                    chrom_components=model_kwargs['chromgp_nfreqs'],
-                    noise_dict={},
-                    tnequad=model_kwargs['tnequad'],
-                    #**noise_kwargs,
-        )
-        log.info("Beginnning to sample...")
-        samp.sample(niter=sampler_kwargs['n_iter'], savepath=outdir)
-        log.info("Finished sampling.")
-        # sorta redundant to have both, but la_forge doesn't look for .npy files
-        chain = np.load(f'{outdir}/chain_1.npy')
-        np.savetxt(f'{outdir}/chain_1.txt', chain,)
-    #################################################################
-    ##################     discovery likelihood   ###################
-    #################################################################
-    elif likelihood == "discovery":
-        try: # make sure requisite packages are installed
-            import xarray as xr
-            import jax
-            from jax import numpy as jnp
-            import numpyro
-            from numpyro.infer import log_likelihood
-            from numpyro import distributions as dist
-            from numpyro import infer
-            import discovery as ds
-            from discovery import prior as ds_prior
-            from discovery.prior import (makelogtransform_uniform,
-                                         makelogprior_uniform,
-                                         sample_uniform)
-        except ImportError:
-            log.error("Please install the latest version of discovery, numpyro, and/or jax")
-            raise ValueError("Please install the latest version of discovery, numpyro, and/or jax")
-        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
-        os.makedirs(outdir, exist_ok=True)
-        with open(outdir+"model_kwargs.json", "w") as f:
-            json.dump(model_kwargs, f)
-        with open(outdir+"sampler_kwargs.json", "w") as f:
-            json.dump(sampler_kwargs, f)
-        samp, log_x, numpyro_model = setup_discovery_noise(e_psr, model_kwargs, sampler_kwargs)
-        # run the sampler
-        log.info("Beginnning to sample...")
-        samp.run(jax.random.key(42))
-        log.info("Finished sampling.")
-        # convert to a DataFrame
-        df = log_x.to_df(samp.get_samples()['par'])
-        # convert DataFrame to dictionary
-        samples_dict = df.to_dict(orient='list')
-        if sampler_kwargs['sampler'] != 'HMC-GIBBS':
-            log.info("Reconstructing Log Likelihood and Posterior from samples...")
-            ln_like = log_likelihood(numpyro_model, samp.get_samples(), parallel=True)['ll']
-            ln_prior = dist.Normal(0, 10).log_prob(samp.get_samples()['par']).sum(axis=-1)
-            ln_post = ln_like + ln_prior
-            samples_dict['lnlike'] = ln_like
-            samples_dict['lnpost'] = ln_post
-        else:
-            samples_dict['lnlike'] = None
-            samples_dict['lnpost'] = None
-        # convert dictionary to ArviZ InferenceData object
-        inference_data = az.from_dict(samples_dict)
-        # Save to NetCDF file which can be loaded into la_forge
-        inference_data.to_netcdf(outdir+"chain.nc")
+        # try to initialize the sampler to the maximum likelihood value from a previous run
+        # initialize to a random point if any points are missing
+        x0 = get_init_sample_from_chain_path(pta, chaindir=sampler_kwargs['empirical_distr'])
+        if not return_sampler_without_sampling:
+            # Start sampling
+            log.info("Beginnning to sample...")
+            samp.sample(
+                x0, sampler_kwargs['n_iter'], SCAMweight=30, AMweight=15, DEweight=50, #**sampler_kwargs
+            )
+            log.info("Finished sampling.")
     else:
         log.error(
             f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination." \
             + "\nCan only use enterprise with PTMCMCSampler or GibbsSampler."
         )
-    if return_sampler:
+    if return_sampler_without_sampling:
         return samp
 
 
@@ -592,6 +500,7 @@ def convert_to_RNAMP(value):
 
 def add_noise_to_model(
     model,
+    use_noise_point='MAP',
     burn_frac=0.25,
     save_corner=True,
     no_corner_plot=False,
@@ -607,6 +516,9 @@ def add_noise_to_model(
     Parameters
     ==========
     model: PINT (or tempo2) timing model
+    use_noise_point: point to use for noise analysis; Default: 'MAP'.
+        Options: 'MAP', 'median',
+        Note that the MAP is the the same as the maximum likelihood value when all the priors are uniform.
     burn_frac: fraction of chain to use for burn-in; Default: 0.25
     save_corner: Flag to toggle saving of corner plots; Default: True
     ignore_red_noise: Flag to manually force RN exclusion from timing model. When False,
@@ -940,109 +852,6 @@ def add_noise_to_model(
     return model
 
 
-def plot_free_specs(c0, freqs, fs_type='Red Noise'):
-    """
-    Plot free specs when using free spectral model
-    """
-    raise NotImplementedError("not yet implemented")
-    return None
-
-
-def setup_discovery_noise(psr,
-                          model_kwargs={},
-                          sampler_kwargs={}):
-    """
-    Setup the discovery likelihood with numpyro sampling for noise analysis
-    """
-    # set up the model
-    sampler = sampler_kwargs['sampler']
-    time_span = ds.getspan([psr])
-    # need 64-bit precision for PTA inference
-    numpyro.enable_x64()
-    # this updates the ds.stand_priordict object
-    ds.priordict_standard.update(prior_dictionary_updates())
-    model_components = [
-        psr.residuals,
-        ds.makegp_timing(psr, svd=True),
-        ds.makenoise_measurement(psr),
-        ds.makegp_ecorr(psr),
-        ]
-    if model_kwargs['inc_rn']:
-        if model_kwargs['rn_psd'] == 'powerlaw':
-            model_components.append(ds.makegp_fourier(psr, ds.powerlaw, model_kwargs['rn_nfreqs'], T=time_span, name='red_noise'))
-        elif model_kwargs['rn_psd'] == 'free_spectral':
-            model_components.append(ds.makegp_fourier(psr, ds.free_spectral, model_kwargs['rn_nfreqs'], T=time_span, name='red_noise'))
-    if model_kwargs['inc_dmgp']:
-        if model_kwargs['dmgp_psd'] == 'powerlaw':
-            model_components.append(ds.makegp_fourier(psr, ds.powerlaw, model_kwargs['dmgp_nfreqs'], T=time_span, name='dm_gp'))
-        elif model_kwargs['dmgp_psd'] == 'free_spectral':
-            model_components.append(ds.makegp_fourier(psr, ds.free_spectral, model_kwargs['dmgp_nfreqs'], T=time_span, name='dm_gp'))
-    if model_kwargs['inc_chromgp']:
-        if model_kwargs['chrom_psd'] == 'powerlaw':
-            model_components.append(ds.makegp_fourier(psr, ds.powerlaw, model_kwargs['chromgp_nfreqs'], T=time_span, name='chrom_gp'))
-        elif model_kwargs['chrom_psd'] == 'free_spectral':
-            model_components.append(ds.makegp_fourier(psr, ds.free_spectral, model_kwargs['chromgp_nfreqs'], T=time_span, name='chrom_gp'))
-    psl = ds.PulsarLikelihood(model_components)
-    ## this prior transform is no longer required and should be removed
-    prior = ds_prior.makelogprior_uniform(psl.logL.params, ds.priordict_standard)
-    log_x = makelogtransform_uniform(psl.logL)
-    # x0 = sample_uniform(psl.logL.params)
-    if sampler == 'HMC-Gibbs':
-        try:
-            from discovery.gibbs import setup_single_psr_hmc_gibbs
-        except ImportError:
-            log.error("Need to have most up-to-date version of discovery installed.")
-            raise ValueError("Make sure proper version of discovery is imported")
-        numpyro_model = None # this doesnt get used for HMC-Gibbs
-        gibbs_hmc_kernel = setup_single_psr_hmc_gibbs(
-                    psrl=psl, psrs=psr,
-                    priordict=ds.priordict_standard,
-                    invhdorf=None, nuts_kwargs={})
-        sampler = infer.MCMC(gibbs_hmc_kernel,
-                    num_warmup=sampler_kwargs['num_warmup'],
-                    num_samples=sampler_kwargs['num_samples'],
-                    num_chains=sampler_kwargs['num_chains'], 
-                    chain_method=sampler_kwargs['chain_method'],
-                    progress_bar=True,
-                )
-    elif sampler == 'NUTS':
-        def numpyro_model():
-            params = jnp.array(numpyro.sample("par", dist.Normal(0,10).expand([len(log_x.params)])))
-            numpyro.factor("ll", log_x(params))
-        nuts_kernel = infer.NUTS(numpyro_model,
-                                 max_tree_depth=sampler_kwargs['max_tree_depth'],
-                                 dense_mass=sampler_kwargs['dense_mass'],
-                                 forward_mode_differentiation=False,
-                                 target_accept_prob=0.99)
-        sampler = infer.MCMC(nuts_kernel,
-                    num_warmup=sampler_kwargs['num_warmup'],
-                    num_samples=sampler_kwargs['num_samples'],
-                    num_chains=sampler_kwargs['num_chains'], 
-                    chain_method=sampler_kwargs['chain_method'],
-                    progress_bar=True,
-                )
-    elif sampler == 'HMC':
-        def numpyro_model():
-            params = jnp.array(numpyro.sample("par", dist.Normal(0,10).expand([len(log_x.params)])))
-            numpyro.factor("ll", log_x(params))
-        hmc_kernel = infer.HMC(numpyro_model, num_steps=sampler_kwargs['num_steps'])
-        sampler = infer.MCMC(hmc_kernel,
-                    num_warmup=sampler_kwargs['num_warmup'],
-                    num_samples=sampler_kwargs['num_samples'],
-                    num_chains=sampler_kwargs['num_chains'], 
-                    chain_method=sampler_kwargs['chain_method'],
-                    progress_bar=True,
-                )
-    else:
-        log.error(
-            f"Invalid likelihood ({sampler_kwargs['likelihood']}) and sampler ({sampler_kwargs['sampler']}) combination." \
-            + "\nCan only use discovery with 'HMC', 'HMC-Gibbs', or 'NUTS'."
-        )
-        
-    
-    return sampler, log_x, numpyro_model
-
-
 def test_equad_convention(pars_list):
     """
     If (t2/tn)equad present, report convention used.
@@ -1070,14 +879,51 @@ def test_equad_convention(pars_list):
         return None
 
 
-def prior_dictionary_updates():
-    return {
-            '(.*_)?dm_gp_log10_A': [-20, -11],
-            '(.*_)?dm_gp_gamma': [0, 7],
-            '(.*_)?chrom_gp_log10_A': [-20, -11],
-            '(.*_)?chrom_gp_gamma': [0, 7],
-           }
-    
+def get_init_sample_from_chain_path(pta, chaindir=None, json_path=None):
+    """
+    Get the initial sample from a chain directory or json file path.
+    If parameters are missing, draw randomly from the prior
+    Parameters
+    ==========
+    pta: enterprise PTA object
+    chaindir: path to chain directory
+    json_path: path to json file containing starting point
+    Returns
+    =======
+    x0: initial sample
+    """
+    try:
+        if chaindir is not None:
+            core = co.Core(chaindir)
+            starting_point = core.get_map_dict()
+            x0_dict = {}
+            for prior, par_name in zip(pta.params, pta.param_names):
+                if par_name in starting_point.keys():
+                    x0_dict.update({par_name: starting_point[par_name]})
+                else:
+                    x0_dict.update({par_name:  prior.sample()})
+            x0 = np.hstack([x0_dict[p] for p in pta.param_names])
+        elif json_path is not None:
+            with open(json_path, 'r') as fin:
+                starting_point = json.load(fin)
+            x0_dict = {}
+            for prior, par_name in zip(pta.params, pta.param_names):
+                if par_name in starting_point.keys():
+                    x0_dict.update({par_name: starting_point[par_name]})
+                else:
+                    x0_dict.update({par_name:  prior.sample()})
+            x0 = np.hstack([x0_dict[p] for p in pta.param_names])
+        else:
+            x0 = np.hstack([p.sample() for p in pta.params])
+    except:
+        x0 = np.hstack([p.sample() for p in pta.params])
+        x0_dict = None
+        log.warning(
+            f"Unable to initialize sampler from chain directory or json file. Drawing random initial sample."
+            )
+    return x0
+
+
 def get_model_and_sampler_default_settings():
     model_defaults = {
         # white noise
@@ -1110,7 +956,7 @@ def get_model_and_sampler_default_settings():
         'likelihood': 'enterprise',
         'sampler': 'PTMCMCSampler',
         # ptmcmc kwargs
-        'n_iter': 2e5,
+        'n_iter': 2.5e5,
         'empirical_distr': None,
         # numpyro kwargs
         'num_steps': 25,
