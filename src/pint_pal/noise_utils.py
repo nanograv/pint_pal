@@ -111,7 +111,7 @@ def get_mean_large_likelihoods(core, N=10):
 def analyze_noise(
     chaindir="./noise_run_chains/",
     use_noise_point='mean_large_likelihood',
-    likelihoods_to_average=10,
+    likelihoods_to_average=50,
     burn_frac=0.25,
     save_corner=True,
     no_corner_plot=False,
@@ -128,7 +128,7 @@ def analyze_noise(
     use_noise_point: point to use for noise analysis; Default: 'MAP'.
         Options: 'MAP', 'median', 'mean_large_likelihood',
         Note that the MAP is the the same as the maximum likelihood value when all the priors are uniform. 
-    likelihoods_to_average: number of top likelihood samples to average; Default: 10
+    likelihoods_to_average: number of top likelihood samples to average; Default: 50
         Only applicable if use_noise_point is 'mean_large_likelihood'.
     burn_frac: fraction of chain to use for burn-in; Default: 0.25
     save_corner: Flag to toggle saving of corner plots; Default: True
