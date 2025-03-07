@@ -595,10 +595,12 @@ def add_noise_to_model(
     log.info(f"Using existing noise analysis results in {chaindir}")
     log.info("Adding new noise parameters to model.")
     noise_core, noise_dict, rn_bf = analyze_noise(
-        chaindir,
-        burn_frac,
-        save_corner,
-        no_corner_plot,
+        chaindir=chaindir,
+        use_noise_point='mean_large_likelihood',
+        likelihoods_to_average=50,
+        burn_frac=0.25,
+        save_corner=save_corner,
+        no_corner_plot=no_corner_plot,
         chaindir_compare=chaindir_compare,
     )
     chainfile = chaindir + "chain_1.txt"
