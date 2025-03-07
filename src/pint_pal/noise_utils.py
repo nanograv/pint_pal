@@ -448,17 +448,17 @@ def model_noise(
                 dmjump_var=False,
                 wb_efac_sigma=wb_efac_sigma,
                 # DM GP
-                dm_var=model_kwargs['inc_dmgp'],
-                dm_Nfreqs=model_kwargs['dmgp_nfreqs'],
+                #dm_var=model_kwargs['inc_dmgp'],
+                #dm_Nfreqs=model_kwargs['dmgp_nfreqs'],
                 # CHROM GP
-                chrom_gp=model_kwargs['inc_chromgp'],
-                chrom_Nfreqs=model_kwargs['chromgp_nfreqs'],
-                chrom_gp_kernel='diag', # Fourier basis chromg_gp
+                #chrom_gp=model_kwargs['inc_chromgp'],
+                #chrom_Nfreqs=model_kwargs['chromgp_nfreqs'],
+                #chrom_gp_kernel='diag', # Fourier basis chromg_gp
                 # DM SOLAR WIND
                 #dm_sw_deter=model_kwargs['inc_sw_deter'],
                 #ACE_prior=model_kwargs['ACE_prior'],
                 # can pass extra signals in here
-                extra_sigs=model_kwargs['extra_sigs'],
+                #extra_sigs=model_kwargs['extra_sigs'],
             )
             pta.set_default_params({})
         else:
