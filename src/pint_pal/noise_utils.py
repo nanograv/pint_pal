@@ -108,7 +108,7 @@ def get_mean_large_likelihoods(core, N=10):
     lnlike_idx = core.params.index('lnlike')
     sorted_data = chain[chain[:, lnlike_idx].argsort()[::-1]]
     vals = np.mean(sorted_data[:N,:],axis=0)
-    return {p: vals[par] for p, par in enumerate(core.params)}
+    return {par: vals[p] for p, par in enumerate(core.params)}
 
 
 def analyze_noise(
