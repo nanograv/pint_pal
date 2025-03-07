@@ -163,7 +163,7 @@ def analyze_noise(
         noise_core.set_burn(burn_frac)
     else:
         noise_core.set_burn(burn_frac)
-    chain = noise_core.chain[int(burn_frac * len(noise_core.chain)) :, :-2]
+    chain = noise_core.chain[int(burn_frac * len(noise_core.chain)) :, :-4]
     psr_name = noise_core.params[0].split("_")[0]
     pars =  np.array([p for p in noise_core.params if p not in ['lnlike', 'lnpost', 'chain_accept', 'pt_chain_accept']])
     # if len(pars)+2 != chain.shape[1]:
@@ -171,12 +171,12 @@ def analyze_noise(
     
     # load in same for comparison noise model
     if chaindir_compare is not None:
-        compare_core = co.Core(chaindir=chaindir) 
+        compare_core = co.Core(chaindir=chaindir)
         compare_core.set_burn(noise_core.burn)
-        chain_compare = compare_core.chain[int(burn_frac * len(noise_core.chain)) :, :]
+        chain_compare = compare_core.chain[int(burn_frac * len(noise_core.chain)) :, :-4]
         pars_compare = np.array([p for p in compare_core.params if p not in ['lnlike', 'lnpost']])
-        if len(pars_compare)+2 != chain_compare.shape[1]:
-            chain_compare = chain_compare[:, :len(pars_compare)+2]
+        # if len(pars_compare)+2 != chain_compare.shape[1]:
+        #     chain_compare = chain_compare[:, :len(pars_compare)+2]
 
         psr_name_compare = pars_compare[0].split("_")[0]
         if psr_name_compare != psr_name:
