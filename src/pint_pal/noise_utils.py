@@ -1,4 +1,4 @@
-import numpy as np, os, json
+import numpy as np, os, json, itertools
 from astropy import log
 from astropy.time import Time
 
@@ -17,6 +17,8 @@ import la_forge.core as co
 
 from enterprise_extensions.sampler import group_from_params, get_parameter_groups
 from enterprise_extensions import model_utils
+from enterprise_extensions.empirical_distr import (EmpiricalDistribution1D,
+                                                   EmpiricalDistribution2D)
 
 
 def setup_sampling_groups(pta,
@@ -487,8 +489,13 @@ def model_noise(
         #######
         # setup sampler using enterprise_extensions
         if sampler_kwargs['empirical_distr'] is not None:
-            log.info(f"Attempting to set up sampler with empirical distribution from {sampler_kwargs['empirical_distr']}")
-            emp_dist = sampler_kwargs['empirical_distr']
+            log.info(f"Attempting to create empirical distribution from {sampler_kwargs['empirical_distr']}")
+            try:
+                core = co.Core(chaindir=sampler_kwargs['empirical_distr'])
+                emp_dist = make_emp_distr(core)
+            except:
+                log.warning(f"Failed to create empirical distribution from {sampler_kwargs['empirical_distr']}... check path.")
+                emp_dist = None
         else:
             log.warning("Setting up sampler without empirical distributions...consider adding one for faster sampling...")
             emp_dist = None
@@ -960,6 +967,47 @@ def get_init_sample_from_chain_path(pta, chaindir=None, json_path=None):
             f"Unable to initialize sampler from chain directory or json file. Drawing random initial sample."
             )
     return x0
+
+def make1d(par, samples, bins=None, nbins=81):
+    if bins is None:
+        bins = np.linspace(min(samples), max(samples), nbins)
+        
+    return EmpiricalDistribution1D(par, samples, bins)
+
+def make2d(pars, samples, bins=None, nbins=81):
+    idx = [0,1]
+    if bins is None:
+        bins = [np.linspace(min(samples[:, i]), max(samples[:, i]), nbins) for i in idx]
+    return EmpiricalDistribution2D(pars, samples.T, bins)
+
+
+def make_emp_distr(core):
+    """
+    Make empirical distributions for all parameters in core.
+    Parameters
+    ==========
+    core: enterprise_extensions.core.Core object
+
+    Returns
+    =======
+    dists: list of EmpiricalDistribution1D and EmpiricalDistribution2D objects
+    """
+    types = ['dm_gp', 'chrom_gp', 'red_noise', 'ecorr', 'chrom_s1yr', 'dm_s1yr', 'exp',]
+    # made 1d hist for everything
+    dists = [make1d(par, core(par)) for par in core.params[:-4] if 'chrom_gp_idx' not in par]
+    # get list of parameters minus chrom_gp_idx cuz this prior is weird.
+    params = [p for p in core.params if 'chrom_gp_idx' not in p]
+    groups = {ii: [par for par in params if ii in par] for ii in types}
+    # make 2ds for various related parameter subgroups
+    for group in groups.values():
+        _ = [dists.append(make2d(pars,core(list(pars)))) for pars in list(itertools.combinations(group,2)) if len(group)>1]
+    # make 2d cross groups
+    _ = [[dists.append(make2d([ecr, dm], core([ecr, dm]))) for ecr in groups['ecorr']] for dm in groups['dm_gp']]
+    _ = [[dists.append(make2d([dm, chrom], core([dm, chrom]))) for dm in groups['dm_gp']] for chrom in groups['chrom_gp']]
+    
+    return dists
+
+
 
 
 def get_model_and_sampler_default_settings():
