@@ -447,6 +447,7 @@ def model_noise(
                 use_dmdata=False,
                 dmjump_var=False,
                 wb_efac_sigma=wb_efac_sigma,
+                tm_svd=True,
                 # DM GP
                 #dm_var=model_kwargs['inc_dmgp'],
                 #dm_Nfreqs=model_kwargs['dmgp_nfreqs'],
@@ -485,13 +486,19 @@ def model_noise(
         groups = setup_sampling_groups(pta, write_groups=False, outdir=outdir)
         #######
         # setup sampler using enterprise_extensions
+        if sampler_kwargs['empirical_distr'] is not None:
+            log.info(f"Attempting to set up sampler with empirical distribution from {sampler_kwargs['empirical_distr']}")
+            emp_dist = sampler_kwargs['empirical_distr']
+        else:
+            log.warning("Setting up sampler without empirical distributions...consider adding one for faster sampling...")
+            emp_dist = None
         samp = ee_sampler.setup_sampler(pta,
                                         outdir=outdir,
                                         resume=resume,
                                         groups=groups,
-                                        empirical_distr = sampler_kwargs['empirical_distr']
+                                        empirical_distr = emp_dist,
         )
-        if sampler_kwargs['empirical_distr'] is not None:
+        if emp_dist is not None:
             try:
                 samp.addProposalToCycle(samp.jp.draw_from_empirical_distr, 50)
             except:
@@ -981,7 +988,8 @@ def get_model_and_sampler_default_settings():
         'ACE_prior': False,
         # 
         'extra_sigs': None,
-        # path to empirical distribution
+        # misc
+        'tm_svd': True
         }
     sampler_defaults = {
         'likelihood': 'enterprise',
