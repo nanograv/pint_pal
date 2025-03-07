@@ -163,11 +163,11 @@ def analyze_noise(
         noise_core.set_burn(burn_frac)
     else:
         noise_core.set_burn(burn_frac)
-    chain = noise_core.chain[int(burn_frac * len(noise_core.chain)) :, :]
+    chain = noise_core.chain[int(burn_frac * len(noise_core.chain)) :, :-2]
     psr_name = noise_core.params[0].split("_")[0]
-    pars =  np.array([p for p in noise_core.params if p not in ['lnlike', 'lnpost']])
-    if len(pars)+2 != chain.shape[1]:
-        chain = chain[:, :len(pars)+2]
+    pars =  np.array([p for p in noise_core.params if p not in ['lnlike', 'lnpost', 'chain_accept', 'pt_chain_accept']])
+    # if len(pars)+2 != chain.shape[1]:
+    #     chain = chain[:, :len(pars)+2]
     
     # load in same for comparison noise model
     if chaindir_compare is not None:
@@ -489,12 +489,12 @@ def model_noise(
         #######
         # setup sampler using enterprise_extensions
         if sampler_kwargs['empirical_distr'] is not None:
-            log.info(f"Attempting to create empirical distribution from {sampler_kwargs['empirical_distr']}")
+            log.info(f"Attempting to create empirical distributions from {sampler_kwargs['empirical_distr']}")
             try:
                 core = co.Core(chaindir=sampler_kwargs['empirical_distr'])
                 emp_dist = make_emp_distr(core)
             except:
-                log.warning(f"Failed to create empirical distribution from {sampler_kwargs['empirical_distr']}... check path.")
+                log.warning(f"Failed to create empirical distributions ... check path.")
                 emp_dist = None
         else:
             log.warning("Setting up sampler without empirical distributions...consider adding one for faster sampling...")
