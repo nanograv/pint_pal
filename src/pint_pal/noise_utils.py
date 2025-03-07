@@ -175,7 +175,7 @@ def analyze_noise(
         compare_core = co.Core(chaindir=chaindir)
         compare_core.set_burn(noise_core.burn)
         chain_compare = compare_core.chain[int(burn_frac * len(noise_core.chain)) :, :-4]
-        pars_compare = np.array([p for p in compare_core.params if p not in ['lnlike', 'lnpost']])
+        pars_compare = np.array([p for p in compare_core.params if p not in ['lnlike', 'lnpost', 'chain_accept', 'pt_chain_accept']])
         # if len(pars_compare)+2 != chain_compare.shape[1]:
         #     chain_compare = chain_compare[:, :len(pars_compare)+2]
 
