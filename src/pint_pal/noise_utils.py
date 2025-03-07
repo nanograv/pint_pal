@@ -304,7 +304,13 @@ def analyze_noise(
                 label="Current",
             )
             ax.axvline(chain[:, idx][mp_idx], ls="--", color="black", label="MAP")
-            ax.axvline(param_medians[idx], ls="--", color="green", label="median")
+            if use_noise_point == 'mean_large_likelihood':
+                lbl = "mean of 50 MLVs"
+            if use_noise_point == 'MAP':
+                lbl = "MAP"
+            if use_noise_point == 'median':
+                lbl = "median"
+            ax.axvline(param_medians[idx], ls="--", color="green", label=lbl)
             if chaindir_compare is not None:
                 ax.hist(
                     chain_compare[:, idx],
@@ -329,6 +335,7 @@ def analyze_noise(
 
         # Wasn't working before, but how do I implement a legend?
         # ax[nr][nc].legend(loc = 'best')
+        pl.legend(loc="best")
         pl.show()
     
     if use_noise_point == 'MAP':
@@ -339,7 +346,7 @@ def analyze_noise(
         noise_dict = get_mean_large_likelihoods(noise_core, N=likelihoods_to_average)
     else:
         log.error(f"Invalid noise point {use_noise_point}. Must be 'MAP' or 'median' ")
-        raise ValueError(f"Invalid noise point {use_noise_point}. Must be 'MAP' or 'median' ")
+        raise ValueError(f"Invalid noise point {use_noise_point}. Must be 'MAP' or 'median' or 'mean_large_likelihood' ")
 
     # Print bayes factor for red noise in pulsar
     rn_amp_nm = psr_name+"_red_noise_log10_A"
