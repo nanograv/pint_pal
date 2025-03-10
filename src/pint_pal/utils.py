@@ -1238,7 +1238,7 @@ def check_recentness_noise(tc):
         name of the most recent available set of chains
     """
     if not tc.get_noise_dir():
-        log.warning(f"Yaml file does not have a noise-dir field (or it is unset).")
+        log.warning(f"Yaml file does not have a noise-dir field (or it is unset). Will check working directory.")
         return None, None
 
     d = os.path.abspath(tc.get_noise_dir())
@@ -1254,12 +1254,18 @@ def check_recentness_noise(tc):
     available_chains = [os.path.basename(n) for n in noise_runs]
     
     if not noise_runs:
-        log.warning('Looking for noise chains in working directory.')
-        noise_runs = [os.path.dirname(os.path.dirname(os.path.abspath(p))) for p in sorted(glob.glob(os.path.join(d, tc.get_source()+"_"+tc.get_toa_type().lower()+"*", "chain*.txt")))]
-        if len(noise_runs) > 1:
-            log.warning(f'{len(noise_runs)} noise chains found in the working directory. Using first in sorted list.')
-            used_chains = os.path.basename(noise_runs[-1])
-            available_chains = [os.path.basename(n) for n in noise_runs]
+        log.warning('Looking for noise chains in given noise-dir, but does not follow current conventions.')
+        noise_runs = [os.path.dirname(os.path.abspath(p)) for p in sorted(glob.glob(os.path.join(d, tc.get_source()+"_"+tc.get_toa_type().lower()+"*", "chain*.txt")))]
+        if len(noise_runs) > 0:
+            if len(noise_runs) == 1:
+                log.warning(f'{len(noise_runs)} noise chain found in noise-dir.')
+            else:
+                log.warning(f'{len(noise_runs)} noise chains found in noise-dir. Using first in sorted list.')
+            used_chains = os.path.abspath(noise_runs[0])
+            available_chains = [os.path.abspath(n) for n in noise_runs]
+    
+    if not noise_runs:
+        log.warning('No chains found. Will search working directory and apply if found.')
 
     log.info(f"Using: {used_chains}")
     log.info(f"Available: {' '.join(available_chains)}")
