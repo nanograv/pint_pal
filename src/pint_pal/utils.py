@@ -1254,13 +1254,13 @@ def check_recentness_noise(tc):
     available_chains = [os.path.basename(n) for n in noise_runs]
     
     if not noise_runs:
-        log.warning('Looking for noise chains in given noise-dir, but does not follow current conventions.')
+        log.warning(f'Looking for noise chains in given noise-dir ({d}), but does not follow current conventions (shared chains in /nanograv/share/20yr/noise-chains/<PSR B/J NAME>/<YYYY-MM-DD>/).')
         noise_runs = [os.path.dirname(os.path.abspath(p)) for p in sorted(glob.glob(os.path.join(d, tc.get_source()+"_"+tc.get_toa_type().lower()+"*", "chain*.txt")))]
         if len(noise_runs) > 0:
             if len(noise_runs) == 1:
-                log.info(f'{len(noise_runs)} noise chain found in noise-dir.')
+                log.info(f'{len(noise_runs)} noise chain found in noise-dir ({d}).')
             else:
-                log.info(f'{len(noise_runs)} noise chains found in noise-dir. Using first in sorted list.')
+                log.info(f'{len(noise_runs)} noise chains found in noise-dir ({d}). Using first in sorted list.')
             used_chains = os.path.abspath(noise_runs[0])
             available_chains = [os.path.abspath(n) for n in noise_runs]
     
