@@ -516,7 +516,7 @@ def model_noise(
                 log.warning(f"Failed to create empirical distributions from successfully loaded directory.")
                 emp_dist = None
         else:
-            log.warning("Setting up sampler without empirical distributions...consider adding one for faster sampling...")
+            log.warning("Setting up sampler without empirical distributions... Consider adding one for faster sampling by adding `emp_distribution`: /<path to old noise chain>/<psr name>_nb to the `noise_run`->`inference` section of the config file.")
             emp_dist = None
         samp = ee_sampler.setup_sampler(pta,
                                         outdir=outdir,
