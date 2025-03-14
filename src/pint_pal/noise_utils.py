@@ -1,4 +1,4 @@
-import numpy as np, os, json, itertools
+import numpy as np, os, json, itertools, time
 from astropy import log
 from astropy.time import Time
 
@@ -533,6 +533,10 @@ def model_noise(
         # try to initialize the sampler to the maximum likelihood value from a previous run
         # initialize to a random point if any points are missing
         x0 = get_init_sample_from_chain_path(pta, chaindir=sampler_kwargs['empirical_distr'])
+        try:
+            log_single_likelihood_evaluation_time(pta, sampler_kwargs)
+        except:
+            log.warning("Failed to time likelihood.")
         if not return_sampler_without_sampling:
             # Start sampling
             log.info("Beginnning to sample...")
@@ -974,6 +978,7 @@ def get_init_sample_from_chain_path(pta, chaindir=None, json_path=None):
     """
     try:
         if chaindir is not None:
+            log.info(f"Attempting to initialize sampler from MAP of chain directory {chaindir}")
             core = co.Core(chaindir)
             starting_point = core.get_map_dict()
             x0_dict = {}
@@ -1015,7 +1020,6 @@ def make2d(pars, samples, bins=None, nbins=81):
         bins = [np.linspace(min(samples[:, i]), max(samples[:, i]), nbins) for i in idx]
     return EmpiricalDistribution2D(pars, samples.T, bins)
 
-
 def make_emp_distr(core):
     """
     Make empirical distributions for all parameters in core.
@@ -1042,6 +1046,19 @@ def make_emp_distr(core):
     
     return dists
 
+def log_single_likelihood_evaluation_time(pta, sampler_kwargs):
+    """
+    Log the time it takes to evaluate the likelihood once.
+    """
+    log.info("Building the enterprise likelihood and estimating evaluation time...")
+    x1 = [[p.sample() for p in pta.params] for _ in range(11)]
+    pta.get_lnlikelihood(x1[0])
+    start_time = time.time()
+    [pta.get_lnlikelihood(x1[i]) for i in range(1,11)]
+    end_time = time.time()
+    slet = (end_time-start_time)/10
+    log.info(f"Single likelihood evaluation time is approximately {slet:.1e} seconds")
+    log.info(f"4 times {sampler_kwargs['n_iter']} likelihood evaluations will take approximately: {4*slet*float(sampler_kwargs['n_iter'])/3600/24:.2f} days")
 
 
 
