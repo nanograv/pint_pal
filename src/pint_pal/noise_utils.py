@@ -500,12 +500,12 @@ def model_noise(
         groups = setup_sampling_groups(pta, write_groups=False, outdir=outdir)
         #######
         # setup sampler using enterprise_extensions
-        if sampler_kwargs['empirical_distr'] is not None:
+        if sampler_kwargs['emp_distribution'] is not None:
             try:
-                log.info(f"Attempting to load chains for an empirical distributions from {sampler_kwargs['empirical_distr']}")
-                core = co.Core(chaindir=sampler_kwargs['empirical_distr'])
+                log.info(f"Attempting to load chains for an empirical distributions from {sampler_kwargs['emp_distribution']}")
+                core = co.Core(chaindir=sampler_kwargs['emp_distribution'])
             except:
-                log.warning(f"Failed to load chains for empirical distributions from {sampler_kwargs['empirical_distr']}.\nCheck path. Need absolute path to chain directory with `pars.txt` and `chain_1.txt`. files")
+                log.warning(f"Failed to load chains for empirical distributions from {sampler_kwargs['emp_distribution']}.\nCheck path. Need absolute path to chain directory with `pars.txt` and `chain_1.txt`. files")
                 core = None
             try:
                 if core is not None:
@@ -532,7 +532,7 @@ def model_noise(
         # Initial sample
         # try to initialize the sampler to the maximum likelihood value from a previous run
         # initialize to a random point if any points are missing
-        x0 = get_init_sample_from_chain_path(pta, chaindir=sampler_kwargs['empirical_distr'])
+        x0 = get_init_sample_from_chain_path(pta, chaindir=sampler_kwargs['emp_distribution'])
         try:
             log_single_likelihood_evaluation_time(pta, sampler_kwargs)
         except:
@@ -1096,7 +1096,7 @@ def get_model_and_sampler_default_settings():
         'sampler': 'PTMCMCSampler',
         # ptmcmc kwargs
         'n_iter': 2.5e5,
-        'empirical_distr': None,
+        'emp_distribution': None,
         # numpyro kwargs
         'num_steps': 25,
         'num_warmup': 500,
