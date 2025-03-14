@@ -446,7 +446,7 @@ def model_noise(
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         # Setup a single pulsar PTA using enterprise_extensions
         # Ensure n_iter is an integer
-        sampler_kwargs['n_iter'] = int(sampler_kwargs['n_iter'])
+        sampler_kwargs['n_iter'] = int(float(sampler_kwargs['n_iter']))
 
         if sampler_kwargs['n_iter'] < 1e4:
             log.warning(
