@@ -501,12 +501,19 @@ def model_noise(
         #######
         # setup sampler using enterprise_extensions
         if sampler_kwargs['empirical_distr'] is not None:
-            log.info(f"Attempting to create empirical distributions from {sampler_kwargs['empirical_distr']}")
             try:
+                log.info(f"Attempting to load chains for an empirical distributions from {sampler_kwargs['empirical_distr']}")
                 core = co.Core(chaindir=sampler_kwargs['empirical_distr'])
-                emp_dist = make_emp_distr(core)
             except:
-                log.warning(f"Failed to create empirical distributions ... check path.")
+                log.warning(f"Failed to load chains for empirical distributions from {sampler_kwargs['empirical_distr']}.\nCheck path. Need absolute path to chain directory with `pars.txt` and `chain_1.txt`. files")
+                core = None
+            try:
+                if core is not None:
+                    emp_dist = make_emp_distr(core)
+                    log.info(f"Successfully created empirical distributions !!")
+                    log.info("Setting up sampler ...")
+            except:
+                log.warning(f"Failed to create empirical distributions from successfully loaded directory.")
                 emp_dist = None
         else:
             log.warning("Setting up sampler without empirical distributions...consider adding one for faster sampling...")
