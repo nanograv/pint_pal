@@ -1,4 +1,4 @@
-import numpy as np, os, json, itertools
+import numpy as np, os, json, itertools, time
 from astropy import log
 from astropy.time import Time
 
@@ -446,7 +446,7 @@ def model_noise(
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         # Setup a single pulsar PTA using enterprise_extensions
         # Ensure n_iter is an integer
-        sampler_kwargs['n_iter'] = int(sampler_kwargs['n_iter'])
+        sampler_kwargs['n_iter'] = int(float(sampler_kwargs['n_iter']))
 
         if sampler_kwargs['n_iter'] < 1e4:
             log.warning(
@@ -500,16 +500,23 @@ def model_noise(
         groups = setup_sampling_groups(pta, write_groups=False, outdir=outdir)
         #######
         # setup sampler using enterprise_extensions
-        if sampler_kwargs['empirical_distr'] is not None:
-            log.info(f"Attempting to create empirical distributions from {sampler_kwargs['empirical_distr']}")
+        if sampler_kwargs['emp_distribution'] is not None:
             try:
-                core = co.Core(chaindir=sampler_kwargs['empirical_distr'])
-                emp_dist = make_emp_distr(core)
+                log.info(f"Attempting to load chains for an empirical distributions from {sampler_kwargs['emp_distribution']}")
+                core = co.Core(chaindir=sampler_kwargs['emp_distribution'])
             except:
-                log.warning(f"Failed to create empirical distributions ... check path.")
+                log.warning(f"Failed to load chains for empirical distributions from {sampler_kwargs['emp_distribution']}.\nCheck path. Need absolute path to chain directory with `pars.txt` and `chain_1.txt`. files")
+                core = None
+            try:
+                if core is not None:
+                    emp_dist = make_emp_distr(core)
+                    log.info(f"Successfully created empirical distributions !!")
+                    log.info("Setting up sampler ...")
+            except:
+                log.warning(f"Failed to create empirical distributions from successfully loaded directory.")
                 emp_dist = None
         else:
-            log.warning("Setting up sampler without empirical distributions...consider adding one for faster sampling...")
+            log.warning("Setting up sampler without empirical distributions... Consider adding one for faster sampling by adding `emp_distribution`: /<path to old noise chain>/<psr name>_nb to the `noise_run`->`inference` section of the config file.")
             emp_dist = None
         samp = ee_sampler.setup_sampler(pta,
                                         outdir=outdir,
@@ -525,7 +532,11 @@ def model_noise(
         # Initial sample
         # try to initialize the sampler to the maximum likelihood value from a previous run
         # initialize to a random point if any points are missing
-        x0 = get_init_sample_from_chain_path(pta, chaindir=sampler_kwargs['empirical_distr'])
+        x0 = get_init_sample_from_chain_path(pta, chaindir=sampler_kwargs['emp_distribution'])
+        try:
+            log_single_likelihood_evaluation_time(pta, sampler_kwargs)
+        except:
+            log.warning("Failed to time likelihood.")
         if not return_sampler_without_sampling:
             # Start sampling
             log.info("Beginnning to sample...")
@@ -967,6 +978,7 @@ def get_init_sample_from_chain_path(pta, chaindir=None, json_path=None):
     """
     try:
         if chaindir is not None:
+            log.info(f"Attempting to initialize sampler from MAP of chain directory {chaindir}")
             core = co.Core(chaindir)
             starting_point = core.get_map_dict()
             x0_dict = {}
@@ -1008,7 +1020,6 @@ def make2d(pars, samples, bins=None, nbins=81):
         bins = [np.linspace(min(samples[:, i]), max(samples[:, i]), nbins) for i in idx]
     return EmpiricalDistribution2D(pars, samples.T, bins)
 
-
 def make_emp_distr(core):
     """
     Make empirical distributions for all parameters in core.
@@ -1035,6 +1046,19 @@ def make_emp_distr(core):
     
     return dists
 
+def log_single_likelihood_evaluation_time(pta, sampler_kwargs):
+    """
+    Log the time it takes to evaluate the likelihood once.
+    """
+    log.info("Building the enterprise likelihood and estimating evaluation time...")
+    x1 = [[p.sample() for p in pta.params] for _ in range(11)]
+    pta.get_lnlikelihood(x1[0])
+    start_time = time.time()
+    [pta.get_lnlikelihood(x1[i]) for i in range(1,11)]
+    end_time = time.time()
+    slet = (end_time-start_time)/10
+    log.info(f"Single likelihood evaluation time is approximately {slet:.1e} seconds")
+    log.info(f"4 times {sampler_kwargs['n_iter']} likelihood evaluations will take approximately: {4*slet*float(sampler_kwargs['n_iter'])/3600/24:.2f} days")
 
 
 
@@ -1072,7 +1096,7 @@ def get_model_and_sampler_default_settings():
         'sampler': 'PTMCMCSampler',
         # ptmcmc kwargs
         'n_iter': 2.5e5,
-        'empirical_distr': None,
+        'emp_distribution': None,
         # numpyro kwargs
         'num_steps': 25,
         'num_warmup': 500,
