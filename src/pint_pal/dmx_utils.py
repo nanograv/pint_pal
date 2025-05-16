@@ -837,14 +837,8 @@ def setup_dmx(
                 dmx = model.components['DispersionDMX']
                 idxs = dmx.get_indices()
                 for idx in idxs:
-                    low_mjd = getattr(model, f"DMXR1_{idx:04d}").value
-                    high_mjd = getattr(model, f"DMXR2_{idx:04d}").value
-                    dmx_val = getattr(model, f"DMX_{idx:04d}").value
-                    dmx_val -= mean_old_dmx_val
-                    frozen = getattr(model, f"DMX_{idx:04d}").frozen
-                    dmx.remove_DMX_range(idx)
-                    dmx.add_DMX_range(low_mjd, high_mjd, idx, dmx_val,
-                            frozen=frozen)
+                    dmx_param = getattr(model, f"DMX_{idx:04d}")
+                    dmx_param.value -= mean_old_dmx_val
                     msg = f"Subtracted {mean_old_dmx_val:.7f} from existing DMX values."
                 log.info(msg)
             return toas
