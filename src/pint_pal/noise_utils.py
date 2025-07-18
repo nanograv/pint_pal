@@ -859,10 +859,8 @@ def add_noise_to_model(
             # Add the ML RN parameters to their component
             dm_comp = pm.noise_model.PLDMNoise()
             dm_keys = np.array([key for key, val in noise_dict.items() if "_red_" in key])
-            dm_comp.TNDMAMP.quantity = convert_to_RNAMP(
-                noise_dict[psr_name + "_dm_gp_log10_A"]
-            )
-            dm_comp.TNDMGAM.quantity = -1 * noise_dict[psr_name + "_dm_gp_gamma"]
+            dm_comp.TNDMAMP.quantity = noise_dict[psr_name + "_dm_gp_log10_A"]
+            dm_comp.TNDMGAM.quantity = noise_dict[psr_name + "_dm_gp_gamma"]
             ##### FIXMEEEEEEE : need to figure out some way to softcode this
             dm_comp.TNDMC.quantitity = 100
             # Add red noise to the timing model
@@ -881,10 +879,8 @@ def add_noise_to_model(
             # Add the ML RN parameters to their component
             chrom_comp = pm.noise_model.PLCMNoise()
             # chrom_keys = np.array([key for key, val in noise_dict.items() if "_chrom_gp_" in key])
-            chrom_comp.TNCMAMP.quantity = convert_to_RNAMP(
-                noise_dict[psr_name + "_chrom_gp_log10_A"]
-            )
-            chrom_comp.TNCMGAM.quantity = -1 * noise_dict[psr_name + "_chrom_gp_gamma"]
+            chrom_comp.TNCMAMP.quantity = noise_dict[psr_name + "_chrom_gp_log10_A"]
+            chrom_comp.TNCMGAM.quantity = noise_dict[psr_name + "_chrom_gp_gamma"]
             ##### FIXMEEEEEEE : need to figure out some way to softcode this
             chrom_comp.TNCMC.quantitity = 100
             # Add red noise to the timing model
@@ -903,14 +899,15 @@ def add_noise_to_model(
         noise = noise_class()  # Make the dispersion instance.
         model.add_component(noise, validate=False, force=False)
         # add parameters
-        if f'{psr_name}_n_earth' in sw_pars:
-            model['NE_SW'].quantity = noise_dict[f'{psr_name}_n_earth']
+        if 'n_earth' in sw_pars:
+            model['NE_SW'].quantity = noise_dict['n_earth']
             model['NE_SW'].frozen = True
+            model['SWP'] = 2
         if f'{psr_name}_sw_gp_log10_A' in sw_pars:
             sw_comp = pm.noise_model.PLSWNoise()
-            sw_comp.TNSWAMP.quantity = convert_to_RNAMP(noise_dict[f'{psr_name}_sw_gp_log10_A'])
+            sw_comp.TNSWAMP.quantity = noise_dict[f'{psr_name}_sw_gp_log10_A']
             sw_comp.TNSWAMP.frozen = True
-            sw_comp.TNSWGAM.quantity = -1.*noise_dict[f'{psr_name}_sw_gp_gamma']
+            sw_comp.TNSWGAM.quantity = noise_dict[f'{psr_name}_sw_gp_gamma']
             sw_comp.TNSWGAM.frozen = True
             # FIXMEEEEEEE : need to figure out some way to softcode this
             sw_comp.TNSWC.quantity = 10
