@@ -13,6 +13,13 @@ from pint_pal.utils import apply_cut_flag, apply_cut_select
 from pint_pal.lite_utils import write_tim
 from pint_pal.dmx_utils import *
 
+# discovery outlier analysis imports
+import discovery as ds
+from discovery import matrix, selection_backend_flags
+import numpy as np
+import jax.numpy as jnp
+import jax.scipy.linalg as jsl
+
 def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     """Necessary set-up to run gibbs sampler, and run it. Return pout.
     """
@@ -334,3 +341,164 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6,nproc=1):
 
     # Need to mask TOAs once again
     apply_cut_select(toas,reason='resumption after write_tim (excise)')
+
+## discovery outlier analysis functions written by Pat Meyers
+def makenoise_measurement_rescaled(psr, noisedict={}, scale=1.0, tnequad=False, selection=selection_backend_flags, vectorize=True):
+    backend_flags = selection(psr)
+    backends = [b for b in sorted(set(backend_flags)) if b != '']
+
+    efacs = [f'{psr.name}_{backend}_efac' for backend in backends]
+    toaerr_scaling = f'{psr.name}_alpha_scaling({psr.toas.size})'
+    if tnequad:
+        log10_tnequads = [f'{psr.name}_{backend}_log10_tnequad' for backend in backends]
+        params = efacs + log10_tnequads + [toaerr_scaling]
+    else:
+        log10_t2equads = [f'{psr.name}_{backend}_log10_t2equad' for backend in backends]
+        params = efacs + log10_t2equads + [toaerr_scaling]
+
+    masks = [(backend_flags == backend) for backend in backends]
+    logscale = np.log10(scale)
+
+    if all(par in noisedict for par in params):
+        if tnequad:
+            noise = sum(mask * (noisedict[efac]**2 * (scale * psr.toaerrs)**2 + 10.0**(2 * (logscale + noisedict[log10_tnequad])))
+                        for mask, efac, log10_tnequad in zip(masks, efacs, log10_tnequads))
+        else:
+            noise = sum(mask * noisedict[efac]**2 * ((scale * psr.toaerrs)**2 + 10.0**(2 * (logscale + noisedict[log10_t2equad])))
+                        for mask, efac, log10_t2equad in zip(masks, efacs, log10_t2equads))
+
+        return matrix.NoiseMatrix1D_novar(noise)
+    else:
+        if vectorize:
+            toaerrs2, masks = matrix.jnparray(scale**2 * psr.toaerrs**2), matrix.jnparray([mask for mask in masks])
+
+            if tnequad:
+                def getnoise(params):
+                    efac2  = matrix.jnparray([params[efac]**2 for efac in efacs])
+                    equad2 = matrix.jnparray([10.0**(2 * (logscale + params[log10_tnequad])) for log10_tnequad in log10_tnequads])
+                    toaerrs2 = toaerrs2 * params[toaerr_scaling]
+                    return (masks * (efac2[:,jnp.newaxis] * toaerrs2[jnp.newaxis,:] + equad2[:,jnp.newaxis])).sum(axis=0)
+            else:
+                def getnoise(params):
+                    efac2  = matrix.jnparray([params[efac]**2 for efac in efacs])
+                    equad2 = matrix.jnparray([10.0**(2 * (logscale + params[log10_t2equad])) for log10_t2equad in log10_t2equads])
+                    return (masks * efac2[:,jnp.newaxis] * ((toaerrs2*params[toaerr_scaling])[jnp.newaxis,:] + equad2[:,jnp.newaxis])).sum(axis=0)
+        else:
+            toaerrs, masks = matrix.jnparray(scale * psr.toaerrs), [matrix.jnparray(mask) for mask in masks]
+            if tnequad:
+                def getnoise(params):
+                    toaerrs2 = toaerrs2 * params[toaerr_scaling]
+                    return sum(mask * (params[efac]**2 * toaerrs**2 + 10.0**(2 * (logscale + params[log10_tnequad])))
+                               for mask, efac, log10_tnequad in zip(masks, efacs, log10_tnequads))
+            else:
+                def getnoise(params):
+                    toaerrs2 = toaerrs2 * params[toaerr_scaling]
+                    return sum(mask * params[efac]**2 * (toaerrs**2 + 10.0**(2 * (logscale + params[log10_t2equad])))
+                               for mask, efac, log10_t2equad in zip(masks, efacs, log10_t2equads))
+
+        getnoise.params = params
+        return matrix.NoiseMatrix1D_var(getnoise)
+        
+def make_conditional_with_tm(psrl):
+    """
+    make function that samples from conditional
+    when timing model is variable as well.
+    """
+    Pvar = psrl.N.P_var
+    Nvar = psrl.N.N
+    F = psrl.N.F
+    Pvar_inv = Pvar.make_inv()
+
+    Nvar_solve_1d = Nvar.make_solve_1d()
+    Nvar_solve_2d = Nvar.make_solve_2d()
+    y = psrl.y
+    def cond(params):
+
+        # Nmy, ldN = Nvar_solve_1d(params, y)
+        NmF, ldN = Nvar_solve_2d(params, F)
+        FtNm = NmF.T
+        FtNmy = FtNm @ y
+        # FtNmy = F.T @ Nmy
+        FtNmF = F.T @ NmF
+        Pinv, ldP = Pvar_inv(params)
+        Sigma = Pinv + FtNmF
+        ch = jsl.cho_factor(Sigma)
+        b_mean = jsl.cho_solve(ch, FtNmy)
+        
+        return b_mean, Sigma
+    return cond
+
+def make_sample_cond_with_tm(psrl):
+    """
+    make function that samples from conditional
+    when timing model is variable as well.
+    """
+    Pvar = psrl.N.P_var
+    Nvar = psrl.N.N
+    F = psrl.N.F
+    Pvar_inv = Pvar.make_inv()
+
+    Nvar_solve_1d = Nvar.make_solve_1d()
+    Nvar_solve_2d = Nvar.make_solve_2d()
+    y = psrl.y
+    def cond(key, params):
+
+        # Nmy, ldN = Nvar_solve_1d(params, y)
+        NmF, ldN = Nvar_solve_2d(params, F)
+        FtNm = NmF.T
+        FtNmy = FtNm @ y
+        # FtNmy = F.T @ Nmy
+        FtNmF = F.T @ NmF
+        Pinv, ldP = Pvar_inv(params)
+        Sigma = Pinv + FtNmF
+        ch = jsl.cho_factor(Sigma)
+        b_mean = jsl.cho_solve(ch, FtNmy)
+
+        noise = matrix.jsp.linalg.solve_triangular(ch[0].T, matrix.jnpnormal(key, (b_mean.shape)), lower=ch[1])
+        # matrix.jsp.linalg.solve_triangular(cf[0].T, matrix.jnpnormal(subkey, mu.shape), lower=False)
+
+        nkey, _ = matrix.jnpsplit(key)
+        
+        return nkey, {k: (noise + b_mean)[slc] for k, slc in psrl.N.index.items()}
+    return cond
+
+# def make_clogl(psrl, psr):
+#     Pvar = psrl.N.P_var
+#     Nvar = psrl.N.N
+#     F = matrix.jnparray(psrl.N.F)
+#     Pvar_inv = Pvar.make_inv()
+#     Psolve_1d = Pvar.make_solve_1d()
+
+#     Nvar_solve_1d = Nvar.make_solve_1d()
+#     Nvar_solve_2d = Nvar.make_solve_2d()
+#     cvars = psrl.N.index.keys()
+#     y = psr.residuals
+#     def clogl(params):
+#         b = jnp.hstack([params[c] for c in cvars])
+#         mean_residuals = F @ b
+        
+#         yprime = y - mean_residuals
+#         # jax.debug.print('{x}', x=yprime[:10])
+#         Nmyp, ldN = Nvar_solve_1d(params, yprime)
+#         ypNmyp = yprime @ Nmyp
+
+#         Pmb, ldP = Psolve_1d(params, b)
+#         bPmb = b @ Pmb
+        
+#         return -0.5 * (ypNmyp + bPmb + ldP + ldN)
+#     return clogl
+
+def make_single_psr_model_scaled_errors(psr, noisedict={}, tm_variable=False):
+    psrl = ds.PulsarLikelihood([psr.residuals,
+                            ds.makegp_timing(psr, svd=True, variable=tm_variable),
+                            ds.makegp_ecorr(psr, noisedict=noisedict),      
+                            makenoise_measurement_rescaled(psr, noisedict=noisedict),
+                            ds.makegp_fourier(psr, ds.freespectrum, 30, name='red_noise')], concat=True)
+    return psrl
+def make_single_psr_model(psr, noisedict={}, tm_variable=False):
+    psrl = ds.PulsarLikelihood([psr.residuals,
+                            ds.makegp_timing(psr, svd=True, variable=tm_variable),
+                            ds.makegp_ecorr(psr, noisedict=noisedict),      
+                            ds.makenoise_measurement(psr, noisedict=noisedict),
+                            ds.makegp_fourier(psr, ds.freespectrum, 30, name='red_noise')], concat=True)
+    return psrl
