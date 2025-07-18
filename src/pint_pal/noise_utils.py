@@ -895,7 +895,7 @@ def add_noise_to_model(
             raise NotImplementedError('CMWaveXNoise not yet implemented')
             
     # Check to see if solar wind is present
-    sw_pars = [key for key in noise_pars if "sw_r2" in key]
+    sw_pars = [key for key in noise_pars if "n_earth" in key]
     if len(sw_pars) > 0:
         log.info('Adding Solar Wind Dispersion to par file')
         all_components = Component.component_types
