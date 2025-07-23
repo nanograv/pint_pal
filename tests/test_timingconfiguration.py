@@ -9,7 +9,7 @@ from pint_pal.timingconfiguration import TimingConfiguration
 
 
 @pytest.fixture
-def tc(scope="class"):
+def tc():
     """ Load a working TimingConfiguration object for testing """
     return TimingConfiguration("configs/J0605+3757.nb.yaml")
 @pytest.fixture
