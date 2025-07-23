@@ -1,4 +1,5 @@
-import numpy as np, os, json, itertools, time
+import os, json, itertools, time, pathlib
+import numpy as np
 from astropy import log
 from astropy.time import Time
 
@@ -31,16 +32,16 @@ def setup_sampling_groups(pta,
 
     Params
     ------
-    pta: the enterprise pta object 
+    pta: the enterprise pta object
     write_groups: bool, write the groups to a file
     outdir: str, directory to write the groups to
-    
+
     returns
     -------
     groups: list of lists of indices corresponding to parameter groups
-    
+
     """
-        
+
         # groups
     pnames = pta.param_names
     groups = get_parameter_groups(pta)
@@ -130,7 +131,7 @@ def analyze_noise(
     chaindir: path to enterprise noise run chain; Default: './noise_run_chains/'
     use_noise_point: point to use for noise analysis; Default: 'MAP'.
         Options: 'MAP', 'median', 'mean_large_likelihood',
-        Note that the MAP is the the same as the maximum likelihood value when all the priors are uniform. 
+        Note that the MAP is the the same as the maximum likelihood value when all the priors are uniform.
     likelihoods_to_average: number of top likelihood samples to average; Default: 50
         Only applicable if use_noise_point is 'mean_large_likelihood'.
     burn_frac: fraction of chain to use for burn-in; Default: 0.25
@@ -161,7 +162,7 @@ def analyze_noise(
                       +"Also make sure you have an up-to-date la_forge installation. ")
             raise ValueError(f"Could not load noise run from {chaindir}. Check path and la_forge installation.")
         else:
-            log.error(f"No noise runs found in {chaindir}. Make sure the path is correct.") 
+            log.error(f"No noise runs found in {chaindir}. Make sure the path is correct.")
             raise ValueError(f"Could not load noise run from {chaindir}. Check path.")
     if sampler == 'PTMCMCSampler':
         # standard burn ins
@@ -173,7 +174,7 @@ def analyze_noise(
     pars =  np.array([p for p in noise_core.params if p not in ['lnlike', 'lnpost', 'chain_accept', 'pt_chain_accept']])
     # if len(pars)+2 != chain.shape[1]:
     #     chain = chain[:, :len(pars)+2]
-    
+
     # load in same for comparison noise model
     if chaindir_compare is not None:
         compare_core = co.Core(chaindir=chaindir)
@@ -190,7 +191,7 @@ def analyze_noise(
             )
             chaindir_compare = None
 
-            
+
     if save_corner and not no_corner_plot:
         pars_short = [p.split("_", 1)[1] for p in pars]
         log.info(f"Chain parameter names are {pars_short}")
@@ -341,7 +342,7 @@ def analyze_noise(
         # ax[nr][nc].legend(loc = 'best')
         pl.legend(loc="best")
         pl.show()
-    
+
     if use_noise_point == 'MAP':
         noise_dict = noise_core.get_map_dict()
     elif use_noise_point == 'median':
@@ -384,7 +385,7 @@ def model_noise(
     noise_kwargs: dictionary of noise model parameters; Default: {}
     sampler_kwargs: dictionary of sampler parameters; Default: {}
     return_sampler: Flag to return the sampler object; Default: False
-    
+
     Recommended to pass model_kwargs and sampler_kwargs from the config file.
     Default kwargs given by function `get_model_and_sampler_default_settings`.
     Import configuration parameters:
@@ -408,7 +409,7 @@ def model_noise(
     sampler_kwargs = sampler_defaults.copy()
     likelihood = sampler_kwargs['likelihood']
     sampler = sampler_kwargs['sampler']
-    
+
     if not using_wideband:
         outdir = base_op_dir + mo.PSR.value + "_nb/"
     else:
@@ -566,6 +567,27 @@ def convert_to_RNAMP(value):
     return (86400.0 * 365.24 * 1e6) / (2.0 * np.pi * np.sqrt(3.0)) * 10**value
 
 
+def find_chain_dir(
+    root_dir,
+    model,
+    using_wideband=False
+):
+    mode = "nb"
+    if using_wideband:
+        mode = "wb"
+
+    sub_dir = f"{model.PSR.value}_{mode}"
+    # Check if the root_dir contains sub_dir or not, otherwise add it
+    p = pathlib.Path(root_dir)
+    last_dir = p.parent.name if p.is_dir() else p.name
+    if last_dir == sub_dir:
+        chain_dir = root_dir
+    else:
+        chain_dir = os.path.join(root_dir, sub_dir)
+
+
+    pass
+
 def add_noise_to_model(
     model,
     use_noise_point='mean_large_likelihood',
@@ -577,7 +599,7 @@ def add_noise_to_model(
     rn_bf_thres=1e2,
     base_dir=None,
     compare_dir=None,
-    return_noise_core=False,
+    return_noise_corchaindir = os.path.join(base_dir, f"{model.PSR.value}_nb/")e=False,
 ):
     """
     Add WN, RN, DMGP, ChromGP, and SW parameters to timing model.
@@ -645,7 +667,7 @@ def add_noise_to_model(
         chainfile = chaindir+"chain.nc"
         mtime = Time(os.path.getmtime(chainfile), format="unix")
         log.info(f"Noise chains loaded from {chainfile} created at {mtime.isot}")
-        
+
 
     # Create the maskParameter for EFACS
     efac_params = []
@@ -659,12 +681,12 @@ def add_noise_to_model(
     ecorr_idx = 1
     dmefac_idx = 1
     dmequad_idx = 1
-    
+
     psr_name = list(noise_dict.keys())[0].split("_")[0]
     noise_pars = np.array(list(noise_dict.keys()))
     wn_dict = {key: val for key, val in noise_dict.items() if "efac" in key or "equad" in key or "ecorr" in key}
     for key, val in wn_dict.items():
-        
+
         if "_efac" in key:
 
             param_name = key.split("_efac")[0].split(psr_name)[1][1:]
@@ -847,14 +869,14 @@ def add_noise_to_model(
         model.add_component(rn_comp, validate=True, force=True)
     else:
         log.info("Not including red noise for this pulsar")
-        
+
     # Check to see if dm noise is present
     dm_pars = [key for key in noise_pars if "_dm_gp" in key]
     if len(dm_pars) > 0:
         ###### POWERLAW DM NOISE ######
         if f'{psr_name}_dm_gp_log10_A' in dm_pars:
-            #dm_bf = model_utils.bayes_fac(noise_core(rn_amp_nm), ntol=1, logAmax=-11, logAmin=-20)[0] 
-            #log.info(f"The SD Bayes factor for dm noise in this pulsar is: {dm_bf}") 
+            #dm_bf = model_utils.bayes_fac(noise_core(rn_amp_nm), ntol=1, logAmax=-11, logAmin=-20)[0]
+            #log.info(f"The SD Bayes factor for dm noise in this pulsar is: {dm_bf}")
             log.info('Adding Powerlaw DM GP noise as PLDMNoise to par file')
             # Add the ML RN parameters to their component
             dm_comp = pm.noise_model.PLDMNoise()
@@ -893,7 +915,7 @@ def add_noise_to_model(
         elif f'{psr_name}_chrom_gp_log10_rho_0' in chrom_pars:
             log.info('Adding Free Spectral CHROM GP as CMWaveXnoise to par file')
             raise NotImplementedError('CMWaveXNoise not yet implemented')
-            
+
     # Check to see if solar wind is present
     sw_pars = [key for key in noise_pars if "sw_r2" in key]
     if len(sw_pars) > 0:
@@ -1011,7 +1033,7 @@ def get_init_sample_from_chain_path(pta, chaindir=None, json_path=None):
 def make1d(par, samples, bins=None, nbins=81):
     if bins is None:
         bins = np.linspace(min(samples), max(samples), nbins)
-        
+
     return EmpiricalDistribution1D(par, samples, bins)
 
 def make2d(pars, samples, bins=None, nbins=81):
@@ -1043,7 +1065,7 @@ def make_emp_distr(core):
     # make 2d cross groups
     _ = [[dists.append(make2d([ecr, dm], core([ecr, dm]))) for ecr in groups['ecorr']] for dm in groups['dm_gp']]
     _ = [[dists.append(make2d([dm, chrom], core([dm, chrom]))) for dm in groups['dm_gp']] for chrom in groups['chrom_gp']]
-    
+
     return dists
 
 def log_single_likelihood_evaluation_time(pta, sampler_kwargs):
@@ -1065,7 +1087,7 @@ def log_single_likelihood_evaluation_time(pta, sampler_kwargs):
 def get_model_and_sampler_default_settings():
     model_defaults = {
         # white noise
-        'inc_wn': True, 
+        'inc_wn': True,
         'tnequad': True,
         # acrhomatic red noise
         'inc_rn': True,
@@ -1086,7 +1108,7 @@ def get_model_and_sampler_default_settings():
         # GP perturbations ontop of the deterministic model
         'inc_swgp': False,
         'ACE_prior': False,
-        # 
+        #
         'extra_sigs': None,
         # misc
         'tm_svd': True
