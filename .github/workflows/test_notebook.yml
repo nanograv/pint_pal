@@ -37,6 +37,7 @@ jobs:
             cython
             pint-pulsar
             tempo2
+            libstempo
             enterprise-pulsar
             enterprise_extensions
             scikit-sparse
