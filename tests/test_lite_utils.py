@@ -1,7 +1,5 @@
-import sys
-sys.path.append("../utils/")
-
 import pytest
+from pathlib import Path
 import numpy as np
 import astropy.units as u
 import pint.toa as toa
@@ -13,11 +11,13 @@ from pint_pal.lite_utils import add_feJumps
 
 @pytest.fixture
 def model():
-    parfile = "par/J2022+2534.basic.par"
+    parent = Path(__file__).parent
+    parfile = parent / "par/J2022+2534.basic.par"
     return models.get_model(parfile)
 @pytest.fixture
 def toas():
-    timfile = "tim/J2022+2534_15y_L-S_nb.tim"
+    parent = Path(__file__).parent
+    timfile = parent / "tim/J2022+2534_15y_L-S_nb.tim"
     return toa.get_TOAs(timfile)
 
 

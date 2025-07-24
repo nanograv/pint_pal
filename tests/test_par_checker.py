@@ -7,6 +7,7 @@ NANOGrav 12.5-year data set (version 3) parameter files
 
 
 import pytest
+from pathlib import Path
 from astropy import log
 import pint.models as models
 import pint_pal.par_checker as pc
@@ -15,11 +16,13 @@ log.setLevel("ERROR") # do not show PINT warnings here to avoid clutter
 
 @pytest.fixture
 def modelB1855():
-    parfile = "par/B1855+09_NANOGrav_12yv4.gls.par"
+    parent = Path(__file__).parent
+    parfile = parent / "par/B1855+09_NANOGrav_12yv4.gls.par"
     return models.get_model(parfile)
 @pytest.fixture
 def modelJ1024():
-    parfile = "par/J1024-0719_NANOGrav_12yv4.gls.par"
+    parent = Path(__file__).parent
+    parfile = parent / "par/J1024-0719_NANOGrav_12yv4.gls.par"
     return models.get_model(parfile)
 @pytest.fixture(params=['modelB1855', 'modelJ1024'])
 def model(request):
