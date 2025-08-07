@@ -4,38 +4,35 @@ Unit testing for timingconfiguration.py
 These tests are performed on YAML configuration files
 '''
 
-
-import unittest
+import pytest
+from pathlib import Path
 from pint_pal.timingconfiguration import TimingConfiguration
 
 
-class TimingConfigurationTests(unittest.TestCase):
-    """ timingconfiguration.py testing class """
+@pytest.fixture
+def tc():
+    """
+    Load a working TimingConfiguration object for testing
 
-    def setUp(self):
-        """ Load a TimingConfiguration object during setup """
-        self.tc = TimingConfiguration("config/goodconfig.yaml")
-        self.badtc = TimingConfiguration("configs/badconfig.yaml")
-
-
-    def test_get_source(self):
-        """ Check the reading of the source entry """
-        self.assertEqual(self.tc.get_source(), "B1855+09")
-
-
-    def test_get_model(self):
-        """ Check the return of a PINT model object """
-        self.assertEqual(self.tc.get_model().PSR.value, "B1855+09")
-        with self.assertRaises(ValueError):
-            self.badtc.get_model()
+    To allow for running tests outside of tests/, the
+    par and tim directories are overwritten
+    """
+    parent = Path(__file__).parent
+    par_directory = parent / "results/"
+    tim_directory = parent / "tim/" 
+    configfile = parent / "configs/J0605+3757.nb.yaml"
+    print(par_directory, configfile)
+    return TimingConfiguration(configfile, tim_directory=tim_directory, par_directory=par_directory)
+@pytest.fixture
+def PSR():
+    return "J0605+3757"
 
 
-    def test_get_TOAs(self):
-        """ Check the return of a PINT toa object, with various filters """
-        pass
+def test_get_source(tc, PSR):
+    print(PSR)
+    assert tc.get_source() == PSR
 
 
-try:
-    unittest.main(argv=[''], verbosity=2)
-except SystemExit: #cleaner output below
-    print
+def test_get_model_and_toas(tc, PSR):
+    mo, to = tc.get_model_and_toas()
+    assert mo.PSR.value == PSR
