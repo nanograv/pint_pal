@@ -6,7 +6,7 @@ if desired; ruyamel.yaml preserves order of existing fields and comments.
 from ruamel.yaml import YAML
 import argparse
 import glob
-from astropy import log
+from loguru import logger as log
 import numpy as np
 from pint_pal import config
 import os

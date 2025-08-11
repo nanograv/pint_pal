@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 import astropy.units as u
-from astropy import log
+from loguru import logger as log
 from astropy.io import fits
 import logging
 import matplotlib.pyplot as plt

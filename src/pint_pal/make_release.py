@@ -5,7 +5,7 @@ and gathering results for hand-off to DWG
 
 from pint_pal.yamlio import *
 from pint_pal.timingconfiguration import TimingConfiguration
-from astropy import log
+from loguru import logger as log
 from datetime import datetime
 import subprocess
 import shutil

@@ -14,7 +14,7 @@ import pint.models as model
 import pint.fitter
 import numpy as np
 import astropy.units as u
-from astropy import log
+from loguru import logger as log
 from astropy.time import Time
 import yaml
 import glob

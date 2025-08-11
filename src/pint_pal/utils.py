@@ -3,7 +3,7 @@
 import sys
 import numpy as np
 import astropy.units as u
-from astropy import log
+from loguru import logger as log
 from pint.utils import weighted_mean
 import pint.residuals as Resid
 import pint.models.parameter

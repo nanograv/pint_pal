@@ -8,7 +8,7 @@ Code since butchered by many timers.
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
-from astropy import log
+from loguru import logger as log
 import astropy.units as u
 import yaml
 

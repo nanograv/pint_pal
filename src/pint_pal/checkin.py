@@ -1,5 +1,5 @@
 from pint_pal.yamlio import read_yaml, write_yaml
-from astropy import log
+from loguru import logger as log
 import os
 import glob
 import shutil

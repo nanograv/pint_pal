@@ -116,7 +116,7 @@ class TimingNotebook:
         from pint_pal.ftester import run_Ftests
         from pint_pal.timingconfiguration import TimingConfiguration
         import yaml
-        from astropy import log
+        from loguru import logger as log
         import pint.fitter
         from pint.utils import dmxparse
         import os
