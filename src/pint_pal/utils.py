@@ -57,10 +57,10 @@ def whiten_resids(fitter, restype = 'postfit'):
         if fitter.is_wideband:
             if restype == 'postfit':
                 time_resids = fitter.resids.residual_objs['toa'].time_resids
-                noise_resids = fitter.resids.noise_resids
+                noise_resids = fitter.resids.toa.noise_resids
             else:
                 time_resids = fitter.resids_init.residual_objs['toa'].time_resids
-                noise_resids = fitter.resids_init.noise_resids
+                noise_resids = fitter.resids_init.toa.noise_resids
         else:
             if restype == 'postfit':
                 time_resids = fitter.resids.time_resids
