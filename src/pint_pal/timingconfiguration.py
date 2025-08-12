@@ -629,7 +629,7 @@ class TimingConfiguration:
 
             # only bother printing anything if there's a suggestion
             if len(new_bad_files) > 0:
-                log.warn(
+                log.warning(
                     f"More than {threshold * 100}% of TOAs have been excised for some files"
                 )
                 log.info("Consider adding the following to `bad-file` in your config file:")
