@@ -771,7 +771,7 @@ def pdf_writer(fitter,
             changed = p
         if abs(cs) > sigma_threshold:
             msg = f"parameter {verb(p)} changed from {iv} to {fv} ({cs:.2g} sigma) during fit."
-            log.warn(msg)
+            log.warning(msg)
             fsum.write(alert("WARNING: ") + msg + "\\\\\n")
     fsum.write(f"Largest parameter change during fit was {verb(changed)} by {max_cs:.2g} sigma.\\\\\n")
                    
