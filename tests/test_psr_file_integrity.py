@@ -2,17 +2,20 @@ from os.path import join, exists
 from glob import glob
 import yaml
 import pytest
+from pathlib import Path
 
-yamls = sorted(glob("configs/[BJ]*.yaml"))
-results = sorted(glob("results/*.par"))
+
+parent = Path(__file__).parent
+yamls = sorted(glob(str(parent) + "configs/[BJ]*.yaml"))
+results = sorted(glob(str(parent) + "results/*.par"))
 
 @pytest.fixture(scope="module")
 def find_bad():
     bad_yamls = {}
-    results = {p:[] for p in glob("results/*.par")}
+    results = {p:[] for p in glob(parent / "results/*.par")}
     bad_results = {}
     bad_comparisons = {}
-    for c in sorted(glob("configs/[BJ]*.yaml")):
+    for c in sorted(glob(parent / "configs/[BJ]*.yaml")):
         try:
             with open(c) as f:
                 y = yaml.load(f, Loader=yaml.FullLoader)
@@ -52,7 +55,7 @@ def test_results_all_used(result_par, find_bad):
 @pytest.mark.parametrize("result_par", results)
 def test_result_not_shared(result_par, find_bad):
     _, _, _, configs = find_bad
-    if result_par in {"results/J1705-1903_PINT_20201102.par"}:
+    if result_par in {parent / "results/J1705-1903_PINT_20201102.par"}:
         pytest.xfail("This pulsar hasn't been timed yet as it has problems.")
     assert len(configs[result_par])<=1
 
