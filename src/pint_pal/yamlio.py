@@ -580,7 +580,8 @@ def main():
     # maybe we want a "initiate" function to make a new yaml?
     if args.check:
         for ff in args.files:
-            log.setLevel('DEBUG')
+            log.remove() 
+            log.add(sys.stderr, level="DEBUG") 
             fix_toa_info(ff,overwrite=args.overwrite)
             add_niterations(ff,overwrite=args.overwrite)
             add_noise_block(ff,overwrite=args.overwrite)
