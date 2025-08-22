@@ -17,8 +17,11 @@ from pint_pal.dmx_utils import *
 import discovery as ds
 from discovery import matrix, selection_backend_flags
 import numpy as np
+import jax
 import jax.numpy as jnp
 import jax.scipy.linalg as jsl
+from numpyro import sample, factor, infer, deterministic
+from numpyro import distributions as dist
 
 def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     """Necessary set-up to run gibbs sampler, and run it. Return pout.
@@ -495,6 +498,8 @@ def make_single_psr_model_scaled_errors(psr, noisedict={}, tm_variable=False):
                             makenoise_measurement_rescaled(psr, noisedict=noisedict),
                             ds.makegp_fourier(psr, ds.freespectrum, 30, name='red_noise')], concat=True)
     return psrl
+
+
 def make_single_psr_model(psr, noisedict={}, tm_variable=False):
     psrl = ds.PulsarLikelihood([psr.residuals,
                             ds.makegp_timing(psr, svd=True, variable=tm_variable),
@@ -502,3 +507,116 @@ def make_single_psr_model(psr, noisedict={}, tm_variable=False):
                             ds.makenoise_measurement(psr, noisedict=noisedict),
                             ds.makegp_fourier(psr, ds.freespectrum, 30, name='red_noise')], concat=True)
     return psrl
+
+
+def make_gibbs_fn(psrl, prior_dict):
+    make_Nalpha = psrl.N.N.getN
+    Nalpha = psrl.N.N
+    Nalpha_solve_2d = Nalpha.make_solve_2d()
+    Nalpha_solve_1d = Nalpha.make_solve_1d()
+    num_resids = psrl.y.size
+    ones = jnp.ones(num_resids)
+    Tmat = psrl.N.F
+    mval = 0.01
+    y = psrl.y
+    ecorr_params = [p for p in psrl.logL.params if 'ecorr' in p]
+    efac_params = [p for p in psrl.logL.params if 'efac' in p]
+    equad_params = [p for p in psrl.logL.params if 'equad' in p]
+    jcond = jax.jit(make_sample_cond_with_tm(psrl))
+    cvars = list(psrl.N.index.keys())
+    def gibbs_fn(rng_key, gibbs_sites, hmc_sites):
+        # draw coefficients
+        pardict = hmc_sites.copy()
+        pardict.update({efn: ef for ef, efn in zip(hmc_sites['efacs'], efac_params)})
+        pardict.update({eqn: eq for eq, eqn in zip(hmc_sites['equads'], equad_params)})
+        pardict.update({ecn: ec for ec, ecn in zip(hmc_sites['ecorrs'], ecorr_params)})
+
+        # update with alpha scaling
+        pardict.update({f'{psrl.name}_alpha_scaling({y.size})': gibbs_sites['alpha_i']**gibbs_sites['z_i']})
+        nkey, coeffs = jcond(rng_key, pardict)
+
+        
+
+        # turn into a single arary, store
+        pardict.update(coeffs)
+        coeffs = jnp.hstack([coeffs[c] for c in cvars])
+        
+        means = Tmat @ coeffs
+        gibbs_sites['coeffs'] = coeffs
+    
+        # theta
+        gibbs_sites['theta'] = sample("theta", dist.Beta(num_resids * mval + jnp.sum(gibbs_sites['z_i']),
+                                                  num_resids * (1-mval) + num_resids - jnp.sum(gibbs_sites['z_i'])),
+                                           rng_key=nkey)
+    
+        # z_i's
+        norm_prob_alpha = jnp.exp(dist.Normal(means,jnp.sqrt(make_Nalpha(pardict))).log_prob(y))
+        pardict.update({f'{psrl.name}_alpha_scaling({y.size})': ones})
+        norm_prob_reg = jnp.exp(dist.Normal(means,jnp.sqrt(make_Nalpha(pardict))).log_prob(y))
+
+        nnkey, _ = jax.random.split(nkey)
+        theta = gibbs_sites['theta']
+
+        q = theta * norm_prob_alpha / (theta * norm_prob_alpha + (1 - theta)*norm_prob_reg)
+        
+        q = jnp.where(q<1, q, 1)
+        gibbs_sites['q'] = q
+    
+        q = deterministic('q', q)
+        gibbs_sites['z_i'] = sample("z_i", dist.Binomial(1, q), rng_key=nnkey)
+    
+        # alphas
+        n3key, _ = jax.random.split(nnkey)
+        
+        yprime = y - means
+        tot = yprime @ Nalpha_solve_1d(pardict, y)[0]
+        top = 0.5 * (1 + gibbs_sites['z_i'] * tot)
+        bot = sample("alpha_i", dist.Gamma(0.5 * (1 + gibbs_sites['z_i'])), rng_key=n3key)
+        gibbs_sites['alpha_i'] = top / bot
+        return gibbs_sites
+    
+    return gibbs_fn
+
+
+def make_numpyro_outlier_model(psrl, psr):
+    jclogl = jax.jit(psrl.clogL)
+    ecorr_high = -5
+    ecorr_low = -8.5
+    efac_high = 10
+    efac_low = 0.1
+    equad_high = -5
+    equad_low = -8.5
+    ecorr_params = [p for p in psrl.logL.params if 'ecorr' in p]
+    efac_params = [p for p in psrl.logL.params if 'efac' in p]
+    equad_params = [p for p in psrl.logL.params if 'equad' in p]
+    def model(rng_key=None):
+        # wn params
+        pardict = {}
+        efacs = sample('efacs', dist.Uniform(efac_low, efac_high).expand([len(efac_params)]), rng_key=rng_key)
+        equads = sample('equads', dist.Uniform(equad_low, equad_high).expand([len(equad_params)]), rng_key=rng_key)
+        ecorrs = sample('ecorrs', dist.Uniform(ecorr_low, ecorr_high).expand([len(ecorr_params)]), rng_key=rng_key)
+        pardict = {efn: ef for ef, efn in zip(efacs, efac_params)}
+        pardict.update({eqn: eq for eq, eqn in zip(equads, equad_params)})
+        pardict.update({ecn: ec for ec, ecn in zip(ecorrs, ecorr_params)})
+    
+        # coefficients (doesn't matter, gibbs takes care of this)
+        coeffs = sample("coeffs", dist.Uniform(-1e-4, 1e-4).expand([psrl.N.F.shape[-1]]), rng_key=rng_key)
+    
+        # rn rhos
+        log10_rhos = sample(f'{psr.name}_red_noise_log10_rho(30)', dist.Uniform(-9, -4).expand([30]), rng_key=rng_key)
+        pardict[f'{psr.name}_red_noise_log10_rho(30)'] = log10_rhos      
+    
+        # theta (doesn't matter, gibbs takes care of this)
+        theta = sample("theta", dist.Uniform(0, 1), rng_key=rng_key)
+    
+        # z_i (doesn't matter, gibbs takes care of this)
+        z_i = sample("z_i", dist.Uniform(0, 1).expand([psr.residuals.size]), rng_key=rng_key)
+        q = sample("q", dist.Uniform(0, 1).expand([psr.residuals.size]), rng_key=rng_key)
+        # alpha_i (doesn't matter, gibbs takes care of this)
+        alpha_i = sample("alpha_i", dist.Uniform(0, 100).expand([psr.residuals.size]), rng_key=rng_key)
+        pardict.update({f'{psr.name}_alpha_scaling({psr.residuals.size})': alpha_i**z_i})
+
+        # put coefficients in right form for clogl
+        pardict.update({k: coeffs[slc] for k, slc in psrl.N.index.items()})
+        factor('clogl', jclogl(pardict))
+    return model
