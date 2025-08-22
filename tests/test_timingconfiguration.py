@@ -3,12 +3,6 @@ Unit testing for timingconfiguration.py
 
 These tests are performed on YAML configuration files
 '''
-# temporary
-import sys
-sys.path.insert(0, "/home/michael/Research/Programs/pint_pal/src/pint_pal/")
-sys.path.append("/home/michael/Research/Programs/pint_pal/src/pint_pal/")
-sys.path.insert(0, "/home/michael/Research/Programs/pint_pal/src/")
-sys.path.append("/home/michael/Research/Programs/pint_pal/src/")
 import pytest
 from pathlib import Path
 from pint_pal.timingconfiguration import TimingConfiguration
