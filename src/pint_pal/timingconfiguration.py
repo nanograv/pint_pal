@@ -374,7 +374,7 @@ class TimingConfiguration:
     
     def get_notebook_use_existing_noise_dir(self):
         """ Return the boolean for using the existing noise directory """
-        return get_value('use_existing_noise_dir', self.config['notebook'], default=pint_pal.config.USE_EXISTING_NOISE_DIR))
+        return get_value('use_existing_noise_dir', self.config['notebook'], default=pint_pal.config.USE_EXISTING_NOISE_DIR)
 
     def get_notebook_use_toa_pickle(self):
         """ Return the boolean for using an existing TOA pickle file """
