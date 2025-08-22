@@ -23,6 +23,11 @@ from pint_pal.lite_utils import new_changelog_entry
 from pint_pal.lite_utils import check_toa_version, check_tobs
 import pint_pal.config
 
+
+def identity_func(x):
+    """ Miscellaneous function to wrap as default """
+    return x
+
 class TimingConfiguration:
     """
     This class contains the functionality to read
@@ -318,29 +323,52 @@ class TimingConfiguration:
         toas = self.apply_ignore(toas,specify_keys=['bad-file'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
 
+        
+    def get_value(self, key, dictionary, default=None, func=identify_func):
+        """
+        Generic return pattern for YAML reading
+        This simplifies the writing of many of the basic helper functions
+        in TimingConfigutation
+        """
+        if key in dictionary.keys():
+            return func(dictionary[key])
+        return default
+
+
     def count_bad_files(self):
         """ Return number of bad file entries """
-        if "bad-file" in self.config['ignore'].keys():
-            return len(self.config['ignore']['bad-file'])
-        return None
+        return get_value('bad-file', self.config['ignore'], func=len)
 
     def count_bad_toas(self):
         """ Return number of bad toa entries """
-        if "bad-toa" in self.config['ignore'].keys():
-            return len(self.config['ignore']['bad-toa'])
-        return None
+        return get_value('bad-toa', self.config['ignore'], func=len)        
+
 
     def get_bipm(self):
         """ Return the bipm string """
-        if "bipm" in self.config.keys():
-            return self.config['bipm']
-        return pint_pal.config.LATEST_BIPM
+        return get_value('bipm', self.config, default=pint_pal.config.LATEST_BIPM)
 
     def get_ephem(self):
         """ Return the ephemeris string """
-        if "ephem" in self.config.keys():
-            return self.config['ephem']
-        return pint_pal.config.LATEST_EPHEM
+        return get_value('ephem', self.config, default=pint_pal.config.LATEST_EPHEM)
+
+    
+    def get_notebook_run_Ftest(self):
+        """ Return the boolean for running F-tests """
+        return get_value('run_Ftest', self.config['notebook'], None)
+
+    def get_notebook_run_noise_analysis(self):
+        """ Return the boolean for running the noise analysis """
+        return get_value('run_noise_analysis', self.config['notebook'], None)
+
+    def get_notebook_use_existing_noise_dir(self):
+        """ Return the boolean for using the existing noise directory """
+        return get_value('use_existing_noise_dir', self.config['notebook'], None)
+
+    def get_notebook_use_toa_pickle(self):
+        """ Return the boolean for using an existing TOA pickle file """
+        return get_value('use_toa_pickle', self.config['notebook'], None)
+
     
     def get_febe_pairs(self,toas):
         febe_list = []
