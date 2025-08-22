@@ -15,6 +15,13 @@ n-iterations: 20
 ephem: DE440
 bipm: BIPM2019
 
+# Added for testing, not in original YAML
+notebook:
+  run_Ftest: true
+  run_noise_analysis: true
+  use_existing_noise_dir: false
+  use_toa_pickle: false
+
 dmx:  # control dmx windowing/fixing
   ignore-dmx: false
   fratio: 1.1
