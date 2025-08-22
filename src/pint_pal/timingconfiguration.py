@@ -9,6 +9,7 @@ Very basic usage:
 import io
 import os
 import re
+from typing import Any, Callable
 import pint.toa as toa
 import pint.models as model
 import pint.fitter
@@ -29,7 +30,7 @@ def identity_func(x):
     return x
 
 
-def get_value(key, dictionary, default=None, func=identity_func):
+def get_value(key: str, dictionary: dict, default: Any = None, func: Callable = identity_func) -> Any:
     """
     Generic return pattern for YAML reading
     This simplifies the writing of many of the basic helper functions
