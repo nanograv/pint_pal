@@ -29,14 +29,16 @@ def identity_func(x):
     return x
 
 
-def get_value(self, key, dictionary, default=None, func=identify_func):
+def get_value(key, dictionary, default=None, func=identity_func):
     """
     Generic return pattern for YAML reading
     This simplifies the writing of many of the basic helper functions
     in TimingConfigutation
     """
     if key in dictionary.keys():
-        return func(dictionary[key])
+        retval = dictionary[key]
+        if retval is not None:
+            return func(retval)
     return default
 
 
