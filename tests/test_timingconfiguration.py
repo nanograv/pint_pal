@@ -60,6 +60,9 @@ def test_get_notebook_run_Ftest(tc):
 def test_get_notebook_run_noise_analysis(tc):
     assert tc.get_notebook_run_noise_analysis() == True
 
+def test_get_notebook_check_excision(tc):
+    assert tc.get_notebook_check_excision() == True
+
 def test_get_notebook_use_existing_noise_dir(tc):
     assert tc.get_notebook_use_existing_noise_dir() == False
 

@@ -19,6 +19,7 @@ bipm: BIPM2019
 notebook:
   run_Ftest: true
   run_noise_analysis: true
+  check_excision: true
   use_existing_noise_dir: false
   use_toa_pickle: false
 

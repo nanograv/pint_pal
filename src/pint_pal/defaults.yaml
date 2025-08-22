@@ -5,6 +5,13 @@
 # defaults to the current working directory, but can be configured
 # with `pint_pal.set_data_root()`).
 
+# Notebook configuration defaults
+RUN_FTEST: True            # run F-test modeling at end
+RUN_NOISE_ANALYSIS: True   # run full noise modeling
+CHECK_EXCISION: True       # run "check [excision] results cell
+USE_EXISTING_NOISE_DIR: False    # use noise analyses previously run
+USE_TOA_PICKLE: False      # use a TOA pickle file previously generated
+
 # Choice of clock, SSE
 LATEST_BIPM: "BIPM2021"    # latest clock realization to use
 LATEST_EPHEM: "DE440"      # latest solar system ephemeris to use

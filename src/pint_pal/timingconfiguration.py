@@ -362,19 +362,23 @@ class TimingConfiguration:
     
     def get_notebook_run_Ftest(self):
         """ Return the boolean for running F-tests """
-        return get_value('run_Ftest', self.config['notebook'], None)
+        return get_value('run_Ftest', self.config['notebook'], default=pint_pal.config.RUN_FTEST)
 
     def get_notebook_run_noise_analysis(self):
         """ Return the boolean for running the noise analysis """
-        return get_value('run_noise_analysis', self.config['notebook'], None)
+        return get_value('run_noise_analysis', self.config['notebook'], default=pint_pal.config.RUN_NOISE_ANALYSIS)
 
+    def get_notebook_check_excision(self):
+        """ Return the boolean for checking excision runs """
+        return get_value('check_excision', self.config['notebook'], default=pint_pal.config.CHECK_EXCISION)
+    
     def get_notebook_use_existing_noise_dir(self):
         """ Return the boolean for using the existing noise directory """
-        return get_value('use_existing_noise_dir', self.config['notebook'], None)
+        return get_value('use_existing_noise_dir', self.config['notebook'], default=pint_pal.config.USE_EXISTING_NOISE_DIR))
 
     def get_notebook_use_toa_pickle(self):
         """ Return the boolean for using an existing TOA pickle file """
-        return get_value('use_toa_pickle', self.config['notebook'], None)
+        return get_value('use_toa_pickle', self.config['notebook'], default=pint_pal.config.USE_TOA_PICKLE)
 
     
     def get_febe_pairs(self,toas):
