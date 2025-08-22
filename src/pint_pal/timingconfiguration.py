@@ -28,6 +28,18 @@ def identity_func(x):
     """ Miscellaneous function to wrap as default """
     return x
 
+
+def get_value(self, key, dictionary, default=None, func=identify_func):
+    """
+    Generic return pattern for YAML reading
+    This simplifies the writing of many of the basic helper functions
+    in TimingConfigutation
+    """
+    if key in dictionary.keys():
+        return func(dictionary[key])
+    return default
+
+
 class TimingConfiguration:
     """
     This class contains the functionality to read
@@ -324,15 +336,7 @@ class TimingConfiguration:
         apply_cut_select(toas,reason='manual cuts, specified keys')
 
         
-    def get_value(self, key, dictionary, default=None, func=identify_func):
-        """
-        Generic return pattern for YAML reading
-        This simplifies the writing of many of the basic helper functions
-        in TimingConfigutation
-        """
-        if key in dictionary.keys():
-            return func(dictionary[key])
-        return default
+
 
 
     def count_bad_files(self):
@@ -395,9 +399,7 @@ class TimingConfiguration:
 
     def get_fitter(self):
         """ Return the fitter string (do more?) """
-        if "fitter" in self.config.keys():
-            return self.config['fitter']
-        return None
+        return get_value('fitter', self.config)
 
     def construct_fitter(self, to, mo):
         """ Return the fitter, tracking pulse numbers if available """
@@ -410,9 +412,7 @@ class TimingConfiguration:
 
     def get_toa_type(self):
         """ Return the toa-type string """
-        if "toa-type" in self.config.keys():
-            return self.config['toa-type']
-        return None
+        return get_value('toa-type', self.config)
 
     def get_outfile_basename(self,ext=''):
         """ Return source.[nw]b basename (e.g. J1234+5678.nb) """
@@ -422,9 +422,7 @@ class TimingConfiguration:
 
     def get_niter(self):
         """ Return an integer of the number of iterations to fit """
-        if "n-iterations" in self.config.keys():
-            return int(self.config['n-iterations'])
-        return 1
+        return get_value('n-iterations', self.config, default=1, func=int)
 
     def get_excised(self):
         """ Return excised-tim file if set and exists"""
@@ -435,63 +433,43 @@ class TimingConfiguration:
 
     def get_mjd_start(self):
         """Return mjd-start quantity (applies units days)"""
-        if 'mjd-start' in self.config['ignore'].keys():
-            return self.config['ignore']['mjd-start']
-        return None
+        return get_value('mjd-start', self.config['ignore'])
 
     def get_mjd_end(self):
         """Return mjd-end quantity (applies units days)"""
-        if 'mjd-end' in self.config['ignore'].keys():
-            return self.config['ignore']['mjd-end']
-        return None
+        return get_value('mjd-end', self.config['ignore'])
 
     def get_orphaned_rec(self):
         """Return orphaned receiver(s)"""
-        if 'orphaned-rec' in self.config['ignore'].keys():
-            return self.config['ignore']['orphaned-rec']
-        return None 
+        return get_value('orphaned-rec', self.config['ignore'])
 
     def get_bad_group(self):
         """Return bad group(s)"""
-        if 'bad-group' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-group']
-        return None
+        return get_value('bad-group', self.config['ignore'])
     
     def get_poor_febes(self):
         """Return poor frontend/backend combinations for removal"""
-        if 'poor-febe' in self.config['ignore'].keys():
-            return self.config['ignore']['poor-febe']
-        return None
+        return get_value('poor-febe', self.config['ignore'])
 
     def get_snr_cut(self):
         """ Return value of the TOA S/N cut """
-        if "snr-cut" in self.config['ignore'].keys():
-            return self.config['ignore']['snr-cut']
-        return None #return some default value instead?
+        return get_value('snr-cut', self.config['ignore']) #return some default value instead?
      
     def get_bad_files(self):
         """ Return list of bad files """
-        if 'bad-file' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-file']
-        return None
+        return get_value('bad-file', self.config['ignore'])
     
     def get_bad_ranges(self):
         """ Return list of bad file ranges by MJD ([MJD1,MJD2])"""
-        if 'bad-range' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-range']
-        return None
+        return get_value('bad-range', self.config['ignore'])
 
     def get_bad_toas(self):
         """ Return list of bad TOAs (lists: [filename, channel, subint]) """
-        if 'bad-toa' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-toa']
-        return None
+        return get_value('bad-toa', self.config['ignore'])
 
     def get_bad_toas_averaged(self):
         """ Return list of bad TOAs (lists: [filename, channel, subint]) """
-        if 'bad-toa-averaged' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-toa-averaged']
-        return None
+        return get_value('bad-toa-averaged', self.config['ignore'])
 
     
     def get_investigation_files(self):
@@ -678,81 +656,56 @@ class TimingConfiguration:
                     print(f"    - ['{t[0]}',{t[1]},{t[2]}]")
 
     def get_prob_outlier(self):
-        if "prob-outlier" in self.config['ignore'].keys():
-            return self.config['ignore']['prob-outlier']
-        return None #return some default value instead?
-
+        """ Return outlier probability value """
+        return get_value('prob-outlier', self.config['ignore']) #return some default value instead?
+    
     def get_noise_dir(self):
         """ Return base directory for noise results """
-        if 'noise-dir' in self.config['intermediate-results'].keys():
-            return self.config['intermediate-results']['noise-dir']
-        return None
+        return get_value('noise-dir', self.config['intermediate-results'])
     
     def get_compare_noise_dir(self):
         """ Return base directory for noise results """
-        if 'compare-noise-dir' in self.config['intermediate-results'].keys():
-            return self.config['intermediate-results']['compare-noise-dir']
-        return None
+        return get_value('compare-noise-dir', self.config['intermediate-results'])
 
     def get_no_corner(self):
         """ Return boolean for no corner plot """
-        if 'no-corner' in self.config['intermediate-results'].keys():
-            return self.config['intermediate-results']['no-corner']
-        return False
+        return get_value('no-corner', self.config['intermediate-results'], default=False)
 
     def get_ignore_dmx(self):
         """ Return ignore-dmx toggle """
-        if 'ignore-dmx' in self.config['dmx'].keys():
-            return self.config['dmx']['ignore-dmx']
-        return None
+        return get_value('ignore-dmx', self.config['dmx'])
 
     def get_fratio(self):
         """ Return desired frequency ratio """
-        if 'fratio' in self.config['dmx'].keys():
-            return self.config['dmx']['fratio']
-        return pint_pal.config.FREQUENCY_RATIO
+        return get_value('fratio', self.config['dmx'], default=pint_pal.config.FREQUENCY_RATIO)
 
     def get_sw_delay(self):
         """ Return desired max(solar wind delay) threshold """
-        if 'max-sw-delay' in self.config['dmx'].keys():
-            return self.config['dmx']['max-sw-delay']
-        return pint_pal.config.MAX_SOLARWIND_DELAY
+        return get_value('max-sw-delay', self.config['dmx'], default=pint_pal.config.MAX_SOLARWIND_DELAY)
 
     def get_custom_dmx(self):
         """ Return MJD/binning params for handling DM events, etc. """
-        if 'custom-dmx' in self.config['dmx'].keys():
-            return self.config['dmx']['custom-dmx']
-        return None
+        return get_value('custom-dmx', self.config['dmx'])
 
     def get_outlier_burn(self):
         """ Return outlier analysis burn-in samples """
-        if 'n-burn' in self.config['outlier'].keys():
-            return self.config['outlier']['n-burn']
-        return None
+        return get_value('n-burn', self.config['outlier'])
 
     def get_outlier_samples(self):
         """ Return number of samples for outlier analysis """
-        if 'n-samples' in self.config['outlier'].keys():
-            return self.config['outlier']['n-samples']
-        return None
+        return get_value('n-samples', self.config['outlier'])
 
     def get_outlier_method(self):
         """ Return outlier analysis method """
-        if 'method' in self.config['outlier'].keys():
-            return self.config['outlier']['method']
-        return None
+        return get_value('method', self.config['outlier'])
 
     def get_orb_phase_range(self):
         """ Return orb-phase-range to ignore """
-        if 'orb-phase-range' in self.config['ignore'].keys():
-            return self.config['ignore']['orb-phase-range']
-        return None
+        return get_value('orb-phase-range', self.config['ignore'])
     
     def get_check_cleared(self):
         """ Return bool to check if yaml has been cleared """
-        if 'cleared' in self.config['check'].keys():
-            return self.config['check']['cleared']
-        return None
+        return get_value('cleared', self.config['check'])
 
     def apply_ignore(self,toas,specify_keys=None,warn=False,model=None):
         """ Basic checks and return TOA excision info. """
