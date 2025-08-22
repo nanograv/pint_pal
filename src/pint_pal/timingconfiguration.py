@@ -334,13 +334,13 @@ class TimingConfiguration:
         """ Return the bipm string """
         if "bipm" in self.config.keys():
             return self.config['bipm']
-        return None #return some default value instead?
+        return pint_pal.config.LATEST_BIPM
 
     def get_ephem(self):
         """ Return the ephemeris string """
         if "ephem" in self.config.keys():
             return self.config['ephem']
-        return None #return some default value instead?
+        return pint_pal.config.LATEST_EPHEM
     
     def get_febe_pairs(self,toas):
         febe_list = []
