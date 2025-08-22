@@ -25,7 +25,7 @@ from pint_pal.lite_utils import check_toa_version, check_tobs
 import pint_pal.config
 
 
-def identity_func(x):
+def identity_func(x: Any) -> Any:
     """ Miscellaneous function to wrap as default """
     return x
 
