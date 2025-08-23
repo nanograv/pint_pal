@@ -20,7 +20,7 @@ def tc():
     parent = Path(__file__).parent
     par_directory = parent / "results/"
     tim_directory = parent / "tim/" 
-    configfile = parent / "configs/J0605+3757.nb.yaml"
+    configfile = parent / "configs/tctest.nb.yaml"
     print(par_directory, configfile)
     return TimingConfiguration(configfile, tim_directory=tim_directory, par_directory=par_directory)
 @pytest.fixture

@@ -1,3 +1,5 @@
+# Modification of J0605+3757.nb.yaml for the purpose of test_timingconfiguration.py
+
 source: J0605+3757
 par-directory: results/
 tim-directory: tim/
@@ -14,6 +16,13 @@ fitter: DownhillGLSFitter
 n-iterations: 20
 ephem: DE440
 bipm: BIPM2019
+
+notebook:
+  run_Ftest: true
+  run_noise_analysis: true
+  check_excision: true
+  use_existing_noise_dir: false
+  use_toa_pickle: false
 
 dmx:  # control dmx windowing/fixing
   ignore-dmx: false
