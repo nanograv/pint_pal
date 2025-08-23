@@ -43,6 +43,11 @@ def read_config_file(config_file):
     with open(config_file, 'r') as f:
         config = yaml.load(f)
 
+    global RUN_FTEST
+    global RUN_NOISE_ANALYSIS
+    global CHECK_EXCISION
+    global USE_EXISTING_NOISE_DIR
+    global USE_TOA_PICKLE
     global LATEST_BIPM
     global LATEST_EPHEM
     global PLANET_SHAPIRO
@@ -51,6 +56,16 @@ def read_config_file(config_file):
     global MAX_SOLARWIND_DELAY
     global LATEST_TOA_RELEASE
 
+    if 'RUN_FTEST' in config:
+        RUN_FTEST = config['RUN_FTEST']
+    if 'RUN_NOISE_ANALYSIS' in config:
+        RUN_NOISE_ANALYSIS = config['RUN_NOISE_ANALYSIS']
+    if 'CHECK_EXCISION' in config:
+        CHECK_EXCISION = config['CHECK_EXCISION']
+    if 'USE_EXISTING_NOISE_DIR' in config:
+        USE_EXISTING_NOISE_DIR = config['USE_EXISTING_NOISE_DIR']
+    if 'USE_TOA_PICKLE' in config:
+        USE_TOA_PICKLE = config['USE_TOA_PICKLE']
     if 'LATEST_BIPM' in config:
         LATEST_BIPM = config['LATEST_BIPM']
     if 'LATEST_EPHEM' in config:
