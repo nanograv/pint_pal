@@ -39,8 +39,8 @@ def test_get_model_and_toas(tc, PSR):
 def test_count_bad_files(tc):
     assert tc.count_bad_files() is None
 
-def test_count_bad_files(tc):
-    assert tc.count_bad_toas() is None
+def test_count_bad_toas(tc):
+    assert tc.count_bad_toas() == 1
 
 def test_get_bipm(tc):
     assert tc.get_bipm() == "BIPM2019"
@@ -100,10 +100,10 @@ def test_get_bad_files(tc):
     assert tc.get_bad_files() is None
 
 def test_get_bad_ranges(tc):
-    assert tc.get_bad_ranges() is None
+    assert tc.get_bad_ranges() == [[0, 60000, "fake"]]
 
 def test_get_bad_toas(tc):
-    assert tc.get_bad_toas() is None
+    assert tc.get_bad_toas() == [["fake.ff", 1, 1]]
 
 def test_get_bad_toas_averaged(tc):
     assert tc.get_bad_toas_averaged() is None

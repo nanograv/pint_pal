@@ -54,7 +54,9 @@ ignore: # toa excision
   mjd-end: 59072.0
   snr-cut: 8
   bad-toa:
+  - [fake.ff, 1, 1]
   bad-range:
+  - [0, 60000, fake]
   bad-file:
   prob-outlier: 0.1
 
