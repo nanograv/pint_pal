@@ -63,6 +63,12 @@ def test_get_notebook_use_existing_noise_dir(tc):
 def test_get_notebook_use_toa_pickle(tc):
     assert tc.get_notebook_use_toa_pickle() == False
 
+def test_get_notebook_log_level(tc):
+    assert tc.get_notebook_log_level() == "INFO"
+
+def test_get_notebook_log_to_file(tc):
+    assert tc.get_notebook_log_to_file() == False
+
 def test_get_fitter(tc):
     assert tc.get_fitter() == "DownhillGLSFitter"
 

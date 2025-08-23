@@ -380,6 +380,14 @@ class TimingConfiguration:
         """ Return the boolean for using an existing TOA pickle file """
         return get_value('use_toa_pickle', self.config['notebook'], default=pint_pal.config.USE_TOA_PICKLE)
 
+    def get_notebook_log_level(self):
+        """ Return logging level """
+        return get_value('log_level', self.config['notebook'], default=pint_pal.config.LOG_LEVEL)
+    
+    def get_notebook_log_to_file(self):
+        """ Return the boolean for logging to file """
+        return get_value('log_to_file', self.config['notebook'], default=pint_pal.config.LOG_TO_FILE)
+
     
     def get_febe_pairs(self,toas):
         febe_list = []

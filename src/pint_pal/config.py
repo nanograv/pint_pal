@@ -48,6 +48,8 @@ def read_config_file(config_file):
     global CHECK_EXCISION
     global USE_EXISTING_NOISE_DIR
     global USE_TOA_PICKLE
+    global LOG_LEVEL
+    global LOG_TO_FILE
     global LATEST_BIPM
     global LATEST_EPHEM
     global PLANET_SHAPIRO
@@ -66,6 +68,10 @@ def read_config_file(config_file):
         USE_EXISTING_NOISE_DIR = config['USE_EXISTING_NOISE_DIR']
     if 'USE_TOA_PICKLE' in config:
         USE_TOA_PICKLE = config['USE_TOA_PICKLE']
+    if 'LOG_LEVEL' in config:
+        LOG_LEVEL = config['LOG_LEVEL']
+    if 'LOG_TO_FILE' in config:
+        LOG_TO_FILE = config['LOG_TO_FILE']
     if 'LATEST_BIPM' in config:
         LATEST_BIPM = config['LATEST_BIPM']
     if 'LATEST_EPHEM' in config:

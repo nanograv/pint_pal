@@ -11,6 +11,8 @@ RUN_NOISE_ANALYSIS: True   # run full noise modeling
 CHECK_EXCISION: True       # run "check [excision] results cell
 USE_EXISTING_NOISE_DIR: False    # use noise analyses previously run
 USE_TOA_PICKLE: False      # use a TOA pickle file previously generated
+LOG_LEVEL: "INFO"          # set logging level
+LOG_TO_FILE: False         # write logging output to file
 
 # Choice of clock, SSE
 LATEST_BIPM: "BIPM2021"    # latest clock realization to use
