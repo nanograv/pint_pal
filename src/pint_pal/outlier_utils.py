@@ -24,7 +24,22 @@ from numpyro import sample, factor, infer, deterministic
 from numpyro import distributions as dist
 
 def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
-    """Necessary set-up to run gibbs sampler, and run it. Return pout.
+    """
+    Run Gibbs sampler for outlier analysis using enterprise PTA model.
+
+    Parameters
+    ----------
+    entPintPulsar : enterprise.PintPulsar object
+        The pulsar object for analysis.
+    results_dir : str, optional
+        Directory to save results.
+    Nsamples : int, optional
+        Number of samples to draw.
+
+    Returns
+    -------
+    poutlier : np.ndarray
+        Mean outlier probability chain.
     """
     # Imports
     import enterprise.signals.parameter as parameter
@@ -71,33 +86,44 @@ def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     return poutlier
 
 def get_entPintPulsar(model,toas,sort=False,drop_pintpsr=True):
-    """Return enterprise.PintPulsar object
+    """
+    Create an enterprise.PintPulsar object from PINT model and TOAs.
 
     Parameters
-    ==========
-    model: `pint.model.TimingModel` object
-    toas: `pint.toa.TOAs` object
-    sort: bool
-        optional, default: False
-    drop_pintpsr: bool
-        optional, default: True; PintPulsar retains model/toas if False
+    ----------
+    model : pint.model.TimingModel
+        Timing model object.
+    toas : pint.toa.TOAs
+        TOAs object.
+    sort : bool, optional
+        Whether to sort TOAs.
+    drop_pintpsr : bool, optional
+        Whether to drop PINT pulsar info.
 
     Returns
-    =======
-    model: `enterprise.PintPulsar` object
+    -------
+    PintPulsar
+        The enterprise PintPulsar object.
     """
     from enterprise.pulsar import PintPulsar
     return PintPulsar(toas,model,sort=sort,drop_pintpsr=drop_pintpsr)
 
 def calculate_pout(model, toas, tc_object):
-    """Determines TOA outlier probabilities using choices specified in the
-    timing configuration file's outlier block. Write tim file with pout flags/values.
+    """
+    Calculate TOA outlier probabilities and write tim file with flags.
 
     Parameters
-    ==========
-    model: `pint.model.TimingModel` object
-    toas: `pint.toa.TOAs` object
-    tc_object: `pint_pal.timingconfiguration` object
+    ----------
+    model : pint.model.TimingModel
+        Timing model object.
+    toas : pint.toa.TOAs
+        TOAs object.
+    tc_object : pint_pal.timingconfiguration
+        Timing configuration object.
+
+    Returns
+    -------
+    None
     """
     method = tc_object.get_outlier_method()
     results_dir = f'outlier/{tc_object.get_outfile_basename()}'
@@ -130,15 +156,23 @@ def calculate_pout(model, toas, tc_object):
     apply_cut_select(toas,reason='resumption after write_tim, pout')
 
 def make_pout_cuts(model,toas,tc_object,outpct_threshold=8.0):
-    """Apply cut flags to TOAs with outlier probabilities larger than specified threshold.
-    Also runs setup_dmx.
+    """
+    Apply cut flags to TOAs with outlier probabilities above threshold and run DMX setup.
 
     Parameters
-    ==========
-    toas: `pint.toa.TOAs` object
-    tc_object: `pint_pal.timingconfiguration` object
-    outpct_threshold: float, optional
-       cut file's remaining TOAs (maxout) if X% were flagged as outliers (default set by 5/64=8%) 
+    ----------
+    model : pint.model.TimingModel
+        Timing model object.
+    toas : pint.toa.TOAs
+        TOAs object.
+    tc_object : pint_pal.timingconfiguration
+        Timing configuration object.
+    outpct_threshold : float, optional
+        Percentage threshold for outlier cuts.
+
+    Returns
+    -------
+    None
     """
     toas = tc_object.apply_ignore(toas,specify_keys=['prob-outlier'])
     apply_cut_select(toas,reason='outlier analysis, specified key')
@@ -153,20 +187,35 @@ def make_pout_cuts(model,toas,tc_object,outpct_threshold=8.0):
 
 def Ftest(chi2_1, dof_1, chi2_2, dof_2):
     """
-    Ftest(chi2_1, dof_1, chi2_2, dof_2):
-        Compute an F-test to see if a model with extra parameters is
-        significant compared to a simpler model.  The input values are the
-        (non-reduced) chi^2 values and the numbers of DOF for '1' the
-        original model and '2' for the new model (with more fit params).
-        The probability is computed exactly like Sherpa's F-test routine
-        (in Ciao) and is also described in the Wikipedia article on the
-        F-test:  http://en.wikipedia.org/wiki/F-test
-        The returned value is the probability that the improvement in
-        chi2 is due to chance (i.e. a low probability means that the
-        new fit is quantitatively better, while a value near 1 means
-        that the new model should likely be rejected).
-        If the new model has a higher chi^2 than the original model,
-        returns value of False
+    Compute an F-test to see if a model with extra parameters is
+    significant compared to a simpler model.  The input values are the
+    (non-reduced) chi^2 values and the numbers of DOF for '1' the
+    original model and '2' for the new model (with more fit params).
+    The probability is computed exactly like Sherpa's F-test routine
+    (in Ciao) and is also described in the Wikipedia article on the
+    F-test:  http://en.wikipedia.org/wiki/F-test
+    The returned value is the probability that the improvement in
+    chi2 is due to chance (i.e. a low probability means that the
+    new fit is quantitatively better, while a value near 1 means
+    that the new model should likely be rejected).
+    If the new model has a higher chi^2 than the original model,
+    returns value of False
+
+    Parameters
+    ----------
+    chi2_1 : float
+        Chi-squared of original model.
+    dof_1 : int
+        Degrees of freedom of original model.
+    chi2_2 : float
+        Chi-squared of new model.
+    dof_2 : int
+        Degrees of freedom of new model.
+
+    Returns
+    -------
+    float or bool
+        Probability that improvement is due to chance, or False if not improved.
     """
     delta_chi2 = chi2_1 - chi2_2
     if delta_chi2 > 0:
@@ -183,21 +232,60 @@ def Ftest(chi2_1, dof_1, chi2_2, dof_2):
 _epoch_args = None
 
 def _set_epoch_args(model, toas, tc_object):
-    """Sets arguments for test_one_epoch() into a global variable 
-    for use in multiprocessing."""
+    """
+    Set global variable for multiprocessing epoch analysis.
+
+    Parameters
+    ----------
+    model : pint.model.TimingModel
+        Timing model object.
+    toas : pint.toa.TOAs
+        TOAs object.
+    tc_object : pint_pal.timingconfiguration
+        Timing configuration object.
+
+    Returns
+    -------
+    None
+    """
     global _epoch_args
     _epoch_args = (model, toas, tc_object)
 
 def _test_one_epoch_args(filename):
-    """Single-argument wrapper function for test_one_epoch() for use with
-    multiprocessing."""
+    """
+    Wrapper for test_one_epoch for multiprocessing.
+
+    Parameters
+    ----------
+    filename : str
+        Filename to test removal.
+
+    Returns
+    -------
+    tuple
+        Results from test_one_epoch.
+    """
     return test_one_epoch(*_epoch_args, filename)
 
 def test_one_epoch(model, toas, tc_object, filename):
-    """Test chi2 for removal of one epoch (filename).  Used internally
+    """
+    Test chi2 for removal of one epoch (filename).  Used internally
     by epochalyptica().
 
-    Returns:
+    Parameters
+    ----------
+    model : pint.model.TimingModel
+        Timing model object.
+    toas : pint.toa.TOAs
+        TOAs object.
+    tc_object : pint_pal.timingconfiguration
+        Timing configuration object.
+    filename : str
+        Filename to remove.
+
+    Returns
+    ------
+    tuple
       receiver - receiver name of the removed file
       mjd - MJD of the removed file
       chi2 - post-fit chi2 after removing the file
@@ -347,6 +435,29 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6,nproc=1):
 
 ## discovery outlier analysis functions written by Pat Meyers
 def makenoise_measurement_rescaled(psr, noisedict={}, scale=1.0, tnequad=False, selection=selection_backend_flags, vectorize=True):
+    """
+    Create a noise measurement matrix with rescaled errors for a pulsar.
+
+    Parameters
+    ----------
+    psr : Pulsar object
+        Pulsar to analyze.
+    noisedict : dict, optional
+        Noise parameters.
+    scale : float, optional
+        Scaling factor for errors.
+    tnequad : bool, optional
+        Use tnequad instead of t2equad.
+    selection : function, optional
+        Backend selection function.
+    vectorize : bool, optional
+        Whether to vectorize output.
+
+    Returns
+    -------
+    NoiseMatrix1D_novar or NoiseMatrix1D_var
+        Noise matrix for measurement errors.
+    """
     backend_flags = selection(psr)
     backends = [b for b in sorted(set(backend_flags)) if b != '']
 
@@ -404,8 +515,17 @@ def makenoise_measurement_rescaled(psr, noisedict={}, scale=1.0, tnequad=False, 
         
 def make_conditional_with_tm(psrl):
     """
-    make function that samples from conditional
-    when timing model is variable as well.
+    Create function to sample from conditional with variable timing model.
+
+    Parameters
+    ----------
+    psrl : PulsarLikelihood object
+        Pulsar likelihood object.
+
+    Returns
+    -------
+    function
+        Conditional sampling function.
     """
     Pvar = psrl.N.P_var
     Nvar = psrl.N.N
@@ -433,8 +553,17 @@ def make_conditional_with_tm(psrl):
 
 def make_sample_cond_with_tm(psrl):
     """
-    make function that samples from conditional
-    when timing model is variable as well.
+    Create function to sample from conditional with variable timing model and random key.
+
+    Parameters
+    ----------
+    psrl : PulsarLikelihood object
+        Pulsar likelihood object.
+
+    Returns
+    -------
+    function
+        Conditional sampling function with random key.
     """
     Pvar = psrl.N.P_var
     Nvar = psrl.N.N
@@ -492,6 +621,23 @@ def make_sample_cond_with_tm(psrl):
 #     return clogl
 
 def make_single_psr_model_scaled_errors(psr, noisedict={}, tm_variable=False):
+    """
+    Build single pulsar likelihood model with scaled measurement errors.
+
+    Parameters
+    ----------
+    psr : Pulsar object
+        Pulsar to analyze.
+    noisedict : dict, optional
+        Noise parameters.
+    tm_variable : bool, optional
+        Whether timing model is variable.
+
+    Returns
+    -------
+    PulsarLikelihood
+        The pulsar likelihood model.
+    """
     psrl = ds.PulsarLikelihood([psr.residuals,
                             ds.makegp_timing(psr, svd=True, variable=tm_variable),
                             ds.makegp_ecorr(psr, noisedict=noisedict),      
@@ -501,6 +647,23 @@ def make_single_psr_model_scaled_errors(psr, noisedict={}, tm_variable=False):
 
 
 def make_single_psr_model(psr, noisedict={}, tm_variable=False):
+    """
+    Build single pulsar likelihood model with default measurement errors.
+
+    Parameters
+    ----------
+    psr : Pulsar object
+        Pulsar to analyze.
+    noisedict : dict, optional
+        Noise parameters.
+    tm_variable : bool, optional
+        Whether timing model is variable.
+
+    Returns
+    -------
+    PulsarLikelihood
+        The pulsar likelihood model.
+    """
     psrl = ds.PulsarLikelihood([psr.residuals,
                             ds.makegp_timing(psr, svd=True, variable=tm_variable),
                             ds.makegp_ecorr(psr, noisedict=noisedict),      
@@ -510,6 +673,21 @@ def make_single_psr_model(psr, noisedict={}, tm_variable=False):
 
 
 def make_gibbs_fn(psrl, prior_dict):
+    """
+    Create Gibbs sampling function for outlier analysis.
+
+    Parameters
+    ----------
+    psrl : PulsarLikelihood object
+        Pulsar likelihood object.
+    prior_dict : dict
+        Dictionary of prior parameters.
+
+    Returns
+    -------
+    function
+        Gibbs sampling function.
+    """
     make_Nalpha = psrl.N.N.getN
     Nalpha = psrl.N.N
     Nalpha_solve_2d = Nalpha.make_solve_2d()
@@ -579,6 +757,21 @@ def make_gibbs_fn(psrl, prior_dict):
 
 
 def make_numpyro_outlier_model(psrl, psr):
+    """
+    Create a numpyro model for outlier analysis for a single pulsar.
+
+    Parameters
+    ----------
+    psrl : PulsarLikelihood object
+        Pulsar likelihood object.
+    psr : Pulsar object
+        Pulsar to analyze.
+
+    Returns
+    -------
+    function
+        Numpyro model function.
+    """
     jclogl = jax.jit(psrl.clogL)
     ecorr_high = -5
     ecorr_low = -8.5
