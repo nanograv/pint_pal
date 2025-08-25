@@ -108,7 +108,7 @@ def get_entPintPulsar(model,toas,sort=False,drop_pintpsr=True):
     from enterprise.pulsar import PintPulsar
     return PintPulsar(toas,model,sort=sort,drop_pintpsr=drop_pintpsr)
 
-def calculate_pout(model, toas, tc_object):
+def calculate_pout(model, toas, tc_object, outlier_sampler_kwargs={}):
     """
     Calculate TOA outlier probabilities and write tim file with flags.
 
@@ -120,6 +120,9 @@ def calculate_pout(model, toas, tc_object):
         TOAs object.
     tc_object : pint_pal.timingconfiguration
         Timing configuration object.
+    outlier_sampler_kwargs : dict, optional
+        Additional keyword arguments for the outlier sampler.
+        Should be passed via the config file outlier:sampler_kwargs.
 
     Returns
     -------
@@ -130,17 +133,34 @@ def calculate_pout(model, toas, tc_object):
     Nsamples = tc_object.get_outlier_samples()
     Nburnin = tc_object.get_outlier_burn()
 
-    if method == 'hmc':
+    if method == 'enterprise-hmc':
+        log.info('Running enterprise hmc outlier analysis...')
         epp = get_entPintPulsar(model, toas, drop_pintpsr=False)
         from enterprise_outliers.hmc_outlier import OutlierHMC
         pout = OutlierHMC(epp, outdir=results_dir, Nsamples=Nsamples, Nburnin=Nburnin)
         print('') # Progress bar doesn't print a newline
         # Some sorting will be needed here so pout refers to toas order?
-    elif method == 'gibbs':
+    elif method == 'enterprise-gibbs':
+        log.info('Running enterprise gibbs outlier analysis...')
         epp = get_entPintPulsar(model, toas)
         pout = gibbs_run(epp,results_dir=results_dir,Nsamples=Nsamples)
+    elif method == 'discovery-gibbs':
+        log.info('Running discovery-gibbs outlier analysis...')
+        log.info('Loading enterprise pulsar object...')
+        psr = get_entPintPulsar(model, toas, drop_pintpsr=False)
+        # should put in a checker to make sure these priors match !!
+        prior_dict = get_discovery_prior_dictionary()
+        log.info('Setting up discovery outlier Gibbs sampler...')
+        sampler = setup_sampler_discovery_outlier_analysis(psr, prior_dict=prior_dict)
+        log.info('Beginning to sample...')
+        sampler.run(jax.random.PRNGKey(0))
+        log.info('Sampling complete. Calculating pout for all toas.')
+        pout = np.mean(sampler.get_samples()['z_i'], axis=0)
     else:
-        log.error(f'Specified method ({method}) is not recognized.')
+        msg = 'Specified method ({method}) is not recognized.'
+        msg+= 'Please use "enterprise-hmc", "enterprise-gibbs", or "discovery-gibbs".'
+        log.error(msg)
+        raise ValueError(msg)
 
     # Apply pout flags, cuts
     for i,oi in enumerate(toas.table['index']):
@@ -813,3 +833,54 @@ def make_numpyro_outlier_model(psrl, psr):
         pardict.update({k: coeffs[slc] for k, slc in psrl.N.index.items()})
         factor('clogl', jclogl(pardict))
     return model
+
+def setup_sampler_discovery_outlier_analysis(psr, tc_object, prior_dict={}):
+    """
+    Setup the numpyro sampler for a discovery outlier analysis.
+
+    Parameters
+    ----------
+    psr : `enterprise.pulsar` object
+    
+    tc_object : `pint_pal.TimingConfiguration` object
+        this gets used to set up the sampler kwargs.
+    
+    prior_dict : dict, optional
+        if running with non-standard priors, need to update them via this dictionary
+
+    Returns
+    -------
+    sampler : `numpyro.infer.mcmc.MCMC`
+        numpyro object which is ready to perform MonteCarlo sampling
+    """
+    psrl = make_single_psr_model_scaled_errors(psr, tm_variable=True)
+    gibbs_fn = make_gibbs_fn(psrl, prior_dict)
+    jgibbs = jax.jit(gibbs_fn)
+    numpyro_model = make_numpyro_outlier_model(psrl, psr)
+    hmc_kernel = infer.NUTS(numpyro_model, max_tree_depth=10, target_accept_prob=0.99)
+    kernel = infer.HMCGibbs(hmc_kernel, gibbs_fn=jgibbs, gibbs_sites=['theta','z_i', 'alpha_i', 'coeffs', 'q'])
+    outlier_kwargs = tc_object.config['outlier']
+    # need to pass relevant outlier kwargs into the sampler
+    sampler = infer.MCMC(kernel, num_warmup=20, num_samples=100, num_chains=1)
+    return sampler
+
+def get_discovery_prior_dictionary(override_dict={}):
+    """
+    Get the prior dictionary for discovery outlier analysis.
+
+    Parameters
+    ----------
+    override_dict : dict
+        Dictionary of parameters to override the default priors.
+
+    Returns
+    -------
+    dict : dict
+        Dictionary of priors.
+    """
+    prior_dict = ds.priordict_standard.copy()
+    prior_dict.update({f'(.*_)?alpha_scaling\\(([0-9]*)\\)': [0.999, 1.001]})
+    prior_dict.update({f'(.*_)?timingmodel_coefficients\\(([0-9]*)\\)': [0.999, 1.001]})
+    for key, value in override_dict.items():
+        prior_dict[key] = value
+    return prior_dict
