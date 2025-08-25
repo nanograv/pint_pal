@@ -791,7 +791,7 @@ class TimingConfiguration:
                 apply_cut_flag(toas,febeinds,'poorfebe',warn=warn)
         if 'prob-outlier' in valid_valued:
             omethod = self.get_outlier_method().lower()  # accepts Gibbs and HMC, e.g.
-            SUPPORTED_METHODS = ['gibbs','hmc']
+            SUPPORTED_METHODS = ['enterprise-gibbs','enterprise-hmc', 'discovery-gibbs']
             if omethod in SUPPORTED_METHODS:
                 oflag = f'pout_{omethod}'
             else:
