@@ -41,17 +41,20 @@ def whiten_resids(fitter, restype = 'postfit', zero_mean=False):
     # Check if input is the epoch averaged dictionary, should only be used if epoch averaged NB TOAs
     if type(fitter) is dict:
         rs = fitter['time_resids']
-        noise_rs = fitter['noise_resids'].copy()
+        noise_rs = fitter['noise_resids']
         # Now check if red noise residuals
-        wres = rs
-        if "pl_red_noise" in noise_rs.keys():
-            wres -= noise_rs['pl_red_noise']
-        if "pl_DM_noise" in noise_rs.keys():
-            wres -= noise_rs['pl_DM_noise']
-        if "pl_chrom_noise" in noise_rs.keys():
-            wres -= noise_rs['pl_chrom_noise']
-        if "pl_SW_noise" in noise_rs.keys():
-            wres -= noise_rs['pl_SW_noise']
+        wres = rs.copy()
+        # if "pl_red_noise" in noise_rs.keys():
+        #     wres -= noise_rs['pl_red_noise']
+        # if "pl_DM_noise" in noise_rs.keys():
+        #     wres -= noise_rs['pl_DM_noise']
+        # if "pl_chrom_noise" in noise_rs.keys():
+        #     wres -= noise_rs['pl_chrom_noise']
+        # if "pl_SW_noise" in noise_rs.keys():
+        #     wres -= noise_rs['pl_SW_noise']
+        for ky in list(noise_rs.keys()):
+            log.info(f"Subtracting {ky} noise resids from time resids for whitening")
+            wres -= noise_rs[ky]
         if np.all(wres == rs):
             log.warning("No red noise, residuals already white. Returning input residuals...")
     # if not assume it's a PINT fitter class object
@@ -77,17 +80,20 @@ def whiten_resids(fitter, restype = 'postfit', zero_mean=False):
         num_res = len(time_resids)
         # Check that the key is in the dictionary
         wres = time_resids.copy() # need to make a copy
-        if "pl_red_noise" in noise_resids.keys():
-            wres -= noise_resids['pl_red_noise'][:num_res]
-        if "pl_DM_noise" in noise_resids.keys():
-            wres -= noise_resids['pl_DM_noise'][:num_res]
-        if "pl_chrom_noise" in noise_resids.keys():
-            wres -= noise_resids['pl_chrom_noise'][:num_res]
-        if "pl_SW_noise" in noise_resids.keys():
-            wres -= noise_resids['pl_SW_noise'][:num_res]
+        # if "pl_red_noise" in noise_resids.keys():
+        #     wres -= noise_resids['pl_red_noise'][:num_res]
+        # if "pl_DM_noise" in noise_resids.keys():
+        #     wres -= noise_resids['pl_DM_noise'][:num_res]
+        # if "pl_chrom_noise" in noise_resids.keys():
+        #     wres -= noise_resids['pl_chrom_noise'][:num_res]
+        # if "pl_SW_noise" in noise_resids.keys():
+        #     wres -= noise_resids['pl_SW_noise'][:num_res]
+        for ky in list(noise_resids.keys()):
+            log.info(f"Subtracting {ky} noise resids from time resids for whitening")
+            wres -= noise_resids[ky][:num_res]
         if np.all(time_resids == wres):
             log.warning("No red noise, residuals already white. Returning input residuals...")
-    if zero_mean = True:
+    if zero_mean is True:
         wres = wres - np.mean(wres)
     return wres
 
