@@ -22,7 +22,7 @@ import copy
 
 ALPHA = 0.0027
 
-def whiten_resids(fitter, restype = 'postfit'):
+def whiten_resids(fitter, restype = 'postfit', zero_mean=False):
     """
     Function to whiten residuals. If no reddened residuals, input will be returned.
 
@@ -32,6 +32,7 @@ def whiten_resids(fitter, restype = 'postfit'):
     restype ['string']: Type of residuals, pre or post fit, to plot from fitter object. Options are:
         'prefit' - plot the prefit residuals.
         'postfit' - plot the postfit residuals (default)
+    zero_mean [bool]: default - False. whether or not to subtract off the mean after whitening.
 
     Returns:
     ---------
@@ -86,6 +87,8 @@ def whiten_resids(fitter, restype = 'postfit'):
             wres -= noise_resids['pl_SW_noise'][:num_res]
         if np.all(time_resids == wres):
             log.warning("No red noise, residuals already white. Returning input residuals...")
+    if zero_mean = True:
+        wres = wres - np.mean(wres)
     return wres
 
 def rms_by_backend(resids, errors, rcvr_backends, dm = False):
