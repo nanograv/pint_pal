@@ -47,6 +47,8 @@ def whiten_resids(fitter, restype = 'postfit'):
             wres -= noise_rs['pl_red_noise']
         if "pl_DM_noise" in noise_rs.keys():
             wres -= noise_rs['pl_DM_noise']
+        if "pl_chrom_noise" in noise_rs.keys():
+            wres -= noise_rs['pl_chrom_noise']
         if "pl_SW_noise" in noise_rs.keys():
             wres -= noise_rs['pl_SW_noise']
         if np.all(wres == rs):
@@ -78,6 +80,8 @@ def whiten_resids(fitter, restype = 'postfit'):
             wres -= noise_resids['pl_red_noise'][:num_res]
         if "pl_DM_noise" in noise_resids.keys():
             wres -= noise_resids['pl_DM_noise'][:num_res]
+        if "pl_chrom_noise" in noise_resids.keys():
+            wres -= noise_resids['pl_chrom_noise'][:num_res]
         if "pl_SW_noise" in noise_resids.keys():
             wres -= noise_resids['pl_SW_noise'][:num_res]
         if np.all(time_resids == wres):
