@@ -40,17 +40,17 @@ def whiten_resids(fitter, restype = 'postfit'):
     # Check if input is the epoch averaged dictionary, should only be used if epoch averaged NB TOAs
     if type(fitter) is dict:
         rs = fitter['time_resids']
-        noise_rs = fitter['noise_resids']
+        noise_rs = fitter['noise_resids'].copy()
         # Now check if red noise residuals
-        if "pl_red_noise" and "pl_DM_noise" in noise_rs:
-            wres = rs - noise_rs['pl_red_noise'] - noise_rs['pl_DM_noise']
-        elif "pl_red_noise" in noise_rs:
-            wres = rs - noise_rs['pl_red_noise']
-        elif "pl_DM_noise" in noise_rs:
-            wres = rs - noise_rs['pl_DM_noise']
-        else:
+        wres = rs
+        if "pl_red_noise" in noise_rs.keys():
+            wres -= noise_rs['pl_red_noise']
+        if "pl_DM_noise" in noise_rs.keys():
+            wres -= noise_rs['pl_DM_noise']
+        if "pl_SW_noise" in noise_rs.keys():
+            wres -= noise_rs['pl_SW_noise']
+        if np.all(wres == rs):
             log.warning("No red noise, residuals already white. Returning input residuals...")
-            wres = rs
     # if not assume it's a PINT fitter class object
     else:
         # Check if WB or NB
@@ -73,15 +73,15 @@ def whiten_resids(fitter, restype = 'postfit'):
             # Get number of residuals
         num_res = len(time_resids)
         # Check that the key is in the dictionary
-        if "pl_red_noise" and "pl_DM_noise" in noise_resids:
-            wres = time_resids - noise_resids['pl_red_noise'][:num_res] - noise_resids['pl_DM_noise'][:num_res]
-        elif "pl_red_noise" in noise_resids:
-            wres = time_resids - noise_resids['pl_red_noise'][:num_res]
-        elif "pl_DM_noise" in noise_resids:
-            wres = time_resids - noise_resids['pl_DM_noise'][:num_res]
-        else:
+        wres = time_resids.copy() # need to make a copy
+        if "pl_red_noise" in noise_resids.keys():
+            wres -= noise_resids['pl_red_noise'][:num_res]
+        if "pl_DM_noise" in noise_resids.keys():
+            wres -= noise_resids['pl_DM_noise'][:num_res]
+        if "pl_SW_noise" in noise_resids.keys():
+            wres -= noise_resids['pl_SW_noise'][:num_res]
+        if np.all(time_resids == wres):
             log.warning("No red noise, residuals already white. Returning input residuals...")
-            wres = time_resids
     return wres
 
 def rms_by_backend(resids, errors, rcvr_backends, dm = False):
