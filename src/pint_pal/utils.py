@@ -22,7 +22,7 @@ import copy
 
 ALPHA = 0.0027
 
-def whiten_resids(fitter, restype = 'postfit', zero_mean=False):
+def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
     """
     Function to whiten residuals. If no reddened residuals, input will be returned.
 
