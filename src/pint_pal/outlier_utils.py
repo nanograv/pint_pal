@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from astropy import log
 from multiprocessing import Pool
+from pathlib import Path
+from datetime import datetime
 
 # Outlier/Epochalyptica imports
 from pint.fitter import ConvergenceFailure
@@ -15,11 +17,13 @@ from pint_pal.dmx_utils import *
 
 # discovery outlier analysis imports
 import discovery as ds
+import arviz as az
 from discovery import matrix, selection_backend_flags
 import numpy as np
 import jax
 import jax.numpy as jnp
 import jax.scipy.linalg as jsl
+import numpyro
 from numpyro import sample, factor, infer, deterministic
 from numpyro import distributions as dist
 
@@ -108,7 +112,7 @@ def get_entPintPulsar(model,toas,sort=False,drop_pintpsr=True):
     from enterprise.pulsar import PintPulsar
     return PintPulsar(toas,model,sort=sort,drop_pintpsr=drop_pintpsr)
 
-def calculate_pout(model, toas, tc_object, outlier_sampler_kwargs={}):
+def calculate_pout(model, toas, tc_object):
     """
     Calculate TOA outlier probabilities and write tim file with flags.
 
@@ -120,30 +124,34 @@ def calculate_pout(model, toas, tc_object, outlier_sampler_kwargs={}):
         TOAs object.
     tc_object : pint_pal.timingconfiguration
         Timing configuration object.
-    outlier_sampler_kwargs : dict, optional
-        Additional keyword arguments for the outlier sampler.
-        Should be passed via the config file outlier:sampler_kwargs.
 
     Returns
     -------
     None
     """
     method = tc_object.get_outlier_method()
-    results_dir = f'outlier/{tc_object.get_outfile_basename()}'
+    results_dir = f'outlier/{tc_object.get_outfile_basename()}/'
     Nsamples = tc_object.get_outlier_samples()
     Nburnin = tc_object.get_outlier_burn()
+    try:
+        outdir = Path(tc_object.config['outlier']['outdir'])
+        outdir = outdir  / results_dir
+    except KeyError:
+        msg = " Need to set outlier analysis outdir in config file: config['outlier']['outdir']. "
+        log.error(msg)
+        raise ValueError(msg)
 
     if method == 'enterprise-hmc':
         log.info('Running enterprise hmc outlier analysis...')
         epp = get_entPintPulsar(model, toas, drop_pintpsr=False)
         from enterprise_outliers.hmc_outlier import OutlierHMC
-        pout = OutlierHMC(epp, outdir=results_dir, Nsamples=Nsamples, Nburnin=Nburnin)
+        pout = OutlierHMC(epp, outdir=outdir, Nsamples=Nsamples, Nburnin=Nburnin)
         print('') # Progress bar doesn't print a newline
         # Some sorting will be needed here so pout refers to toas order?
     elif method == 'enterprise-gibbs':
         log.info('Running enterprise gibbs outlier analysis...')
         epp = get_entPintPulsar(model, toas)
-        pout = gibbs_run(epp,results_dir=results_dir,Nsamples=Nsamples)
+        pout = gibbs_run(epp,results_dir=outdir,Nsamples=Nsamples)
     elif method == 'discovery-gibbs':
         log.info('Running discovery-gibbs outlier analysis...')
         log.info('Loading enterprise pulsar object...')
@@ -151,13 +159,20 @@ def calculate_pout(model, toas, tc_object, outlier_sampler_kwargs={}):
         # should put in a checker to make sure these priors match !!
         prior_dict = get_discovery_prior_dictionary()
         log.info('Setting up discovery outlier Gibbs sampler...')
-        sampler = setup_sampler_discovery_outlier_analysis(psr, prior_dict=prior_dict)
-        log.info('Beginning to sample...')
-        sampler.run(jax.random.PRNGKey(0))
+        sampler = setup_sampler_discovery_outlier_analysis(psr, tc_object, prior_dict=prior_dict)
+        data = run_discovery_with_checkpoints(
+            sampler=sampler,
+            n_checkpoints=10,
+            n_samples_per_checkpoint=2000,
+            outdir=outdir,
+            file_basename=tc_object.get_outfile_basename(),
+            rng_key = jax.random.PRNGKey(42),
+            resume = True,
+        )
         log.info('Sampling complete. Calculating pout for all toas.')
-        pout = np.mean(sampler.get_samples()['z_i'], axis=0)
+        pout = data.posterior["z_i"].mean(dim=("chain", "draw"))
     else:
-        msg = 'Specified method ({method}) is not recognized.'
+        msg = 'Specified outlier analysis method ({method}) is not recognized.'
         msg+= 'Please use "enterprise-hmc", "enterprise-gibbs", or "discovery-gibbs".'
         log.error(msg)
         raise ValueError(msg)
@@ -453,7 +468,7 @@ def epochalyptica(model,toas,tc_object,ftest_threshold=1.0e-6,nproc=1):
     # Need to mask TOAs once again
     apply_cut_select(toas,reason='resumption after write_tim (excise)')
 
-## discovery outlier analysis functions written by Pat Meyers
+## discovery outlier analysis functions written by Pat Meyers, Jeremy Baier, and David Wright
 def makenoise_measurement_rescaled(psr, noisedict={}, scale=1.0, tnequad=False, selection=selection_backend_flags, vectorize=True):
     """
     Create a noise measurement matrix with rescaled errors for a pulsar.
@@ -532,7 +547,7 @@ def makenoise_measurement_rescaled(psr, noisedict={}, scale=1.0, tnequad=False, 
 
         getnoise.params = params
         return matrix.NoiseMatrix1D_var(getnoise)
-        
+
 def make_conditional_with_tm(psrl):
     """
     Create function to sample from conditional with variable timing model.
@@ -614,32 +629,6 @@ def make_sample_cond_with_tm(psrl):
         return nkey, {k: (noise + b_mean)[slc] for k, slc in psrl.N.index.items()}
     return cond
 
-# def make_clogl(psrl, psr):
-#     Pvar = psrl.N.P_var
-#     Nvar = psrl.N.N
-#     F = matrix.jnparray(psrl.N.F)
-#     Pvar_inv = Pvar.make_inv()
-#     Psolve_1d = Pvar.make_solve_1d()
-
-#     Nvar_solve_1d = Nvar.make_solve_1d()
-#     Nvar_solve_2d = Nvar.make_solve_2d()
-#     cvars = psrl.N.index.keys()
-#     y = psr.residuals
-#     def clogl(params):
-#         b = jnp.hstack([params[c] for c in cvars])
-#         mean_residuals = F @ b
-        
-#         yprime = y - mean_residuals
-#         # jax.debug.print('{x}', x=yprime[:10])
-#         Nmyp, ldN = Nvar_solve_1d(params, yprime)
-#         ypNmyp = yprime @ Nmyp
-
-#         Pmb, ldP = Psolve_1d(params, b)
-#         bPmb = b @ Pmb
-        
-#         return -0.5 * (ypNmyp + bPmb + ldP + ldN)
-#     return clogl
-
 def make_single_psr_model_scaled_errors(psr, noisedict={}, tm_variable=False):
     """
     Build single pulsar likelihood model with scaled measurement errors.
@@ -665,7 +654,6 @@ def make_single_psr_model_scaled_errors(psr, noisedict={}, tm_variable=False):
                             ds.makegp_fourier(psr, ds.freespectrum, 30, name='red_noise')], concat=True)
     return psrl
 
-
 def make_single_psr_model(psr, noisedict={}, tm_variable=False):
     """
     Build single pulsar likelihood model with default measurement errors.
@@ -690,7 +678,6 @@ def make_single_psr_model(psr, noisedict={}, tm_variable=False):
                             ds.makenoise_measurement(psr, noisedict=noisedict),
                             ds.makegp_fourier(psr, ds.freespectrum, 30, name='red_noise')], concat=True)
     return psrl
-
 
 def make_gibbs_fn(psrl, prior_dict):
     """
@@ -774,7 +761,6 @@ def make_gibbs_fn(psrl, prior_dict):
         return gibbs_sites
     
     return gibbs_fn
-
 
 def make_numpyro_outlier_model(psrl, psr):
     """
@@ -884,3 +870,106 @@ def get_discovery_prior_dictionary(override_dict={}):
     for key, value in override_dict.items():
         prior_dict[key] = value
     return prior_dict
+
+def run_discovery_with_checkpoints(
+    sampler: numpyro.infer.MCMC,
+    n_checkpoints: int = 10,
+    n_samples_per_checkpoint: int = 2000,
+    outdir: str = ".",
+    file_basename: str = "results",
+    rng_key: jax.random.PRNGKey = None,
+    resume: bool = True,
+) -> None:
+    """
+    Run a NumPyro MCMC sampler in multiple chunks with checkpointing.
+
+    This function executes an MCMC sampler for a given number of checkpoints,
+    saving ArviZ inference data at each step and overwriting the NumPyro sampler
+    state in a pickle file. The ArviZ outputs are stored per iteration in
+    Zarr format and concatenated into a single complete file after all
+    checkpoints finish. On resume, the sampler state is reloaded from the last
+    pickle file and sampling continues from the last checkpoint.
+
+    Parameters
+    ----------
+    sampler : numpyro.infer.MCMC
+        A NumPyro MCMC sampler object that has been initialized with a kernel.
+    n_checkpoints : int, optional (default=10)
+        Number of checkpoints (iterations) to run. Each checkpoint generates
+        `n_samples_per_checkpoint` posterior samples.
+    n_samples_per_checkpoint : int, optional (default=2000)
+        Number of samples to draw at each checkpoint.
+    outdir : str, optional (default=".")
+        Output directory for checkpoints and results.
+    file_basename : str, optional (default="results")
+        Base name for output files. Files will be saved as
+        `{file_basename}-arviz-checkpoint-<i>.zarr` for ArviZ
+        and `{file_basename}-numpyro-sampler.pickle` for the sampler state.
+    rng_key : jax.random.PRNGKey
+        JAX random key used to control the random number generation in sampling.
+    resume : bool, optional (default=True)
+        Whether to resume from the most recent checkpoint if files exist.
+        Otherwise will start overwriting saved files.
+
+    Returns
+    -------
+    data : arviz.InferenceData
+        Results are written to disk:
+        - Iteration-specific ArviZ Zarr checkpoints
+        - Overwritten NumPyro sampler pickle (latest state only)
+        - Final concatenated ArviZ dataset `{file_basename}-arviz-complete.zarr`
+    """
+
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # paths
+    sampler_pickle_path = outdir / f"{file_basename}-numpyro-sampler.pickle"
+
+    # Determine resume iteration
+    start_iter = 0
+    if resume and sampler_pickle_path.exists():
+        log.info("Resuming from last saved sampler state...")
+        with sampler_pickle_path.open("rb") as input_file:
+            sampler = pickle.load(input_file)
+        sampler.post_warmup_state = sampler.last_state
+
+        # find last ArviZ checkpoint
+        checkpoint_files = sorted(outdir.glob(f"{file_basename}-arviz-checkpoint-*.zarr"))
+        if checkpoint_files:
+            last_file = checkpoint_files[-1]
+            start_iter = int(last_file.stem.split("-")[-1]) + 1
+            log.info(f"Resuming from checkpoint {start_iter}")
+        else:
+            log.info("No ArviZ checkpoints found, starting from 0.")
+
+    for iteration in range(start_iter, n_checkpoints):
+        before_sampling = datetime.now().astimezone().replace(microsecond=0)
+
+        # run MCMC
+        sampler.run(rng_key)
+
+        after_sampling = datetime.now().astimezone().replace(microsecond=0)
+        duration = (after_sampling - before_sampling).total_seconds() / 3600.0
+        log.info(f"Saving checkpoint {iteration} after {duration:.2f} hours")
+
+        # convert to ArviZ and save iteration-specific checkpoint
+        data = az.from_numpyro(sampler)
+        az.to_zarr(data, str(outdir / f"{file_basename}-arviz-checkpoint-{iteration}.zarr"))
+
+        # overwrite NumPyro sampler pickle (always latest state)
+        with sampler_pickle_path.open("wb") as output_file:
+            pickle.dump(sampler, output_file)
+
+        sampler.post_warmup_state = sampler.last_state
+
+    log.info(f"Finished all {n_checkpoints} checkpoints. Writing concatenated samples...")
+
+    # collect all ArviZ checkpoints into one file
+    data = az.concat(
+        [az.from_zarr(str(outdir / f"{file_basename}-arviz-checkpoint-{i}.zarr")) for i in range(n_checkpoints)],
+        dim="draw",
+    )
+    az.to_zarr(data, str(outdir / f"{file_basename}-arviz-complete.zarr"))
+    
+    return data
