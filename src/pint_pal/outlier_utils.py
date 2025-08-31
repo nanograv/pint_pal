@@ -6,6 +6,7 @@ from astropy import log
 from multiprocessing import Pool
 from pathlib import Path
 from datetime import datetime
+import dill as pickle
 
 # Outlier/Epochalyptica imports
 from pint.fitter import ConvergenceFailure
@@ -170,7 +171,7 @@ def calculate_pout(model, toas, tc_object):
             resume = True,
         )
         log.info('Sampling complete. Calculating pout for all toas.')
-        pout = data.posterior["z_i"].mean(dim=("chain", "draw"))
+        pout = data.posterior["z_i"].mean(dim=("chain", "draw")).values
     else:
         msg = 'Specified outlier analysis method ({method}) is not recognized.'
         msg+= 'Please use "enterprise-hmc", "enterprise-gibbs", or "discovery-gibbs".'
