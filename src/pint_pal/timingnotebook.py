@@ -93,7 +93,7 @@ class TimingNotebook:
 
 
     def add_setup(self,autorun=False):
-        """ Add setup helper info, import and log.setLevel cells """
+        """ Add setup helper info, import, and logging cells """
         self.add_markdown_cell_skip('''\
         # \[set-up\], imports
 
@@ -116,10 +116,10 @@ class TimingNotebook:
         from pint_pal.ftester import run_Ftests
         from pint_pal.timingconfiguration import TimingConfiguration
         import yaml
-        from astropy import log
+        from loguru import logger as log
         import pint.fitter
         from pint.utils import dmxparse
-        import os
+        import os, sys
         from astropy.visualization import quantity_support
         quantity_support()
 
@@ -129,7 +129,9 @@ class TimingNotebook:
         #%matplotlib inline\
         ''')
         self.add_code_cell_skip('''\
-        log.setLevel("INFO") # Set desired verbosity of log statements (DEBUG/INFO/WARNING/ERROR)
+        LOG_LEVEL = "INFO" # Set desired verbosity of log statements (DEBUG/INFO/WARNING/ERROR)
+        log.remove() 
+        log.add(sys.stderr, level=LOG_LEVEL) 
         git_config_info()\
         ''',autorun)
 
@@ -349,12 +351,13 @@ class TimingNotebook:
         Run F-tests to check significance of existing/new parameters; `alpha` is the p-value threshold for rejecting the null hypothesis that a parameter is not significant. This cell may take 5-10 minutes to run.\
         ''',autorun)
         self.add_code_cell('''\
-        savedLevel = log.getEffectiveLevel()
         try:
-            log.setLevel("WARNING")
+            log.remove()
+            log.add(sys.stderr, level="WARNING")
             Ftest_dict = run_Ftests(fo, alpha = 0.0027)
         finally:
-            log.setLevel(savedLevel)\
+            log.remove()
+            log.add(sys.stderr, level=LOG_LEVEL)\
         ''')
 
     def add_summary(self,autorun=False):

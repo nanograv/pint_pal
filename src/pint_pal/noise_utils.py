@@ -1,6 +1,5 @@
-import os, json, itertools, time, pathlib
-import numpy as np
-from astropy import log
+import numpy as np, os, json, itertools, time, pathlib
+from loguru import logger as log
 from astropy.time import Time
 
 from enterprise.pulsar import Pulsar

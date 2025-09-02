@@ -1,6 +1,6 @@
 from typing import Any, Optional, Tuple, Union
 import numpy as np
-from astropy import log
+from loguru import logger as log
 import pint
 from pint_pal.utils import apply_cut_flag, apply_cut_select
 
