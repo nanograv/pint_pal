@@ -8,7 +8,7 @@ Code since butchered by many timers.
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
-from astropy import log
+from loguru import logger as log
 import astropy.units as u
 import yaml
 
@@ -3560,7 +3560,7 @@ def plot_fd_res_v_freq(
     # Check if comparing the FD parameters
     if comp_FD:
         if axs != None:
-            log.warn("Cannot do full comparison with three panels")
+            log.warning("Cannot do full comparison with three panels")
             axs = None
         if "figsize" in kwargs.keys():
             figsize = kwargs["figsize"]
