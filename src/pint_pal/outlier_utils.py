@@ -2,7 +2,7 @@
 import os, sys
 import matplotlib.pyplot as plt
 import numpy as np
-from astropy import log
+from loguru import logger as log
 from multiprocessing import Pool
 from pathlib import Path
 from datetime import datetime

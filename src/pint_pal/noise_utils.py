@@ -1,5 +1,5 @@
 import numpy as np, os, json, itertools, time
-from astropy import log
+from loguru import logger as log
 from astropy.time import Time
 
 from enterprise.pulsar import Pulsar
