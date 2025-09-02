@@ -233,7 +233,7 @@ class TimingConfiguration:
             print(file=o)
             return o.getvalue()
 
-    def check_simultaneous(self,toas,backend1,backend2,warn=False):
+    def check_simultaneous(self, toas, backend1, backend2, warn=False):
         """Cut overlapped TOAs from the specified backends (simul)
     
         Assumes TOAs overlap if they are taken on the same day with the
@@ -249,26 +249,50 @@ class TimingConfiguration:
         backend2 [string]: backend to cut if simultaneous (e.g. ASP)
         """
         cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
-        toaflags = toas.orig_table['flags']
-        toamjds = toas.orig_table['mjd_float']
-    
-        idx1 = np.where([f['be']==backend1 for f in toas.orig_table['flags']])[0]
-        idx2 = np.where([f['be']==backend2 for f in toas.orig_table['flags']])[0]
+        flags = toas.orig_table['flags']
+        mjds = toas.orig_table['mjd_float']
+
+        # Use `np.unique()` to find pairs of TOAs observed on the same day,
+        # with the same receiver ('fe' flag). Then, for each such pair, we can
+        # check the `freqs_overlap()` condition. This is much more efficient
+        # than directly checking all three conditions on every pair of TOAs.
+        epoch_id = [f"{int(mjd)} {f['fe']}" for mjd, f in zip(mjds, flags)]
+        epochs, which_epoch = np.unique(epoch_id, return_inverse=True)
+
+        # Building up a set of simultaneous pairs first helps separate this search
+        # from the code below that actually applies the flags.
+        simul_pairs = set()
+        for this_epoch, epoch in enumerate(epochs):
+            epoch_flags = flags[which_epoch == this_epoch]
+            epoch_mjds = mjds[which_epoch == this_epoch]
+            epoch_idxs = np.where(which_epoch == this_epoch)[0]
+
+            # 'j' is the index of a TOA within this "epoch"; 'i' is the index in the full table
+            j_where_backend1 = np.where([f['be']==backend1 for f in epoch_flags])[0]
+            j_where_backend2 = np.where([f['be']==backend2 for f in epoch_flags])[0]
+            for j1 in j_where_backend1:
+                for j2 in j_where_backend2:
+                    if (epoch_flags[j1]['fe']==epoch_flags[j2]['fe']) and int(epoch_mjds[j1])==int(epoch_mjds[j2]):
+                        i1 = epoch_idxs[j1]
+                        i2 = epoch_idxs[j2]
+                        if not freqs_overlap(toas.orig_table[i1], toas.orig_table[i2]):
+                            continue
+                        simul_pairs.add((i1, i2))
+
+        # Now go through the simultaneous pairs we found and apply appropriate flags.
         simul_cut_inds = []
-        for i1 in idx1:
-            for i2 in idx2:
-                if cuts[i2]: continue # Already cut
-                if (toaflags[i1]['fe']==toaflags[i2]['fe']) and int(toamjds[i1])==int(toamjds[i2]):
-                    if not freqs_overlap(toas.orig_table[i1],toas.orig_table[i2]): continue
-                    if 'simul' not in toaflags[i1].keys(): # label and keep
-                        toas.orig_table[i1]['flags']['simul'] = '1'
-                    if 'simul' not in toaflags[i2].keys(): # label and cut
-                        toas.orig_table[i2]['flags']['simul'] = '2'
-                        simul_cut_inds.append(i2)
-    
+        for i1, i2 in simul_pairs:
+            if cuts[i2]:
+                continue # Already cut
+            if 'simul' not in flags[i1].keys(): # label and keep
+                toas.orig_table[i1]['flags']['simul'] = '1'
+            if 'simul' not in flags[i2].keys(): # label and cut
+                toas.orig_table[i2]['flags']['simul'] = '2'
+                simul_cut_inds.append(i2)
+
         if simul_cut_inds:
-            apply_cut_flag(toas,np.array(simul_cut_inds),'simul',warn=warn)
-            apply_cut_select(toas,f"simultaneous {backend1}/{backend2} observations")
+            apply_cut_flag(toas, np.array(simul_cut_inds), 'simul', warn=warn)
+            apply_cut_select(toas, f"simultaneous {backend1}/{backend2} observations")
 
     def check_file_outliers(self,toas,outpct_threshold=8.0):
         """ Check for files where Noutliers > nout_threshold, cut files where True (maxout)
@@ -504,7 +528,7 @@ class TimingConfiguration:
         febe_to_cut = []
         for febe in febe_pairs:
             f_bool = np.array([f == febe for f in toas.get_flag_value('f')[0]])
-            f_names = toas[f_bool].get_flag_value('name')[0]
+            f_names = np.array(toas.get_flag_value('name')[0])[f_bool]
             files = set(f_names)
             n_files = len(files)
             if n_files > nfiles_threshold:
