@@ -19,10 +19,10 @@ from astropy import log
 from astropy.time import Time
 import yaml
 import glob
+import pint_pal
 from pint_pal.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from pint_pal.lite_utils import new_changelog_entry
 from pint_pal.lite_utils import check_toa_version, check_tobs
-import pint_pal.config
 
 
 def identity_func(x: Any) -> Any:

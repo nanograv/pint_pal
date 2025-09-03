@@ -4,7 +4,7 @@ import re
 import copy
 from astropy import log
 import astropy.units as u
-import pint_pal.config
+import pint_pal
 from pint.modelutils import model_equatorial_to_ecliptic
 
 def check_if_fit(model, *param):
