@@ -1,4 +1,4 @@
-import pint_pal.packageconfiguration
+import pint_pal.packageconfiguration # must go before any use of pint_pal.config
 from pint_pal.packageconfiguration import set_data_root, reset_data_root
 import pint_pal.checkin
 
