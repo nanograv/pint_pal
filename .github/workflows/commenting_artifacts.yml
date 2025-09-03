@@ -25,9 +25,7 @@ jobs:
           SUITE_ID=$(jq -r '.check_suite_id' <<< "$WORKFLOW_RUN_EVENT_OBJ")
           # Sample for a single artifact, can be improved for a multiple artifacts
           ARTIFACT_ID=$(gh api "/repos/${{ github.repository }}/actions/artifacts" \
-            --jq ".artifacts.[] |
-            select(.workflow_run.id==${PREVIOUS_JOB_ID}) |
-            .id")
+            --jq ".artifacts.[] | select(.workflow_run.id==${PREVIOUS_JOB_ID}) | .id")
           echo "ARTIFACT_URL=https://github.com/${{ github.repository }}/suites/${SUITE_ID}/artifacts/${ARTIFACT_ID}" >> $GITHUB_ENV
           PR_NUMBER=$(jq -r '.pull_requests[0].number' <<< "$WORKFLOW_RUN_EVENT_OBJ")
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_ENV
