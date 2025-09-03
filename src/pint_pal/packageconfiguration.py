@@ -61,7 +61,11 @@ def set_data_root(path):
     """
     data_root = os.path.realpath(os.path.expanduser(path))
     config_file = os.path.join(data_root, 'pint_pal_project.yaml')
-    pint_pal.config = PackageConfiguration(config_file, data_root)
+    default_config_file = os.path.join(os.path.dirname(__file__), 'defaults.yaml')
+    try:
+        pint_pal.config = PackageConfiguration(config_file, data_root)
+    except FileNotFoundError:
+        pint_pal.config = PackageConfiguration(default_config_file, data_root)
 
 def reset_data_root():
     """
