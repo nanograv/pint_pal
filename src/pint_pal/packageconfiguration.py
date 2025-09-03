@@ -8,7 +8,7 @@ class PackageConfiguration:
     A class to manage package-level configuration data.
     It shouldn't be necessary for the user to create an instance of this class.
     Instead, the single, global instance can be managed using the `set_data_root()`
-    and `reset_data_root()` functions.
+    and `reset_config()` functions.
     """
     __slots__ = [
         'PACKAGE_DIR',
@@ -33,15 +33,21 @@ class PackageConfiguration:
         """
         Initialize the PackageConfiguration from a YAML configuration file.
         """
+        self.update(config_file)
+        self.PACKAGE_DIR = os.path.dirname(__file__)
+        self.DATA_ROOT = data_root
+
+    def update(self, config_file):
+        """
+        Update configuration values without changing the data root.
+        Can be called on its own to change only some configuration options.
+        """
         with open(config_file, 'r') as f:
             config = yaml.load(f)
 
         for key in self.__slots__:
             if key in config:
                 setattr(self, key, config[key])
-
-        self.PACKAGE_DIR = os.path.dirname(__file__)
-        self.DATA_ROOT = data_root
 
 def set_data_root(path):
     """
@@ -60,18 +66,19 @@ def set_data_root(path):
     (2) all scripts and notebooks are run from the root of the data repository.
     """
     data_root = os.path.realpath(os.path.expanduser(path))
-    config_file = os.path.join(data_root, 'pint_pal_project.yaml')
-    default_config_file = os.path.join(os.path.dirname(__file__), 'defaults.yaml')
-    try:
-        pint_pal.config = PackageConfiguration(config_file, data_root)
-    except FileNotFoundError:
-        pint_pal.config = PackageConfiguration(default_config_file, data_root)
+    pint_pal.config.DATA_ROOT = data_root
 
-def reset_data_root():
+    config_file = os.path.join(data_root, 'pint_pal_project.yaml')
+    try:
+        pint_pal.config.update(config_file)
+    except FileNotFoundError:
+        pass
+
+def reset_config():
     """
     Reset the data root and config variables to the default values.
     """
     config_file = os.path.join(os.path.dirname(__file__), 'defaults.yaml')
     pint_pal.config = PackageConfiguration(config_file, '.')
 
-reset_data_root()
+reset_config()
