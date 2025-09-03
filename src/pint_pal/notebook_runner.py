@@ -10,7 +10,6 @@ from ruamel.yaml import YAML
 yaml = YAML(typ='safe')
 
 import pint_pal
-import pint_pal.config
 from pint_pal.notebook_templater import transform_notebook
 
 ansi_color = re.compile(r'\x1b\[([0-9]{1,3};)*[0-9]{1,3}m')
