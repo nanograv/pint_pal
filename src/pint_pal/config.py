@@ -43,27 +43,8 @@ def read_config_file(config_file):
     with open(config_file, 'r') as f:
         config = yaml.load(f)
 
-    global LATEST_BIPM
-    global LATEST_EPHEM
-    global PLANET_SHAPIRO
-    global CORRECT_TROPOSPHERE
-    global FREQUENCY_RATIO
-    global MAX_SOLARWIND_DELAY
-    global LATEST_TOA_RELEASE
+    for key in config.keys():
+        globals()[key] = config[key]
 
-    if 'LATEST_BIPM' in config:
-        LATEST_BIPM = config['LATEST_BIPM']
-    if 'LATEST_EPHEM' in config:
-        LATEST_EPHEM = config['LATEST_EPHEM']
-    if 'PLANET_SHAPIRO' in config:
-        PLANET_SHAPIRO = config['PLANET_SHAPIRO']
-    if 'CORRECT_TROPOSPHERE' in config:
-        CORRECT_TROPOSPHERE = config['CORRECT_TROPOSPHERE']
-    if 'FREQUENCY_RATIO' in config:
-        FREQUENCY_RATIO = config['FREQUENCY_RATIO']
-    if 'MAX_SOLARWIND_DELAY' in config:
-        MAX_SOLARWIND_DELAY = config['MAX_SOLARWIND_DELAY']
-    if 'LATEST_TOA_RELEASE' in config:
-        LATEST_TOA_RELEASE = config['LATEST_TOA_RELEASE']
 
 read_config_file(os.path.join(PACKAGE_DIR, 'defaults.yaml'))
