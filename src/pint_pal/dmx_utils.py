@@ -1,6 +1,6 @@
 from typing import Any, Optional, Tuple, Union
 import numpy as np
-from astropy import log
+from loguru import logger as log
 import pint
 from pint_pal.utils import apply_cut_flag, apply_cut_select
 
@@ -476,12 +476,13 @@ def get_dmx_freqs(toas: pint.toa.TOAs, mask: np.ndarray, allow_wideband: bool = 
 
     if allow_wideband:
         # indices of wideband TOAs
-        wb_mask = mask & (np.array(toas.get_flag_value('pp_dm')[0]) != None)
+        wb_mask = mask.copy()
+        wb_mask[mask] = np.array(['pp_dm' in f for f in toas.table[mask]['flags']])
         # the following arrays will be empty if all TOAs are narrowband
-        fratios = toas.get_flag_value('fratio')[0] # frequency ratio / WB TOA
-        fratios = np.array(fratios)[wb_mask]
-        bws = toas.get_flag_value('bw')[0]  # bandwidth [MHz] / WB TOA
-        bws = np.array(bws)[wb_mask]
+        # frequency ratio / WB TOA
+        fratios = np.array([f['fratio'] if 'fratio' in f else None for f in toas.table[wb_mask]['flags']])
+        # bandwidth [MHz] / WB TOA
+        bws = np.array([f['bw'] if 'bw' in f else None for f in toas.table[wb_mask]['flags']])
         low_freqs = bws.astype('float32') / (fratios.astype('float32') - 1)
         low_freq = min(low_freq, np.min(low_freqs, initial=np.inf))
         high_freqs = bws.astype('float32') + low_freqs
@@ -836,14 +837,8 @@ def setup_dmx(
                 dmx = model.components['DispersionDMX']
                 idxs = dmx.get_indices()
                 for idx in idxs:
-                    low_mjd = getattr(model, f"DMXR1_{idx:04d}").value
-                    high_mjd = getattr(model, f"DMXR2_{idx:04d}").value
-                    dmx_val = getattr(model, f"DMX_{idx:04d}").value
-                    dmx_val -= mean_old_dmx_val
-                    frozen = getattr(model, f"DMX_{idx:04d}").frozen
-                    dmx.remove_DMX_range(idx)
-                    dmx.add_DMX_range(low_mjd, high_mjd, idx, dmx_val,
-                            frozen=frozen)
+                    dmx_param = getattr(model, f"DMX_{idx:04d}")
+                    dmx_param.value -= mean_old_dmx_val
                     msg = f"Subtracted {mean_old_dmx_val:.7f} from existing DMX values."
                 log.info(msg)
             return toas

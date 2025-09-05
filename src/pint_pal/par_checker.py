@@ -2,7 +2,7 @@
 
 import re
 import copy
-from astropy import log
+from loguru import logger as log
 import astropy.units as u
 import pint_pal.config
 from pint.modelutils import model_equatorial_to_ecliptic

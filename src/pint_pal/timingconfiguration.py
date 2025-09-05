@@ -9,12 +9,13 @@ Very basic usage:
 import io
 import os
 import re
+from typing import Any, Callable
 import pint.toa as toa
 import pint.models as model
 import pint.fitter
 import numpy as np
 import astropy.units as u
-from astropy import log
+from loguru import logger as log
 from astropy.time import Time
 import yaml
 import glob
@@ -22,6 +23,25 @@ from pint_pal.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from pint_pal.lite_utils import new_changelog_entry
 from pint_pal.lite_utils import check_toa_version, check_tobs
 import pint_pal.config
+
+
+def identity_func(x: Any) -> Any:
+    """ Miscellaneous function to wrap as default """
+    return x
+
+
+def get_value(key: str, dictionary: dict, default: Any = None, func: Callable = identity_func) -> Any:
+    """
+    Generic return pattern for YAML reading
+    This simplifies the writing of many of the basic helper functions
+    in TimingConfigutation
+    """
+    if key in dictionary.keys():
+        retval = dictionary[key]
+        if retval is not None:
+            return func(retval)
+    return default
+
 
 class TimingConfiguration:
     """
@@ -233,7 +253,7 @@ class TimingConfiguration:
             print(file=o)
             return o.getvalue()
 
-    def check_simultaneous(self,toas,backend1,backend2,warn=False):
+    def check_simultaneous(self, toas, backend1, backend2, warn=False):
         """Cut overlapped TOAs from the specified backends (simul)
     
         Assumes TOAs overlap if they are taken on the same day with the
@@ -249,26 +269,50 @@ class TimingConfiguration:
         backend2 [string]: backend to cut if simultaneous (e.g. ASP)
         """
         cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
-        toaflags = toas.orig_table['flags']
-        toamjds = toas.orig_table['mjd_float']
-    
-        idx1 = np.where([f['be']==backend1 for f in toas.orig_table['flags']])[0]
-        idx2 = np.where([f['be']==backend2 for f in toas.orig_table['flags']])[0]
+        flags = toas.orig_table['flags']
+        mjds = toas.orig_table['mjd_float']
+
+        # Use `np.unique()` to find pairs of TOAs observed on the same day,
+        # with the same receiver ('fe' flag). Then, for each such pair, we can
+        # check the `freqs_overlap()` condition. This is much more efficient
+        # than directly checking all three conditions on every pair of TOAs.
+        epoch_id = [f"{int(mjd)} {f['fe']}" for mjd, f in zip(mjds, flags)]
+        epochs, which_epoch = np.unique(epoch_id, return_inverse=True)
+
+        # Building up a set of simultaneous pairs first helps separate this search
+        # from the code below that actually applies the flags.
+        simul_pairs = set()
+        for this_epoch, epoch in enumerate(epochs):
+            epoch_flags = flags[which_epoch == this_epoch]
+            epoch_mjds = mjds[which_epoch == this_epoch]
+            epoch_idxs = np.where(which_epoch == this_epoch)[0]
+
+            # 'j' is the index of a TOA within this "epoch"; 'i' is the index in the full table
+            j_where_backend1 = np.where([f['be']==backend1 for f in epoch_flags])[0]
+            j_where_backend2 = np.where([f['be']==backend2 for f in epoch_flags])[0]
+            for j1 in j_where_backend1:
+                for j2 in j_where_backend2:
+                    if (epoch_flags[j1]['fe']==epoch_flags[j2]['fe']) and int(epoch_mjds[j1])==int(epoch_mjds[j2]):
+                        i1 = epoch_idxs[j1]
+                        i2 = epoch_idxs[j2]
+                        if not freqs_overlap(toas.orig_table[i1], toas.orig_table[i2]):
+                            continue
+                        simul_pairs.add((i1, i2))
+
+        # Now go through the simultaneous pairs we found and apply appropriate flags.
         simul_cut_inds = []
-        for i1 in idx1:
-            for i2 in idx2:
-                if cuts[i2]: continue # Already cut
-                if (toaflags[i1]['fe']==toaflags[i2]['fe']) and int(toamjds[i1])==int(toamjds[i2]):
-                    if not freqs_overlap(toas.orig_table[i1],toas.orig_table[i2]): continue
-                    if 'simul' not in toaflags[i1].keys(): # label and keep
-                        toas.orig_table[i1]['flags']['simul'] = '1'
-                    if 'simul' not in toaflags[i2].keys(): # label and cut
-                        toas.orig_table[i2]['flags']['simul'] = '2'
-                        simul_cut_inds.append(i2)
-    
+        for i1, i2 in simul_pairs:
+            if cuts[i2]:
+                continue # Already cut
+            if 'simul' not in flags[i1].keys(): # label and keep
+                toas.orig_table[i1]['flags']['simul'] = '1'
+            if 'simul' not in flags[i2].keys(): # label and cut
+                toas.orig_table[i2]['flags']['simul'] = '2'
+                simul_cut_inds.append(i2)
+
         if simul_cut_inds:
-            apply_cut_flag(toas,np.array(simul_cut_inds),'simul',warn=warn)
-            apply_cut_select(toas,f"simultaneous {backend1}/{backend2} observations")
+            apply_cut_flag(toas, np.array(simul_cut_inds), 'simul', warn=warn)
+            apply_cut_select(toas, f"simultaneous {backend1}/{backend2} observations")
 
     def check_file_outliers(self,toas,outpct_threshold=8.0):
         """ Check for files where Noutliers > nout_threshold, cut files where True (maxout)
@@ -318,29 +362,56 @@ class TimingConfiguration:
         toas = self.apply_ignore(toas,specify_keys=['bad-file'],warn=warn)
         apply_cut_select(toas,reason='manual cuts, specified keys')
 
+        
+
+
+
     def count_bad_files(self):
         """ Return number of bad file entries """
-        if "bad-file" in self.config['ignore'].keys():
-            return len(self.config['ignore']['bad-file'])
-        return None
+        return get_value('bad-file', self.config['ignore'], func=len)
 
     def count_bad_toas(self):
         """ Return number of bad toa entries """
-        if "bad-toa" in self.config['ignore'].keys():
-            return len(self.config['ignore']['bad-toa'])
-        return None
+        return get_value('bad-toa', self.config['ignore'], func=len)        
+
 
     def get_bipm(self):
         """ Return the bipm string """
-        if "bipm" in self.config.keys():
-            return self.config['bipm']
-        return None #return some default value instead?
+        return get_value('bipm', self.config, default=pint_pal.config.LATEST_BIPM)
 
     def get_ephem(self):
         """ Return the ephemeris string """
-        if "ephem" in self.config.keys():
-            return self.config['ephem']
-        return None #return some default value instead?
+        return get_value('ephem', self.config, default=pint_pal.config.LATEST_EPHEM)
+
+    
+    def get_notebook_run_Ftest(self):
+        """ Return the boolean for running F-tests """
+        return get_value('run_Ftest', self.config['notebook'], default=pint_pal.config.RUN_FTEST)
+
+    def get_notebook_run_noise_analysis(self):
+        """ Return the boolean for running the noise analysis """
+        return get_value('run_noise_analysis', self.config['notebook'], default=pint_pal.config.RUN_NOISE_ANALYSIS)
+
+    def get_notebook_check_excision(self):
+        """ Return the boolean for checking excision runs """
+        return get_value('check_excision', self.config['notebook'], default=pint_pal.config.CHECK_EXCISION)
+    
+    def get_notebook_use_existing_noise_dir(self):
+        """ Return the boolean for using the existing noise directory """
+        return get_value('use_existing_noise_dir', self.config['notebook'], default=pint_pal.config.USE_EXISTING_NOISE_DIR)
+
+    def get_notebook_use_toa_pickle(self):
+        """ Return the boolean for using an existing TOA pickle file """
+        return get_value('use_toa_pickle', self.config['notebook'], default=pint_pal.config.USE_TOA_PICKLE)
+
+    def get_notebook_log_level(self):
+        """ Return logging level """
+        return get_value('log_level', self.config['notebook'], default=pint_pal.config.LOG_LEVEL)
+    
+    def get_notebook_log_to_file(self):
+        """ Return the boolean for logging to file """
+        return get_value('log_to_file', self.config['notebook'], default=pint_pal.config.LOG_TO_FILE)
+
     
     def get_febe_pairs(self,toas):
         febe_list = []
@@ -367,9 +438,7 @@ class TimingConfiguration:
 
     def get_fitter(self):
         """ Return the fitter string (do more?) """
-        if "fitter" in self.config.keys():
-            return self.config['fitter']
-        return None
+        return get_value('fitter', self.config)
 
     def construct_fitter(self, to, mo):
         """ Return the fitter, tracking pulse numbers if available """
@@ -382,9 +451,7 @@ class TimingConfiguration:
 
     def get_toa_type(self):
         """ Return the toa-type string """
-        if "toa-type" in self.config.keys():
-            return self.config['toa-type']
-        return None
+        return get_value('toa-type', self.config)
 
     def get_outfile_basename(self,ext=''):
         """ Return source.[nw]b basename (e.g. J1234+5678.nb) """
@@ -394,9 +461,7 @@ class TimingConfiguration:
 
     def get_niter(self):
         """ Return an integer of the number of iterations to fit """
-        if "n-iterations" in self.config.keys():
-            return int(self.config['n-iterations'])
-        return 1
+        return get_value('n-iterations', self.config, default=1, func=int)
 
     def get_excised(self):
         """ Return excised-tim file if set and exists"""
@@ -407,63 +472,43 @@ class TimingConfiguration:
 
     def get_mjd_start(self):
         """Return mjd-start quantity (applies units days)"""
-        if 'mjd-start' in self.config['ignore'].keys():
-            return self.config['ignore']['mjd-start']
-        return None
+        return get_value('mjd-start', self.config['ignore'])
 
     def get_mjd_end(self):
         """Return mjd-end quantity (applies units days)"""
-        if 'mjd-end' in self.config['ignore'].keys():
-            return self.config['ignore']['mjd-end']
-        return None
+        return get_value('mjd-end', self.config['ignore'])
 
     def get_orphaned_rec(self):
         """Return orphaned receiver(s)"""
-        if 'orphaned-rec' in self.config['ignore'].keys():
-            return self.config['ignore']['orphaned-rec']
-        return None 
+        return get_value('orphaned-rec', self.config['ignore'])
 
     def get_bad_group(self):
         """Return bad group(s)"""
-        if 'bad-group' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-group']
-        return None
+        return get_value('bad-group', self.config['ignore'])
     
     def get_poor_febes(self):
         """Return poor frontend/backend combinations for removal"""
-        if 'poor-febe' in self.config['ignore'].keys():
-            return self.config['ignore']['poor-febe']
-        return None
+        return get_value('poor-febe', self.config['ignore'])
 
     def get_snr_cut(self):
         """ Return value of the TOA S/N cut """
-        if "snr-cut" in self.config['ignore'].keys():
-            return self.config['ignore']['snr-cut']
-        return None #return some default value instead?
+        return get_value('snr-cut', self.config['ignore']) #return some default value instead?
      
     def get_bad_files(self):
         """ Return list of bad files """
-        if 'bad-file' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-file']
-        return None
+        return get_value('bad-file', self.config['ignore'])
     
     def get_bad_ranges(self):
         """ Return list of bad file ranges by MJD ([MJD1,MJD2])"""
-        if 'bad-range' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-range']
-        return None
+        return get_value('bad-range', self.config['ignore'])
 
     def get_bad_toas(self):
         """ Return list of bad TOAs (lists: [filename, channel, subint]) """
-        if 'bad-toa' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-toa']
-        return None
+        return get_value('bad-toa', self.config['ignore'])
 
     def get_bad_toas_averaged(self):
         """ Return list of bad TOAs (lists: [filename, channel, subint]) """
-        if 'bad-toa-averaged' in self.config['ignore'].keys():
-            return self.config['ignore']['bad-toa-averaged']
-        return None
+        return get_value('bad-toa-averaged', self.config['ignore'])
 
     
     def get_investigation_files(self):
@@ -504,7 +549,7 @@ class TimingConfiguration:
         febe_to_cut = []
         for febe in febe_pairs:
             f_bool = np.array([f == febe for f in toas.get_flag_value('f')[0]])
-            f_names = toas[f_bool].get_flag_value('name')[0]
+            f_names = np.array(toas.get_flag_value('name')[0])[f_bool]
             files = set(f_names)
             n_files = len(files)
             if n_files > nfiles_threshold:
@@ -629,7 +674,7 @@ class TimingConfiguration:
 
             # only bother printing anything if there's a suggestion
             if len(new_bad_files) > 0:
-                log.warn(
+                log.warning(
                     f"More than {threshold * 100}% of TOAs have been excised for some files"
                 )
                 log.info("Consider adding the following to `bad-file` in your config file:")
@@ -650,81 +695,56 @@ class TimingConfiguration:
                     print(f"    - ['{t[0]}',{t[1]},{t[2]}]")
 
     def get_prob_outlier(self):
-        if "prob-outlier" in self.config['ignore'].keys():
-            return self.config['ignore']['prob-outlier']
-        return None #return some default value instead?
-
+        """ Return outlier probability value """
+        return get_value('prob-outlier', self.config['ignore']) #return some default value instead?
+    
     def get_noise_dir(self):
         """ Return base directory for noise results """
-        if 'noise-dir' in self.config['intermediate-results'].keys():
-            return self.config['intermediate-results']['noise-dir']
-        return None
+        return get_value('noise-dir', self.config['intermediate-results'])
     
     def get_compare_noise_dir(self):
         """ Return base directory for noise results """
-        if 'compare-noise-dir' in self.config['intermediate-results'].keys():
-            return self.config['intermediate-results']['compare-noise-dir']
-        return None
+        return get_value('compare-noise-dir', self.config['intermediate-results'])
 
     def get_no_corner(self):
         """ Return boolean for no corner plot """
-        if 'no-corner' in self.config['intermediate-results'].keys():
-            return self.config['intermediate-results']['no-corner']
-        return False
+        return get_value('no-corner', self.config['intermediate-results'], default=False)
 
     def get_ignore_dmx(self):
         """ Return ignore-dmx toggle """
-        if 'ignore-dmx' in self.config['dmx'].keys():
-            return self.config['dmx']['ignore-dmx']
-        return None
+        return get_value('ignore-dmx', self.config['dmx'])
 
     def get_fratio(self):
         """ Return desired frequency ratio """
-        if 'fratio' in self.config['dmx'].keys():
-            return self.config['dmx']['fratio']
-        return pint_pal.config.FREQUENCY_RATIO
+        return get_value('fratio', self.config['dmx'], default=pint_pal.config.FREQUENCY_RATIO)
 
     def get_sw_delay(self):
         """ Return desired max(solar wind delay) threshold """
-        if 'max-sw-delay' in self.config['dmx'].keys():
-            return self.config['dmx']['max-sw-delay']
-        return pint_pal.config.MAX_SOLARWIND_DELAY
+        return get_value('max-sw-delay', self.config['dmx'], default=pint_pal.config.MAX_SOLARWIND_DELAY)
 
     def get_custom_dmx(self):
         """ Return MJD/binning params for handling DM events, etc. """
-        if 'custom-dmx' in self.config['dmx'].keys():
-            return self.config['dmx']['custom-dmx']
-        return None
+        return get_value('custom-dmx', self.config['dmx'])
 
     def get_outlier_burn(self):
         """ Return outlier analysis burn-in samples """
-        if 'n-burn' in self.config['outlier'].keys():
-            return self.config['outlier']['n-burn']
-        return None
+        return get_value('n-burn', self.config['outlier'])
 
     def get_outlier_samples(self):
         """ Return number of samples for outlier analysis """
-        if 'n-samples' in self.config['outlier'].keys():
-            return self.config['outlier']['n-samples']
-        return None
+        return get_value('n-samples', self.config['outlier'])
 
     def get_outlier_method(self):
         """ Return outlier analysis method """
-        if 'method' in self.config['outlier'].keys():
-            return self.config['outlier']['method']
-        return None
+        return get_value('method', self.config['outlier'])
 
     def get_orb_phase_range(self):
         """ Return orb-phase-range to ignore """
-        if 'orb-phase-range' in self.config['ignore'].keys():
-            return self.config['ignore']['orb-phase-range']
-        return None
+        return get_value('orb-phase-range', self.config['ignore'])
     
     def get_check_cleared(self):
         """ Return bool to check if yaml has been cleared """
-        if 'cleared' in self.config['check'].keys():
-            return self.config['check']['cleared']
-        return None
+        return get_value('cleared', self.config['check'])
 
     def apply_ignore(self,toas,specify_keys=None,warn=False,model=None):
         """ Basic checks and return TOA excision info. """
