@@ -14,7 +14,7 @@ if 'TEMPO2' not in os.environ:
     env_base_dir = Path(sys.executable).parent.parent
     tempo2_dir = env_base_dir / 'share' / 'tempo2'
     if tempo2_dir.exists():
-        os.environ['TEMPO2'] = tempo2_dir
+        os.environ['TEMPO2'] = str(tempo2_dir)
 
 from . import _version
 __version__ = _version.get_versions()['version']
