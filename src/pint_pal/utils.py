@@ -551,7 +551,7 @@ def pdf_writer(fitter,
 
     label = f"{psr} {'narrowband' if NB else 'wideband'}"
     # Write beginning header info
-    fsum.write(r'\section*{PSR ' + label + '\markboth{' + label + '}{}}\n')
+    fsum.write(r'\section*{PSR ' + label + r'\markboth{' + label + '}{}}\n')
     
     try:
         who = check_output(['git','config','--get','user.name'], text=True).strip()
@@ -702,7 +702,7 @@ def pdf_writer(fitter,
         fsum.write('One non-JUMPed receiver.  Good.\\\\')
     else:
         fsum.write(alert('Warning: %d non-JUMPed receivers.' % (nnotjumped,))+ '\\\\')
-    fsum.write('\end{tabbing}\n')
+    fsum.write('\\end{tabbing}\n')
     fsum.write('}\n\n')   # ends environment started above.
 
     fsum.write(r'\subsection*{Frozen parameters all zero?}' + '\n')
@@ -781,10 +781,10 @@ def pdf_writer(fitter,
     ndof_0 = fitter.resids_init.dof
     rchi= chi2_0/ndof_0
     fpp = scipy.stats.chi2(int(ndof_0)).sf(float(chi2_0))
-    fsum.write('Reduced $\chi^2$ is %f/%d = %f (false positive probability %g)\n' % (chi2_0,ndof_0,rchi,fpp))
+    fsum.write('Reduced $\\chi^2$ is %f/%d = %f (false positive probability %g)\n' % (chi2_0,ndof_0,rchi,fpp))
     if rchi<0.95 or rchi>1.05:
         # Eh. Not clear if this is useful given an FPP.
-        fsum.write('\\\\ Warning: $\chi^2$ is far from 1.00\n')
+        fsum.write('\\\\ Warning: $\\chi^2$ is far from 1.00\n')
     if 0.001<fpp<0.999:
         fsum.write('\\\\ False positive probability is believable\n')
     else:
@@ -798,7 +798,7 @@ def pdf_writer(fitter,
         ndof_1 = fitter_noise.resids.dof
         rchi = chi2_1/ndof_1
         fpp = scipy.stats.chi2(int(ndof_1)).sf(float(chi2_1))
-        fsum.write('New reduced $\chi^2$ is %f/%d = %f (false positive probability %g)\n' % (chi2_1,ndof_1,rchi,fpp))
+        fsum.write('New reduced $\\chi^2$ is %f/%d = %f (false positive probability %g)\n' % (chi2_1,ndof_1,rchi,fpp))
         if 0.001<fpp<0.999:
             fsum.write('\\\\ New false positive probability is believable\n')
         else:
@@ -1021,7 +1021,7 @@ def pdf_writer(fitter,
         fsum.write(r'\subsubsection*{Excised TOAs by Cut Flag}' + '\n')
         fsum.write(f"Note: {cuts_dict['cut']['good'][1]} good TOAs remain out of {ntoa} total." + "\\\\\n")
         if cut_pct > 75.0:
-            msg = f"Lots of TOAs have been excised ({round(cut_pct, 1)}\%)! Is that intended? See attached plots."
+            msg = f"Lots of TOAs have been excised ({round(cut_pct, 1)}\\%)! Is that intended? See attached plots."
             fsum.write(alert(msg) + "\\\\\n")
         for cf in cuts_dict['cut'].keys():
             if cf != 'good':
@@ -1037,7 +1037,7 @@ def pdf_writer(fitter,
             tot,cut = cuts_dict['tel'][tel]
             cut_pct = 100.0 * float(cut)/tot
             remain = tot-cut
-            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\% cut!")
+            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\\% cut!")
             fsum.write('%s: %i TOAs remain (%i cut; %i total). %s \\\\\n' % (verb(tel), remain, cut, tot, cutwarn))
 
         # cuts per frontend/backend combo
@@ -1048,7 +1048,7 @@ def pdf_writer(fitter,
             tot,cut = cuts_dict['f'][febe]
             cut_pct = 100.0 * float(cut)/tot
             remain = tot-cut
-            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\% cut!")
+            if cut_pct > 75.0: cutwarn = alert(f"{round(cut_pct,1)}\\% cut!")
             fsum.write('%s: %i TOAs remain (%i cut; %i total). %s \\\\\n' % (verb(febe), remain, cut, tot, cutwarn))
 
             if float(remain)/ntoa < 0.05:
