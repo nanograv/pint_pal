@@ -343,7 +343,7 @@ def plot_residuals_time(
                     mkr_pre = "."
             except Exception:
                 mkr = "x"
-                log.log(1, "Color by Flag doesn't have a marker label!!")
+                log.warning("Color by Flag doesn't have a marker label!!")
         if "color" in kwargs.keys():
             clr = kwargs["color"]
         else:
@@ -351,7 +351,7 @@ def plot_residuals_time(
                 clr = colorscheme[cb_label]
             except Exception:
                 clr = "k"
-                log.log(1, "Color by Flag doesn't have a color!!")
+                log.warning("Color by Flag doesn't have a color!!")
         if "alpha" in kwargs.keys():
             alpha = kwargs["alpha"]
         else:
