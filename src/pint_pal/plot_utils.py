@@ -338,7 +338,7 @@ def plot_residuals_time(
             mkr = kwargs["fmt"]
         else:
             try:
-                mkr = markers[cb_label]
+                mkr = markerscheme[cb_label]
                 if restype == "both":
                     mkr_pre = "."
             except Exception:
