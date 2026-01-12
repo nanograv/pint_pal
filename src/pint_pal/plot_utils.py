@@ -66,7 +66,7 @@ def plot_residuals_time(
     whitened=False,
     save=False,
     legend=True,
-    title=True,
+    title=None,
     axs=None,
     mixed_ecorr=False,
     **kwargs,
@@ -93,7 +93,8 @@ def plot_residuals_time(
     save [boolean] : If True will save plot with the name "resid_v_mjd.png" Will add averaged/whitened
          as necessary [default: False].
     legend [boolean] : If False, will not print legend with plot [default: True].
-    title [boolean] : If False, will not print plot title [default: True].
+    title [boolean] : If False, will not print plot title.
+         If None (default), will print title only if axs is not supplied.
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
 
@@ -320,12 +321,16 @@ def plot_residuals_time(
         figsize = kwargs["figsize"]
     else:
         figsize = (10, 5)
-    if axs == None:
-        fig = plt.figure(figsize=figsize)
+    if axs is None:
+        fig = plt.figure(figsize=figsize, constrained_layout=True)
         ax1 = fig.add_subplot(111)
+        if title is None:
+            title = True
     else:
-        fig = plt.gcf()
         ax1 = axs
+        fig = ax1.figure
+        if title is None:
+            title = False
 
     for i, c in enumerate(CB):
         inds = np.where(cb == c)[0]
@@ -338,12 +343,12 @@ def plot_residuals_time(
             mkr = kwargs["fmt"]
         else:
             try:
-                mkr = markers[cb_label]
+                mkr = markerscheme[cb_label]
                 if restype == "both":
                     mkr_pre = "."
             except Exception:
                 mkr = "x"
-                log.log(1, "Color by Flag doesn't have a marker label!!")
+                log.warning("Color by Flag doesn't have a marker label!!")
         if "color" in kwargs.keys():
             clr = kwargs["color"]
         else:
@@ -351,7 +356,7 @@ def plot_residuals_time(
                 clr = colorscheme[cb_label]
             except Exception:
                 clr = "k"
-                log.log(1, "Color by Flag doesn't have a color!!")
+                log.warning("Color by Flag doesn't have a color!!")
         if "alpha" in kwargs.keys():
             alpha = kwargs["alpha"]
         else:
@@ -484,28 +489,15 @@ def plot_residuals_time(
         else:
             ax1.set_ylabel("Residual ($\mu$s)")
     if legend:
-        if len(CB) > 5:
-            ncol = int(np.ceil(len(CB) / 2))
-            y_offset = 1.15
-        else:
-            ncol = len(CB)
-            y_offset = 1.0
         ax1.legend(
-            loc="upper center",
-            bbox_to_anchor=(0.5, y_offset + 1.0 / figsize[1]),
-            ncol=ncol,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.075),
+            ncol=5,
         )
     if title:
-        if len(CB) > 5:
-            y_offset = 1.1
-        else:
-            y_offset = 1.0
-        plt.title(
+        fig.suptitle(
             "%s %s timing residuals" % (fitter.model.PSR.value, restype),
-            y=y_offset + 1.0 / figsize[1],
         )
-    if axs == None:
-        plt.tight_layout()
     if save:
         ext = ""
         if whitened:
@@ -747,7 +739,7 @@ def plot_residuals_freq(
     whitened=False,
     save=False,
     legend=True,
-    title=True,
+    title=None,
     axs=None,
     **kwargs,
 ):
@@ -774,7 +766,8 @@ def plot_residuals_freq(
     save [boolean] : If True will save plot with the name "resid_v_freq.png" Will add averaged/whitened
          as necessary [default: False].
     legend [boolean] : If False, will not print legend with plot [default: True].
-    title [boolean] : If False, will not print plot title [default: True].
+    title [boolean] : If False, will not print plot title.
+         If None (default), will print title only if axs is not supplied.
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
 
@@ -990,12 +983,16 @@ def plot_residuals_freq(
         figsize = kwargs["figsize"]
     else:
         figsize = (10, 4)
-    if axs == None:
-        fig = plt.figure(figsize=figsize)
+    if axs is None:
+        fig = plt.figure(figsize=figsize, constrained_layout=True)
         ax1 = fig.add_subplot(111)
+        if title is None:
+            title = True
     else:
-        fig = plt.gcf()
         ax1 = axs
+        fig = ax1.figure
+        if title is None:
+            title = False
 
     for i, c in enumerate(CB):
         inds = np.where(cb == c)[0]
@@ -1152,28 +1149,15 @@ def plot_residuals_freq(
         else:
             ax1.set_ylabel("Residual ($\mu$s)")
     if legend:
-        if len(CB) > 5:
-            ncol = int(np.ceil(len(CB) / 2))
-            y_offset = 1.15
-        else:
-            ncol = len(CB)
-            y_offset = 1.0
         ax1.legend(
-            loc="upper center",
-            bbox_to_anchor=(0.5, y_offset + 1.0 / figsize[1]),
-            ncol=ncol,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.075),
+            ncol=5,
         )
     if title:
-        if len(CB) > 5:
-            y_offset = 1.1
-        else:
-            y_offset = 1.0
-        plt.title(
+        fig.suptitle(
             "%s %s frequency residuals" % (fitter.model.PSR.value, restype),
-            y=y_offset + 1.0 / figsize[1],
         )
-    if axs == None:
-        plt.tight_layout()
     if save:
         ext = ""
         if whitened:
@@ -2515,7 +2499,7 @@ def plot_residuals_orb(
     whitened=False,
     save=False,
     legend=True,
-    title=True,
+    title=None,
     axs=None,
     **kwargs,
 ):
@@ -2537,7 +2521,8 @@ def plot_residuals_orb(
     save [boolean] : If True will save plot with the name "resid_v_mjd.png" Will add averaged/whitened
          as necessary [default: False].
     legend [boolean] : If False, will not print legend with plot [default: True].
-    title [boolean] : If False, will not print plot title [default: True].
+    title [boolean] : If False, will not print plot title.
+         If None (default), will print title only if axs is not supplied.
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
 
@@ -2763,12 +2748,16 @@ def plot_residuals_orb(
         figsize = kwargs["figsize"]
     else:
         figsize = (10, 4)
-    if axs == None:
-        fig = plt.figure(figsize=figsize)
+    if axs is None:
+        fig = plt.figure(figsize=figsize, constrained_layout=True)
         ax1 = fig.add_subplot(111)
+        if title is None:
+            title = True
     else:
-        fig = plt.gcf()
         ax1 = axs
+        fig = ax1.figure
+        if title is None:
+            title = False
     for i, c in enumerate(CB):
         inds = np.where(cb == c)[0]
         if not inds.tolist():
@@ -2912,28 +2901,15 @@ def plot_residuals_orb(
         else:
             ax1.set_ylabel("Residual ($\mu$s)")
     if legend:
-        if len(CB) > 5:
-            ncol = int(np.ceil(len(CB) / 2))
-            y_offset = 1.15
-        else:
-            ncol = len(CB)
-            y_offset = 1.0
         ax1.legend(
-            loc="upper center",
-            bbox_to_anchor=(0.5, y_offset + 1.0 / figsize[1]),
-            ncol=ncol,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.075),
+            ncol=5,
         )
     if title:
-        if len(CB) > 5:
-            y_offset = 1.1
-        else:
-            y_offset = 1.0
         plt.title(
             "%s %s timing residuals" % (fitter.model.PSR.value, restype),
-            y=y_offset + 1.0 / figsize[1],
         )
-    if axs == None:
-        plt.tight_layout()
     if save:
         ext = ""
         if whitened:
@@ -2994,9 +2970,23 @@ def plot_residuals_orb(
 
     return
 
-def plot_residuals_serial(fitter, restype = 'postfit', colorby='pta', plotsig = False, avg = False, whitened = False, \
-                        save = False, legend = True, title = True, axs = None, mixed_ecorr=False, epoch_lines=False, \
-                        milli=False, mjd_order=False, **kwargs):
+def plot_residuals_serial(
+    fitter,
+    restype='postfit',
+    colorby='pta',
+    plotsig=False,
+    avg=False,
+    whitened=False,
+    save=False,
+    legend=True,
+    title=True,
+    axs=None,
+    mixed_ecorr=False,
+    epoch_lines=False,
+    milli=False,
+    mjd_order=False,
+    **kwargs,
+):
     """
     Make a serial plot of the residuals. (TOAs are evenly spaced along the x-axis)
     In the default setup this will emulate pintk/tempo2 and TOAs appear in the order they are listed in the par file
@@ -3021,7 +3011,8 @@ def plot_residuals_serial(fitter, restype = 'postfit', colorby='pta', plotsig = 
     save [boolean] : If True will save plot with the name "resid_v_mjd.png" Will add averaged/whitened
          as necessary [default: False].
     legend [boolean] : If False, will not print legend with plot [default: True].
-    title [boolean] : If False, will not print plot title [default: True].
+    title [boolean] : If False, will not print plot title.
+         If None (default), will print title only if axs is not supplied.
     axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
          larger figure [default: None].
         
@@ -3259,12 +3250,12 @@ def plot_residuals_serial(fitter, restype = 'postfit', colorby='pta', plotsig = 
         figsize = kwargs['figsize']
     else:
         figsize = (10,5)
-    if axs == None:
-        fig = plt.figure(figsize=figsize)
+    if axs is None:
+        fig = plt.figure(figsize=figsize, constrained_layout=True)
         ax1 = fig.add_subplot(111)
     else:
-        fig = plt.gcf()
         ax1 = axs
+        fig = ax1.figure
 
     # if want tempo2 version, where serial = order in tim file
     if not mjd_order:
@@ -3371,25 +3362,13 @@ def plot_residuals_serial(fitter, restype = 'postfit', colorby='pta', plotsig = 
         else:
             ax1.set_ylabel(f'Residual ({unitstr})')
     if legend:
-        if len(CB) > 5:
-            ncol = int(np.ceil(len(CB)/2))
-            y_offset = 1.15
-        else:
-            ncol = len(CB)
-            y_offset = 1.0
-        ax1.legend(loc='upper center', bbox_to_anchor= (0.5, y_offset+1.0/figsize[1]), ncol=ncol)
+        ax1.legend(loc='lower center', bbox_to_anchor=(0.5, 1.075), ncol=5)
     if title:
-        if len(CB) > 5:
-            y_offset = 1.1
-        else:
-            y_offset = 1.0
         if isinstance(title, str):
             title_str = title
         else:
             title_str = "%s %s timing residuals" % (fitter.model.PSR.value, restype)
-        plt.title(title_str, y=y_offset+1.0/figsize[1])
-    if axs == None:
-        plt.tight_layout()
+        fig.suptitle(title_str)
     if save:
         ext = ""
         if whitened:
