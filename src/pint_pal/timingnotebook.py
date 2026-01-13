@@ -12,7 +12,6 @@ Very basic usage:
 
 
 import os
-from base64 import encodestring
 import codecs
 import textwrap
 
@@ -95,7 +94,7 @@ class TimingNotebook:
     def add_setup(self,autorun=False):
         """ Add setup helper info, import, and logging cells """
         self.add_markdown_cell_skip('''\
-        # \[set-up\], imports
+        # \\[set-up\\], imports
 
         Reminder (if working on the notebook server): grab current copies of relevant software before doing anything! Make sure your copy of `pint_pal` is up to date and you're working on a development branch, e.g. `psr/J1234+5678/jks`. Then:
         ```
@@ -140,7 +139,7 @@ class TimingNotebook:
                      write=False,autorun=False):
         """ Add cells that load yaml/par/tim and do pre-noise fits """
         self.add_markdown_cell_skip('''\
-        # develop/update \[prenoise\] timing solution
+        # develop/update \\[prenoise\\] timing solution
 
         Load configuration (`.yaml`) file, get TOAs and timing model; if you're running from the root of the git distribution, simply edit the `.yaml` file name, otherwise include relevant paths to the `.yaml` file, and `.par`/`.tim` directories as kwargs (see commented example).\
         ''',autorun)
@@ -263,7 +262,7 @@ class TimingNotebook:
     def add_noise(self,run_noise=False,use_existing=False,autorun=False,write=False):
         """ Add a number of cells that will perform noise modeling via enterprise """
         self.add_markdown_cell_skip('''\
-        # \[noise\] analysis, re-fit
+        # \\[noise\\] analysis, re-fit
 
         Noise analysis runs are required for the 15-yr v0.9 data set, using the latest available timing model and set of TOAs. Once a new `.yaml` file is merged, noise runs will get kicked off on Thorny Flats (HPCs) using the `timing-model` and `toas` indicated therein. For pulsars without existing pre-noise solutions, timers should use the [prenoise] section of this notebook to improve TOA excision, ensure residuals are flat, then submit a merge request with that solution, and wait for noise results to be made available before proceeding.
 
@@ -324,7 +323,7 @@ class TimingNotebook:
     def add_compare(self,autorun=False):
         """ Add cells to compare timing models """
         self.add_markdown_cell_skip('''\
-        # \[compare\] to previous timing model
+        # \\[compare\\] to previous timing model
 
         Compare post-fit model to `compare-model` (or pre-fit model, if `compare-model` is not specified in the `.yaml` file). Use `?mo.compare` for more information about verbosity options.\
         ''',autorun)
@@ -335,7 +334,7 @@ class TimingNotebook:
     def add_significance(self,autorun=False):
         """ Add cells that calculate resid stats, do F-tests """
         self.add_markdown_cell_skip('''\
-        # check parameter \[significance\]
+        # check parameter \\[significance\\]
 
         Get information on the weighted (W)RMS residuals per backend. Set `epoch_avg = True` to get the (W)RMS of the epoch-averaged residuals (does not work for wideband analysis; the timing model must have `ECORR` in order for epoch averaging to work). Set `whitened = True` to get the (W)RMS of the whitened residuals. Set both to `True` to get the (W)RMS of the whitened, epoch-averaged residuals.
 
@@ -363,7 +362,7 @@ class TimingNotebook:
     def add_summary(self,autorun=False):
         """ Add cells that will generate summary pdfs """
         self.add_markdown_cell_skip('''\
-        # generate \[summary\] pdf
+        # generate \\[summary\\] pdf
         
         Generate summary plots required for pdf summaries. Note: this cell will output white space for the plots, but will save them and incorporate them into the pdf summaries appropriately.\
         ''',autorun)
@@ -384,7 +383,7 @@ class TimingNotebook:
     def add_changelog(self,autorun=False):
         """ Add cell explaining how to generate changelog entries """
         self.add_markdown_cell_skip('''\
-        # \[changelog\] entries
+        # \\[changelog\\] entries
 
         New changelog entries in the `.yaml` file should follow a specific format and are only added for specified reasons (excising TOAs, adding/removing params, changing binary models, etc.). For more detailed instructions, run `new_changelog_entry?` in a new cell. This function can be used to format your entry, which should be added to the bottom of the appropriate `.yaml` file. Note: make sure your git `user.email` is properly configured, since this field is used to add your name to the entry.\
         ''',autorun)

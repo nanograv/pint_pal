@@ -480,14 +480,14 @@ def plot_residuals_time(
     else:
         if avg and whitened:
             ax1.set_ylabel(
-                "Average Residual ($\mu$s) \n (Whitened)", multialignment="center"
+                "Average Residual ($\\mu$s) \n (Whitened)", multialignment="center"
             )
         elif avg and not whitened:
-            ax1.set_ylabel("Average Residual ($\mu$s)")
+            ax1.set_ylabel(r"Average Residual ($\mu$s)")
         elif whitened and not avg:
-            ax1.set_ylabel("Residual ($\mu$s) \n (Whitened)", multialignment="center")
+            ax1.set_ylabel("Residual ($\\mu$s) \n (Whitened)", multialignment="center")
         else:
-            ax1.set_ylabel("Residual ($\mu$s)")
+            ax1.set_ylabel(r"Residual ($\mu$s)")
     if legend:
         ax1.legend(
             loc="lower center",
@@ -716,7 +716,7 @@ def plot_FD_delay(
         if (FD_delay < 0).any():
             ax1.axhline(-P0_bin_max * 1e6, label="1 profile bin")
     ax1.set_xlabel("Frequency (MHz)")
-    ax1.set_ylabel("Delay ($\mu$s)")
+    ax1.set_ylabel(r"Delay ($\mu$s)")
     if title:
         ax1.set_title("%s FD Delay" % psr_name)
     if legend:
@@ -1140,14 +1140,14 @@ def plot_residuals_freq(
     else:
         if avg and whitened:
             ax1.set_ylabel(
-                "Average Residual ($\mu$s) \n (Whitened)", multialignment="center"
+                "Average Residual ($\\mu$s) \n (Whitened)", multialignment="center"
             )
         elif avg and not whitened:
-            ax1.set_ylabel("Average Residual ($\mu$s)")
+            ax1.set_ylabel(r"Average Residual ($\mu$s)")
         elif whitened and not avg:
-            ax1.set_ylabel("Residual ($\mu$s) \n (Whitened)", multialignment="center")
+            ax1.set_ylabel("Residual ($\\mu$s) \n (Whitened)", multialignment="center")
         else:
-            ax1.set_ylabel("Residual ($\mu$s)")
+            ax1.set_ylabel(r"Residual ($\mu$s)")
     if legend:
         ax1.legend(
             loc="lower center",
@@ -2230,14 +2230,14 @@ def plot_measurements_v_res(
     else:
         if avg and whitened:
             ax1.set_xlabel(
-                "Average Residual ($\mu$s) \n (Whitened)", multialignment="center"
+                "Average Residual ($\\mu$s) \n (Whitened)", multialignment="center"
             )
         elif avg and not whitened:
-            ax1.set_xlabel("Average Residual ($\mu$s)")
+            ax1.set_xlabel(r"Average Residual ($\mu$s)")
         elif whitened and not avg:
-            ax1.set_xlabel("Residual ($\mu$s) \n (Whitened)", multialignment="center")
+            ax1.set_xlabel("Residual ($\\mu$s) \n (Whitened)", multialignment="center")
         else:
-            ax1.set_xlabel("Residual ($\mu$s)")
+            ax1.set_xlabel(r"Residual ($\mu$s)")
     ax1.set_xlim(-1.1 * xmax, 1.1 * xmax)
     if legend:
         if len(RCVR_BCKNDS) > 5:
@@ -2892,14 +2892,14 @@ def plot_residuals_orb(
     else:
         if avg and whitened:
             ax1.set_ylabel(
-                "Average Residual ($\mu$s) \n (Whitened)", multialignment="center"
+                "Average Residual ($\\mu$s) \n (Whitened)", multialignment="center"
             )
         elif avg and not whitened:
-            ax1.set_ylabel("Average Residual ($\mu$s)")
+            ax1.set_ylabel(r"Average Residual ($\mu$s)")
         elif whitened and not avg:
-            ax1.set_ylabel("Residual ($\mu$s) \n (Whitened)", multialignment="center")
+            ax1.set_ylabel("Residual ($\\mu$s) \n (Whitened)", multialignment="center")
         else:
-            ax1.set_ylabel("Residual ($\mu$s)")
+            ax1.set_ylabel(r"Residual ($\mu$s)")
     if legend:
         ax1.legend(
             loc="lower center",
@@ -3067,7 +3067,7 @@ def plot_residuals_serial(
         unitstr = "ms"
     else:
         unit = u.us
-        unitstr = "$\mu$s"
+        unitstr = r"$\mu$s"
 
     # Get residuals
     if 'res' in kwargs.keys():
@@ -3615,13 +3615,13 @@ def plot_fd_res_v_freq(
                 ylabel = "Residual/Uncertainty"
         else:
             if avg and whitened:
-                ylabel = "Average Residual ($\mu$s) \n (Whitened)"
+                ylabel = "Average Residual ($\\mu$s) \n (Whitened)"
             elif avg and not whitened:
-                ylabel = "Average Residual ($\mu$s)"
+                ylabel = "Average Residual ($\\mu$s)"
             elif whitened and not avg:
-                ylabel = "Residual ($\mu$s) \n (Whitened)"
+                ylabel = "Residual ($\\mu$s) \n (Whitened)"
             else:
-                ylabel = "Residual ($\mu$s)"
+                ylabel = "Residual ($\\mu$s)"
         ax1.set_ylabel(ylabel)
 
     # Now if we want to show the other plots, we plot them
