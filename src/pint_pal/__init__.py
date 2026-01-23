@@ -1,5 +1,6 @@
 import pint_pal.packageconfiguration # must go before any use of pint_pal.config
 from pint_pal.packageconfiguration import set_data_root, reset_config
+from pint_pal.threads import set_thread_limit
 import pint_pal.checkin
 import os, sys
 from pathlib import Path
