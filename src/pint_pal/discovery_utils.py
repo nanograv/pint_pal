@@ -7,6 +7,7 @@ from multiprocessing import Pool
 from pathlib import Path
 from datetime import datetime
 import dill as pickle
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 # discovery outlier analysis imports
 import discovery as ds
@@ -20,26 +21,145 @@ import numpyro
 from numpyro import sample, factor, infer, deterministic
 from numpyro import distributions as dist
 
-def get_discovery_prior_dictionary(override_dict={}):
+def get_discovery_prior_dictionary(override_dict: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Get the prior dictionary for discovery outlier analysis.
 
     Parameters
     ----------
-    override_dict : dict
+    override_dict : dict, optional
         Dictionary of parameters to override the default priors.
 
     Returns
     -------
-    dict : dict
+    dict
         Dictionary of priors.
     """
     prior_dict = ds.priordict_standard.copy()
-    prior_dict.update({f'(.*_)?alpha_scaling\\(([0-9]*)\\)': [0.999, 1.001]})
-    prior_dict.update({f'(.*_)?timingmodel_coefficients\\(([0-9]*)\\)': [0.999, 1.001]})
-    for key, value in override_dict.items():
-        prior_dict[key] = value
+    if override_dict:
+        for key, value in override_dict.items():
+            prior_dict[key] = value
     return prior_dict
+
+def make_spna_cnm(
+        psr: Any,
+        noise: Optional[Dict[str, Any]] = None,
+        time_span: Optional[float] = None,
+        vary_white_noise: bool = True,
+        vary_ecorr: bool = True,
+        include_rn: bool = True,
+        include_dmgp: bool = True,
+        include_chromgp: bool = True,
+        chromatic_idx: Optional[float] = None,
+        include_swgp: bool = True,
+        marg_ne: bool = True,
+        return_args: bool = False
+) -> Union[ds.PulsarLikelihood, Sequence[Any]]:
+    """
+    Build a SPNA CNM (pulsar likelihood) composed of measurement noise and various Gaussian processes.
+
+    Parameters
+    ----------
+    psr : object
+        Pulsar object used by the discovery library (must provide Mmat, residuals, etc.).
+    noise : dict, optional
+        Static white-noise parameter dictionary used when vary_white_noise is False.
+    time_span : float, optional
+        Observation time span; if None, determined via ds.getspan([psr]).
+    vary_white_noise : bool
+        Whether to construct variable white-noise components.
+    vary_ecorr : bool
+        Whether epoch-correlated noise should be variable.
+    include_rn : bool
+        Include red-noise GP if True.
+    include_dmgp : bool
+        Include DM GP if True.
+    include_chromgp : bool
+        Include chromatic GP if True.
+    chromatic_idx : float, optional
+        Fixed chromatic spectral index when including chromatic GP.
+    include_swgp : bool
+        Include solar-wind GP if True.
+    marg_ne : bool
+        If True, append solar DM design column to psr.Mmat.
+    return_args : bool
+        If True, return the list of component arguments instead of a PulsarLikelihood.
+
+    Returns
+    -------
+    discovery.PulsarLikelihood or list
+        PulsarLikelihood instance assembled from components, or the raw args list if return_args is True.
+    """
+    if noise is None:
+        noise = {}
+    if time_span is None:
+        time_span = ds.getspan([psr])
+    if marg_ne:
+        psr.Mmat = np.hstack([psr.Mmat, np.array([ds.make_solardm(psr)(1.0)]).T])
+    args = []
+    if vary_white_noise:
+        args.append(ds.makenoise_measurement(psr, tnequad=True))
+        args.append(ds.makegp_ecorr(psr))
+        args.append(ds.makegp_timing(psr, svd=True, variable=True))
+        if include_rn:
+            args.append(ds.makegp_fourier(psr, ds.powerlaw, 40, T=time_span, name='red_noise',
+                              # use lambda function since the fourierbasis has to be a callable with only psr, comp, T args
+                              fourierbasis=lambda psr, comp, T : log_fourierbasis(psr, T=T, logmode=2, f_min=1/(5*time_span), nlin=40, nlog=10)
+                        )
+            )
+    else:
+        args.append(
+            ds.makenoise_measurement(psr, noise)
+        )
+        if vary_ecorr:
+            args.append(
+                ds.makegp_ecorr(psr)
+            )
+        else:
+            args.append(
+                ds.makegp_ecorr(psr, noise)
+            )
+        args.append(
+            ds.makegp_timing(psr, svd=True, variable=False)
+        )
+        if include_rn:
+            args.append(
+            ds.makegp_fourier(psr, ds.powerlaw, 40, T=time_span, name='red_noise',
+                              # use lambda function since the fourierbasis has to be a callable with only psr, comp, T args
+                              fourierbasis=lambda psr, comp, T : log_fourierbasis(psr, T=T, logmode=2, f_min=1/(5*time_span), nlin=40, nlog=10)
+                             )
+            )
+    if include_dmgp:
+        args.append(ds.makegp_fourier(psr, ds.powerlaw, 200, T=time_span, name='dm_gp',
+                                fourierbasis=lambda psr, comp, T : log_fourierbasis_dm(psr, T=T, logmode=2, f_min=1/(5*time_span), nlin=150, nlog=10)
+                                 ))
+    if include_chromgp:
+        if chromatic_idx is None:
+            args.append(
+                ds.makegp_fourier(psr, ds.powerlaw, 200, T=time_span, name='chrom_gp',
+                    fourierbasis=lambda psr, comp, T : log_fourierbasis_chromatic(psr, T=T, logmode=2, f_min=1/(5*time_span), nlin=150, nlog=10)
+                )
+            )
+        else:
+            args.append(
+                ds.makegp_fourier(psr, ds.powerlaw, 200, T=time_span, name='chrom_gp',
+                    fourierbasis=lambda psr, comp, T : log_fourierbasis_chromatic_fixed(psr, alpha=chromatic_idx, 
+                        T=T, logmode=2, f_min=1/(5*time_span), nlin=150, nlog=10)
+                )
+            )
+    #args.append(du.makegp_td_sw(psr, ridge_kernel, M, T=time_span))
+    if include_swgp:
+        args.append(ds.makegp_fourier(psr, ds.powerlaw, 200, T=time_span, name='sw_gp',
+                            fourierbasis=lambda psr, comp, T : log_fourierbasis_solardm(psr, T=T, logmode=2, f_min=1/(5*time_span), nlin=150, nlog=10)
+                                 ))
+    det_sw_subtracted_resids = np.array(psr.residuals - ds.make_solardm(psr)(6.67))
+    args.append(det_sw_subtracted_resids)
+    if return_args:
+        return args
+    else:
+        return ds.PulsarLikelihood(tuple(args))
+
+
 
 def run_discovery_with_checkpoints(
     sampler: numpyro.infer.MCMC,
@@ -49,7 +169,7 @@ def run_discovery_with_checkpoints(
     file_basename: str = "results",
     rng_key: jax.random.PRNGKey = None,
     resume: bool = True,
-) -> None:
+) -> az.InferenceData:
     """
     Run a NumPyro MCMC sampler in multiple chunks with checkpointing.
 
