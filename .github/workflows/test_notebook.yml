@@ -54,6 +54,10 @@ jobs:
       shell: bash -el {0}
       run: |
         pip install -e .
+    - name: Run Unit Tests
+      shell: bash -el {0}
+      run: |
+        pytest --ignore=tests/test_run_notebook.py
     - name: Test with Standard Pulsar
       shell: bash -el {0}
       run: |

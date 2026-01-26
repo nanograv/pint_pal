@@ -1,0 +1,5 @@
+# Used for unit testing updates of the package configuration
+
+# Override default TT(BIPM) and ephemeris versions
+LATEST_BIPM: "BIPM2019" # outdated value for testing purposes
+LATEST_EPHEM: "DE430"   # outdated value for testing purposes

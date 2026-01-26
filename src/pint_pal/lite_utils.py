@@ -1411,7 +1411,7 @@ def highlight_cut_resids(toas,model,tc_object,cuts=['badtoa','badfile'],multi=Fa
                 log.warning(f"Unrecognized cut: {c}")
 
         ax.grid(True)
-        ax.set_ylabel('Residual ($\mu$s)')
+        ax.set_ylabel(r'Residual ($\mu$s)')
 
     ax1.legend(loc='upper center', bbox_to_anchor= (0.5, 1.2), ncol=len(cuts))
     #plt.title(f'{model.PSR.value} highlighted cuts',y=1.2)
