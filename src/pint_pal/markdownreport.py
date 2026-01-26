@@ -234,7 +234,7 @@ class MarkdownReport:
         filename : str
            Output filename for the PDF.
         verbose : bool, default=False
-           If True, prints the command generated
+           If True, prints the commands generated and the HTML header.
         """
         command_list = [
                 "pandoc",
