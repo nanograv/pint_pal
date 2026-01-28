@@ -1,14 +1,21 @@
-import os, sys
+import numpy as np
+import pint_pal
+import threadpoolctl
+import os
 
-def test_numpy_not_imported_too_early():
-    import pint_pal
-    assert "numpy" not in sys.modules
+def test_thread_limit():
+    """
+    Tests setting the number of threads using threadpoolctl.
+    """
+    n_threads_orig = threadpoolctl.threadpool_info()[0]["num_threads"]
 
-def test_env_vars_set():
-    import pint_pal
+    expected_num = max(os.cpu_count() - 2, 1)
+    pint_pal.set_thread_limit()
+    for lib_info in threadpoolctl.threadpool_info():
+        assert lib_info["num_threads"] == expected_num
+
     pint_pal.set_thread_limit(1)
-    assert os.environ["OMP_NUM_THREADS"] == "1"
-    assert os.environ["OPENBLAS_NUM_THREADS"] == "1"
-    assert os.environ["MKL_NUM_THREADS"] == "1"
-    assert os.environ["NUMEXPR_NUM_THREADS"] == "1"
-    assert os.environ["VECLIB_MAXIMUM_THREADS"] == "1"
+    for lib_info in threadpoolctl.threadpool_info():
+        assert lib_info["num_threads"] == 1
+
+    pint_pal.set_thread_limit(n_threads_orig)

@@ -1,7 +1,10 @@
 import os
 from typing import Optional
 
-def set_thread_limit(n_threads: Optional[int] = None) -> None:
+import threadpoolctl
+from loguru import logger
+
+def set_thread_limit(n_threads: Optional[int] = None, reserve: int = 2) -> None:
     """
     Set the maximum number of threads to be used by Numpy and other
     multithreaded code, including MCMC samplers, in this process.
@@ -9,10 +12,14 @@ def set_thread_limit(n_threads: Optional[int] = None) -> None:
 
     Parameters
     ----------
-    n_threads: int (optional)
+    n_threads : int (optional)
         Maximum number of threads to use. If unspecified, look for an
         environment variable set by the HPC job manager. If none is found,
-        the default is to use 2 less than the number of CPUs (minimum 1).
+        the default is to use a limit based on the number of CPUs detected,
+        subtracting `reserve` (by default, 2).
+    reserve : int, default 2
+        If the `n_threads` is unspecified, this will be subtracted from the
+        number of CPUs to determine the maximum number of threads to use.
     """
     if n_threads is None:
         if "SLURM_TASKS_PER_NODE" in os.environ:
@@ -25,8 +32,5 @@ def set_thread_limit(n_threads: Optional[int] = None) -> None:
             # Use all but 2 CPUs (minimum 1)
             n_threads = max(os.cpu_count() - 2, 1)
 
-    os.environ["OMP_NUM_THREADS"] = str(n_threads)
-    os.environ["OPENBLAS_NUM_THREADS"] = str(n_threads)
-    os.environ["MKL_NUM_THREADS"] = str(n_threads)
-    os.environ["NUMEXPR_NUM_THREADS"] = str(n_threads)
-    os.environ["VECLIB_MAXIMUM_THREADS"] = str(n_threads)
+    logger.info("Setting thread limit to {}", n_threads)
+    threadpoolctl.threadpool_limits(limits=n_threads)
