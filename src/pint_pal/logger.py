@@ -1,7 +1,38 @@
 from loguru import logger
 import pint.logging
-from typing import Union
+from typing import Union, IO
+from collections.abc import Callable
 import sys
+
+log_format = "<level>{level}</level> ({name}:{line}): {message}"
+
+def add_sink(
+    file: IO = sys.stderr,
+    level: Union[str, int] = "INFO",
+    filter: Optional[Callable] = pint.logging.LogFilter(),
+) -> None:
+    """
+    Add a sink (i.e., a file where log messages will be written) to the logger,
+    using a format consistent with that used by the default configuration.
+
+    Parameters
+    ----------
+    file: file-like object
+        The location where log messages will be written.
+    level: str or int
+        The minimum level of messages to log. Can be specified as a string
+        or as an integer. The mapping (determined by loguru) is as follows:
+        "DEBUG"=10, "INFO"=20, "ERROR"=30, "WARNING"=40, "CRITICAL"=50.
+    filter: callable, optional
+        Filter function to apply to messages. By default, uses the filter
+        provided by PINT (an instance of `pint.logging.LogFilter`).
+    """
+    logger.add(
+        file,
+        level=level,
+        format=log_format,
+        filter=filter,
+    )
 
 def setup(level: Union[str, int] = "INFO", use_stdout: bool = True) -> None:
     """
@@ -16,7 +47,7 @@ def setup(level: Union[str, int] = "INFO", use_stdout: bool = True) -> None:
     ----------
     level: str or int
         The minimum level of messages to log. Can be specified as a string
-        or as an integer. The mapping (specified by loguru) is as follows:
+        or as an integer. The mapping (determined by loguru) is as follows:
         "DEBUG"=10, "INFO"=20, "ERROR"=30, "WARNING"=40, "CRITICAL"=50.
     use_stdout: bool
         If `True` (the default), only messages of "WARNING" level or above
@@ -26,7 +57,6 @@ def setup(level: Union[str, int] = "INFO", use_stdout: bool = True) -> None:
         In a shell, it is preferable to send all messages to stderr so that
         logging output can be redirected separately from stdout.
     """
-    log_format = "<level>{level}</level> ({name}:{line}): {message}"
     stderr_filter = pint.logging.LogFilter()
 
     def stdout_filter(record):
@@ -35,22 +65,7 @@ def setup(level: Union[str, int] = "INFO", use_stdout: bool = True) -> None:
 
     logger.remove()
     if use_stdout:
-        logger.add(
-            sys.stdout,
-            level=level,
-            format=log_format,
-            filter=stdout_filter,
-        )
-        logger.add(
-            sys.stderr,
-            level="WARNING",
-            format=log_format,
-            filter=stderr_filter,
-        )
+        add_sink(sys.stdout, level=level, filter=stdout_filter)
+        add_sink(sys.stderr, level="WARNING", filter=stderr_filter)
     else:
-        logger.add(
-            sys.stderr,
-            level=level,
-            format=log_format,
-            filter=stderr_filter,
-        )
+        add_sink(sys.stderr, level=level, filter=stderr_filter)
