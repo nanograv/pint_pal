@@ -830,7 +830,7 @@ def log_notebook_to_file(source, toa_type, base_dir="."):
 def log_warnings():
     log.warning(
         "lite_utils.log_warnings() is deprecated; "
-        "use pint.logger.capture_warnings() instead"
+        "use pint.logger.log_warnings() instead"
     )
     pint.logger.capture_warnings()
 
