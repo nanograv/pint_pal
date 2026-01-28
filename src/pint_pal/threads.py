@@ -30,7 +30,7 @@ def set_thread_limit(n_threads: Optional[int] = None, reserve: int = 2) -> None:
             n_threads = int(os.environ["NCPUS"])
         else:
             # Use all but 2 CPUs (minimum 1)
-            n_threads = max(os.cpu_count() - 2, 1)
+            n_threads = max(os.cpu_count() - reserve, 1)
 
     logger.info("Setting thread limit to {}", n_threads)
     threadpoolctl.threadpool_limits(limits=n_threads)
