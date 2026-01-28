@@ -1,6 +1,6 @@
 from loguru import logger
 import pint.logging
-from typing import Union, IO
+from typing import Union, Optional, IO
 from collections.abc import Callable
 import sys
 
