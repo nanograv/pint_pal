@@ -825,14 +825,14 @@ def log_notebook_to_file(source, toa_type, base_dir="."):
         "use pint.logger.log_to_file() instead"
     )
     job_name = f"{source}.{toa_type}"
-    pint.logger.log_to_file(job_name, base_dir=base_dir)
+    pint_pal.logger.log_to_file(job_name, base_dir=base_dir)
 
 def log_warnings():
     log.warning(
         "lite_utils.log_warnings() is deprecated; "
         "use pint.logger.log_warnings() instead"
     )
-    pint.logger.capture_warnings()
+    pint_pal.logger.capture_warnings()
 
 def get_cut_colors(palette='pastel'):
     """Get dictionary mapping cut flags to colors
