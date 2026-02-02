@@ -110,9 +110,8 @@ def log_to_file(
     base_dir: str or Path
         Path in which the log file will be created.
     """
-    toa_type = toa_type.lower()
     timestamp = time.strftime('%Y-%m-%d_%H%M%S')
-    logfile_name = Path(base_dir) / f"{source}.{toa_type}.{timestamp}.log"
+    logfile_name = Path(base_dir) / f"{job_name}.{timestamp}.log"
 
     # Start a new log file every time you reload the yaml
     if logfile_id is not None:
