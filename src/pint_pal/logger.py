@@ -114,6 +114,7 @@ def log_to_file(
     logfile_name = Path(base_dir) / f"{job_name}.{timestamp}.log"
 
     # Start a new log file every time you reload the yaml
+    global logfile_id
     if logfile_id is not None:
         logger.remove(logfile_id)
 
