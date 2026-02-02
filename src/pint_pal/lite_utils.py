@@ -832,7 +832,7 @@ def log_warnings():
         "lite_utils.log_warnings() is deprecated; "
         "use pint.logger.log_warnings() instead"
     )
-    pint_pal.logger.capture_warnings()
+    pint_pal.logger.log_warnings()
 
 def get_cut_colors(palette='pastel'):
     """Get dictionary mapping cut flags to colors
