@@ -7,7 +7,7 @@ Starting with generation using Claude, significant modification thereafter
 import pytest
 from collections import OrderedDict
 from unittest.mock import patch
-from markdownreport import MarkdownSection, MarkdownReport, color_text
+from pint_pal.markdownreport import MarkdownSection, MarkdownReport, color_text
 
 
 @pytest.fixture
