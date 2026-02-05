@@ -19,9 +19,9 @@ class MarkdownSection:
         self._title = title
         self._content = [] if content is None else content
         self.remove_spacing = remove_spacing
-        
+
     @property
-    def title(self) -> str: 
+    def title(self) -> str:
         return self._title
 
     @title.setter
@@ -50,7 +50,7 @@ class MarkdownSection:
         ----------
         include_title : bool, default=True
             If True, includes the title as a section in the output string.
-        
+
         Returns
         -------
         output : str
@@ -66,12 +66,12 @@ class MarkdownSection:
                 output += f"{element}\n\n"
         return output
 
-        
+
 class MarkdownReport:
     def __init__(self, title: str = "", sections: OrderedDict | dict | None = None, font_size: int = 10):
         """
         Initialization for the MarkdownReport
-        
+
         Parameters
         ----------
         title : str
@@ -83,7 +83,7 @@ class MarkdownReport:
         """
         self.title = title
         self.sections = OrderedDict() if sections is None else sections
-        self.current_section = None if sections is None else sections[-1].title
+        self.current_section = None if sections is None else next(reversed(sections)).title
 
         self.header = textwrap.dedent(
             """
@@ -115,7 +115,7 @@ class MarkdownReport:
             ---
             """
         )
-        
+
     def get_section(self, section_title: str) -> MarkdownSection:
         """
         Returns a section of the report.
@@ -206,8 +206,8 @@ class MarkdownReport:
         section = self.get_section(section_title) #ensure section exists
         section.add_content(content)
 
-        
-        
+
+
     def generate(self) -> str:
         """
         Creates the combined markdown string from all of the sections.
@@ -223,7 +223,7 @@ class MarkdownReport:
             output += section.generate()
         return output
 
-    
+
 
     def generate_pdf(self, filename: str, verbose: bool = False) -> None:
         """
@@ -273,5 +273,3 @@ def color_text(text: str, color: str = "black", highlight: str = "white") -> str
        Color of the highlight/background.
     """
     return f"<span style=\"color:{color}; background-color: {highlight};\">{text}</span>"
-
-
