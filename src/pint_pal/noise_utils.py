@@ -20,6 +20,10 @@ from enterprise_extensions import model_utils
 from enterprise_extensions.empirical_distr import (EmpiricalDistribution1D,
                                                    EmpiricalDistribution2D)
 
+from pint_pal import discovery_utils as disco_utils
+from jax.random import PRNGKey
+from discovery import priordict_standard as ds_pdict
+
 
 def setup_sampling_groups(pta,
                           write_groups=True,
@@ -369,6 +373,7 @@ def model_noise(
     base_op_dir="./",
     model_kwargs={},
     sampler_kwargs={},
+    seed=42,
     return_sampler_without_sampling=False,
 ):
     """
@@ -392,7 +397,7 @@ def model_noise(
             enterprise -- enterprise likelihood
             discovery -- various numpyro samplers with a discovery likelihood
         sampler: for enterprise choose from ['PTMCMCSampler','GibbsSampler']
-             for discovery choose from  ['HMC', 'NUTS', 'HMC-GIBBS']
+             for discovery choose from  ['NUTS', 'optimization']
 
     Returns
     =======
@@ -402,10 +407,10 @@ def model_noise(
     # get the default settings
     model_defaults, sampler_defaults = get_model_and_sampler_default_settings()
     # update with args passed in
-    model_defaults.update(model_kwargs)
-    sampler_defaults.update(sampler_kwargs)
-    model_kwargs = model_defaults.copy()
-    sampler_kwargs = sampler_defaults.copy()
+    #model_defaults.update(model_kwargs)
+    #sampler_defaults.update(sampler_kwargs)
+    #model_kwargs = model_defaults.copy()
+    #sampler_kwargs = sampler_defaults.copy()
     likelihood = sampler_kwargs['likelihood']
     sampler = sampler_kwargs['sampler']
     
@@ -456,12 +461,12 @@ def model_noise(
             pta = models.model_singlepsr_noise(
                 e_psr,
                 white_vary=True,
-                red_var=model_kwargs['inc_rn'], # defaults True
+                red_var=True if model_kwargs['red_noise'] else False, # defaults True
                 is_wideband=False,
                 use_dmdata=False,
                 dmjump_var=False,
                 wb_efac_sigma=wb_efac_sigma,
-                tm_svd=True,
+                tm_svd=True if model_kwargs['tm_svd'] else False, # defaults True
                 # DM GP
                 #dm_var=model_kwargs['inc_dmgp'],
                 #dm_Nfreqs=model_kwargs['dmgp_nfreqs'],
@@ -482,7 +487,7 @@ def model_noise(
                 is_wideband=True,
                 use_dmdata=True,
                 white_vary=True,
-                red_var=model_kwargs['inc_rn'],
+                red_var=True if model_kwargs['red_noise'] else False, # defaults True
                 dmjump_var=False,
                 wb_efac_sigma=wb_efac_sigma,
                 ng_twg_setup=True,
@@ -547,9 +552,32 @@ def model_noise(
     elif likelihood == "enterprise" and sampler == 'GibbsSampler':
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         raise NotImplementedError("GibbsSampler not yet implemented for enterprise likelihood")
-    elif likelihood == "discovery":
+    ##########################################################
+    ################     discovery      ######################
+    ##########################################################
+    elif likelihood == "discovery" and sampler == 'NUTS':
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
-        raise NotImplementedError("Discovery likelihood not yet implemented")
+        psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
+            psr=e_psr,
+            noise_dict={},
+            time_span=None,
+            model_kwargs=model_kwargs,
+            return_args=False,
+        )
+        logL = disco_utils.make_numpyro_model(psl.logL, ds_pdict)
+        samp = disco_utils.make_sampler_nuts(
+            logL,
+            sampler_kwargs=sampler_kwargs,
+        )
+        if not return_sampler_without_sampling:
+            arviz_df = disco_utils.run_discovery_with_checkpoints(
+                sampler=samp,
+                num_checkpoints=sampler_kwargs.get('num_checkpoints', 5),
+                outdir=".",
+                file_basename="results",
+                rng_key=PRNGKey(seed),
+                resume=True,
+            )
     else:
         log.error(
             f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination." \
