@@ -6,6 +6,7 @@
 # with `pint_pal.set_data_root()`).
 
 # Notebook configuration defaults
+NUM_THREADS: max(N-2, 1)   # Number of CPUs allowed
 RUN_FTEST: True            # run F-test modeling at end
 RUN_NOISE_ANALYSIS: True   # run full noise modeling
 CHECK_EXCISION: True       # run "check [excision] results cell

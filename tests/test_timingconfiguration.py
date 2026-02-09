@@ -4,6 +4,7 @@ Unit testing for timingconfiguration.py
 These tests are performed on YAML configuration files
 '''
 import pytest
+import os
 from pathlib import Path
 from pint_pal.timingconfiguration import TimingConfiguration
 
@@ -29,7 +30,6 @@ def PSR():
 
 
 def test_get_source(tc, PSR):
-    print(PSR)
     assert tc.get_source() == PSR
 
 def test_get_model_and_toas(tc, PSR):
@@ -47,7 +47,13 @@ def test_get_bipm(tc):
 
 def test_get_ephem(tc):
     assert tc.get_ephem() == "DE440"
-    
+
+def test_get_notebook_threads(tc):
+    assert tc.get_notebook_num_threads() == max(os.cpu_count() - 2, 1)
+
+def test_set_notebook_threads(tc):
+    assert os.environ["OMP_NUM_THREADS"] == max(os.cpu_count() - 2, 1)
+
 def test_get_notebook_run_Ftest(tc):
     assert tc.get_notebook_run_Ftest() == True
 

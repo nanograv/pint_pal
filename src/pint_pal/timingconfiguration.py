@@ -23,7 +23,7 @@ import pint_pal
 from pint_pal.utils import write_if_changed, apply_cut_flag, apply_cut_select
 from pint_pal.lite_utils import new_changelog_entry
 from pint_pal.lite_utils import check_toa_version, check_tobs
-
+from pint_pal.set_threads import set_threads
 
 def identity_func(x: Any) -> Any:
     """ Miscellaneous function to wrap as default """
@@ -383,6 +383,22 @@ class TimingConfiguration:
         """ Return the ephemeris string """
         return get_value('ephem', self.config, default=pint_pal.config.LATEST_EPHEM)
 
+
+    def get_notebook_num_threads(self):
+        """ Return the number of CPUs to override the defaults """
+        value = get_value('NUM_THREADS', self.config['notebook'], default=pint_pal.config.NUM_THREADS)
+        value = value.replace("N", "os.cpu_count()")
+        try:
+            num_threads = eval(value)
+        except: #several possible errors here depending on the eval
+            raise ValueError("Configuration file NUM_THREADS error: {value}")
+        return num_threads
+
+    def set_num_threads(self):
+        """ Get the number of CPUs and then set the appropriate environment variables """
+        num = sel.get_notebook_num_threads()
+        set_threads(num)
+        return
     
     def get_notebook_run_Ftest(self):
         """ Return the boolean for running F-tests """
