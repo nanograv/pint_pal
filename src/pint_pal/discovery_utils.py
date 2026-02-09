@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import warnings
 from functools import partial
-from loguru import logger
+import inspect
+from loguru import logger as log
 from multiprocessing import Pool
 from pathlib import Path
 from datetime import datetime
@@ -30,10 +31,10 @@ from numpyro.infer.svi import SVIState
 
 
 warnings.filterwarnings("ignore")
-logger.disable("pint")
-logger.remove()
-logger.add(sys.stderr, colorize=False, enqueue=True)
-logger.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices")
+log.disable("pint")
+log.remove()
+log.add(sys.stderr, colorize=False, enqueue=True)
+log.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices")
 
 def get_discovery_prior_dictionary(override_dict: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
@@ -55,130 +56,218 @@ def get_discovery_prior_dictionary(override_dict: Optional[Dict[str, Any]] = Non
             prior_dict[key] = value
     return prior_dict
 
+def timing_model_block(
+        psr,
+        svd=True,
+        tm_marg=True,
+    ):
+
+    return ds.makegp_timing(psr, svd=svd, variable=not tm_marg)
+
+def white_noise_block(
+        psr,
+        noise_dict={},
+        vary_measurement_noise=True,
+        include_ecorr=True,   
+        vary_ecorr=True,
+        tn_equad=True,
+    ):
+    if vary_measurement_noise:
+        measurement_noise = ds.makenoise_measurement(psr, tnequad=tn_equad)
+    elif not vary_measurement_noise:
+        measurement_noise = ds.makenoise_measurement(psr, tnequad=tn_equad, noise_dict=noise_dict)
+    else:
+        raise ValueError("Invalid value for vary_measurement_noise. Must be True or False.")
+    if vary_ecorr and include_ecorr:
+        ecorr = ds.makegp_ecorr(psr)
+    elif not vary_ecorr and include_ecorr:
+        ecorr = ds.makegp_ecorr(psr, noise_dict)
+    else:
+        raise ValueError("Invalid value for vary_ecorr. Must be True or False.")
+    if include_ecorr:
+        return measurement_noise, ecorr
+    else:
+        return measurement_noise
+
+
+def red_noise_block(
+        psr,
+        basis='fourier',
+        prior='powerlaw',
+        Nfreqs=100,
+        time_span: Optional[float] = None,
+        noise_dict={},
+        name='red_noise',
+        ):
+    if basis == 'fourier':
+        if prior == 'powerlaw':
+            prior = ds.powerlaw
+        else:
+            raise ValueError("Invalid prior specified for solar wind noise. Must be 'powerlaw'.")
+        rn = ds.makegp_fourier(psr, prior, Nfreqs, T=time_span, name=name)
+    elif basis == 'interpolation':
+        raise NotImplementedError("Interpolation basis for solar wind noise is not yet implemented.")
+    else:
+        raise ValueError("Invalid basis specified for solar wind noise. Must be 'fourier' or 'interpolation'.")
+
+    return rn
+
+def chromatic_noise_block(
+        psr,
+        time_span: Optional[float] = None,
+        chromatic_idx='vary',
+        ):
+    rn = ds.makegp_fourier(psr, ds.powerlaw, 40, T=time_span, name='red_noise',)
+    return
+
+def solar_wind_noise_block(
+        psr,
+        basis='fourier',
+        prior='powerlaw',
+        nfreqs=100,
+        time_span: Optional[float] = None,
+        name='red_noise',
+        ):
+    if basis == 'fourier':
+        if prior == 'powerlaw':
+            prior = ds.powerlaw
+        else:
+            raise ValueError("Invalid prior specified for solar wind noise. Must be 'powerlaw'.")
+        rn = ds.makegp_fourier(psr, prior, nfreqs, T=time_span, name=name,)
+    elif basis == 'interpolation':
+        raise NotImplementedError("Interpolation basis for solar wind noise is not yet implemented.")
+    else:
+        raise ValueError("Invalid basis specified for solar wind noise. Must be 'fourier' or 'interpolation'.")
+
+    return rn
+
 def make_single_pulsar_noise_likelihood_discovery(
         psr: Any,
-        noise: Optional[Dict[str, Any]] = None,
+        noise_dict: Optional[Dict[str, Any]] = None,
         time_span: Optional[float] = None,
-        vary_white_noise: bool = True,
-        vary_ecorr: bool = True,
-        include_rn: bool = True,
-        include_dmgp: bool = True,
-        include_chromgp: bool = True,
-        chromatic_idx: Optional[float] = None,
-        include_swgp: bool = True,
-        marg_ne: bool = True,
-        return_args: bool = False
+        model_kwargs: Optional[Dict[str, Any]] = None,
+        return_args: bool = False,
 ) -> Union[ds.PulsarLikelihood, Sequence[Any]]:
     """
     Build a discover likelihood for a single pulsar noise analysis.
 
     Parameters
     ----------
-    psr : object
-        Pulsar object used by the discovery library (must provide Mmat, residuals, etc.).
-    noise : dict, optional
-        Static white-noise parameter dictionary used when vary_white_noise is False.
+    psr : Any
+        Pulsar object.
+    noise_dictionary : dict, optional
+        Dictionary of noise parameters.
     time_span : float, optional
-        Observation time span; if None, determined via ds.getspan([psr]).
-    vary_white_noise : bool
-        Whether to construct variable white-noise components.
-    vary_ecorr : bool
-        Whether epoch-correlated noise should be variable.
-    include_rn : bool
-        Include red-noise GP if True.
-    include_dmgp : bool
-        Include DM GP if True.
-    include_chromgp : bool
-        Include chromatic GP if True.
-    chromatic_idx : float, optional
-        Fixed chromatic spectral index when including chromatic GP.
-    include_swgp : bool
-        Include solar-wind GP if True.
-    marg_ne : bool
-        If True, append solar DM design column to psr.Mmat.
-    return_args : bool
-        If True, return the list of component arguments instead of a PulsarLikelihood.
+        Time span for the noise model.
+    model_kwargs : dict, optional
+        Dictionary of model keyword arguments.
+    return_args : bool, optional
+        If True, return the raw argument list instead of the PulsarLikelihood instance.
 
     Returns
     -------
     discovery.PulsarLikelihood or list
         PulsarLikelihood instance assembled from components, or the raw args list if return_args is True.
     """
-    if noise is None:
-        noise = {}
+    if noise_dict is None:
+        noise_dict = {}
     if time_span is None:
         time_span = ds.getspan([psr])
-    if marg_ne:
-        psr.Mmat = np.hstack([psr.Mmat, np.array([ds.make_solardm(psr)(1.0)]).T])
-    args = []
-    if vary_white_noise:
-        args.append(ds.makenoise_measurement(psr, tnequad=True))
-        args.append(ds.makegp_ecorr(psr))
-        args.append(ds.makegp_timing(psr, svd=True, variable=True))
-        if include_rn:
-            args.append(ds.makegp_fourier(psr, ds.powerlaw, 40, T=time_span, name='red_noise',
-                              # use lambda function since the fourierbasis has to be a callable with only psr, comp, T args
-                              fourierbasis=lambda psr, comp, T : log_fourierbasis(psr, T=T, logmode=2, f_min=1/(5*time_span), nlin=40, nlog=10)
-                        )
-            )
-    else:
+    # if marg_ne:
+    #     psr.Mmat = np.hstack([psr.Mmat, np.array([ds.make_solardm(psr)(1.0)]).T])
+    model_kwargs.update({ky: False for ky in ['timing_model', 'white_noise', 'red_noise', 'dm_noise', 'chromatic_noise', 'solar_wind'] if ky not in model_kwargs.keys()})
+    ## timing model
+    args = [psr.residuals]
+    if model_kwargs['timing_model']:
         args.append(
-            ds.makenoise_measurement(psr, noise)
+            timing_model_block(psr, **model_kwargs['timing_model'])
         )
-        if vary_ecorr:
-            args.append(
-                ds.makegp_ecorr(psr)
-            )
-        else:
-            args.append(
-                ds.makegp_ecorr(psr, noise)
-            )
+    # white noise block
+    if model_kwargs['white_noise']:
         args.append(
-            ds.makegp_timing(psr, svd=True, variable=False)
+            white_noise_block(
+                psr,
+                noise_dict=noise_dict,
+                **model_kwargs['white_noise'],
+            )[0] # fixme 
         )
-        if include_rn:
-            args.append(
-            ds.makegp_fourier(psr, ds.powerlaw, 40, T=time_span, name='red_noise',
-                              # use lambda function since the fourierbasis has to be a callable with only psr, comp, T args
-                              fourierbasis=lambda psr, comp, T : log_fourierbasis(psr, T=T, logmode=2, f_min=1/(5*time_span), nlin=40, nlog=10)
-                             )
+    # red noise block
+    if model_kwargs['red_noise']:
+        args.append(
+            red_noise_block(
+                psr,
+                noise_dict=noise_dict,
+                **model_kwargs['red_noise'],
             )
-    if include_dmgp:
-        args.append(ds.makegp_fourier(psr, ds.powerlaw, 200, T=time_span, name='dm_gp',
-                                fourierbasis=lambda psr, comp, T : log_fourierbasis_dm(psr, T=T, logmode=2, f_min=1/(5*time_span), nlin=150, nlog=10)
-                                 ))
-    if include_chromgp:
-        if chromatic_idx is None:
-            args.append(
-                ds.makegp_fourier(psr, ds.powerlaw, 200, T=time_span, name='chrom_gp',
-                    fourierbasis=lambda psr, comp, T : log_fourierbasis_chromatic(psr, T=T, logmode=2, f_min=1/(5*time_span), nlin=150, nlog=10)
-                )
+        )
+    if model_kwargs['dm_noise']:
+        args.append(
+            chromatic_noise_block(
+                psr,
+                noise_dict=noise_dict,
+                chromatic_index=2.0,
+                name='dm_gp',
+                **model_kwargs['dm_noise']
             )
-        else:
-            args.append(
-                ds.makegp_fourier(psr, ds.powerlaw, 200, T=time_span, name='chrom_gp',
-                    fourierbasis=lambda psr, comp, T : log_fourierbasis_chromatic_fixed(psr, alpha=chromatic_idx, 
-                        T=T, logmode=2, f_min=1/(5*time_span), nlin=150, nlog=10)
-                )
+        )
+    if model_kwargs['chromatic_noise']:
+        args.append(
+            chromatic_noise_block(
+                psr,
+                noise_dict=noise_dict,
+                name='chrom_gp',
+                **model_kwargs['chromatic_noise']
             )
-    #args.append(du.makegp_td_sw(psr, ridge_kernel, M, T=time_span))
-    if include_swgp:
-        args.append(ds.makegp_fourier(psr, ds.powerlaw, 200, T=time_span, name='sw_gp',
-                            fourierbasis=lambda psr, comp, T : log_fourierbasis_solardm(psr, T=T, logmode=2, f_min=1/(5*time_span), nlin=150, nlog=10)
-                                 ))
-    det_sw_subtracted_resids = np.array(psr.residuals - ds.make_solardm(psr)(6.67))
-    args.append(det_sw_subtracted_resids)
+        )
+    if model_kwargs['solar_wind']:
+        args.append(
+            solar_wind_noise_block(
+                psr,
+                noise_dict=noise_dict,
+                name='sw_gp',
+                **model_kwargs['solar_wind']
+            )
+        )
     if return_args:
         return args
     else:
         return ds.PulsarLikelihood(tuple(args))
 
+def make_sampler_nuts(
+        numpyro_model,
+        sampler_kwargs={},
+        ) -> infer.MCMC:
+    nutsargs = dict(
+        max_tree_depth=8,
+        dense_mass=False,
+        forward_mode_differentiation=False,
+        target_accept_prob=0.8,
+        **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.NUTS).args}
+        )
+    samples_per_checkpoint = int(sampler_kwargs.get('num_samples', 1000) / sampler_kwargs.get('num_checkpoints', 5))
+    mcmcargs = dict(
+        num_samples=samples_per_checkpoint,
+        num_warmup=sampler_kwargs.get('num_warmup', 500),
+        **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.MCMC).kwonlyargs and not 'num_samples'}
+        )
+    sampler = infer.MCMC(infer.NUTS(numpyro_model, **nutsargs), **mcmcargs)
+    #sampler.to_df = lambda: numpyro_model.to_df(sampler.get_samples())
 
+    return sampler
+
+def make_numpyro_model(input_lnlike, priordict={}):
+    def numpyro_model():
+        lnlike = input_lnlike({par: numpyro.sample(par, dist.Uniform(*ds.prior.getprior_uniform(par, priordict)))
+            for par in input_lnlike.params})
+
+        numpyro.factor('logl', lnlike)
+    #numpyro_model.to_df = lambda chain: pd.DataFrame(chain)
+
+    return numpyro_model
 
 def run_discovery_with_checkpoints(
     sampler: numpyro.infer.MCMC,
-    n_checkpoints: int = 10,
-    n_samples_per_checkpoint: int = 2000,
+    num_checkpoints: int = 5,
     outdir: str = ".",
     file_basename: str = "results",
     rng_key: jax.random.PRNGKey = None,
@@ -198,7 +287,7 @@ def run_discovery_with_checkpoints(
     ----------
     sampler : numpyro.infer.MCMC
         A NumPyro MCMC sampler object that has been initialized with a kernel.
-    n_checkpoints : int, optional (default=10)
+    num_checkpoints : int, optional (default=10)
         Number of checkpoints (iterations) to run. Each checkpoint generates
         `n_samples_per_checkpoint` posterior samples.
     n_samples_per_checkpoint : int, optional (default=2000)
@@ -233,7 +322,7 @@ def run_discovery_with_checkpoints(
     # Determine resume iteration
     start_iter = 0
     if resume and sampler_pickle_path.exists():
-        logger.info("Resuming from last saved sampler state...")
+        log.info("Resuming from last saved sampler state...")
         with sampler_pickle_path.open("rb") as input_file:
             sampler = pickle.load(input_file)
         sampler.post_warmup_state = sampler.last_state
@@ -243,11 +332,11 @@ def run_discovery_with_checkpoints(
         if checkpoint_files:
             last_file = checkpoint_files[-1]
             start_iter = int(last_file.stem.split("-")[-1]) + 1
-            logger.info(f"Resuming from checkpoint {start_iter}")
+            log.info(f"Resuming from checkpoint {start_iter}")
         else:
-            logger.info("No ArviZ checkpoints found, starting from 0.")
+            log.info("No ArviZ checkpoints found, starting from 0.")
 
-    for iteration in range(start_iter, n_checkpoints):
+    for iteration in range(start_iter, num_checkpoints):
         before_sampling = datetime.now().astimezone().replace(microsecond=0)
 
         # run MCMC
@@ -255,7 +344,7 @@ def run_discovery_with_checkpoints(
 
         after_sampling = datetime.now().astimezone().replace(microsecond=0)
         duration = (after_sampling - before_sampling).total_seconds() / 3600.0
-        logger.info(f"Saving checkpoint {iteration} after {duration:.2f} hours")
+        log.info(f"Saving checkpoint {iteration} after {duration:.2f} hours")
 
         # convert to ArviZ and save iteration-specific checkpoint
         data = az.from_numpyro(sampler)
@@ -267,11 +356,11 @@ def run_discovery_with_checkpoints(
 
         sampler.post_warmup_state = sampler.last_state
 
-    logger.info(f"Finished all {n_checkpoints} checkpoints. Writing concatenated samples...")
+    log.info(f"Finished all {num_checkpoints} checkpoints. Writing concatenated samples...")
 
     # collect all ArviZ checkpoints into one file
     data = az.concat(
-        [az.from_zarr(str(outdir / f"{file_basename}-arviz-checkpoint-{i}.zarr")) for i in range(n_checkpoints)],
+        [az.from_zarr(str(outdir / f"{file_basename}-arviz-checkpoint-{i}.zarr")) for i in range(num_checkpoints)],
         dim="draw",
     )
     az.to_zarr(data, str(outdir / f"{file_basename}-arviz-complete.zarr"))
@@ -515,7 +604,7 @@ def run_svi_early_stopping(
     best_svi_state = svi_state
     patience_counter = 0
 
-    logger.info(f"Starting training with batches of {batch_size} steps.")
+    log.info(f"Starting training with batches of {batch_size} steps.")
 
     final_params = None
     for batch_num in range(max_num_batches):
@@ -529,16 +618,16 @@ def run_svi_early_stopping(
             svi_state = run_training_batch(svi, svi_state, rng_key, batch_size)
         current_val_loss = svi.evaluate(svi_state)
         total_steps = (batch_num + 1) * batch_size
-        logger.info(
+        log.info(
             f"Batch {batch_num + 1}/{max_num_batches} | Total steps taken: {total_steps}",
         )
 
         # Early stopping logic
-        logger.info(f"{current_val_loss=}")
-        logger.info(f"{best_val_loss=}")
+        log.info(f"{current_val_loss=}")
+        log.info(f"{best_val_loss=}")
         difference = current_val_loss - best_val_loss if batch_num >= 1 else -np.inf
         if difference < -1:
-            logger.info(
+            log.info(
                 f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f} {difference=}. Saving state.",
             )
             best_val_loss = current_val_loss
@@ -546,19 +635,19 @@ def run_svi_early_stopping(
             patience_counter = 0
         else:
             patience_counter += 1
-            logger.info(
+            log.info(
                 f"Loss did not improve. Patience: {patience_counter}/{patience} {difference=}",
             )
 
             if patience_counter >= patience:
-                logger.info("Early stopping triggered. Halting training.")
+                log.info("Early stopping triggered. Halting training.")
                 break
 
-            logger.info(f"Best loss achieved: {best_val_loss:.4f}")
+            log.info(f"Best loss achieved: {best_val_loss:.4f}")
 
             final_params = svi.get_params(best_svi_state)
 
-    logger.info("Optimization complete.")
+    log.info("Optimization complete.")
     # This conditional is entered if we exhaust the max training batches
     # without early stopping
     if final_params is None:
