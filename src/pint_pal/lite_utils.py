@@ -22,8 +22,10 @@ import pint.models as models
 import pint.residuals
 from pint.modelutils import model_equatorial_to_ecliptic
 
+from pint.models.parameter import prefixParameter
 from pint.models.parameter import maskParameter
 from pint.models.timing_model import Component
+from pint import DMconst
 
 def convert_pint_to_tempo_timfile(tim_path, op_path, psr_name = "test", timing_pkg = 'tempo'):
     """
@@ -723,6 +725,99 @@ def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
         if component in model.components:
             log.info(f"Removing {component} from model.")
             model.remove_component(component)
+    return
+
+def add_DM1_DM2_and_unfreeze_DM(
+        model,
+        DM1=True,
+        DM2=True,
+        frozen=False
+    ):
+    """Adds DM1 and DM2 to the model and the parameters.
+
+    Parameters
+    ==========
+    model: PINT model object
+    """
+    if DM1:
+        log.info('Adding DM1 to the model...')
+        try:
+            dm1 = prefixParameter(
+                        name="DM1",
+                        units="pc cm^-3/yr^1",
+                        description="1st order time derivative of the dispersion measure",
+                        type_match="float",
+                        long_double=True,
+                        tcb2tdb_scale_factor=DMconst,
+                    )
+            model.components['DispersionDM'].add_param(dm1)
+            model.DM1.value = 0.0
+        except ValueError as e:
+            log.info(f"DM1 already exists in the model. skipping ...")
+    if DM2:
+        try:
+            log.info('Adding DM2 to the model...')
+            dm2 = prefixParameter(
+                    name="DM2",
+                    units="pc cm^-3/yr^2",
+                    description="2nd order time derivative of the dispersion measure",
+                    type_match="float",
+                    long_double=True,
+                    tcb2tdb_scale_factor=DMconst,
+                )
+            model.components['DispersionDM'].add_param(dm2)
+            model.DM2.value = 0.0
+        except ValueError as e:
+            log.info(f"DM2 already exists in the model .. skipping ...")
+    if frozen:
+        log.info('Freezing DM, DM1, and DM2...')
+        model.DM.frozen = True
+        if DM1:
+            model.DM1.frozen = True
+        if DM2:
+            model.DM2.frozen = True
+    else:
+        log.info('Unfreezing DM, DM1, and DM2...')
+        model.DM.frozen = False
+        if DM1:
+            model.DM1.frozen = False
+        if DM2:
+            model.DM2.frozen = False
+    return
+
+def add_deteriministic_solar_wind_to_model(
+        model,
+        NE_SW=6.67,
+        frozen=False,
+        SWM = 0):
+    """
+     Adds a deterministic solar wind model to the input timing model.
+     Parameters
+     ==========
+     model: PINT model object
+     NE_SW: float, optional
+         Solar wind density at 1 AU in electrons per cubic centimeter; default is 6.67, which is the mean in the NANOGrav 15yr-year chromatic noise paper.
+    frozen: bool, optional
+        If True, NE_SW will be frozen in the fit; if False, it will be free to vary. Default is False.
+    SWM: int, optional
+        Solar wind model to use; default is 0, which is the simple 1/r^2 model. The only other option currently implemented is 1, which is the more complex model from You et al. (2007).
+    Returns
+    =======
+    No return.
+        But updates the solar wind dispersion component in the model.
+    """
+    log.info('Adding Solar Wind Dispersion to par file')
+    all_components = Component.component_types
+    noise_class = all_components["SolarWindDispersion"]
+    noise = noise_class()  # Make the dispersion instance.
+    model.add_component(noise, validate=False, force=True)
+    # add parameters
+    model['NE_SW'].quantity = NE_SW 
+    if frozen:
+        model['NE_SW'].frozen = True
+    elif not frozen:
+        model['NE_SW'].frozen = False
+    model['SWM'].value = SWM
     return
 
 def get_receivers(toas):
