@@ -396,7 +396,7 @@ class TimingConfiguration:
 
     def set_num_threads(self):
         """ Get the number of CPUs and then set the appropriate environment variables """
-        num = sel.get_notebook_num_threads()
+        num = self.get_notebook_num_threads()
         set_threads(num)
         return
     
