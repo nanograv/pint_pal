@@ -582,7 +582,7 @@ class TimingConfiguration:
     def check_outlier(self):
         """Perform simple checks on yaml outlier block and prob-outlier field
         """
-        REQUIRED_KEYS = ['method','n-burn','n-samples']
+        REQUIRED_KEYS = ['method','n-burn','n-samples', 'outdir']
         try:
             EXISTING_KEYS = self.config['outlier'].keys()
             VALUED_KEYS = [k for k in EXISTING_KEYS if self.config['outlier'][k] is not None]
@@ -811,7 +811,7 @@ class TimingConfiguration:
                 apply_cut_flag(toas,febeinds,'poorfebe',warn=warn)
         if 'prob-outlier' in valid_valued:
             omethod = self.get_outlier_method().lower()  # accepts Gibbs and HMC, e.g.
-            SUPPORTED_METHODS = ['gibbs','hmc']
+            SUPPORTED_METHODS = ['enterprise-gibbs','enterprise-hmc', 'discovery-gibbs']
             if omethod in SUPPORTED_METHODS:
                 oflag = f'pout_{omethod}'
             else:
