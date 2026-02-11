@@ -22,8 +22,7 @@ import pint.models as models
 import pint.residuals
 from pint.modelutils import model_equatorial_to_ecliptic
 
-from pint.models.parameter import prefixParameter
-from pint.models.parameter import maskParameter
+from pint.models.parameter import floatParameter, maskParameter
 from pint.models.timing_model import Component
 from pint import DMconst
 
@@ -742,9 +741,9 @@ def add_DM1_DM2_and_unfreeze_DM(
     if DM1:
         log.info('Adding DM1 to the model...')
         try:
-            dm1 = prefixParameter(
+            dm1 = floatParameter(
                         name="DM1",
-                        units="pc cm^-3/yr^1",
+                        units="pc cm^-3 yr^-1",
                         description="1st order time derivative of the dispersion measure",
                         type_match="float",
                         long_double=True,
@@ -757,9 +756,9 @@ def add_DM1_DM2_and_unfreeze_DM(
     if DM2:
         try:
             log.info('Adding DM2 to the model...')
-            dm2 = prefixParameter(
+            dm2 = floatParameter(
                     name="DM2",
-                    units="pc cm^-3/yr^2",
+                    units="pc cm^-3 yr^-2",
                     description="2nd order time derivative of the dispersion measure",
                     type_match="float",
                     long_double=True,
