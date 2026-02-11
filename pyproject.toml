@@ -39,6 +39,7 @@ dependencies = [
     "fastshermanmorrison-pulsar",
     "loguru",
     "threadpoolctl",
+    "setuptools<81.0",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
