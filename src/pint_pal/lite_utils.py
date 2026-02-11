@@ -788,7 +788,9 @@ def add_deteriministic_solar_wind_to_model(
         model,
         NE_SW=6.67,
         frozen=False,
-        SWM = 0):
+        SWM = 0,
+        set_SWEPOCH_to_DMEPOCH = True
+    ):
     """
      Adds a deterministic solar wind model to the input timing model.
      Parameters
@@ -800,6 +802,8 @@ def add_deteriministic_solar_wind_to_model(
         If True, NE_SW will be frozen in the fit; if False, it will be free to vary. Default is False.
     SWM: int, optional
         Solar wind model to use; default is 0, which is the simple 1/r^2 model. The only other option currently implemented is 1, which is the more complex model from You et al. (2007).
+    set_SWEPOCH_to_DMEPOCH: bool, optional
+        If True, sets SWEPOCH to DMEPOCH; if False, leaves SWEPOCH unchanged.
     Returns
     =======
     No return.
@@ -817,6 +821,11 @@ def add_deteriministic_solar_wind_to_model(
     elif not frozen:
         model['NE_SW'].frozen = False
     model['SWM'].value = SWM
+    if set_SWEPOCH_to_DMEPOCH:
+        if model.DMEPOCH.value is not None:
+            model.SWEPOCH.quantity = model.DMEPOCH.quantity
+        else:
+            log.warning("DMEPOCH is not set; SWEPOCH will not be set to DMEPOCH.")
     return
 
 def get_receivers(toas):
