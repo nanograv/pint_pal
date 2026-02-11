@@ -13,9 +13,11 @@ import dill as pickle
 from typing import Any, Dict, List, Optional, Sequence, Union, Callable
 
 # discovery outlier analysis imports
+import pandas as pd
 import discovery as ds
 import arviz as az
 from discovery import matrix, selection_backend_flags
+from discovery import prior as ds_prior
 import numpy as np
 import optax
 import jax
@@ -36,7 +38,7 @@ log.remove()
 log.add(sys.stderr, colorize=False, enqueue=True)
 log.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices")
 
-def get_discovery_prior_dictionary(override_dict: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def get_discovery_prior_dictionary(override_dict: Optional[Dict[str, Any]] = {}) -> Dict[str, Any]:
     """
     Get the prior dictionary for discovery outlier analysis.
 
@@ -51,6 +53,16 @@ def get_discovery_prior_dictionary(override_dict: Optional[Dict[str, Any]] = Non
         Dictionary of priors.
     """
     prior_dict = ds.priordict_standard.copy()
+    prior_dict.update({
+        '(.*_)?red_noise_log10_A.*': [-20, -11],
+        '(.*_)?red_noise_gamma.*': [0, 7],
+        '(.*_)?dm_gp_log10_A.*': [-20, -11],
+        '(.*_)?dm_gp_gamma.*': [0, 7],
+        '(.*_)?chrom_gp_log10_A.*': [-20, -11],
+        '(.*_)?chrom_gp_gamma.*': [-7, 7],
+        '(.*_)?swgp_log10_A.*': [-12, -1],
+        '(.*_)?swgp_gamma.*': [-7, 7],
+    })
     if override_dict:
         for key, value in override_dict.items():
             prior_dict[key] = value
@@ -67,28 +79,34 @@ def timing_model_block(
 def white_noise_block(
         psr,
         noise_dict={},
-        vary_measurement_noise=True,
-        include_ecorr=True,   
-        vary_ecorr=True,
+        include_ecorr=True,
+        gp_ecorr=False,
         tn_equad=True,
+        selection=ds.selection_backend_flags,
     ):
-    if vary_measurement_noise:
-        measurement_noise = ds.makenoise_measurement(psr, tnequad=tn_equad)
-    elif not vary_measurement_noise:
-        measurement_noise = ds.makenoise_measurement(psr, tnequad=tn_equad, noise_dict=noise_dict)
-    else:
-        raise ValueError("Invalid value for vary_measurement_noise. Must be True or False.")
-    if vary_ecorr and include_ecorr:
-        ecorr = ds.makegp_ecorr(psr)
-    elif not vary_ecorr and include_ecorr:
-        ecorr = ds.makegp_ecorr(psr, noise_dict)
-    else:
-        raise ValueError("Invalid value for vary_ecorr. Must be True or False.")
-    if include_ecorr:
-        return measurement_noise, ecorr
-    else:
-        return measurement_noise
+    return ds.makenoise_measurement(
+        psr,
+        tnequad=tn_equad,
+        ecorr=include_ecorr,
+        selection=selection,
+        noisedict=noise_dict,
+    )
 
+def gp_ecorr_block(
+        psr,
+        noise_dict={},
+        include_ecorr=True, # dummy vars
+        gp_ecorr=False,
+        tn_equad=True,
+        selection=ds.selection_backend_flags,
+        gp_ecorr_name='ecorrGP'
+    ):
+    return ds.makegp_ecorr(
+        psr,
+        noisedict=noise_dict,
+        selection=selection,
+        gp_ecorr_name=gp_ecorr_name,
+        )
 
 def red_noise_block(
         psr,
@@ -96,7 +114,6 @@ def red_noise_block(
         prior='powerlaw',
         Nfreqs=100,
         time_span: Optional[float] = None,
-        noise_dict={},
         name='red_noise',
         ):
     if basis == 'fourier':
@@ -112,13 +129,34 @@ def red_noise_block(
 
     return rn
 
+def dm_noise_block(
+        psr,
+        basis='fourier',
+        prior='powerlaw',
+        Nfreqs=100,
+        time_span: Optional[float] = None,
+        name='dm_gp',
+        ):
+    if basis == 'fourier':
+        if prior == 'powerlaw':
+            prior = ds.powerlaw
+        else:
+            raise ValueError("Invalid prior specified for dm noise. Must be 'powerlaw'.")
+        dmgp = ds.makegp_fourier(psr, prior, Nfreqs, T=time_span, name=name, fourierbasis=ds.dmfourierbasis)
+    elif basis == 'interpolation':
+        raise NotImplementedError("Interpolation basis for dm noise is not yet implemented.")
+    else:
+        raise ValueError("Invalid basis specified for dm noise. Must be 'fourier' or 'interpolation'.")
+
+    return dmgp
+
 def chromatic_noise_block(
         psr,
         time_span: Optional[float] = None,
         chromatic_idx='vary',
         ):
     rn = ds.makegp_fourier(psr, ds.powerlaw, 40, T=time_span, name='red_noise',)
-    return
+    return rn
 
 def solar_wind_noise_block(
         psr,
@@ -179,51 +217,67 @@ def make_single_pulsar_noise_likelihood_discovery(
     ## timing model
     args = [psr.residuals]
     if model_kwargs['timing_model']:
+
         args.append(
             timing_model_block(psr, **model_kwargs['timing_model'])
         )
-    # white noise block
+    else:
+        log.error("Timing model must be included in the model_kwargs for the likelihood to be properly constructed.")
+    # white noise block + gp ecorr block
     if model_kwargs['white_noise']:
+        log.info("Adding white noise to the model.")
+        gp_ecorr = model_kwargs['white_noise'].get('gp_ecorr', False)
+        if gp_ecorr:
+            args.append(
+                gp_ecorr_block(
+                    psr,
+                    noise_dict=noise_dict,
+                    **model_kwargs['white_noise'],
+                )
+            )
+            # make sure kernel ecorr is off if basis ecorr is on !
+            model_kwargs['white_noise']['include_ecorr'] = False
         args.append(
             white_noise_block(
                 psr,
                 noise_dict=noise_dict,
                 **model_kwargs['white_noise'],
-            )[0] # fixme 
+            )
         )
+    else:
+        log.error("White noise must be included in the model_kwargs for the likelihood to be properly constructed.")
     # red noise block
     if model_kwargs['red_noise']:
+        log.info("Adding red noise to the model.")
         args.append(
             red_noise_block(
                 psr,
-                noise_dict=noise_dict,
                 **model_kwargs['red_noise'],
             )
         )
     if model_kwargs['dm_noise']:
+        log.info("Adding DM noise to the model.")
         args.append(
-            chromatic_noise_block(
+            dm_noise_block(
                 psr,
-                noise_dict=noise_dict,
-                chromatic_index=2.0,
-                name='dm_gp',
                 **model_kwargs['dm_noise']
             )
         )
+
     if model_kwargs['chromatic_noise']:
+        log.info("Adding chromatic noise to the model.")
         args.append(
             chromatic_noise_block(
                 psr,
-                noise_dict=noise_dict,
                 name='chrom_gp',
                 **model_kwargs['chromatic_noise']
             )
         )
     if model_kwargs['solar_wind']:
+        log.info("Adding solar wind noise to the model.")
         args.append(
             solar_wind_noise_block(
                 psr,
-                noise_dict=noise_dict,
                 name='sw_gp',
                 **model_kwargs['solar_wind']
             )
@@ -244,24 +298,28 @@ def make_sampler_nuts(
         target_accept_prob=0.8,
         **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.NUTS).args}
         )
-    samples_per_checkpoint = int(sampler_kwargs.get('num_samples', 1000) / sampler_kwargs.get('num_checkpoints', 5))
+    #samples_per_checkpoint = int(sampler_kwargs.get('num_samples', 1000) / sampler_kwargs.get('num_checkpoints', 5))
     mcmcargs = dict(
-        num_samples=samples_per_checkpoint,
-        num_warmup=sampler_kwargs.get('num_warmup', 500),
-        **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.MCMC).kwonlyargs and not 'num_samples'}
+        #num_samples=samples_per_checkpoint,
+        #num_warmup=sampler_kwargs.get('num_warmup', 500),
+        **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.MCMC).kwonlyargs
+           #and not 'num_samples'
+           }
         )
     sampler = infer.MCMC(infer.NUTS(numpyro_model, **nutsargs), **mcmcargs)
-    #sampler.to_df = lambda: numpyro_model.to_df(sampler.get_samples())
+    sampler.to_df = lambda: numpyro_model.to_df(sampler.get_samples())
 
     return sampler
 
 def make_numpyro_model(input_lnlike, priordict={}):
+    priors_dict = ds.priordict_standard.copy()
+    priors_dict.update(priordict)
     def numpyro_model():
-        lnlike = input_lnlike({par: numpyro.sample(par, dist.Uniform(*ds.prior.getprior_uniform(par, priordict)))
+        lnlike = input_lnlike({par: numpyro.sample(par, dist.Uniform(*ds_prior.getprior_uniform(par, priordict)))
             for par in input_lnlike.params})
 
         numpyro.factor('logl', lnlike)
-    #numpyro_model.to_df = lambda chain: pd.DataFrame(chain)
+    numpyro_model.to_df = lambda chain: pd.DataFrame(chain)
 
     return numpyro_model
 

@@ -23,6 +23,8 @@ from enterprise_extensions.empirical_distr import (EmpiricalDistribution1D,
 from pint_pal import discovery_utils as disco_utils
 from jax.random import PRNGKey
 from discovery import priordict_standard as ds_pdict
+from discovery import samplers
+from discovery.samplers import numpyro as ds_numpyro
 
 
 def setup_sampling_groups(pta,
@@ -564,20 +566,38 @@ def model_noise(
             model_kwargs=model_kwargs,
             return_args=False,
         )
-        logL = disco_utils.make_numpyro_model(psl.logL, ds_pdict)
+        logL = disco_utils.make_numpyro_model(psl.logL, disco_utils.get_discovery_prior_dictionary())
         samp = disco_utils.make_sampler_nuts(
             logL,
             sampler_kwargs=sampler_kwargs,
         )
         if not return_sampler_without_sampling:
-            arviz_df = disco_utils.run_discovery_with_checkpoints(
+            num_samples_per_checkpoint = int(sampler_kwargs.get('num_samples', 1000) / sampler_kwargs.get('num_checkpoints', 5))
+            ds_numpyro.run_nuts_with_checkpoints(
                 sampler=samp,
-                num_checkpoints=sampler_kwargs.get('num_checkpoints', 5),
-                outdir=".",
-                file_basename="results",
+                num_samples_per_checkpoint=num_samples_per_checkpoint,
                 rng_key=PRNGKey(seed),
-                resume=True,
-            )
+                outdir=base_op_dir,
+                resume=resume,
+                )
+    elif likelihood == "discovery" and sampler == 'optimizer':
+        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
+        psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
+            psr=e_psr,
+            noise_dict={},
+            time_span=None,
+            model_kwargs=model_kwargs,
+            return_args=False,
+        )
+        logL = disco_utils.make_numpyro_model(psl.logL, disco_utils.get_discovery_prior_dictionary())
+        # FIXME --- continue implementing this
+        if not return_sampler_without_sampling:
+            ds_numpyro.run_optimizer_with_checkpoints(
+                sampler=samp,
+                rng_key=PRNGKey(seed),
+                outdir=base_op_dir,
+                resume=resume,
+                )
     else:
         log.error(
             f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination." \
