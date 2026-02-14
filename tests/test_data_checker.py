@@ -1,5 +1,5 @@
 '''
-Unit testing for par_checker.py
+Unit testing for data_checker.py
 
 These tests are performed on modified versions of the
 NANOGrav 12.5-year data set (version 3) parameter files
@@ -85,12 +85,13 @@ def test_check_parameters(model):
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_check_epoch_centering(model):
+def test_check_epoch_centering(model, toas):
     """
     Check to see if the EPOCH parameters are appropriately centered.
     """
-    epochchecker = dc.EpochChecker(model)
-    assert epochchecker.check()
+    if model.PSR.value in str(toas.filename):
+        epochchecker = dc.EpochChecker(model, toas)
+        assert epochchecker.check()
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_check_jumps(model, toas):

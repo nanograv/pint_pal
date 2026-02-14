@@ -309,6 +309,8 @@ class NameChecker(DataChecker):
         """
         Parameters
         ----------
+        filename: str
+            Filename (par or tim) which should contain the pulsar name
         raiseexcept: bool, optional
             Will an error raise an exception (default) or just a warning
 
@@ -332,6 +334,7 @@ class NameChecker(DataChecker):
             return False
         return True
 
+    
 class EpochChecker(DataChecker):
     def check(
         self,
@@ -360,21 +363,30 @@ class EpochChecker(DataChecker):
         KeyError
             If the check fails and ``raiseexcept`` is True
         """
-        self.verify(has_model=True)
+        self.verify(has_model=True, has_toas=True)
 
 
+
+        # Check START/FINISH, these are required always
+        for item in ["START", "FINISH"]:
+            if self.m[item].value is None:
+                self.raise_or_warn(
+                    f"{item} parameter not found in par file.",
+                    KeyError if raiseexcept else None,
+                )
+                return False
 
         START = self.m["START"].value
         FINISH = self.m["FINISH"].value
-        PEPOCH = self.m["PEPOCH"].value
-        POSEPOCH = self.m["POSEPOCH"].value
-        DMEPOCH = self.m["DMEPOCH"].value
+            
         center = (FINISH - START)/2.0 + START
 
+        # Check required parameters
         for item in required:
             if item not in ["PEPOCH", "POSEPOCH", "DMEPOCH"]:
-                raise KeyError(
-                    f"Epoch parameter not defined: {item} not supported."
+                self.raise_or_warn(
+                    f"Epoch parameter not defined: {item} not supported.",
+                    KeyError if raiseexcept else None,
                 )
                 return False
             if not (item in required and self.m[item].value is not None and np.abs(self.m[item].value - center) < tolerance):
@@ -383,6 +395,24 @@ class EpochChecker(DataChecker):
                     ValueError if raiseexcept else None,
                 )
                 return False
+            
+        # At this point, all of the required values are within tolerance.
+        # Now check against TOAs
+        mjds = self.t.get_mjds().value
+        min_toa = min(mjds)
+        max_toa = max(mjds)
+        if not (np.abs(min_toa - START) < tolerance):
+            self.raise_or_warn(
+                f"START parameter not equal to minimum MJD within tolerance.",
+                ValueError if raiseexcept else None,
+            )
+            return False
+        if not (np.abs(max_toa - FINISH) < tolerance):
+            self.raise_or_warn(
+                f"FINISH parameter not equal to maximum MJD within tolerance.",
+                ValueError if raiseexcept else None,
+            )
+            return False
         return True
 
 
