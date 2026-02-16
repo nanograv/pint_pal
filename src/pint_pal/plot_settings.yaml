@@ -2,22 +2,25 @@
 # Changes here will be applied to notebook plotting immediately (after restarting the kernel)
 
 obs_c: {
-    "ao": "#6BA9E2",
-    "arecibo": "#6BA9E2",
+    "ao": "#40C3C3",
+    "arecibo": "#40C3C3" ,
     "gbt": "#61C853",
     "vla": "#40635F",
-    "CHIME": "#ECE133",
+    "CHIME": "#A3DB8B",
     "nancay": "#407BD5",
     "ncyobs": "#407BD5",
-    "effelsberg_asterix": "#407BD5",
-    "effelsberg": "#407BD5",
-    "leap": "#ECE133",
-    "jodrell": "#407BD5",
-    "jbroach": "#407BD5",
-    "wsrt": "#E5A4CB",
+    "effelsberg_asterix": "#00A9E2",
+    "effelsberg": "#00A9E2",
+    "leap": "#004B97",
+    "jodrell": "#404BD5",
+    "jbroach": "#404BD5",
+    "wsrt": "#404B97",
     "parkes": "#BE0119",
     "gmrt": "#855CA0",
     "meerkat": "#FD9927",
+    "fast": "#FD99CA",
+    "nenufar": "#E0DEFF", 
+    "lofar": "#E0EAFF",
     "None": "#808080",
 }
 
@@ -27,6 +30,7 @@ pta_c: {
     "NANOGrav": "#61C853",
     "PPTA": "#BE0119",
     "MPTA": "#FD9927",
+    "CPTA": "#FD99CA",
     "None": "#808080",
 }
 
@@ -103,7 +107,12 @@ febe_c: {
     "UWL_PDFB4_40CM": "#BE0119",
     "None": "#808080",
     "unknown_asterix": "#855CA0",
-    "CHIME": "#ECE133",
+    "CHIME": "#A3DB8B",
+    "unknown_LuMP": "#E0EAFF",
+    "unknown_COBALT": "#E0EAFF",
+    "unknown_LOFAR": "#E0EAFF",
+    "LaNewBa_LUPPI": "#E0DEFF",
+    "19BEAM_MB4K": "#FD99CA",
 }
 
 ng20_c: {
@@ -144,6 +153,9 @@ obs_m: {
     "parkes": "x",
     "gmrt": "x",
     "meerkat": "x",
+    "fast": "x",
+    "lofar": "x",
+    "nenufar": "x",
     "None": "x",
 }
 
@@ -153,6 +165,7 @@ pta_m: {
     "NANOGrav": "x",
     "PPTA": "x",
     "MPTA": "x",
+    "CPTA": "x",
     "None": "x",
 }
 
@@ -252,6 +265,7 @@ febe_m: {
     "3GHz_YUPPI": "x",
     "6GHz_YUPPI": "x",
     "CHIME": "x",
+    "19BEAM_MB4K": "x", 
 }
 
 label_names: {
