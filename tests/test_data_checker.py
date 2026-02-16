@@ -83,6 +83,12 @@ def test_check_parameters(model):
     }
     assert parchecker.check(required=required, excluded=excluded, required_value=required_value)
 
+    assert parchecker.check_frozen()
+    # Make a bad model with a wrong frozen value
+    model['NE_SW'].value = 1.0    
+    parchecker = dc.ParChecker(model)
+    assert (not parchecker.check_frozen(raiseexcept=False))
+
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_check_epoch_centering(model, toas):
