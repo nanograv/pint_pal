@@ -346,7 +346,7 @@ class TimingConfiguration:
         """ If wb type, check for pp_dm flags in all TOAs, else ignore """
         if self.get_toa_type() == 'WB':
             no_ppdm_inds = np.where(toas['pp_dm'] == '')[0]
-            if no_ppdm_inds:
+            if np.any(no_ppdm_inds):
                 log.warning(f"{len(no_ppdm_inds)} wb TOA(s) without pp_dm flag(s)?! Ignoring...")
                 apply_cut_flag(toas,no_ppdm_inds,'no_ppdm')
                 apply_cut_select(toas,reason='WB TOAs without pp_dm flags')
