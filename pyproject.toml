@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "versioneer[toml]==0.28"]
+requires = ["setuptools>=61.0,<81.0", "versioneer[toml]==0.28"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -39,7 +39,6 @@ dependencies = [
     "fastshermanmorrison-pulsar",
     "loguru",
     "threadpoolctl",
-    "setuptools<81.0",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
