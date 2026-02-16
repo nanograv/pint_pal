@@ -98,6 +98,7 @@ class DataChecker:
         p: str,
         raiseexcept: Optional[bool] = True,
         require_unfrozen: Optional[bool] = True,
+        require_frozen: Optional[bool] = False,
     ) -> bool:
         """
         Check for the existence of a single parameter, optionally it must be unfrozen
@@ -121,6 +122,10 @@ class DataChecker:
         KeyError
             If the check fails and ``raiseexcept`` is True
         """
+        if require_unfrozen and require_frozen:
+            # Do not use raiseexcept, just raise
+            raise ValueError("Both require_unfrozen and require_frozen cannot both be True.")
+        
         self.verify(has_model=True)
 
         if not (p in self.m.params and self.m[p].value is not None):
@@ -133,6 +138,13 @@ class DataChecker:
             if self.m[p].frozen:
                 self.raise_or_warn(
                     f"Parameter '{p}' found in timing model but frozen",
+                    KeyError if raiseexcept else None,
+                )
+                return False
+        if require_frozen:
+            if not self.m[p].frozen:
+                self.raise_or_warn(
+                    f"Parameter '{p}' found in timing model but unfrozen",
                     KeyError if raiseexcept else None,
                 )
                 return False
@@ -499,11 +511,7 @@ class ParChecker(DataChecker):
         Parameters
         ----------
         required: list
-            parameter names that must be present
-        excluded: list
-            parameter names that cannot be present
-        required_value : dict
-            parameter names and values that must be present
+            Key-value pairs of parameter names that are frozen with their values
         raiseexcept: bool, optional
             Will an error raise an exception (default) or just a warning
 
@@ -550,6 +558,49 @@ class ParChecker(DataChecker):
                 if not value:
                     return False
         return True
+
+    def check_frozen(
+        self,
+        required: Dict = {"NE_SW": 0}, 
+        raiseexcept: Optional[bool] = True,
+    ) -> bool:
+        """
+        Check parameters that must be frozen to a specific value
+
+        Parameters
+        ----------
+        required: dict
+            parameter names that must be present
+        excluded: list
+            parameter names that cannot be present
+        required_value : dict
+            parameter names and values that must be present
+        raiseexcept: bool, optional
+            Will an error raise an exception (default) or just a warning
+
+        Returns
+        -------
+        bool
+            True if the checks pass, False otherwise
+
+        Raises
+        ------
+        KeyError
+            If the check fails and ``raiseexcept`` is True
+        """
+        self.verify(has_model=True) #contained in each call of check_parameter
+
+        for p in required.keys():
+            self.check_parameter(p, raiseexcept=raiseexcept, require_unfrozen=False, require_frozen=True)
+            if self.m[p].value != required[p]:
+                self.raise_or_warn(
+                    f"Parameter '{p}' must be frozen to a value of {required[p]}, not {self.m[p].value}",
+                    ValueError if raiseexcept else None,
+                )
+                return False
+        return True
+        
+    
 
 
 class JumpChecker(DataChecker):
