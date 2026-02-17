@@ -28,7 +28,7 @@ dependencies = [
     "nbconvert",
     "ipywidgets>=7.6.3",
     "pypulse>=0.0.1",
-    "numpy<2.0",
+    "numpy",
     "weasyprint",
     "pytest-xdist[psutil]>=2.3.0",
     "notebook",
@@ -39,6 +39,7 @@ dependencies = [
     "fastshermanmorrison-pulsar",
     "loguru",
     "threadpoolctl",
+    "setuptools<81.0",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
