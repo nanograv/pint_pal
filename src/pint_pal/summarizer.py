@@ -11,13 +11,12 @@ import astropy
 import enterprise
 import pint_pal
 
-from markdownreport import *
-
 import pint.models as models
-from pint.fitter import Fitter
-import pint.logging
-pint.logging.setup(level="ERROR")
+import pint.fitter
+from loguru import logger as log
 
+
+from pint_pal.markdownreport import MarkdownReport, color_text
 from pint_pal.utils import resid_stats
 
 
@@ -38,7 +37,7 @@ class Summarizer:
         
         self.fitter = fitter
         if fitter_post_noise is None: #is this the right behavior?
-            print("No post-noise fitter specified; setting post-noise fitter to pre-noise fitter")
+            log.warning("No post-noise fitter specified; setting post-noise fitter to pre-noise fitter")
             self.fitter_post_noise = fitter
         else:
             self.fitter_post_noise = fitter_post_noise
@@ -67,6 +66,7 @@ class Summarizer:
         self.user = user
 
         if autorun:
+            self.generate_timing_model_comparison()
             self.generate_residual_stats(threshold=3) #hard coding for now
             self.add_summary_plots()
             self.generate_summary_info()
@@ -101,9 +101,17 @@ class Summarizer:
                 return color_text(text, color="white", highlight="red")
 
             
-    def generate_timing_model(self):
-        pass
+    def generate_timing_model_comparison(self):
+        if self.fitter_post_noise is None: # cannot do comparison, only show single par file?
+            pass
+        else:
+            self.report.add_section_by_title("Model Comparison")
+            string = self.fitter.model.compare(self.fitter_post_noise.model)
+            # logic in here to check parameters
+            self.report.write(string)
 
+
+    
     
     def generate_residual_stats(self, threshold: float = 10) -> None:
         """
