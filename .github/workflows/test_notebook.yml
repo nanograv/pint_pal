@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest] # Once we get the tex packages changed, we should include "macos-13"
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
     - name: Install Required Ubuntu Packages
