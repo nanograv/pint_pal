@@ -30,6 +30,8 @@ from numpyro import distributions as dist
 from numpyro.infer import SVI, Trace_ELBO
 from numpyro.infer.elbo import ELBO
 from numpyro.infer.svi import SVIState
+#from numpyro.infer import SVI, SVIState
+from IPython.display import display, clear_output
 
 
 warnings.filterwarnings("ignore")
@@ -69,21 +71,61 @@ def get_discovery_prior_dictionary(override_dict: Optional[Dict[str, Any]] = {})
     return prior_dict
 
 def timing_model_block(
-        psr,
-        svd=True,
-        tm_marg=True,
-    ):
+        psr: Any,
+        svd: bool = True,
+        tm_marg: bool = True,
+    ) -> Any:
+    """
+    Build the timing-model Gaussian-process block for a pulsar.
 
+    Parameters
+    ----------
+    psr : Any
+        Pulsar object.
+    svd : bool, optional
+        Whether to use SVD for the timing model design matrix. Default is True.
+    tm_marg : bool, optional
+        If True, marginalize the timing model; otherwise treat it as a variable.
+        Default is True.
+
+    Returns
+    -------
+    Any
+        Discovery timing-model GP block.
+    """
     return ds.makegp_timing(psr, svd=svd, variable=not tm_marg)
 
 def white_noise_block(
-        psr,
-        noise_dict={},
-        include_ecorr=True,
-        gp_ecorr=False,
-        tn_equad=True,
-        selection=ds.selection_backend_flags,
-    ):
+        psr: Any,
+        noise_dict: Dict[str, Any] = {},
+        include_ecorr: bool = True,
+        gp_ecorr: bool = False,
+        tn_equad: bool = True,
+        selection: Callable = ds.selection_backend_flags,
+    ) -> Any:
+    """
+    Build the white-noise measurement block.
+
+    Parameters
+    ----------
+    psr : Any
+        Pulsar object.
+    noise_dict : dict, optional
+        Noise parameter dictionary. Default is empty dict.
+    include_ecorr : bool, optional
+        Whether to include ECORR terms. Default is True.
+    gp_ecorr : bool, optional
+        Whether to include GP ECORR terms. Default is False.
+    tn_equad : bool, optional
+        Whether to include EQUAD terms. Default is True.
+    selection : Callable, optional
+        Backend selection function. Default is discovery.selection_backend_flags.
+
+    Returns
+    -------
+    Any
+        Discovery white-noise block.
+    """
     return ds.makenoise_measurement(
         psr,
         tnequad=tn_equad,
@@ -93,14 +135,39 @@ def white_noise_block(
     )
 
 def gp_ecorr_block(
-        psr,
-        noise_dict={},
-        include_ecorr=True, # dummy vars
-        gp_ecorr=False,
-        tn_equad=True,
-        selection=ds.selection_backend_flags,
-        gp_ecorr_name='ecorrGP'
-    ):
+        psr: Any,
+        noise_dict: Dict[str, Any] = {},
+        include_ecorr: bool = True, # dummy vars
+        gp_ecorr: bool = False,
+        tn_equad: bool = True,
+        selection: Callable = ds.selection_backend_flags,
+        gp_ecorr_name: str = 'ecorrGP'
+    ) -> Any:
+    """
+    Build the Gaussian-process ECORR block.
+
+    Parameters
+    ----------
+    psr : Any
+        Pulsar object.
+    noise_dict : dict, optional
+        Noise parameter dictionary. Default is empty dict.
+    include_ecorr : bool, optional
+        Unused placeholder to match white-noise interface.
+    gp_ecorr : bool, optional
+        Unused placeholder to match white-noise interface.
+    tn_equad : bool, optional
+        Unused placeholder to match white-noise interface.
+    selection : Callable, optional
+        Backend selection function. Default is discovery.selection_backend_flags.
+    gp_ecorr_name : str, optional
+        Name for the GP ECORR component. Default is "ecorrGP".
+
+    Returns
+    -------
+    Any
+        Discovery GP ECORR block.
+    """
     return ds.makegp_ecorr(
         psr,
         noisedict=noise_dict,
@@ -109,13 +176,36 @@ def gp_ecorr_block(
         )
 
 def red_noise_block(
-        psr,
-        basis='fourier',
-        prior='powerlaw',
-        Nfreqs=100,
+        psr: Any,
+        basis: str = 'fourier',
+        prior: str = 'powerlaw',
+        Nfreqs: int = 100,
         time_span: Optional[float] = None,
-        name='red_noise',
-        ):
+        name: str = 'red_noise',
+        ) -> Any:
+    """
+    Build the red-noise Gaussian-process block.
+
+    Parameters
+    ----------
+    psr : Any
+        Pulsar object.
+    basis : str, optional
+        Basis type for the GP. Default is "fourier".
+    prior : str, optional
+        Prior type for the GP amplitude. Default is "powerlaw".
+    Nfreqs : int, optional
+        Number of Fourier frequencies. Default is 100.
+    time_span : float, optional
+        Time span for the Fourier basis. Default is None.
+    name : str, optional
+        Name of the noise component. Default is "red_noise".
+
+    Returns
+    -------
+    Any
+        Discovery red-noise block.
+    """
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
@@ -130,13 +220,36 @@ def red_noise_block(
     return rn
 
 def dm_noise_block(
-        psr,
-        basis='fourier',
-        prior='powerlaw',
-        Nfreqs=100,
+        psr: Any,
+        basis: str = 'fourier',
+        prior: str = 'powerlaw',
+        Nfreqs: int = 100,
         time_span: Optional[float] = None,
-        name='dm_gp',
-        ):
+        name: str = 'dm_gp',
+        ) -> Any:
+    """
+    Build the dispersion-measure (DM) noise Gaussian-process block.
+
+    Parameters
+    ----------
+    psr : Any
+        Pulsar object.
+    basis : str, optional
+        Basis type for the GP. Default is "fourier".
+    prior : str, optional
+        Prior type for the GP amplitude. Default is "powerlaw".
+    Nfreqs : int, optional
+        Number of Fourier frequencies. Default is 100.
+    time_span : float, optional
+        Time span for the Fourier basis. Default is None.
+    name : str, optional
+        Name of the noise component. Default is "dm_gp".
+
+    Returns
+    -------
+    Any
+        Discovery DM-noise block.
+    """
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
@@ -151,21 +264,61 @@ def dm_noise_block(
     return dmgp
 
 def chromatic_noise_block(
-        psr,
+        psr: Any,
         time_span: Optional[float] = None,
-        chromatic_idx='vary',
-        ):
+        chromatic_idx: str = 'vary',
+        ) -> Any:
+    """
+    Build the chromatic noise Gaussian-process block.
+
+    Parameters
+    ----------
+    psr : Any
+        Pulsar object.
+    time_span : float, optional
+        Time span for the Fourier basis. Default is None.
+    chromatic_idx : str, optional
+        Chromatic index handling mode. Default is "vary".
+
+    Returns
+    -------
+    Any
+        Discovery chromatic-noise block.
+    """
     rn = ds.makegp_fourier(psr, ds.powerlaw, 40, T=time_span, name='red_noise',)
     return rn
 
 def solar_wind_noise_block(
-        psr,
-        basis='fourier',
-        prior='powerlaw',
-        nfreqs=100,
+        psr: Any,
+        basis: str = 'fourier',
+        prior: str = 'powerlaw',
+        nfreqs: int = 100,
         time_span: Optional[float] = None,
-        name='red_noise',
-        ):
+        name: str = 'red_noise',
+        ) -> Any:
+    """
+    Build the solar-wind noise Gaussian-process block.
+
+    Parameters
+    ----------
+    psr : Any
+        Pulsar object.
+    basis : str, optional
+        Basis type for the GP. Default is "fourier".
+    prior : str, optional
+        Prior type for the GP amplitude. Default is "powerlaw".
+    nfreqs : int, optional
+        Number of Fourier frequencies. Default is 100.
+    time_span : float, optional
+        Time span for the Fourier basis. Default is None.
+    name : str, optional
+        Name of the noise component. Default is "red_noise".
+
+    Returns
+    -------
+    Any
+        Discovery solar-wind noise block.
+    """
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
@@ -288,9 +441,25 @@ def make_single_pulsar_noise_likelihood_discovery(
         return ds.PulsarLikelihood(tuple(args))
 
 def make_sampler_nuts(
-        numpyro_model,
-        sampler_kwargs={},
+        numpyro_model: Callable,
+        sampler_kwargs: Dict[str, Any] = {},
         ) -> infer.MCMC:
+    """
+    Create a NumPyro NUTS sampler with filtered keyword arguments.
+
+    Parameters
+    ----------
+    numpyro_model : Callable
+        NumPyro model function.
+    sampler_kwargs : dict, optional
+        Keyword arguments for NUTS and MCMC constructors. Only supported
+        parameters are forwarded. Default is empty dict.
+
+    Returns
+    -------
+    numpyro.infer.MCMC
+        Configured MCMC sampler instance.
+    """
     nutsargs = dict(
         max_tree_depth=8,
         dense_mass=False,
@@ -311,10 +480,26 @@ def make_sampler_nuts(
 
     return sampler
 
-def make_numpyro_model(input_lnlike, priordict={}):
+def make_numpyro_model(input_lnlike: Any, priordict: Dict[str, Any] = {}) -> Callable[[], None]:
+    """
+    Wrap a discovery likelihood into a NumPyro model.
+
+    Parameters
+    ----------
+    input_lnlike : Any
+        Likelihood object that provides a callable interface and a .params list.
+    priordict : dict, optional
+        Dictionary of prior overrides. Default is empty dict.
+
+    Returns
+    -------
+    Callable[[], None]
+        NumPyro model function with attached .to_df convenience method.
+    """
     priors_dict = ds.priordict_standard.copy()
     priors_dict.update(priordict)
-    def numpyro_model():
+    def numpyro_model() -> None:
+        """NumPyro model that samples parameters and factors in the log-likelihood."""
         lnlike = input_lnlike({par: numpyro.sample(par, dist.Uniform(*ds_prior.getprior_uniform(par, priordict)))
             for par in input_lnlike.params})
 
@@ -328,7 +513,7 @@ def run_discovery_with_checkpoints(
     num_checkpoints: int = 5,
     outdir: str = ".",
     file_basename: str = "results",
-    rng_key: jax.random.PRNGKey = None,
+    rng_key: Optional[jax.Array] = None,
     resume: bool = True,
 ) -> az.InferenceData:
     """
@@ -345,11 +530,8 @@ def run_discovery_with_checkpoints(
     ----------
     sampler : numpyro.infer.MCMC
         A NumPyro MCMC sampler object that has been initialized with a kernel.
-    num_checkpoints : int, optional (default=10)
-        Number of checkpoints (iterations) to run. Each checkpoint generates
-        `n_samples_per_checkpoint` posterior samples.
-    n_samples_per_checkpoint : int, optional (default=2000)
-        Number of samples to draw at each checkpoint.
+    num_checkpoints : int, optional (default=5)
+        Number of checkpoints (iterations) to run.
     outdir : str, optional (default=".")
         Output directory for checkpoints and results.
     file_basename : str, optional (default="results")
@@ -528,7 +710,8 @@ def run_training_batch(
     for loop inside a JIT-compiled function.
     """
 
-    def body_fn(carry, x):
+    def body_fn(carry: tuple[SVIState, jax.Array], x: Any) -> tuple[tuple[SVIState, jax.Array], None]:
+        """Single SVI update step for jax.lax.scan."""
         svi_state, rng_key = carry
         rng_key, subkey = jax.random.split(rng_key)
         new_svi_state, loss = svi.update(svi_state)
@@ -541,6 +724,23 @@ def run_training_batch(
 
     return final_svi_state
 
+def _stack_hist(arr_list):
+    return np.stack([np.asarray(a, dtype=float) for a in arr_list], axis=0)
+
+def _plot_with_iqr(ax, Y, color, title, ylabel, x):
+    q25, q50, q75 = np.nanpercentile(Y, [25, 50, 75], axis=0)
+    for y in Y:
+        ax.plot(x, y, color=color, alpha=0.12, lw=1)
+    ax.fill_between(x, q25, q75, color=color, alpha=0.25)
+    ax.plot(x, q50, color=color, lw=2)
+    ax.set_title(title)
+    ax.set_xlabel("Within-batch progress")
+    ax.set_ylabel(ylabel)
+    ax.grid(alpha=0.2)
+
+def _tree_l2_norm(tree):
+    leaves = jax.tree_util.tree_leaves(tree)
+    return jnp.sqrt(sum(jnp.vdot(x, x) for x in leaves))
 
 @partial(jax.jit, static_argnums=(0, -1))
 def run_training_batch_with_diagnostics(
@@ -548,58 +748,34 @@ def run_training_batch_with_diagnostics(
     svi_state: SVIState,
     rng_key: jax.Array,
     batch_size: int,
-) -> tuple[SVIState, jnp.ndarray, jnp.ndarray]:
-    """
-    Run SVI updates with diagnostic information (gradient norms and intermediate states).
+):
+    def body_fn(carry: tuple[SVIState, jax.Array], _: Any):
+        state, key = carry
+        key, subkey = jax.random.split(key)
 
-    This function is JIT-compiled for speed. The SVI object and batch_size are
-    treated as static arguments (static_argnums=(0, -1)).
+        old_params = svi.get_params(state)
 
-    Parameters
-    ----------
-    svi : SVI
-        NumPyro SVI object containing the model, guide, and optimizer.
-    svi_state : SVIState
-        Current state of the SVI optimizer.
-    rng_key : jax.Array
-        JAX random number generator key.
-    batch_size : int
-        Number of SVI update steps to run.
-
-    Returns
-    -------
-    final_svi_state : SVIState
-        Final SVI state after batch_size update steps.
-    svi_states : jnp.ndarray
-        Array of intermediate SVI states at each step.
-    global_norm_grads : jnp.ndarray
-        Array of global gradient norms at each step, useful for monitoring
-        training stability.
-
-    Notes
-    -----
-    Computing gradients explicitly at each step adds computational overhead
-    compared to run_training_batch. Use this function only when diagnostic
-    information is needed for monitoring or debugging purposes.
-    """
-
-    def body_fn(carry, x):
-        svi_state, rng_key, _ = carry
-        rng_key, subkey = jax.random.split(rng_key)
-        new_svi_state, loss = svi.update(svi_state)
-        global_norm_grad = optax.global_norm(
-            jax.grad(svi.loss.loss, argnums=1)(
-                rng_key, svi.get_params(svi_state), svi.model, svi.guide
-            ),
+        # gradient norm diagnostic
+        grads = jax.grad(svi.loss.loss, argnums=1)(
+            state.rng_key, old_params, svi.model, svi.guide
         )
-        return (new_svi_state, subkey, global_norm_grad), None
+        grad_norm = _tree_l2_norm(grads)
 
-    # Use lax.scan to loop `body_fn` for `batch_size` iterations
-    (final_svi_state, _, _), (svi_states, _, global_norm_grads) = jax.lax.scan(
-        body_fn, (svi_state, rng_key), xs=None, length=batch_size,
+        # keep update behavior same as non-diagnostics fn
+        new_state, loss = svi.update(state)
+
+        new_params = svi.get_params(new_state)
+        step = jax.tree_util.tree_map(lambda a, b: b - a, old_params, new_params)
+        step_norm = _tree_l2_norm(step)
+        param_norm = _tree_l2_norm(new_params)
+
+        y = (new_state, loss, grad_norm, step_norm, param_norm)
+        return (new_state, subkey), y
+
+    (final_state, _), (svi_states, losses, grad_norms, step_norms, param_norms) = jax.lax.scan(
+        body_fn, (svi_state, rng_key), xs=None, length=batch_size
     )
-
-    return final_svi_state, svi_states, global_norm_grads
+    return final_state, svi_states, losses, grad_norms, step_norms, param_norms
 
 
 def run_svi_early_stopping(
@@ -608,13 +784,14 @@ def run_svi_early_stopping(
     batch_size: int = 1000,
     patience: int = 3,
     max_num_batches: int = 50,
+    difference_threshold: float = 1.0,
     diagnostics: bool = False,
-) -> dict:
+) -> Dict[str, Any]:
     """
     Run SVI optimization with early stopping based on loss plateau detection.
 
     Training proceeds in batches of optimization steps. Early stopping is triggered
-    when the validation loss fails to improve by more than 1.0 for `patience`
+    when the validation loss fails to improve by more than `difference_threshold` for `patience`
     consecutive batches.
 
     Parameters
@@ -626,10 +803,12 @@ def run_svi_early_stopping(
     batch_size : int, optional
         Number of optimization steps per batch. Default is 1000.
     patience : int, optional
-        Number of consecutive batches without improvement (>1.0 decrease in loss)
+        Number of consecutive batches without improvement (> `difference_threshold` decrease in loss)
         before early stopping is triggered. Default is 3.
     max_num_batches : int, optional
         Maximum number of batches to run. Default is 50.
+    difference_threshold : float, optional
+        Minimum decrease in loss required to reset the patience counter. Default is 1.0.
     diagnostics : bool, optional
         If True, collect gradient norms and intermediate states at each step.
         This adds computational overhead. Default is False.
@@ -642,8 +821,8 @@ def run_svi_early_stopping(
 
     Notes
     -----
-    The early stopping criterion requires the loss to improve by at least 1.0
-    to reset the patience counter. This threshold is hardcoded and may need
+    The early stopping criterion requires the loss to improve by at least `difference_threshold`
+    to reset the patience counter. This threshold is configurable and may need
     adjustment for different problem scales.
 
     Examples
@@ -657,6 +836,9 @@ def run_svi_early_stopping(
 
     svi_states_list = []
     global_norm_grads_list = []
+    step_norms_list = []
+    param_norms_list = []
+    losses_list = []
 
     best_val_loss = float("inf")
     best_svi_state = svi_state
@@ -665,13 +847,108 @@ def run_svi_early_stopping(
     log.info(f"Starting training with batches of {batch_size} steps.")
 
     final_params = None
+    if diagnostics:
+        # once, before loop so plot updates in place
+        plt.ioff()  # optional: avoids duplicate auto-displays
+        # Create persistent figure once
+        fig, axs = plt.subplots(2, 4, figsize=(18, 8))
+        ax_cum_loss, ax_cum_grad, ax_cum_step, ax_cum_param = axs[0]
+        ax_batch_loss, ax_batch_grad, ax_batch_step, ax_batch_param = axs[1]
+        # Fixed metric colors
+        C_LOSS = "#1f77b4"   # blue
+        C_GRAD = "#d62728"   # red
+        C_STEP = "#2ca02c"   # green
+        C_PARAM = "#9467bd"  # purple
     for batch_num in range(max_num_batches):
         if diagnostics:
-            svi_state, batch_svi_states_list, batch_global_norm_grads = run_training_batch_with_diagnostics(
-                svi, svi_state, rng_key, batch_size
+            # from run_training_batch_with_diagnostics(...)
+            svi_state, batch_svi_states, batch_losses, batch_grad_norms, batch_step_norms, batch_param_norms = (
+                run_training_batch_with_diagnostics(svi, svi_state, rng_key, batch_size)
             )
-            svi_states_list.append(batch_svi_states_list)
-            global_norm_grads_list.append(batch_global_norm_grads)
+
+            # store
+            svi_states_list.append(batch_svi_states)
+            losses_list.append(np.asarray(batch_losses))
+            global_norm_grads_list.append(np.asarray(batch_grad_norms))
+            step_norms_list.append(np.asarray(batch_step_norms))
+            param_norms_list.append(np.asarray(batch_param_norms))
+
+            # cumulative arrays
+            cum_losses = np.concatenate(losses_list, axis=0)
+            cum_grads  = np.concatenate(global_norm_grads_list, axis=0)
+            cum_steps  = np.concatenate(step_norms_list, axis=0)
+            cum_params = np.concatenate(param_norms_list, axis=0)
+
+            eps = 1e-16
+            cum_grads_safe = np.clip(cum_grads, eps, None)
+
+            # clear only cumulative row every loop
+            for ax in [ax_cum_loss, ax_cum_grad, ax_cum_step, ax_cum_param]:
+                ax.clear()
+
+            # cumulative row
+            ax_cum_loss.plot(cum_losses, color=C_LOSS)
+            ax_cum_grad.plot(cum_grads_safe, color=C_GRAD)
+            ax_cum_step.plot(cum_steps, color=C_STEP)
+            ax_cum_param.plot(cum_params, color=C_PARAM)
+
+            ax_cum_loss.set_title("Cumulative Loss")
+            ax_cum_grad.set_title("Cumulative Grad Norm")
+            ax_cum_step.set_title("Cumulative Step Norm")
+            ax_cum_param.set_title("Cumulative Param Norm")
+
+            ax_cum_loss.set_yscale("symlog", linthresh=1.0)
+            ax_cum_grad.set_yscale("log")
+
+            for ax in [ax_cum_loss, ax_cum_grad, ax_cum_step, ax_cum_param]:
+                ax.set_xlabel("Global step")
+            ax_cum_loss.set_ylabel("Value")
+
+            # ---- batch summary row (clear + redraw as summary over all batches so far) ----
+            for ax in [ax_batch_loss, ax_batch_grad, ax_batch_step, ax_batch_param]:
+                ax.clear()
+
+            L = _stack_hist(losses_list)
+            G = _stack_hist(global_norm_grads_list)
+            S = _stack_hist(step_norms_list)
+            P = _stack_hist(param_norms_list)
+
+            x = np.linspace(0.0, 1.0, L.shape[1])
+
+            L0 = L[:, [0]]
+            loss_frac = (L - L0) / (np.abs(L0) + eps)
+
+            G0 = np.clip(G[:, [0]], eps, None)
+            grad_logrel = np.log10(np.clip(G, eps, None) / G0)
+
+            S0 = np.clip(S[:, [0]], eps, None)
+            step_logrel = np.log10(np.clip(S, eps, None) / S0)
+
+            P0 = np.clip(P[:, [0]], eps, None)
+            param_logrel = np.log10(np.clip(P, eps, None) / P0)
+
+            _plot_with_iqr(ax_batch_loss, loss_frac, C_LOSS, "Per-batch Loss Change", "frac(loss-loss0)", x)
+            _plot_with_iqr(ax_batch_grad, grad_logrel, C_GRAD, "Per-batch Grad Change", "log10(grad/grad0)", x)
+            _plot_with_iqr(ax_batch_step, step_logrel, C_STEP, "Per-batch Step Change", "log10(step/step0)", x)
+            _plot_with_iqr(ax_batch_param, param_logrel, C_PARAM, "Per-batch Param Change", "log10(param/param0)", x)
+
+            ax_batch_loss.set_yscale("symlog", linthresh=1e-2)
+            for ax in [ax_batch_loss, ax_batch_grad, ax_batch_step, ax_batch_param]:
+                ax.axhline(0.0, color="k", lw=1, alpha=0.35)
+
+            fig.suptitle(f"SVI Diagnostics (Batch {batch_num + 1}/{max_num_batches})")
+            fig.tight_layout()
+            clear_output(wait=True)
+            display(fig)
+
+            # optional: quick text summary per batch
+            log.info(
+                f"[batch {batch_num + 1}] "
+                f"loss(last)={float(batch_losses[-1]):.4g}, "
+                f"grad_norm(last)={float(batch_grad_norms[-1]):.4g}, "
+                f"step_norm(last)={float(batch_step_norms[-1]):.4g}"
+            )
+
         else:
             svi_state = run_training_batch(svi, svi_state, rng_key, batch_size)
         current_val_loss = svi.evaluate(svi_state)
@@ -684,7 +961,7 @@ def run_svi_early_stopping(
         log.info(f"{current_val_loss=}")
         log.info(f"{best_val_loss=}")
         difference = current_val_loss - best_val_loss if batch_num >= 1 else -np.inf
-        if difference < -1:
+        if difference < - difference_threshold:
             log.info(
                 f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f} {difference=}. Saving state.",
             )
@@ -711,4 +988,7 @@ def run_svi_early_stopping(
     if final_params is None:
         final_params = svi.get_params(best_svi_state)
 
-    return final_params
+    if diagnostics:
+        return final_params, (svi_states_list, global_norm_grads_list)
+    else:
+        return final_params, None

@@ -1,3 +1,6 @@
+from xml.parsers.expat import model
+
+#from discovery.src.discovery.samplers import numpyro
 import numpy as np, os, json, itertools, time
 from loguru import logger as log
 from astropy.time import Time
@@ -25,6 +28,15 @@ from jax.random import PRNGKey
 from discovery import priordict_standard as ds_pdict
 from discovery import samplers
 from discovery.samplers import numpyro as ds_numpyro
+import numpyro
+from numpyro.infer import SVI, Trace_ELBO
+import numpyro.distributions as dist
+from numpyro.infer.initialization import init_to_value, init_to_sample
+from numpyro.infer.reparam import ExplicitReparam
+from numpyro.distributions import constraints
+
+
+
 
 
 def setup_sampling_groups(pta,
@@ -469,6 +481,7 @@ def model_noise(
                 dmjump_var=False,
                 wb_efac_sigma=wb_efac_sigma,
                 tm_svd=True if model_kwargs['tm_svd'] else False, # defaults True
+                # FIXME -- should update this so dmgp kwargs work in enterprise likelihood as well.
                 # DM GP
                 #dm_var=model_kwargs['inc_dmgp'],
                 #dm_Nfreqs=model_kwargs['dmgp_nfreqs'],
@@ -592,12 +605,47 @@ def model_noise(
         logL = disco_utils.make_numpyro_model(psl.logL, disco_utils.get_discovery_prior_dictionary())
         # FIXME --- continue implementing this
         if not return_sampler_without_sampling:
-            ds_numpyro.run_optimizer_with_checkpoints(
-                sampler=samp,
-                rng_key=PRNGKey(seed),
-                outdir=base_op_dir,
-                resume=resume,
-                )
+            params = sorted(psl.logL.params)
+            # reparameterize white noise since they have the largest gradients !
+            repar_params = [p for p in params if 'efac' in p or 'equad' in p or 'ecorr' in p]
+            if len(repar_params) > 0:
+                if not set(repar_params) < set(params):
+                    err = f"{repar_params=} but is not in model {params=}."
+                    raise KeyError(err)
+
+            config = {
+                param: ExplicitReparam(dist.transforms.AffineTransform(0, 1))
+                    for param in repar_params
+                }
+            logL = numpyro.handlers.reparam(logL, config=config)
+
+            autoguide_map = numpyro.infer.autoguide.AutoDelta(logL)
+
+            svi = disco_utils.setup_svi(
+                model=logL,
+                guide=autoguide_map,
+                loss=None, #defauls to trace elbo
+                num_warmup_steps=sampler_kwargs.get('num_warmup_steps', 500),
+                max_epochs=sampler_kwargs.get('max_epochs', 1000),
+                peak_lr=sampler_kwargs.get('peak_lr', 0.01),
+                gradient_clipping_val=sampler_kwargs.get('gradient_clipping_val', None),
+            )
+            map_params, diagnostics = disco_utils.run_svi_early_stopping(
+                rng_key= PRNGKey(seed),
+                svi=svi,
+                batch_size = sampler_kwargs.get('batch_size', 500),
+                patience = sampler_kwargs.get('patience', 3),
+                difference_threshold = sampler_kwargs.get('difference_threshold', 5.0),
+                max_num_batches = sampler_kwargs.get('max_num_batches', 50),
+                diagnostics = sampler_kwargs.get('diagnostics', True),
+            )
+            # write map params to file
+            os.makedirs(base_op_dir, exist_ok=True)
+            with open(os.path.join(base_op_dir, f"{e_psr.name}_map_params.json"), "w") as f:
+                json.dump({k: float(v) for k, v in map_params.items()}, f, indent=4)
+            if sampler_kwargs.get('diagnostics', False):
+                with open(os.path.join(base_op_dir, f"{e_psr.name}_svi_diagnostics.json"), "w") as f:
+                    json.dump({k: float(v) for k, v in diagnostics.items()}, f, indent=4)
     else:
         log.error(
             f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination." \
@@ -938,7 +986,7 @@ def add_noise_to_model(
             raise NotImplementedError('CMWaveXNoise not yet implemented')
             
     # Check to see if solar wind is present
-    sw_pars = [key for key in noise_pars if "n_earth" in key]
+    sw_pars = [key for key in noise_pars if "n_earth" in key or "sw_gp" in key]
     if len(sw_pars) > 0:
         log.info('Adding Solar Wind Dispersion to par file')
         all_components = Component.component_types
@@ -960,8 +1008,10 @@ def add_noise_to_model(
             sw_comp.TNSWC.quantity = 10
             sw_comp.TNSWC.frozen = True
             model.add_component(sw_comp, validate=False, force=True)
-        if f'{psr_name}_sw_gp_log10_rho' in sw_pars:
+        elif f'{psr_name}_sw_gp_log10_rho' in sw_pars:
             raise NotImplementedError('Solar Wind Dispersion free spec GP not yet implemented')
+        elif f'{psr_name}_sw_gp_log10_sigma_ridge' in sw_pars:
+            raise NotImplementedError('Solar Wind Dispersion time domain model not yet implemented')
 
 
     # Setup and validate the timing model to ensure things are correct
