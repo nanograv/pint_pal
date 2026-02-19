@@ -129,7 +129,7 @@ def get_mean_large_likelihoods(core, N=10):
     return {par: vals[p] for p, par in enumerate(core.params)}
 
 
-def analyze_noise(
+def analyze_enterprise_noise(
     chaindir="./noise_run_chains/",
     use_noise_point='mean_large_likelihood',
     likelihoods_to_average=50,
@@ -661,47 +661,7 @@ def convert_to_RNAMP(value):
     """
     return (86400.0 * 365.24 * 1e6) / (2.0 * np.pi * np.sqrt(3.0)) * 10**value
 
-
-def add_noise_to_model(
-    model,
-    use_noise_point='mean_large_likelihood',
-    burn_frac=0.25,
-    save_corner=True,
-    no_corner_plot=False,
-    ignore_red_noise=False,
-    using_wideband=False,
-    rn_bf_thres=1e2,
-    base_dir=None,
-    compare_dir=None,
-    return_noise_core=False,
-):
-    """
-    Add WN, RN, DMGP, ChromGP, and SW parameters to timing model.
-
-    Parameters
-    ==========
-    model: PINT (or tempo2) timing model
-    use_noise_point: point to use for noise analysis; Default: 'mean_large_likelihood'.
-        Options: 'MAP', 'median', 'mean_large_likelihood'
-        Note that the MAP is the the same as the maximum likelihood value when all the priors are uniform.
-        Mean large likelihood takes N of the largest likelihood values and then takes the mean of those. (Recommended).
-    burn_frac: fraction of chain to use for burn-in; Default: 0.25
-    save_corner: Flag to toggle saving of corner plots; Default: True
-    ignore_red_noise: Flag to manually force RN exclusion from timing model. When False,
-        code determines whether
-    RN is necessary based on whether the RN BF > 1e3. Default: False
-    using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
-    base_dir: directory containing {psr}_nb and {psr}_wb chains directories; if None, will
-        check for results in the current working directory './'.
-    return_noise_core: Flag to return the la_forge.core object; Default: False
-
-    Returns
-    =======
-    model: New timing model which includes WN and RN (and potentially dmgp, chrom_gp, and solar wind) parameters
-    (optional)
-    noise_core: la_forge.core object which contains noise chains and run metadata
-    """
-
+"""
     # Assume results are in current working directory if not specified
     if not base_dir:
         base_dir = "./"
@@ -741,7 +701,34 @@ def add_noise_to_model(
         chainfile = chaindir+"chain.nc"
         mtime = Time(os.path.getmtime(chainfile), format="unix")
         log.info(f"Noise chains loaded from {chainfile} created at {mtime.isot}")
-        
+"""
+
+def add_noise_to_model(
+    model,
+    noise_dict,
+    using_wideband=False,
+):
+    """
+    Add WN, RN, DMGP, ChromGP, and SW parameters to timing model.
+
+    Parameters
+    ==========
+    model: PINT (or tempo2) timing model
+    noise_dict: Dictionary containing noise parameters.
+    ignore_red_noise: Flag to manually force RN exclusion from timing model. When False,
+        code determines whether
+    RN is necessary based on whether the RN BF > 1e3. Default: False
+    using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
+    base_dir: directory containing {psr}_nb and {psr}_wb chains directories; if None, will
+        check for results in the current working directory './'.
+    return_noise_core: Flag to return the la_forge.core object; Default: False
+
+    Returns
+    =======
+    model: New timing model which includes WN and RN (and potentially dmgp, chrom_gp, and solar wind) parameters
+    (optional)
+    noise_core: la_forge.core object which contains noise chains and run metadata
+    """
 
     # Create the maskParameter for EFACS
     efac_params = []
@@ -927,9 +914,8 @@ def add_noise_to_model(
         model.add_component(ec_comp, validate=True, force=True)
 
     # Create red noise component and add it to the model
-    log.info(f"The SD Bayes factor for red noise in this pulsar is: {rn_bf}")
-    if (rn_bf >= rn_bf_thres or np.isnan(rn_bf)) and (not ignore_red_noise):
-
+    rn_keys = np.array([key for key, val in noise_dict.items() if "red_noise" in key])
+    if len(rn_keys) > 0:
         log.info("Including red noise for this pulsar")
         # Add the ML RN parameters to their component
         rn_comp = pm.PLRedNoise()
@@ -1017,17 +1003,15 @@ def add_noise_to_model(
     # Setup and validate the timing model to ensure things are correct
     model.setup()
     model.validate()
-    model.meta['noise_mtime'] = mtime.isot
+    #mtime = Time(os.path.getmtime(chainfile), format="unix")
+    #model.meta['noise_mtime'] = mtime.isot
 
     if convert_equad_to_t2:
         from pint_pal.lite_utils import convert_enterprise_equads
 
         model = convert_enterprise_equads(model)
 
-    if not return_noise_core:
-        return model
-    if return_noise_core:
-        return model, noise_core
+    return model
 
 
 def test_equad_convention(pars_list):

@@ -922,7 +922,7 @@ def run_svi_early_stopping(
             grad_logrel = np.log10(np.clip(G, eps, None) / G0)
 
             S0 = np.clip(S[:, [0]], eps, None)
-            step_logrel = np.log10(np.clip(S, eps, None) / S0)
+            step_logrel = np.log10(np.clip(S, eps, None)+eps / (S0+eps))
 
             P0 = np.clip(P[:, [0]], eps, None)
             param_logrel = np.log10(np.clip(P, eps, None) / P0)
@@ -987,6 +987,11 @@ def run_svi_early_stopping(
     # without early stopping
     if final_params is None:
         final_params = svi.get_params(best_svi_state)
+
+    final_params = {
+        (name[:-9] if name.endswith("_auto_loc") else name): value
+        for name, value in final_params.items()
+    }
 
     if diagnostics:
         return final_params, (svi_states_list, global_norm_grads_list)
