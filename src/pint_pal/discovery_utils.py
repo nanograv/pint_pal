@@ -1,5 +1,6 @@
 # Generic imports
 import os, sys
+import json
 import matplotlib.pyplot as plt
 import numpy as np
 import warnings
@@ -18,6 +19,7 @@ import discovery as ds
 import arviz as az
 from discovery import matrix, selection_backend_flags
 from discovery import prior as ds_prior
+from discovery.pulsar import save_chain
 import numpy as np
 import optax
 import jax
@@ -34,41 +36,16 @@ from numpyro.infer.svi import SVIState
 from IPython.display import display, clear_output
 
 
+## copied from discovery to be deleted later
+from pint_pal import solar as ds_solar
+
+
 warnings.filterwarnings("ignore")
 log.disable("pint")
 log.remove()
 log.add(sys.stderr, colorize=False, enqueue=True)
 log.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices")
 
-def get_discovery_prior_dictionary(override_dict: Optional[Dict[str, Any]] = {}) -> Dict[str, Any]:
-    """
-    Get the prior dictionary for discovery outlier analysis.
-
-    Parameters
-    ----------
-    override_dict : dict, optional
-        Dictionary of parameters to override the default priors.
-
-    Returns
-    -------
-    dict
-        Dictionary of priors.
-    """
-    prior_dict = ds.priordict_standard.copy()
-    prior_dict.update({
-        '(.*_)?red_noise_log10_A.*': [-20, -11],
-        '(.*_)?red_noise_gamma.*': [0, 7],
-        '(.*_)?dm_gp_log10_A.*': [-20, -11],
-        '(.*_)?dm_gp_gamma.*': [0, 7],
-        '(.*_)?chrom_gp_log10_A.*': [-20, -11],
-        '(.*_)?chrom_gp_gamma.*': [-7, 7],
-        '(.*_)?swgp_log10_A.*': [-12, -1],
-        '(.*_)?swgp_gamma.*': [-7, 7],
-    })
-    if override_dict:
-        for key, value in override_dict.items():
-            prior_dict[key] = value
-    return prior_dict
 
 def timing_model_block(
         psr: Any,
@@ -265,7 +242,11 @@ def dm_noise_block(
 
 def chromatic_noise_block(
         psr: Any,
+        basis: str = 'fourier',
+        prior: str = 'powerlaw',
+        Nfreqs: int = 100,
         time_span: Optional[float] = None,
+        name: str = 'chrom_gp',
         chromatic_idx: str = 'vary',
         ) -> Any:
     """
@@ -285,16 +266,23 @@ def chromatic_noise_block(
     Any
         Discovery chromatic-noise block.
     """
-    rn = ds.makegp_fourier(psr, ds.powerlaw, 40, T=time_span, name='red_noise',)
-    return rn
+    chrom_gp = ds.makegp_fourier(
+        psr,
+        ds.powerlaw,
+        Nfreqs,
+        T=time_span,
+        name='chrom_gp',
+        basis=ds.dmfourerbasis_alpha
+    )
+    return chrom_gp
 
 def solar_wind_noise_block(
         psr: Any,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
-        nfreqs: int = 100,
+        Nfreqs: int = 100,
         time_span: Optional[float] = None,
-        name: str = 'red_noise',
+        name: str = 'sw_gp',
         ) -> Any:
     """
     Build the solar-wind noise Gaussian-process block.
@@ -324,13 +312,27 @@ def solar_wind_noise_block(
             prior = ds.powerlaw
         else:
             raise ValueError("Invalid prior specified for solar wind noise. Must be 'powerlaw'.")
-        rn = ds.makegp_fourier(psr, prior, nfreqs, T=time_span, name=name,)
+        swgp = ds.makegp_fourier(psr, prior, Nfreqs, T=time_span, basis=ds_solar.fourierbasis_solar_dm, name=name)
     elif basis == 'interpolation':
-        raise NotImplementedError("Interpolation basis for solar wind noise is not yet implemented.")
+        td_basis, edges = ds_solar.custom_blocked_interpolation_basis(
+            psr.toas,
+            # FIXME -- switch this to the custom bins from mercedes.
+            bin_edges=np.arange(psr.toas.min()/86400, psr.toas.max()/86400, 30),  # 30-day bins
+            kind="linear",
+        )
+        prior_kernel = ds_solar.ridge_kernel(nodes=td_basis.shape[1])
+        swgp = ds_solar.makegp_timedomain_solar_dm(
+            psr,
+            covariance=prior_kernel,
+            dt=None,
+            Umat=td_basis,
+            common=[],
+            name='sw_gp'
+        )
     else:
         raise ValueError("Invalid basis specified for solar wind noise. Must be 'fourier' or 'interpolation'.")
 
-    return rn
+    return swgp
 
 def make_single_pulsar_noise_likelihood_discovery(
         psr: Any,
@@ -508,104 +510,109 @@ def make_numpyro_model(input_lnlike: Any, priordict: Dict[str, Any] = {}) -> Cal
 
     return numpyro_model
 
-def run_discovery_with_checkpoints(
-    sampler: numpyro.infer.MCMC,
-    num_checkpoints: int = 5,
-    outdir: str = ".",
-    file_basename: str = "results",
-    rng_key: Optional[jax.Array] = None,
-    resume: bool = True,
-) -> az.InferenceData:
-    """
-    Run a NumPyro MCMC sampler in multiple chunks with checkpointing.
-
-    This function executes an MCMC sampler for a given number of checkpoints,
-    saving ArviZ inference data at each step and overwriting the NumPyro sampler
-    state in a pickle file. The ArviZ outputs are stored per iteration in
-    Zarr format and concatenated into a single complete file after all
-    checkpoints finish. On resume, the sampler state is reloaded from the last
-    pickle file and sampling continues from the last checkpoint.
-
+def run_nuts_with_checkpoints(
+    sampler,
+    num_samples_per_checkpoint,
+    rng_key,
+    outdir="chains",
+    file_name="numpyro_samples",
+    resume=False,
+    diagnostics=True,
+):
+    """Run NumPyro MCMC and save checkpoints.
+    This function performs multiple iterations of MCMC sampling, saving checkpoints
+    after each iteration. It saves samples to feather files and the NumPyro MCMC
+    state to JSON.
     Parameters
     ----------
     sampler : numpyro.infer.MCMC
-        A NumPyro MCMC sampler object that has been initialized with a kernel.
-    num_checkpoints : int, optional (default=5)
-        Number of checkpoints (iterations) to run.
-    outdir : str, optional (default=".")
-        Output directory for checkpoints and results.
-    file_basename : str, optional (default="results")
-        Base name for output files. Files will be saved as
-        `{file_basename}-arviz-checkpoint-<i>.zarr` for ArviZ
-        and `{file_basename}-numpyro-sampler.pickle` for the sampler state.
+        A NumPyro MCMC sampler object.
+    num_samples_per_checkpoint : int
+        The number of samples to save in each checkpoint.
     rng_key : jax.random.PRNGKey
-        JAX random key used to control the random number generation in sampling.
-    resume : bool, optional (default=True)
-        Whether to resume from the most recent checkpoint if files exist.
-        Otherwise will start overwriting saved files.
-
+        The random number generator key for JAX.
+    outdir : str | Path
+        The directory for output files.
+    resume : bool
+        Whether to look for a state to resume from.
     Returns
     -------
-    data : arviz.InferenceData
-        Results are written to disk:
-        - Iteration-specific ArviZ Zarr checkpoints
-        - Overwritten NumPyro sampler pickle (latest state only)
-        - Final concatenated ArviZ dataset `{file_basename}-arviz-complete.zarr`
+    None
+        This function doesn't return any value but saves the results to disk.
+    Side Effects
+    ------------
+    - Runs the MCMC sampler for the number of iterations required to reach the total sample number.
+    - Saves samples data to feather files after each iteration.
+    - Writes the NumPyro sampler state to a pickle file after each iteration.
+    Example
+    -------
+    >>> import discovery.samplers.numpyro as ds_numpyro
+    >>> # Assume `model` is configured
+    >>> npsampler = ds_numpyro.makesampler_nuts(model, num_samples =100, num_warmup=50)
+    >>> ds_numpyro.run_nuts_with_checkpoints(npsampler, 10, jax.random.key(42))
     """
+    # convert to pathlib object
+    # make directory if it doesn't exist
+    if not isinstance(outdir, Path):
+        outdir = Path(outdir)
+        outdir.mkdir(exist_ok=True, parents=True)
 
-    outdir = Path(outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
+    samples_file = outdir / f"{file_name}.feather"
+    checkpoint_file = outdir / f"{file_name}-checkpoint.pickle"
 
-    # paths
-    sampler_pickle_path = outdir / f"{file_basename}-numpyro-sampler.pickle"
+    if checkpoint_file.is_file() and samples_file.is_file() and resume:
+        df = pd.read_feather(samples_file)
+        num_samples_saved = df.shape[0]
 
-    # Determine resume iteration
-    start_iter = 0
-    if resume and sampler_pickle_path.exists():
-        log.info("Resuming from last saved sampler state...")
-        with sampler_pickle_path.open("rb") as input_file:
-            sampler = pickle.load(input_file)
-        sampler.post_warmup_state = sampler.last_state
+        with checkpoint_file.open("rb") as f:
+            checkpoint = pickle.load(f)
 
-        # find last ArviZ checkpoint
-        checkpoint_files = sorted(outdir.glob(f"{file_basename}-arviz-checkpoint-*.zarr"))
-        if checkpoint_files:
-            last_file = checkpoint_files[-1]
-            start_iter = int(last_file.stem.split("-")[-1]) + 1
-            log.info(f"Resuming from checkpoint {start_iter}")
-        else:
-            log.info("No ArviZ checkpoints found, starting from 0.")
+        total_sample_num = sampler.num_samples - num_samples_saved
 
-    for iteration in range(start_iter, num_checkpoints):
-        before_sampling = datetime.now().astimezone().replace(microsecond=0)
+        sampler.post_warmup_state = checkpoint
 
-        # run MCMC
+    else:
+        df = None
+        num_samples_saved = 0
+        total_sample_num = sampler.num_samples
+
+    num_checkpoints = int(jnp.ceil(total_sample_num / num_samples_per_checkpoint))
+    remainder_samples = int(total_sample_num % num_samples_per_checkpoint)
+
+    for checkpoint in range(num_checkpoints):
+        if checkpoint == 0:
+            sampler.num_samples = num_samples_per_checkpoint
+            sampler._set_collection_params()  # Need this to update num_samples
+        elif checkpoint == num_checkpoints - 1:
+            # We won't need to update the collection params because we've set the post warmup state,
+            # and that accomplishes the same goal.
+            sampler.num_samples = remainder_samples if remainder_samples != 0 else num_samples_per_checkpoint
+
         sampler.run(rng_key)
 
-        after_sampling = datetime.now().astimezone().replace(microsecond=0)
-        duration = (after_sampling - before_sampling).total_seconds() / 3600.0
-        log.info(f"Saving checkpoint {iteration} after {duration:.2f} hours")
+        df_new = sampler.to_df()
 
-        # convert to ArviZ and save iteration-specific checkpoint
-        data = az.from_numpyro(sampler)
-        az.to_zarr(data, str(outdir / f"{file_basename}-arviz-checkpoint-{iteration}.zarr"))
+        df = pd.concat([df, df_new]) if df is not None else df_new
 
-        # overwrite NumPyro sampler pickle (always latest state)
-        with sampler_pickle_path.open("wb") as output_file:
-            pickle.dump(sampler, output_file)
+        save_chain(df, samples_file)
+
+        with checkpoint_file.open("wb") as f:
+            pickle.dump(sampler.last_state, f)
 
         sampler.post_warmup_state = sampler.last_state
 
-    log.info(f"Finished all {num_checkpoints} checkpoints. Writing concatenated samples...")
+        rng_key, _ = jax.random.split(rng_key)
 
-    # collect all ArviZ checkpoints into one file
-    data = az.concat(
-        [az.from_zarr(str(outdir / f"{file_basename}-arviz-checkpoint-{i}.zarr")) for i in range(num_checkpoints)],
-        dim="draw",
-    )
-    az.to_zarr(data, str(outdir / f"{file_basename}-arviz-complete.zarr"))
-    
-    return data
+        # checkpoint plot
+        if diagnostics:
+            clear_output(wait=True)
+            az.plot_trace(df)
+            plt.suptitle(f"Checkpoint {checkpoint + 1}/{num_checkpoints}")
+            plt.show()
+            # gelman rubin diagnostic
+            rhat = az.rhat(df)
+            print(f"R-hat diagnostics:\n{rhat}")
+
 
 def setup_svi(
     model: Callable,

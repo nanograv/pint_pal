@@ -1,0 +1,11 @@
+{
+  "(.*_)?red_noise_log10_A.*": [-20, -11],
+  "(.*_)?red_noise_gamma.*": [0, 7],
+  "(.*_)?dm_gp_log10_A.*": [-20, -11],
+  "(.*_)?dm_gp_gamma.*": [0, 7],
+  "(.*_)?chrom_gp_log10_A.*": [-20, -11],
+  "(.*_)?chrom_gp_gamma.*": [-7, 7],
+  "(.*_)?swgp_log10_A.*": [-12, -1],
+  "(.*_)?swgp_gamma.*": [-7, 7],
+  "(.*_)?sw_gp_log10_sigma_ridge.*": [-4, 2]
+}

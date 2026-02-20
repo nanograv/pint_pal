@@ -579,19 +579,23 @@ def model_noise(
             model_kwargs=model_kwargs,
             return_args=False,
         )
-        logL = disco_utils.make_numpyro_model(psl.logL, disco_utils.get_discovery_prior_dictionary())
+        prior_dict = ds_pdict.copy()
+        pint_pal_priors = json.load(open(os.path.join(os.path.dirname(__file__), "discovery_priors.json")))
+        prior_dict.update(pint_pal_priors)
+        logL = disco_utils.make_numpyro_model(psl.logL, prior_dict)
         samp = disco_utils.make_sampler_nuts(
             logL,
             sampler_kwargs=sampler_kwargs,
         )
         if not return_sampler_without_sampling:
-            num_samples_per_checkpoint = int(sampler_kwargs.get('num_samples', 1000) / sampler_kwargs.get('num_checkpoints', 5))
-            ds_numpyro.run_nuts_with_checkpoints(
+            disco_utils.run_nuts_with_checkpoints(
                 sampler=samp,
-                num_samples_per_checkpoint=num_samples_per_checkpoint,
+                num_samples_per_checkpoint=sampler_kwargs.get('num_samples_per_checkpoint', 1000),
                 rng_key=PRNGKey(seed),
                 outdir=base_op_dir,
+                file_name=f"{e_psr.name}_nuts_samples",
                 resume=resume,
+                diagnostics=sampler_kwargs.get('diagnostics', True),
                 )
     elif likelihood == "discovery" and sampler == 'optimizer':
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
@@ -602,8 +606,10 @@ def model_noise(
             model_kwargs=model_kwargs,
             return_args=False,
         )
-        logL = disco_utils.make_numpyro_model(psl.logL, disco_utils.get_discovery_prior_dictionary())
-        # FIXME --- continue implementing this
+        prior_dict = ds_pdict.copy()
+        pint_pal_priors = json.load(open(os.path.join(os.path.dirname(__file__), "discovery_priors.json")))
+        prior_dict.update(pint_pal_priors)
+        logL = disco_utils.make_numpyro_model(psl.logL, prior_dict)
         if not return_sampler_without_sampling:
             params = sorted(psl.logL.params)
             # reparameterize white noise since they have the largest gradients !
@@ -612,7 +618,6 @@ def model_noise(
                 if not set(repar_params) < set(params):
                     err = f"{repar_params=} but is not in model {params=}."
                     raise KeyError(err)
-
             config = {
                 param: ExplicitReparam(dist.transforms.AffineTransform(0, 1))
                     for param in repar_params
@@ -652,7 +657,7 @@ def model_noise(
             + "\nCan only use enterprise with PTMCMCSampler or GibbsSampler."
         )
     if return_sampler_without_sampling:
-        return samp
+        return samp if 'samp' in locals() else None
 
 
 def convert_to_RNAMP(value):
