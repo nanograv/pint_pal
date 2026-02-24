@@ -215,6 +215,8 @@ def makegp_timedomain_solar_dm(psr, covariance, dt=1.0, Umat=None, common=[], na
     else:
         Umat = Umat * dt_DM[:, None]
     toas = psr.toas @ Umat / Umat.sum(axis=0)
+    ## i am not fully convinced that this is correct yet.
+    ## seems like Daniel is using an Ecorr basis and then doing the averaging.
 
     get_tmat = covariance
     tau = jnp.abs(toas[:, jnp.newaxis] - toas[jnp.newaxis, :])
@@ -248,13 +250,13 @@ def linear_blocked_sw_interpolation_basis(
 
 def custom_blocked_interpolation_basis(
         toas,
-        bin_edges,
+        nodes,
         kind="linear",
 ):
-    bin_edges = bin_edges * 86400  # MJD to seconds
-    basis = np.identity(len(bin_edges))
+    nodes = nodes * 86400  # MJD to seconds
+    basis = np.identity(len(nodes))
     interp = interpolate.interp1d(
-        bin_edges,
+        nodes,
         basis,
         kind=kind,
         axis=0,
@@ -270,7 +272,7 @@ def custom_blocked_interpolation_basis(
             "Interpolation basis has no support in the TOA range. Perhaps check units."
         )
 
-    return M[:, idx], bin_edges[idx]
+    return M[:, idx], nodes[idx]
 
 def ridge_kernel(
         nodes,
@@ -282,5 +284,35 @@ def ridge_kernel(
         return scale * jnp.eye(nodes, dtype=tau.dtype)
 
     return kernel
+
+def square_exponential_kernel(
+        log10_sigma_se: float = -7.,
+        log10_ell_se: float = 1.,
+):
+    """Square exponential kernel"""
+    def kernel(tau, log10_sigma_se=log10_sigma_se, log10_ell_se=log10_ell_se):
+        sigma2 = 10**(2 * log10_sigma_se)
+        ell = 10**log10_ell_se
+        return sigma2 * jnp.exp(-0.5 * (tau / ell)**2)
+
+    return kernel
+
+def quasi_periodic_kernel(
+        log10_sigma: float = -7.,
+        log10_ell: float = 1.,
+        log10_gamma_p: float = 0.,
+        log10_p: float = 0.,
+):
+    """Quasi-periodic kernel"""
+    def kernel(tau, log10_sigma=log10_sigma, log10_ell=log10_ell,
+               log10_gamma_p=log10_gamma_p, log10_p=log10_p):
+        sigma2 = 10**(2 * log10_sigma   )
+        ell = 10**log10_ell
+        gamma_p = 10**log10_gamma_p
+        p = 10**log10_p
+        return sigma2 * jnp.exp(-0.5 * (tau / ell)**2 - 2 * (jnp.sin(jnp.pi * tau / p) / gamma_p)**2)
+
+    return kernel
+
 
 

@@ -944,7 +944,7 @@ def add_noise_to_model(
             #log.info(f"The SD Bayes factor for dm noise in this pulsar is: {dm_bf}") 
             log.info('Adding Powerlaw DM GP noise as PLDMNoise to par file')
             # Add the ML RN parameters to their component
-            dm_comp = pm.noise_model.PLDMNoise()
+            dm_comp = pm.PLDMNoise()
             dm_comp.TNDMAMP.quantity = noise_dict[psr_name + "_dm_gp_log10_A"]
             dm_comp.TNDMGAM.quantity = noise_dict[psr_name + "_dm_gp_gamma"]
             ##### FIXMEEEEEEE : need to figure out some way to softcode this
@@ -963,7 +963,7 @@ def add_noise_to_model(
         if f'{psr_name}_chrom_gp_log10_A' in chrom_pars:
             log.info('Adding Powerlaw CHROM GP noise as PLCMNoise to par file')
             # Add the ML RN parameters to their component
-            chrom_comp = pm.noise_model.PLCMNoise()
+            chrom_comp = pm.PLCMNoise()
             # chrom_keys = np.array([key for key, val in noise_dict.items() if "_chrom_gp_" in key])
             chrom_comp.TNCMAMP.quantity = noise_dict[psr_name + "_chrom_gp_log10_A"]
             chrom_comp.TNCMGAM.quantity = noise_dict[psr_name + "_chrom_gp_gamma"]
@@ -983,14 +983,14 @@ def add_noise_to_model(
         all_components = Component.component_types
         noise_class = all_components["SolarWindDispersion"]
         noise = noise_class()  # Make the dispersion instance.
-        model.add_component(noise, validate=False, force=False)
+        model.add_component(noise, validate=False, force=True)
         # add parameters
         if 'n_earth' in sw_pars:
             model['NE_SW'].quantity = noise_dict['n_earth']
             model['NE_SW'].frozen = True
             model['SWP'] = 2
         if f'{psr_name}_sw_gp_log10_A' in sw_pars:
-            sw_comp = pm.noise_model.PLSWNoise()
+            sw_comp = pm.PLSWNoise()
             sw_comp.TNSWAMP.quantity = noise_dict[f'{psr_name}_sw_gp_log10_A']
             sw_comp.TNSWAMP.frozen = True
             sw_comp.TNSWGAM.quantity = noise_dict[f'{psr_name}_sw_gp_gamma']
@@ -1001,8 +1001,8 @@ def add_noise_to_model(
             model.add_component(sw_comp, validate=False, force=True)
         elif f'{psr_name}_sw_gp_log10_rho' in sw_pars:
             raise NotImplementedError('Solar Wind Dispersion free spec GP not yet implemented')
-        elif f'{psr_name}_sw_gp_log10_sigma_ridge' in sw_pars:
-            raise NotImplementedError('Solar Wind Dispersion time domain model not yet implemented')
+        # elif f'{psr_name}_sw_gp_log10_sigma_ridge' in sw_pars:
+        #     raise NotImplementedError('Solar Wind Dispersion time domain model not yet implemented')
 
 
     # Setup and validate the timing model to ensure things are correct

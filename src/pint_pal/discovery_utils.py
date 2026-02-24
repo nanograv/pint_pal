@@ -279,6 +279,9 @@ def chromatic_noise_block(
 def solar_wind_noise_block(
         psr: Any,
         basis: str = 'fourier',
+        basis_nodes: Optional[np.ndarray] = None,
+        interp_dt: Optional[float] = 30.0,
+        interp_kind: str = 'linear',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
         time_span: Optional[float] = None,
@@ -293,10 +296,17 @@ def solar_wind_noise_block(
         Pulsar object.
     basis : str, optional
         Basis type for the GP. Default is "fourier".
+        Supported options are ["fourier", "interpolation"].
+    basis_nodes : np.ndarray, optional
+        Nodes for the basis. Default is None. Only used for interpolation basis.
+    interp_dt : float, optional
+        Time step for interpolation nodes in days. Default is 30. Only used for interpolation basis.
+    interp_kind : str, optional
+        Interpolation kind for the basis. Default is "linear". Only used for interpolation basis.
     prior : str, optional
         Prior type for the GP amplitude. Default is "powerlaw".
-    nfreqs : int, optional
-        Number of Fourier frequencies. Default is 100.
+    Nfreqs : int, optional
+        Number of Fourier frequencies. Default is 100. Only used for Fourier basis.
     time_span : float, optional
         Time span for the Fourier basis. Default is None.
     name : str, optional
@@ -314,11 +324,13 @@ def solar_wind_noise_block(
             raise ValueError("Invalid prior specified for solar wind noise. Must be 'powerlaw'.")
         swgp = ds.makegp_fourier(psr, prior, Nfreqs, T=time_span, basis=ds_solar.fourierbasis_solar_dm, name=name)
     elif basis == 'interpolation':
-        td_basis, edges = ds_solar.custom_blocked_interpolation_basis(
+        if basis_nodes is None:
+            basis_nodes = np.arange(psr.toas.min()/86400, psr.toas.max()/86400, interp_dt)
+        # else basis nodes are provided by user.
+        td_basis, _ = ds_solar.custom_blocked_interpolation_basis(
             psr.toas,
-            # FIXME -- switch this to the custom bins from mercedes.
-            bin_edges=np.arange(psr.toas.min()/86400, psr.toas.max()/86400, 30),  # 30-day bins
-            kind="linear",
+            nodes=basis_nodes,
+            kind=interp_kind,
         )
         prior_kernel = ds_solar.ridge_kernel(nodes=td_basis.shape[1])
         swgp = ds_solar.makegp_timedomain_solar_dm(
@@ -327,7 +339,7 @@ def solar_wind_noise_block(
             dt=None,
             Umat=td_basis,
             common=[],
-            name='sw_gp'
+            name=name,
         )
     else:
         raise ValueError("Invalid basis specified for solar wind noise. Must be 'fourier' or 'interpolation'.")
