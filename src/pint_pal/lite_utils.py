@@ -22,7 +22,7 @@ import pint.models as models
 import pint.residuals
 from pint.modelutils import model_equatorial_to_ecliptic
 
-from pint.models.parameter import floatParameter, maskParameter
+from pint.models.parameter import floatParameter, maskParameter, prefixParameter
 from pint.models.timing_model import Component
 from pint import DMconst
 
@@ -740,36 +740,79 @@ def add_DM1_DM2_and_unfreeze_DM(
     ==========
     model: PINT model object
     """
+    if 'DispersionDM' not in model.components:
+        raise ValueError("DispersionDM component is required before adding DM1/DM2.")
+
+    disp_dm = model.components['DispersionDM']
+
     if DM1:
-        log.info('Adding DM1 to the model...')
-        try:
-            dm1 = floatParameter(
-                        name="DM1",
-                        units="pc cm^-3 yr^-1",
-                        description="1st order time derivative of the dispersion measure",
-                        type_match="float",
+        if hasattr(model, 'DM1'):
+            if getattr(model.DM1, 'is_prefix', False):
+                log.info('DM1 already exists as prefix; setting DM1=0.0')
+                model.DM1.value = 0.0
+            else:
+                log.warning('DM1 exists but is not a prefixParameter. Replacing with prefixParameter.')
+                disp_dm.remove_param('DM1')
+                disp_dm.add_param(
+                    prefixParameter(
+                        parameter_type='float',
+                        name='DM1',
+                        units='pc cm^-3/yr^1',
+                        description='1st order time derivative of the dispersion measure',
                         long_double=True,
                         tcb2tdb_scale_factor=DMconst,
                     )
-            model.components['DispersionDM'].add_param(dm1)
-            model.DM1.value = 0.0
-        except ValueError as e:
-            log.info(f"DM1 already exists in the model. skipping ...")
-    if DM2:
-        try:
-            log.info('Adding DM2 to the model...')
-            dm2 = floatParameter(
-                    name="DM2",
-                    units="pc cm^-3 yr^-2",
-                    description="2nd order time derivative of the dispersion measure",
-                    type_match="float",
+                )
+                model.DM1.value = 0.0
+        else:
+            log.info('Adding DM1 to the model as prefixParameter...')
+            disp_dm.add_param(
+                prefixParameter(
+                    parameter_type='float',
+                    name='DM1',
+                    units='pc cm^-3/yr^1',
+                    description='1st order time derivative of the dispersion measure',
                     long_double=True,
                     tcb2tdb_scale_factor=DMconst,
                 )
-            model.components['DispersionDM'].add_param(dm2)
+            )
+            model.DM1.value = 0.0
+
+    if DM2:
+        if hasattr(model, 'DM2'):
+            if getattr(model.DM2, 'is_prefix', False):
+                log.info('DM2 already exists as prefix; setting DM2=0.0')
+                model.DM2.value = 0.0
+            else:
+                log.warning('DM2 exists but is not a prefixParameter. Replacing with prefixParameter.')
+                disp_dm.remove_param('DM2')
+                disp_dm.add_param(
+                    prefixParameter(
+                        parameter_type='float',
+                        name='DM2',
+                        units='pc cm^-3/yr^2',
+                        description='2nd order time derivative of the dispersion measure',
+                        long_double=True,
+                        tcb2tdb_scale_factor=DMconst,
+                    )
+                )
+                model.DM2.value = 0.0
+        else:
+            log.info('Adding DM2 to the model as prefixParameter...')
+            disp_dm.add_param(
+                prefixParameter(
+                    parameter_type='float',
+                    name='DM2',
+                    units='pc cm^-3/yr^2',
+                    description='2nd order time derivative of the dispersion measure',
+                    long_double=True,
+                    tcb2tdb_scale_factor=DMconst,
+                )
+            )
             model.DM2.value = 0.0
-        except ValueError as e:
-            log.info(f"DM2 already exists in the model .. skipping ...")
+
+    model.setup()
+    model.validate()
     if frozen:
         log.info('Freezing DM, DM1, and DM2...')
         model.DM.frozen = True
@@ -784,6 +827,14 @@ def add_DM1_DM2_and_unfreeze_DM(
             model.DM1.frozen = False
         if DM2:
             model.DM2.frozen = False
+
+    if DM1 and not model.DM1.frozen and 'DM1' not in model.fittable_params:
+        model.DM1.frozen = True
+        log.warning('DM1 is not fittable after setup; forcing DM1 frozen=True.')
+    if DM2 and not model.DM2.frozen and 'DM2' not in model.fittable_params:
+        model.DM2.frozen = True
+        log.warning('DM2 is not fittable after setup; forcing DM2 frozen=True.')
+
     return
 
 def add_deteriministic_solar_wind_to_model(
