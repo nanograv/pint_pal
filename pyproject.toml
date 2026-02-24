@@ -37,7 +37,9 @@ dependencies = [
     "la-forge",
     "arviz",
     "fastshermanmorrison-pulsar",
-    "loguru"
+    "loguru",
+    "threadpoolctl",
+    "setuptools<81.0",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

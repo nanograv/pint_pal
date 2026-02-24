@@ -7,7 +7,6 @@ from ruamel.yaml import YAML
 import argparse
 import glob
 from loguru import logger as log
-import numpy as np
 from pint_pal import config
 import os
 

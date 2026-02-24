@@ -1,7 +1,5 @@
 from xml.parsers.expat import model
-
-#from discovery.src.discovery.samplers import numpyro
-import numpy as np, os, json, itertools, time
+import numpy as np, os, json, itertools, time, pathlib
 from loguru import logger as log
 from astropy.time import Time
 
@@ -428,10 +426,7 @@ def model_noise(
     likelihood = sampler_kwargs['likelihood']
     sampler = sampler_kwargs['sampler']
     
-    if not using_wideband:
-        outdir = base_op_dir + mo.PSR.value + "_nb/"
-    else:
-        outdir = base_op_dir + mo.PSR.value + '_wb/'
+    outdir = format_chain_dir(base_op_dir, mo, using_wideband=using_wideband)
 
     if os.path.exists(outdir) and run_noise_analysis and not resume:
         log.warning(
@@ -666,47 +661,30 @@ def convert_to_RNAMP(value):
     """
     return (86400.0 * 365.24 * 1e6) / (2.0 * np.pi * np.sqrt(3.0)) * 10**value
 
-"""
-    # Assume results are in current working directory if not specified
-    if not base_dir:
-        base_dir = "./"
 
-    chaindir_compare = compare_dir
-    if not using_wideband:
-        chaindir = os.path.join(base_dir, f"{model.PSR.value}_nb/")
-        if compare_dir is not None:
-            chaindir_compare = os.path.join(compare_dir, f"{model.PSR.value}_nb/")
+def format_chain_dir(
+    root_dir: str,
+    model: pm.timing_model.TimingModel,
+    using_wideband: bool = False
+) -> str:
+    """
+    Appropriately formats a chain directory. This must end in PSR_[nw]b/
+    """
+    mode = "nb"
+    if using_wideband:
+        mode = "wb"
+
+    sub_dir = f"{model.PSR.value}_{mode}"
+    # Check if the root_dir contains sub_dir or not, otherwise add it
+    p = pathlib.Path(root_dir)
+    last_dir = p.parent.name if p.is_dir() else p.name
+    if last_dir == sub_dir:
+        chain_dir = root_dir
     else:
-        chaindir = os.path.join(base_dir, f"{model.PSR.value}_wb/")
-        if compare_dir is not None:
-            chaindir_compare = os.path.join(compare_dir, f"{model.PSR.value}_wb/")
+        chain_dir = os.path.join(root_dir, sub_dir, '')
 
-    log.info(f"Using existing noise analysis results in {chaindir}")
-    log.info("Adding new noise parameters to model.")
-    if use_noise_point == 'mean_large_likelihood':
-        log.info("Using mean of top 50 likelihood samples for noise parameters.")
-    elif use_noise_point == 'MAP':
-        log.info("Using maximum a posteriori values for noise parameters.")
-    elif use_noise_point == 'median':
-        log.info("Using median values for noise parameters.")
-    noise_core, noise_dict, rn_bf = analyze_noise(
-        chaindir=chaindir,
-        use_noise_point=use_noise_point,
-        likelihoods_to_average=50,
-        burn_frac=burn_frac,
-        save_corner=save_corner,
-        no_corner_plot=no_corner_plot,
-        chaindir_compare=chaindir_compare,
-    )
-    chainfile = chaindir + "chain_1.txt"
-    try:
-        mtime = Time(os.path.getmtime(chainfile), format="unix")
-        log.info(f"Noise chains loaded from {chainfile} created at {mtime.isot}")
-    except:
-        chainfile = chaindir+"chain.nc"
-        mtime = Time(os.path.getmtime(chainfile), format="unix")
-        log.info(f"Noise chains loaded from {chainfile} created at {mtime.isot}")
-"""
+    return chain_dir
+
 
 def add_noise_to_model(
     model,
