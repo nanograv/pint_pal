@@ -927,7 +927,7 @@ def add_noise_to_model(
             noise_dict[psr_name + "_red_noise_log10_A"]
         )
         rn_comp.RNIDX.quantity = -1 * noise_dict[psr_name + "_red_noise_gamma"]
-        rn_comp.RNC.quantity = rn_kwargs.get('Nfreqs', 30)
+        rn_comp.TNREDC.quantity = rn_kwargs.get('Nfreqs', 30)
         # Add red noise to the timing model
         model.add_component(rn_comp, validate=True, force=True)
     else:
