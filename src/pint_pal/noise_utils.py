@@ -452,7 +452,7 @@ def model_noise(
 
     # Create enterprise Pulsar object for supplied pulsar timing model (mo) and toas (to)
     log.info(f"Creating enterprise.Pulsar object from model with {mo.NTOA.value} toas...")
-    e_psr = Pulsar(mo, to)
+    e_psr = Pulsar(mo, to, pint=True)
     ##########################################################
     ################     PTMCMCSampler      ##################
     ##########################################################
