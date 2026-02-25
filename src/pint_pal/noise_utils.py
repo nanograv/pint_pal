@@ -646,9 +646,26 @@ def model_noise(
             os.makedirs(outdir, exist_ok=True)
             with open(os.path.join(outdir, f"{e_psr.name}_map_params.json"), "w") as f:
                 json.dump({k: float(v) for k, v in map_params.items()}, f, indent=4)
-            if sampler_kwargs.get('diagnostics', False):
-                with open(os.path.join(outdir, f"{e_psr.name}_svi_diagnostics.json"), "w") as f:
-                    json.dump({k: float(v) for k, v in diagnostics.items()}, f, indent=4)
+            try:
+                if sampler_kwargs.get('diagnostics', False):
+                    if diagnostics is None:
+                        diagnostics_payload = {}
+                    elif isinstance(diagnostics, dict):
+                        diagnostics_payload = {
+                            k: (float(v) if np.isscalar(v) else np.asarray(v).tolist())
+                            for k, v in diagnostics.items()
+                        }
+                    elif isinstance(diagnostics, (tuple, list)):
+                        diagnostics_payload = {
+                            f"diagnostic_{i}": np.asarray(v).tolist()
+                            for i, v in enumerate(diagnostics)
+                        }
+                    else:
+                        diagnostics_payload = {"diagnostics": str(diagnostics)}
+                    with open(os.path.join(outdir, f"{e_psr.name}_svi_diagnostics.json"), "w") as f:
+                        json.dump(diagnostics_payload, f, indent=4)
+            except Exception as e:
+                log.warning(f"Failed to save diagnostics: {e}")
     else:
         log.error(
             f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination." \
@@ -1002,7 +1019,7 @@ def add_noise_to_model(
         elif f'{psr_name}_sw_gp_log10_sigma_sq_exp' in sw_pars:
             log.info("Including Time Domain Square Exponential SW Noise for this pulsar")
             # Add the ML RN parameters to their component
-            sw_comp = pm.TimeDomainSquareExpSWNoise()
+            sw_comp = pm.TimeDomainSqExpSWNoise()
             sw_comp.TDSWLOGSIG.quantity = noise_dict[f'{psr_name}_sw_gp_log10_sigma_sq_exp']
             sw_comp.TDSWLOGSIG.frozen = True
             sw_comp.TDSWLOGELL.quantity = noise_dict[f'{psr_name}_sw_gp_log10_ell']
@@ -1017,7 +1034,7 @@ def add_noise_to_model(
                 for node in basis_nodes:
                     sw_comp.add_tdsw_node_component(node)
             else:
-                raise ValueError("Must specify either dt or basis_nodes for TimeDomainSquareExpSWNoise component.")
+                raise ValueError("Must specify either dt or basis_nodes for TimeDomainSqExpSWNoise component.")
             model.add_component(sw_comp, validate=False, force=True)
         elif f'{psr_name}_sw_gp_log10_sigma_quasi_periodic' in sw_pars:
             log.info("Including Time Domain Quasi-Periodic SW Noise for this pulsar")
