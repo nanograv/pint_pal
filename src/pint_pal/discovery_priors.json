@@ -4,8 +4,15 @@
   "(.*_)?dm_gp_log10_A.*": [-20, -11],
   "(.*_)?dm_gp_gamma.*": [0, 7],
   "(.*_)?chrom_gp_log10_A.*": [-20, -11],
-  "(.*_)?chrom_gp_gamma.*": [-7, 7],
+  "(.*_)?chrom_gp_gamma.*": [-3, 7],
   "(.*_)?swgp_log10_A.*": [-12, -1],
   "(.*_)?swgp_gamma.*": [-7, 7],
-  "(.*_)?sw_gp_log10_sigma_ridge.*": [-4, 2]
+  "(.*_)?sw_gp_log10_sigma_ridge.*": [-4, 2],
+  "(.*_)?sw_gp_log10_sigma_matern.*": [-4, 2],
+  "(.*_)?sw_gp_log10_sigma_quasi_periodic.*": [-4, 2],
+  "(.*_)?sw_gp_log10_sigma_sq_exp.*": [-4, 2],
+  "(.*_)?sw_gp_log10_ell.*": [0.5, 3.6],
+  "(.*_)?sw_gp_log10_alpha.*": [-1, 1],
+  "(.*_)?sw_gp_log10_p.*": [0.5, 3.6],
+  "(.*_)?sw_gp_log10_gamma_p.*": [0.5, 3.6]
 }

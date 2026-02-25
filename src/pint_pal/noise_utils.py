@@ -1,5 +1,6 @@
 from xml.parsers.expat import model
 import numpy as np, os, json, itertools, time, pathlib
+import pandas as pd
 from loguru import logger as log
 from astropy.time import Time
 
@@ -12,7 +13,7 @@ import pint.models as pm
 from pint.models.parameter import maskParameter
 from pint.models.timing_model import Component
 
-import matplotlib.pyplot as pl
+import matplotlib.pyplot as plt
 
 import la_forge.core as co
 
@@ -251,10 +252,10 @@ def analyze_enterprise_noise(
         else:
             figname = f"./{psr_name}_noise_corner.pdf"
 
-        pl.savefig(figname)
-        pl.savefig(figname.replace(".pdf", ".png"), dpi=300)
+        plt.savefig(figname)
+        plt.savefig(figname.replace(".pdf", ".png"), dpi=300)
 
-        pl.show()
+        plt.show()
 
     if no_corner_plot:
 
@@ -313,7 +314,7 @@ def analyze_enterprise_noise(
             j = idx % (nrows * ncols)
             if j == 0:
                 pp += 1
-                fig = pl.figure(figsize=(8, 11))
+                fig = plt.figure(figsize=(8, 11))
 
             ax = fig.add_subplot(nrows, ncols, j + 1)
             ax.hist(
@@ -322,6 +323,7 @@ def analyze_enterprise_noise(
                 histtype="step",
                 color="black",
                 label="Current",
+                denity=True,
             )
             ax.axvline(chain[:, idx][mp_idx], ls="--", color="black", label="MAP")
             if use_noise_point == 'mean_large_likelihood':
@@ -338,6 +340,7 @@ def analyze_enterprise_noise(
                     histtype="step",
                     color="orange",
                     label="Past",
+                    density=True,
                 )
                 ax.axvline(
                     chain_compare[:, idx][mp_compare_idx], ls="--", color="orange"
@@ -350,13 +353,13 @@ def analyze_enterprise_noise(
             ax.set_yticklabels([])
 
             if j == (nrows * ncols) - 1 or idx == len(pars_short) - 1:
-                pl.tight_layout()
-                pl.savefig(f"{figbase}_{pp}.pdf")
+                plt.tight_layout()
+                plt.savefig(f"{figbase}_{pp}.pdf")
 
         # Wasn't working before, but how do I implement a legend?
         # ax[nr][nc].legend(loc = 'best')
-        pl.legend(loc="best")
-        pl.show()
+        plt.legend(loc="best")
+        plt.show()
     
     if use_noise_point == 'MAP':
         noise_dict = noise_core.get_map_dict()
@@ -460,7 +463,7 @@ def model_noise(
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
         # Setup a single pulsar PTA using enterprise_extensions
         # Ensure n_iter is an integer
-        sampler_kwargs['n_iter'] = int(float(sampler_kwargs['n_iter']))
+        sampler_kwargs['n_iter'] = int(float(sampler_kwargs['n_iter'].get('n_iter', 25000)))
 
         if sampler_kwargs['n_iter'] < 1e4:
             log.warning(
@@ -587,7 +590,7 @@ def model_noise(
                 sampler=samp,
                 num_samples_per_checkpoint=sampler_kwargs.get('num_samples_per_checkpoint', 1000),
                 rng_key=PRNGKey(seed),
-                outdir=base_op_dir,
+                outdir=outdir,
                 file_name=f"{e_psr.name}_nuts_samples",
                 resume=resume,
                 diagnostics=sampler_kwargs.get('diagnostics', True),
@@ -627,24 +630,24 @@ def model_noise(
                 loss=None, #defauls to trace elbo
                 num_warmup_steps=sampler_kwargs.get('num_warmup_steps', 500),
                 max_epochs=sampler_kwargs.get('max_epochs', 1000),
-                peak_lr=sampler_kwargs.get('peak_lr', 0.01),
+                peak_learning_rate=sampler_kwargs.get('peak_learning_rate', 0.01),
                 gradient_clipping_val=sampler_kwargs.get('gradient_clipping_val', None),
             )
             map_params, diagnostics = disco_utils.run_svi_early_stopping(
                 rng_key= PRNGKey(seed),
                 svi=svi,
-                batch_size = sampler_kwargs.get('batch_size', 500),
+                batch_size = sampler_kwargs.get('batch_size', 100),
                 patience = sampler_kwargs.get('patience', 3),
                 difference_threshold = sampler_kwargs.get('difference_threshold', 5.0),
-                max_num_batches = sampler_kwargs.get('max_num_batches', 50),
+                max_num_batches = sampler_kwargs.get('max_num_batches', 500),
                 diagnostics = sampler_kwargs.get('diagnostics', True),
             )
             # write map params to file
-            os.makedirs(base_op_dir, exist_ok=True)
-            with open(os.path.join(base_op_dir, f"{e_psr.name}_map_params.json"), "w") as f:
+            os.makedirs(outdir, exist_ok=True)
+            with open(os.path.join(outdir, f"{e_psr.name}_map_params.json"), "w") as f:
                 json.dump({k: float(v) for k, v in map_params.items()}, f, indent=4)
             if sampler_kwargs.get('diagnostics', False):
-                with open(os.path.join(base_op_dir, f"{e_psr.name}_svi_diagnostics.json"), "w") as f:
+                with open(os.path.join(outdir, f"{e_psr.name}_svi_diagnostics.json"), "w") as f:
                     json.dump({k: float(v) for k, v in diagnostics.items()}, f, indent=4)
     else:
         log.error(
@@ -689,6 +692,7 @@ def format_chain_dir(
 def add_noise_to_model(
     model,
     noise_dict,
+    model_kwargs={},
     using_wideband=False,
 ):
     """
@@ -698,9 +702,7 @@ def add_noise_to_model(
     ==========
     model: PINT (or tempo2) timing model
     noise_dict: Dictionary containing noise parameters.
-    ignore_red_noise: Flag to manually force RN exclusion from timing model. When False,
-        code determines whether
-    RN is necessary based on whether the RN BF > 1e3. Default: False
+    model_kwargs: dictionary of noise model settings from tc.config['noise_run']['model']; Default: {}
     using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
     base_dir: directory containing {psr}_nb and {psr}_wb chains directories; if None, will
         check for results in the current working directory './'.
@@ -710,7 +712,6 @@ def add_noise_to_model(
     =======
     model: New timing model which includes WN and RN (and potentially dmgp, chrom_gp, and solar wind) parameters
     (optional)
-    noise_core: la_forge.core object which contains noise chains and run metadata
     """
 
     # Create the maskParameter for EFACS
@@ -957,6 +958,7 @@ def add_noise_to_model(
     # Check to see if solar wind is present
     sw_pars = [key for key in noise_pars if "n_earth" in key or "sw_gp" in key]
     if len(sw_pars) > 0:
+        sw_kwargs = model_kwargs.get('solar_wind', {})
         log.info('Adding Solar Wind Dispersion to par file')
         all_components = Component.component_types
         noise_class = all_components["SolarWindDispersion"]
@@ -966,6 +968,7 @@ def add_noise_to_model(
         if 'n_earth' in sw_pars:
             model['NE_SW'].quantity = noise_dict['n_earth']
             model['NE_SW'].frozen = True
+            model['SWM'] = 1
             model['SWP'] = 2
         if f'{psr_name}_sw_gp_log10_A' in sw_pars:
             sw_comp = pm.PLSWNoise()
@@ -973,14 +976,96 @@ def add_noise_to_model(
             sw_comp.TNSWAMP.frozen = True
             sw_comp.TNSWGAM.quantity = noise_dict[f'{psr_name}_sw_gp_gamma']
             sw_comp.TNSWGAM.frozen = True
-            # FIXMEEEEEEE : need to figure out some way to softcode this
-            sw_comp.TNSWC.quantity = 10
+            sw_comp.TNSWC.quantity = sw_kwargs.get('Nfreqs')
             sw_comp.TNSWC.frozen = True
             model.add_component(sw_comp, validate=False, force=True)
         elif f'{psr_name}_sw_gp_log10_rho' in sw_pars:
             raise NotImplementedError('Solar Wind Dispersion free spec GP not yet implemented')
-        # elif f'{psr_name}_sw_gp_log10_sigma_ridge' in sw_pars:
-        #     raise NotImplementedError('Solar Wind Dispersion time domain model not yet implemented')
+        elif f'{psr_name}_sw_gp_log10_sigma_ridge' in sw_pars:
+            log.info("Including Time Domain Ride SW Noise for this pulsar")
+            # Add the ML RN parameters to their component
+            sw_comp = pm.TimeDomainRideSWNoise()
+            sw_comp.TDSWLOGSIG.quantity = noise_dict[f'{psr_name}_sw_gp_log10_sigma_ridge']
+            sw_comp.TDSWLOGSIG.frozen = True
+            dt = sw_kwargs.get('dt', False)
+            basis_nodes = sw_kwargs.get('basis_nodes', None)
+            kind = sw_kwargs.get('interp_kind', 'linear')
+            sw_comp.TDSWINTERP_KIND.value = kind
+            if dt:
+                sw_comp.TDSWDT.quantity = dt
+            elif basis_nodes is not None:
+                for node in basis_nodes:
+                    sw_comp.add_tdsw_node_component(node)
+            else:
+                raise ValueError("Must specify either dt or basis_nodes for TimeDomainRideSWNoise component.")
+            model.add_component(sw_comp, validate=False, force=True)
+        elif f'{psr_name}_sw_gp_log10_sigma_sq_exp' in sw_pars:
+            log.info("Including Time Domain Square Exponential SW Noise for this pulsar")
+            # Add the ML RN parameters to their component
+            sw_comp = pm.TimeDomainSquareExpSWNoise()
+            sw_comp.TDSWLOGSIG.quantity = noise_dict[f'{psr_name}_sw_gp_log10_sigma_sq_exp']
+            sw_comp.TDSWLOGSIG.frozen = True
+            sw_comp.TDSWLOGELL.quantity = noise_dict[f'{psr_name}_sw_gp_log10_ell']
+            sw_comp.TDSWLOGELL.frozen = True
+            dt = sw_kwargs.get('dt', False)
+            basis_nodes = sw_kwargs.get('basis_nodes', None)
+            kind = sw_kwargs.get('interp_kind', 'linear')
+            sw_comp.TDSWINTERP_KIND.value = kind
+            if dt:
+                sw_comp.TDSWDT.quantity = dt
+            elif basis_nodes is not None:
+                for node in basis_nodes:
+                    sw_comp.add_tdsw_node_component(node)
+            else:
+                raise ValueError("Must specify either dt or basis_nodes for TimeDomainSquareExpSWNoise component.")
+            model.add_component(sw_comp, validate=False, force=True)
+        elif f'{psr_name}_sw_gp_log10_sigma_quasi_periodic' in sw_pars:
+            log.info("Including Time Domain Quasi-Periodic SW Noise for this pulsar")
+            # Add the ML RN parameters to their component
+            sw_comp = pm.TimeDomainQuasiPeriodicSWNoise()
+            sw_comp.TDSWLOGSIG.quantity = noise_dict[f'{psr_name}_sw_gp_log10_sigma_quasi_periodic']
+            sw_comp.TDSWLOGSIG.frozen = True
+            sw_comp.TDSWLOGELL.quantity = noise_dict[f'{psr_name}_sw_gp_log10_ell']
+            sw_comp.TDSWLOGELL.frozen = True
+            sw_comp.TDSWLOGGAMP.quantity = noise_dict[f'{psr_name}_sw_gp_log10_gamma_p']
+            sw_comp.TDSWLOGGAMP.frozen = True
+            sw_comp.TDSWLOGP.quantity = noise_dict[f'{psr_name}_sw_gp_log10_p']
+            dt = sw_kwargs.get('dt', False)
+            basis_nodes = sw_kwargs.get('basis_nodes', None)
+            kind = sw_kwargs.get('interp_kind', 'linear')
+            sw_comp.TDSWINTERP_KIND.value = kind
+            if dt:
+                sw_comp.TDSWDT.quantity = dt
+            elif basis_nodes is not None:
+                for node in basis_nodes:
+                    sw_comp.add_tdsw_node_component(node)
+            else:
+                raise ValueError("Must specify either dt or basis_nodes for TimeDomainQuasiPeriodicSWNoise component.")
+            model.add_component(sw_comp, validate=False, force=True)
+        elif f'{psr_name}_sw_gp_log10_sigma_matern' in sw_pars:
+            log.info("Including Time Domain Matern SW Noise for this pulsar")
+            # Add the ML RN parameters to their component
+            sw_comp = pm.TimeDomainMaternSWNoise()
+            sw_comp.TDSWLOGSIG.quantity = noise_dict[f'{psr_name}_sw_gp_log10_sigma_matern']
+            sw_comp.TDSWLOGSIG.frozen = True
+            sw_comp.TDSWLOGELL.quantity = noise_dict[f'{psr_name}_sw_gp_log10_ell']
+            sw_comp.TDSWLOGELL.frozen = True
+            sw_comp.TDSWNU.quantity = sw_kwargs.get('nu', 1.5)
+            sw_comp.TDSWNU.frozen = True
+            dt = sw_kwargs.get('dt', False)
+            basis_nodes = sw_kwargs.get('basis_nodes', None)
+            kind = sw_kwargs.get('interp_kind', 'linear')
+            sw_comp.TDSWINTERP_KIND.value = kind
+            if dt:
+                sw_comp.TDSWDT.quantity = dt
+            elif basis_nodes is not None:
+                for node in basis_nodes:
+                    sw_comp.add_tdsw_node_component(node)
+            else:
+                raise ValueError("Must specify either dt or basis_nodes for TimeDomainMaternSWNoise component.")
+            model.add_component(sw_comp, validate=False, force=True)
+        else:
+            log.warning('Solar wind parameters not recognized. Check parameter names and ensure match standard noise conventions.')
 
 
     # Setup and validate the timing model to ensure things are correct
@@ -1120,6 +1205,41 @@ def log_single_likelihood_evaluation_time(pta, sampler_kwargs):
     slet = (end_time-start_time)/10
     log.info(f"Single likelihood evaluation time is approximately {slet:.1e} seconds. Hopefully this is < 1 second or so...")
     #log.info(f"4 times {sampler_kwargs['n_iter']} likelihood evaluations will take approximately: {4*slet*float(sampler_kwargs['n_iter'])/3600/24:.2f} days")
+
+
+def get_map_noise_values(outdir, model):
+    """Load noise values from a discovery output directory.
+
+    If a map JSON exists, return it. Otherwise read a feather chain and return
+    per-column means over numeric columns.
+    """
+    outdir = pathlib.Path(format_chain_dir(outdir, model=model))  # ensure correct formatting of chain directory
+    if not outdir.exists() or not outdir.is_dir():
+        raise ValueError(f"Invalid outdir: {outdir}")
+
+
+    map_file = next(outdir.glob("*_map_params.json"), None)
+
+    if map_file is not None:
+        with map_file.open("r") as fin:
+            data = json.load(fin)
+        return {k: float(v) for k, v in data.items()}
+
+    feather_file = next(outdir.glob("*.feather"), None)
+    if feather_file is None:
+        raise FileNotFoundError(
+            f"No *_map_dict.json, *_map_params.json, or *.feather found in {outdir}"
+        )
+
+    df = pd.read_feather(feather_file)
+    if df.empty:
+        raise ValueError(f"Feather chain is empty: {feather_file}")
+
+    numeric_df = df.select_dtypes(include=[np.number])
+    if numeric_df.shape[1] == 0:
+        raise ValueError(f"No numeric columns found in feather chain: {feather_file}")
+
+    return {k: float(v) for k, v in numeric_df.mean(axis=0).to_dict().items()}
 
 
 

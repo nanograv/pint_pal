@@ -151,7 +151,7 @@ def fourierbasis_solar_dm(psr,
 
     return f, df, fmat * dt_DM[:, None]
 
-def makegp_timedomain_solar_dm(psr, covariance, dt=1.0, Umat=None, common=[], name='timedomain_sw_gp'):
+def makegp_timedomain_solar_dm(psr, covariance, dt=1.0, Umat=None, nodes=None, common=[], name='timedomain_sw_gp'):
     """
     Construct a time-domain Gaussian process for solar wind dispersion measure variations.
 
@@ -212,14 +212,16 @@ def makegp_timedomain_solar_dm(psr, covariance, dt=1.0, Umat=None, common=[], na
         bins = quantize(psr.toas, dt)
         Umat = np.vstack([bins == i for i in range(bins.max() + 1)]).T.astype('d')
         Umat = Umat * dt_DM[:, None]
+        nodes = psr.toas @ Umat / Umat.sum(axis=0)
     else:
         Umat = Umat * dt_DM[:, None]
-    toas = psr.toas @ Umat / Umat.sum(axis=0)
+        assert nodes is not None, "If Umat is provided, nodes must also be provided."
+    
     ## i am not fully convinced that this is correct yet.
     ## seems like Daniel is using an Ecorr basis and then doing the averaging.
 
     get_tmat = covariance
-    tau = jnp.abs(toas[:, jnp.newaxis] - toas[jnp.newaxis, :])
+    tau = jnp.abs(nodes[:, jnp.newaxis] - nodes[jnp.newaxis, :])
 
     def getphi(params):
         return get_tmat(tau, *[params[arg] for arg in argmap])
@@ -228,7 +230,7 @@ def makegp_timedomain_solar_dm(psr, covariance, dt=1.0, Umat=None, common=[], na
     return matrix.VariableGP(matrix.NoiseMatrix2D_var(getphi), Umat)
 
 
-def linear_blocked_sw_interpolation_basis(
+def linear_blocked_interpolation_basis(
         toas,
         bin_edges,
 ):
@@ -275,42 +277,74 @@ def custom_blocked_interpolation_basis(
     return M[:, idx], nodes[idx]
 
 def ridge_kernel(
-        nodes,
         log10_sigma_ridge: float = -7.
 ):
     """Ridge regression kernel"""
     def kernel(tau, log10_sigma_ridge=log10_sigma_ridge):
         scale = 10**(2 * log10_sigma_ridge)
-        return scale * jnp.eye(nodes, dtype=tau.dtype)
+        return scale * jnp.eye(len(tau), dtype=tau.dtype)
 
     return kernel
 
 def square_exponential_kernel(
-        log10_sigma_se: float = -7.,
-        log10_ell_se: float = 1.,
+        log10_sigma_sq_exp: float = -7.,
+        log10_ell: float = 1.,
 ):
     """Square exponential kernel"""
-    def kernel(tau, log10_sigma_se=log10_sigma_se, log10_ell_se=log10_ell_se):
-        sigma2 = 10**(2 * log10_sigma_se)
-        ell = 10**log10_ell_se
+    def kernel(tau, log10_sigma_sq_exp=log10_sigma_sq_exp, log10_ell=log10_ell):
+        sigma2 = 10**(2 * log10_sigma_sq_exp)
+        ell = 10**log10_ell
         return sigma2 * jnp.exp(-0.5 * (tau / ell)**2)
 
     return kernel
 
 def quasi_periodic_kernel(
-        log10_sigma: float = -7.,
+        log10_sigma_quasi_periodic: float = -7.,
         log10_ell: float = 1.,
         log10_gamma_p: float = 0.,
         log10_p: float = 0.,
 ):
     """Quasi-periodic kernel"""
-    def kernel(tau, log10_sigma=log10_sigma, log10_ell=log10_ell,
+    def kernel(tau, log10_sigma_quasi_periodic=log10_sigma_quasi_periodic, log10_ell=log10_ell,
                log10_gamma_p=log10_gamma_p, log10_p=log10_p):
-        sigma2 = 10**(2 * log10_sigma   )
+        sigma2 = 10**(2 * log10_sigma_quasi_periodic)
         ell = 10**log10_ell
         gamma_p = 10**log10_gamma_p
         p = 10**log10_p
         return sigma2 * jnp.exp(-0.5 * (tau / ell)**2 - 2 * (jnp.sin(jnp.pi * tau / p) / gamma_p)**2)
+
+    return kernel
+
+
+def matern_kernel(
+        log10_sigma_matern: float = -7.,
+        log10_ell: float = 1.,
+        #nu: float = 1.5,
+):
+    """Matérn kernel.
+
+    Supports common closed-form smoothness values nu in {0.5, 1.5, 2.5}.
+    """
+
+    # if nu not in (0.5, 1.5, 2.5):
+    #     raise ValueError("matern_kernel currently supports nu in {0.5, 1.5, 2.5}.")
+
+    def kernel(tau, log10_sigma_matern=log10_sigma_matern, log10_ell=log10_ell,): # hardcoded nu for now
+        nu=1.5
+        sigma2 = 10**(2 * log10_sigma_matern)
+        ell = 10**log10_ell
+        r = jnp.abs(tau) / ell
+
+        if nu == 0.5:
+            k = jnp.exp(-r)
+        elif nu == 1.5:
+            c = jnp.sqrt(3.0)
+            k = (1.0 + c * r) * jnp.exp(-c * r)
+        else:  # nu == 2.5
+            c = jnp.sqrt(5.0)
+            k = (1.0 + c * r + (5.0 / 3.0) * r**2) * jnp.exp(-c * r)
+
+        return sigma2 * k
 
     return kernel
 

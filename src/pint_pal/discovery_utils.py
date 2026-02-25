@@ -304,7 +304,10 @@ def solar_wind_noise_block(
     interp_kind : str, optional
         Interpolation kind for the basis. Default is "linear". Only used for interpolation basis.
     prior : str, optional
-        Prior type for the GP amplitude. Default is "powerlaw".
+        Prior type for the GP amplitude. For Fourier basis this is a PSD. For time domain it is a covariance function.
+        Fourier basis supports ["powerlaw"].
+        Time-domain interpolation basis supports ["ridge", "square_exponential", "quasi_periodic", "matern"].
+        Default is "powerlaw".
     Nfreqs : int, optional
         Number of Fourier frequencies. Default is 100. Only used for Fourier basis.
     time_span : float, optional
@@ -327,17 +330,29 @@ def solar_wind_noise_block(
         if basis_nodes is None:
             basis_nodes = np.arange(psr.toas.min()/86400, psr.toas.max()/86400, interp_dt)
         # else basis nodes are provided by user.
-        td_basis, _ = ds_solar.custom_blocked_interpolation_basis(
+        td_basis, nodes = ds_solar.custom_blocked_interpolation_basis(
             psr.toas,
             nodes=basis_nodes,
             kind=interp_kind,
         )
-        prior_kernel = ds_solar.ridge_kernel(nodes=td_basis.shape[1])
+        if prior == 'ridge':
+            prior_kernel = ds_solar.ridge_kernel()
+        elif prior == 'square_exponential':
+            prior_kernel = ds_solar.square_exponential_kernel()
+        elif prior == 'quasi_periodic':
+            prior_kernel = ds_solar.quasi_periodic_kernel()
+        elif prior == 'matern':
+            prior_kernel = ds_solar.matern_kernel()
+        elif prior == 'powerlaw':
+            raise ValueError("Power-law prior is not supported for interpolation basis solar wind noise. Please choose 'ridge', 'square_exponential', 'quasi_periodic', or 'matern'.")
+        else: 
+            raise ValueError("Invalid prior specified for interpolation basis solar wind noise. Must be 'ridge', 'square_exponential', 'quasi_periodic', or 'matern'.")
         swgp = ds_solar.makegp_timedomain_solar_dm(
             psr,
             covariance=prior_kernel,
             dt=None,
             Umat=td_basis,
+            nodes=nodes,
             common=[],
             name=name,
         )
@@ -483,10 +498,10 @@ def make_sampler_nuts(
         )
     #samples_per_checkpoint = int(sampler_kwargs.get('num_samples', 1000) / sampler_kwargs.get('num_checkpoints', 5))
     mcmcargs = dict(
-        #num_samples=samples_per_checkpoint,
-        #num_warmup=sampler_kwargs.get('num_warmup', 500),
+        num_samples=sampler_kwargs.get('num_samples', 2000),
+        num_warmup=sampler_kwargs.get('num_warmup', 500),
         **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.MCMC).kwonlyargs
-           #and not 'num_samples'
+           and not 'num_samples' and not 'num_warmup'
            }
         )
     sampler = infer.MCMC(infer.NUTS(numpyro_model, **nutsargs), **mcmcargs)
@@ -617,13 +632,33 @@ def run_nuts_with_checkpoints(
 
         # checkpoint plot
         if diagnostics:
-            clear_output(wait=True)
-            az.plot_trace(df)
-            plt.suptitle(f"Checkpoint {checkpoint + 1}/{num_checkpoints}")
-            plt.show()
-            # gelman rubin diagnostic
-            rhat = az.rhat(df)
-            print(f"R-hat diagnostics:\n{rhat}")
+            try:
+                idata = az.from_numpyro(sampler)
+                fig_trace = az.plot_trace(idata)
+                fig_trace = fig_trace.ravel()[0].figure if hasattr(fig_trace, "ravel") else plt.gcf()
+                fig_trace.suptitle(f"Checkpoint {checkpoint + 1}/{num_checkpoints} trace")
+                fig_trace.tight_layout()
+
+
+                rhat = az.rhat(idata)
+                rhat_vals = np.asarray(rhat.to_array(), dtype=float).ravel()
+                rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
+                clear_output(wait=True)
+                display(fig_trace)
+                if len(rhat_vals) > 0:
+                    n_high = int(np.sum(rhat_vals > 1.01))
+                    print(
+                        "R-hat summary: "
+                        f"median={np.median(rhat_vals):.4f}, "
+                        f"max={np.max(rhat_vals):.4f}, "
+                        f"n(>1.01)={n_high}/{len(rhat_vals)}"
+                    )
+                else:
+                    print("R-hat summary: no finite values available")
+            except Exception as e:
+                log.warning(f"Diagnostics plotting failed at checkpoint {checkpoint + 1}: {e}")
+    if diagnostics:
+        plt.close(fig_trace)
 
 
 def setup_svi(
@@ -632,7 +667,7 @@ def setup_svi(
     loss: ELBO | None = None,
     num_warmup_steps: int = 500,
     max_epochs: int = 5000,
-    peak_lr: float = 0.01,
+    peak_learning_rate: float = 0.01,
     gradient_clipping_val: float | None = None,
 ) -> SVI:
     """
@@ -651,7 +686,7 @@ def setup_svi(
         Number of warmup steps for learning rate schedule. Default is 500.
     max_epochs : int, optional
         Maximum number of training epochs for learning rate decay. Default is 5000.
-    peak_lr : float, optional
+    peak_learning_rate : float, optional
         Peak learning rate value. Default is 0.01.
     gradient_clipping_val : float or None, optional
         Maximum global norm for gradient clipping. If None, no clipping is applied.
@@ -665,18 +700,18 @@ def setup_svi(
 
     Notes
     -----
-    The learning rate schedule starts at 0, warms up to peak_lr over num_warmup_steps,
-    then decays following a cosine schedule to 1% of peak_lr over max_epochs steps.
+    The learning rate schedule starts at 0, warms up to peak_learning_rate over num_warmup_steps,
+    then decays following a cosine schedule to 1% of peak_learning_rate over max_epochs steps.
     """
     if loss is None:
         loss = Trace_ELBO()
     # Define the learning rate schedule
     learning_rate_schedule = optax.warmup_cosine_decay_schedule(
         init_value=0,
-        peak_value=peak_lr,
+        peak_value=peak_learning_rate,
         warmup_steps=num_warmup_steps,
         decay_steps=max_epochs,
-        end_value=peak_lr * 0.01,  # Decay to 10% of the peak
+        end_value=peak_learning_rate * 0.01,  # Decay to 10% of the peak
     )
     npyro_optimizer = numpyro.optim.optax_to_numpyro(
         # Gradient clipping if supplied
@@ -1000,7 +1035,9 @@ def run_svi_early_stopping(
             log.info(f"Best loss achieved: {best_val_loss:.4f}")
 
             final_params = svi.get_params(best_svi_state)
-
+    if diagnostics:
+        # close the fig
+        plt.close(fig)
     log.info("Optimization complete.")
     # This conditional is entered if we exhaust the max training batches
     # without early stopping
