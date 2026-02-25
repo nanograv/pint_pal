@@ -48,7 +48,7 @@ classifiers = [
 ]
 
 [tool.setuptools.package-data]
-pint_pal = ["defaults.yaml", "plot_settings.yaml"]
+pint_pal = ["defaults.yaml", "plot_settings.yaml", "discovery_priors.json"]
 
 [project.urls]
 "Homepage" = "https://github.com/nanograv/pint_pal"
