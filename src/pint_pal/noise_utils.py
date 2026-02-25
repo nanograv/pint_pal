@@ -918,6 +918,7 @@ def add_noise_to_model(
     rn_keys = np.array([key for key, val in noise_dict.items() if "red_noise" in key])
     if len(rn_keys) > 0:
         log.info("Including red noise for this pulsar")
+        rn_kwargs = model_kwargs.get('red_noise', {})
         # Add the ML RN parameters to their component
         rn_comp = pm.PLRedNoise()
 
@@ -926,6 +927,7 @@ def add_noise_to_model(
             noise_dict[psr_name + "_red_noise_log10_A"]
         )
         rn_comp.RNIDX.quantity = -1 * noise_dict[psr_name + "_red_noise_gamma"]
+        rn_comp.RNC.quantity = rn_kwargs.get('Nfreqs', 30)
         # Add red noise to the timing model
         model.add_component(rn_comp, validate=True, force=True)
     else:
@@ -934,6 +936,7 @@ def add_noise_to_model(
     # Check to see if dm noise is present
     dm_pars = [key for key in noise_pars if "_dm_gp" in key]
     if len(dm_pars) > 0:
+        dm_kwargs = model_kwargs.get('dm_noise', {})
         ###### POWERLAW DM NOISE ######
         if f'{psr_name}_dm_gp_log10_A' in dm_pars:
             #dm_bf = model_utils.bayes_fac(noise_core(rn_amp_nm), ntol=1, logAmax=-11, logAmin=-20)[0] 
@@ -944,7 +947,7 @@ def add_noise_to_model(
             dm_comp.TNDMAMP.quantity = noise_dict[psr_name + "_dm_gp_log10_A"]
             dm_comp.TNDMGAM.quantity = noise_dict[psr_name + "_dm_gp_gamma"]
             ##### FIXMEEEEEEE : need to figure out some way to softcode this
-            dm_comp.TNDMC.quantitity = 100
+            dm_comp.TNDMC.quantitity = dm_kwargs.get('Nfreqs', 100)
             # Add red noise to the timing model
             model.add_component(dm_comp, validate=True, force=True)
         ###### FREE SPECTRAL (WaveX) DM NOISE ######
@@ -957,6 +960,7 @@ def add_noise_to_model(
     if len(chrom_pars) > 0:
         ###### POWERLAW CHROMATIC NOISE ######
         if f'{psr_name}_chrom_gp_log10_A' in chrom_pars:
+            chrom_kwargs = model_kwargs.get('chromatic_noise', {})
             log.info('Adding Powerlaw CHROM GP noise as PLCMNoise to par file')
             # Add the ML RN parameters to their component
             chrom_comp = pm.PLCMNoise()
@@ -964,7 +968,7 @@ def add_noise_to_model(
             chrom_comp.TNCMAMP.quantity = noise_dict[psr_name + "_chrom_gp_log10_A"]
             chrom_comp.TNCMGAM.quantity = noise_dict[psr_name + "_chrom_gp_gamma"]
             ##### FIXMEEEEEEE : need to figure out some way to softcode this
-            chrom_comp.TNCMC.quantitity = 100
+            chrom_comp.TNCMC.quantitity = chrom_kwargs.get('Nfreqs', 100)
             # Add red noise to the timing model
             model.add_component(chrom_comp, validate=True, force=True)
         ###### FREE SPECTRAL (WaveX) DM NOISE ######
@@ -993,7 +997,7 @@ def add_noise_to_model(
             sw_comp.TNSWAMP.frozen = True
             sw_comp.TNSWGAM.quantity = noise_dict[f'{psr_name}_sw_gp_gamma']
             sw_comp.TNSWGAM.frozen = True
-            sw_comp.TNSWC.quantity = sw_kwargs.get('Nfreqs')
+            sw_comp.TNSWC.quantity = sw_kwargs.get('Nfreqs', 100)
             sw_comp.TNSWC.frozen = True
             model.add_component(sw_comp, validate=False, force=True)
         elif f'{psr_name}_sw_gp_log10_rho' in sw_pars:
