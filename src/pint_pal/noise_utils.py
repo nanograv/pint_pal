@@ -927,8 +927,7 @@ def add_noise_to_model(
 	#rn_comp.RNAMP.quantity = convert_to_RNAMP(
         #    noise_dict[psr_name + "_red_noise_log10_A"]
         #)
-	#rn_comp.RNIDX.quantity = -1 * noise_dict[psr_name + "_red_noise_gamma"]
-        rn_comp.TNREDAMP.quantity = noise_dict[psr_name + "_red_noise_log10_A"]
+	rn_comp.TNREDAMP.quantity = noise_dict[psr_name + "_red_noise_log10_A"]
 	rn_comp.TNREDGAM.quantity = noise_dict[psr_name + "_red_noise_gamma"]
 	rn_comp.TNREDC.quantity = rn_kwargs.get('Nfreqs', 30)
         # Add red noise to the timing model
