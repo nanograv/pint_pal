@@ -641,6 +641,8 @@ def model_noise(
                 difference_threshold = sampler_kwargs.get('difference_threshold', 5.0),
                 max_num_batches = sampler_kwargs.get('max_num_batches', 500),
                 diagnostics = sampler_kwargs.get('diagnostics', True),
+                outdir = outdir,
+                file_prefix = e_psr.name,
             )
             # write map params to file
             os.makedirs(outdir, exist_ok=True)
