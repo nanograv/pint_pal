@@ -844,6 +844,8 @@ def run_svi_early_stopping(
     max_num_batches: int = 50,
     difference_threshold: float = 1.0,
     diagnostics: bool = False,
+    outdir: str | Path | None = None,
+    file_prefix: str = "svi",
 ) -> Dict[str, Any]:
     """
     Run SVI optimization with early stopping based on loss plateau detection.
@@ -870,6 +872,11 @@ def run_svi_early_stopping(
     diagnostics : bool, optional
         If True, collect gradient norms and intermediate states at each step.
         This adds computational overhead. Default is False.
+    outdir : str | Path | None, optional
+        Directory to save diagnostics plots when `diagnostics=True`. If None,
+        plots are only displayed and not written to disk. Default is None.
+    file_prefix : str, optional
+        Prefix used for saved diagnostics plot filenames. Default is "svi".
 
     Returns
     -------
@@ -905,6 +912,12 @@ def run_svi_early_stopping(
     log.info(f"Starting training with batches of {batch_size} steps.")
 
     final_params = None
+    diagnostics_plot_dir = None
+    diagnostics_plot_path = None
+    if diagnostics and outdir is not None:
+        diagnostics_plot_dir = Path(outdir)
+        diagnostics_plot_dir.mkdir(parents=True, exist_ok=True)
+        diagnostics_plot_path = diagnostics_plot_dir / f"{file_prefix}_svi_diagnostics.png"
     if diagnostics:
         # once, before loop so plot updates in place
         plt.ioff()  # optional: avoids duplicate auto-displays
@@ -996,6 +1009,8 @@ def run_svi_early_stopping(
 
             fig.suptitle(f"SVI Diagnostics (Batch {batch_num + 1}/{max_num_batches})")
             fig.tight_layout()
+            if diagnostics_plot_path is not None:
+                fig.savefig(diagnostics_plot_path, dpi=150, bbox_inches="tight")
             clear_output(wait=True)
             display(fig)
 
