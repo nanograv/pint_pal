@@ -490,11 +490,11 @@ def make_sampler_nuts(
         Configured MCMC sampler instance.
     """
     nutsargs = dict(
-        max_tree_depth=8,
-        dense_mass=False,
-        forward_mode_differentiation=False,
-        target_accept_prob=0.8,
-        **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.NUTS).args}
+        max_tree_depth=sampler_kwargs.get('max_tree_depth', 8), # these should be good defaults
+        dense_mass=sampler_kwargs.get('dense_mass', False),
+        forward_mode_differentiation=sampler_kwargs.get('forward_mode_differentiation', False),
+        target_accept_prob=sampler_kwargs.get('target_accept_prob', 0.8),
+        **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.NUTS).args and arg not in {'max_tree_depth', 'dense_mass', 'forward_mode_differentiation', 'target_accept_prob'}}
         )
     #samples_per_checkpoint = int(sampler_kwargs.get('num_samples', 1000) / sampler_kwargs.get('num_checkpoints', 5))
     mcmcargs = dict(
@@ -640,26 +640,36 @@ def run_nuts_with_checkpoints(
                 fig_trace = fig_trace.ravel()[0].figure if hasattr(fig_trace, "ravel") else plt.gcf()
                 fig_trace.suptitle(f"Checkpoint {checkpoint + 1}/{num_checkpoints} trace")
                 fig_trace.tight_layout()
-                trace_file = outdir / f"{file_name}-checkpoint-{checkpoint + 1:03d}-trace.png"
+                trace_file = outdir / f"{file_name}-checkpoint-trace.png"
                 fig_trace.savefig(trace_file, dpi=150, bbox_inches="tight")
 
 
-                rhat = az.rhat(idata)
-                rhat_vals = np.asarray(rhat.to_array(), dtype=float).ravel()
-                rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
+                chain_method = getattr(sampler, "chain_method", "unknown")
+                posterior_sizes = dict(getattr(idata.posterior, "sizes", {}))
+                n_chains = int(posterior_sizes.get("chain", 0))
+                n_draws = int(posterior_sizes.get("draw", 0))
                 clear_output(wait=True)
                 display(fig_trace)
-                print(f"Saved checkpoint trace plot: {trace_file}")
-                if len(rhat_vals) > 0:
-                    n_high = int(np.sum(rhat_vals > 1.01))
-                    print(
-                        "R-hat summary: "
-                        f"median={np.median(rhat_vals):.4f}, "
-                        f"max={np.max(rhat_vals):.4f}, "
-                        f"n(>1.01)={n_high}/{len(rhat_vals)}"
-                    )
+                if chain_method in {"parallel", "vectorized", "sequential"} and n_chains >= 2 and n_draws >= 4:
+                    rhat = az.rhat(idata)
+                    rhat_vals = np.asarray(rhat.to_array(), dtype=float).ravel()
+                    rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
+                    if len(rhat_vals) > 0:
+                        n_high = int(np.sum(rhat_vals > 1.01))
+                        print(
+                            "R-hat summary: "
+                            f"median={np.median(rhat_vals):.4f}, "
+                            f"max={np.max(rhat_vals):.4f}, "
+                            f"n(>1.01)={n_high}/{len(rhat_vals)}"
+                        )
+                    else:
+                        print("R-hat summary: no finite values available")
                 else:
-                    print("R-hat summary: no finite values available")
+                    print(
+                        "R-hat skipped: "
+                        f"chain_method={chain_method}, chains={n_chains}, draws={n_draws}. "
+                        "Need at least 2 chains and 4 draws per chain."
+                    )
                 plt.close(fig_trace)
             except Exception as e:
                 log.warning(f"Diagnostics plotting failed at checkpoint {checkpoint + 1}: {e}")
