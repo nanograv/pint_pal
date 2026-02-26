@@ -923,11 +923,14 @@ def add_noise_to_model(
         rn_comp = pm.PLRedNoise()
 
         rn_keys = np.array([key for key, val in noise_dict.items() if "_red_" in key])
-        rn_comp.RNAMP.quantity = convert_to_RNAMP(
+        # this is the old convention. switching to TN convention to match DM, SW, CHROM noises.
+	#rn_comp.RNAMP.quantity = convert_to_RNAMP(
             noise_dict[psr_name + "_red_noise_log10_A"]
         )
-        rn_comp.RNIDX.quantity = -1 * noise_dict[psr_name + "_red_noise_gamma"]
-        rn_comp.TNREDC.quantity = rn_kwargs.get('Nfreqs', 30)
+	#rn_comp.RNIDX.quantity = -1 * noise_dict[psr_name + "_red_noise_gamma"]
+        rn_comp.TNREDAMP.quantity = noise_dict[psr_name + "_red_noise_log10_A"]
+	rn_comp.TNREDGAM.quantity = noise_dict[psr_name + "_red_noise_gamma"]
+	rn_comp.TNREDC.quantity = rn_kwargs.get('Nfreqs', 30)
         # Add red noise to the timing model
         model.add_component(rn_comp, validate=True, force=True)
     else:
@@ -967,7 +970,6 @@ def add_noise_to_model(
             # chrom_keys = np.array([key for key, val in noise_dict.items() if "_chrom_gp_" in key])
             chrom_comp.TNCMAMP.quantity = noise_dict[psr_name + "_chrom_gp_log10_A"]
             chrom_comp.TNCMGAM.quantity = noise_dict[psr_name + "_chrom_gp_gamma"]
-            ##### FIXMEEEEEEE : need to figure out some way to softcode this
             chrom_comp.TNCMC.quantitity = chrom_kwargs.get('Nfreqs', 100)
             # Add red noise to the timing model
             model.add_component(chrom_comp, validate=True, force=True)
