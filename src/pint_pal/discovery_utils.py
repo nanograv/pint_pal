@@ -634,10 +634,14 @@ def run_nuts_with_checkpoints(
         if diagnostics:
             try:
                 idata = az.from_numpyro(sampler)
-                fig_trace = az.plot_trace(idata)
+                n_vars = len(idata.posterior.data_vars)
+                with az.rc_context({"plot.max_subplots": max(40, 2 * n_vars)}):
+                    fig_trace = az.plot_trace(idata)
                 fig_trace = fig_trace.ravel()[0].figure if hasattr(fig_trace, "ravel") else plt.gcf()
                 fig_trace.suptitle(f"Checkpoint {checkpoint + 1}/{num_checkpoints} trace")
                 fig_trace.tight_layout()
+                trace_file = outdir / f"{file_name}-checkpoint-{checkpoint + 1:03d}-trace.png"
+                fig_trace.savefig(trace_file, dpi=150, bbox_inches="tight")
 
 
                 rhat = az.rhat(idata)
@@ -645,6 +649,7 @@ def run_nuts_with_checkpoints(
                 rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
                 clear_output(wait=True)
                 display(fig_trace)
+                print(f"Saved checkpoint trace plot: {trace_file}")
                 if len(rhat_vals) > 0:
                     n_high = int(np.sum(rhat_vals > 1.01))
                     print(
@@ -655,10 +660,9 @@ def run_nuts_with_checkpoints(
                     )
                 else:
                     print("R-hat summary: no finite values available")
+                plt.close(fig_trace)
             except Exception as e:
                 log.warning(f"Diagnostics plotting failed at checkpoint {checkpoint + 1}: {e}")
-    if diagnostics:
-        plt.close(fig_trace)
 
 
 def setup_svi(
