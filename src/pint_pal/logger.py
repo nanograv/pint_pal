@@ -8,17 +8,18 @@ import time
 import warnings
 
 def log_format(record):
-    level = record['level']
-    name = record['name']
-    line = record['line']
-    message = record['message']
     if 'extra' in record and record['extra']:
         # This is a captured warning, find the original source
         name = record['extra']['mod_name']
         line = record['extra']['lineno']
-    if name is None:
-        name = "__main__"
-    return f"<level>{level}</level> ({name}:{line}): {message}\n"
+        if name is None:
+            name = "__main__"
+        return (
+            "<level>{level}</level> "
+            f"({name}:{line}): "
+            "{message}"
+        )
+    return "<level>{level}</level> ({name}:{line}): {message}\n"
 
 logfile_id = None
 
