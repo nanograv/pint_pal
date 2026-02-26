@@ -501,7 +501,7 @@ def make_sampler_nuts(
         num_samples=sampler_kwargs.get('num_samples', 2000),
         num_warmup=sampler_kwargs.get('num_warmup', 500),
         **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.MCMC).kwonlyargs
-           and not 'num_samples' and not 'num_warmup'
+              and arg not in {'num_samples', 'num_warmup'}
            }
         )
     sampler = infer.MCMC(infer.NUTS(numpyro_model, **nutsargs), **mcmcargs)
