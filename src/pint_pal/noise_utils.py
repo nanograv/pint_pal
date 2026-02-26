@@ -924,12 +924,12 @@ def add_noise_to_model(
 
         rn_keys = np.array([key for key, val in noise_dict.items() if "_red_" in key])
         # this is the old convention. switching to TN convention to match DM, SW, CHROM noises.
-	#rn_comp.RNAMP.quantity = convert_to_RNAMP(
+	    #rn_comp.RNAMP.quantity = convert_to_RNAMP(
         #    noise_dict[psr_name + "_red_noise_log10_A"]
         #)
-	rn_comp.TNREDAMP.quantity = noise_dict[psr_name + "_red_noise_log10_A"]
-	rn_comp.TNREDGAM.quantity = noise_dict[psr_name + "_red_noise_gamma"]
-	rn_comp.TNREDC.quantity = rn_kwargs.get('Nfreqs', 30)
+        rn_comp.TNREDAMP.quantity = noise_dict[psr_name + "_red_noise_log10_A"]
+        rn_comp.TNREDGAM.quantity = noise_dict[psr_name + "_red_noise_gamma"]
+        rn_comp.TNREDC.quantity = rn_kwargs.get('Nfreqs', 30)
         # Add red noise to the timing model
         model.add_component(rn_comp, validate=True, force=True)
     else:
