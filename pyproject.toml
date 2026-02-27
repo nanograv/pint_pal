@@ -21,7 +21,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "ruamel.yaml",
-    # "pint_pulsar",
+    "pint_pulsar",
     "enterprise-pulsar>=3.3.2",
     "enterprise-extensions>=v2.4.1",
     "pytest",
@@ -37,7 +37,7 @@ dependencies = [
     "la-forge",
     "arviz",
     "dill",
-    "discovery @ git+https://github.com/jeremy-baier/discovery.git@twg-dev", # update this later
+    "discovery",
     "fastshermanmorrison-pulsar",
     "jax",
     "loguru",
