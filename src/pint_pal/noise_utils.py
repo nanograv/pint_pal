@@ -570,6 +570,8 @@ def model_noise(
     ##########################################################
     elif likelihood == "discovery" and sampler == 'NUTS':
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
+        # make outdir here to expose directory issues before sampling
+        os.makedirs(outdir, exist_ok=True)
         psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
             psr=e_psr,
             noise_dict={},
