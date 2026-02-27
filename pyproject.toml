@@ -36,8 +36,14 @@ dependencies = [
     "gitpython",
     "la-forge",
     "arviz",
+    "dill",
+    "discovery @ git+https://github.com/jeremy-baier/discovery.git@twg-dev", # update this later
     "fastshermanmorrison-pulsar",
+    "jax",
     "loguru",
+    "numpyro",
+    "optax",
+    "pandas",
     "threadpoolctl",
     "setuptools<81.0",
 ]
