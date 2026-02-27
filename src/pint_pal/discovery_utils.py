@@ -416,6 +416,8 @@ def chromatic_noise_block(
             ),
             name=name
             )
+    else:
+        raise ValueError("Invalid *basis* specified for chromatic noise. Supported basis types: ['fourier']")
     return chrom_gp
 
 def solar_wind_noise_block(
