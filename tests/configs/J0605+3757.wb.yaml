@@ -23,15 +23,28 @@ dmx:  # control dmx windowing/fixing
   max-sw-delay: 0.1 # finer binning when solar wind delay > threshold (us)
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 
-noise_run:
   model:
-      inc_rn: true
-      inc_dmgp: false
-      inc_chromgp: false
-  inference:
-     likelihood: enterprise
-     sampler: PTMCMCSampler
-     n_iter: 200000
+    timing_model:
+      svd: true
+      tm_marg: false
+    white_noise:
+      gp_ecorr: false
+      tn_equad: true
+      include_ecorr: true
+    red_noise:
+      basis: fourier
+      Nfreqs: 40
+      prior: powerlaw
+    dm_noise:
+      basis: fourier
+      Nfreqs: 100
+      prior: powerlaw
+    solar_wind:
+      basis: interpolation
+      basis_nodes: null  ### later we will pass in SW edge midpoints array
+      prior: square_exponential
+      interp_kind: linear
+    chromatic_noise: False
 
 intermediate-results: # use results from previous runs
   #noise-dir: /nanograv/share/15yr/timing/intermediate/20221021.Noise.wb.a8ff4ddc/
