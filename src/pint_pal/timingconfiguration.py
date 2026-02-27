@@ -129,11 +129,12 @@ class TimingConfiguration:
     def get_free_params(self, fitter: pint.fitter.Fitter):
         """ Return list of free parameters """
         free_params = self.config['free-params']
+        retval = free_params[:] # copy list, do not write over the data
         if 'free-dmx' in self.config.keys() and self.config['free-dmx']:
-            free_params += [p for p in fitter.model.params if p.startswith("DMX_")]
+            retval += [p for p in fitter.model.params if p.startswith("DMX_")]
         if 'free-jumps' in self.config.keys():
-            free_params += self.get_free_jumps(fitter=fitter, convert_to_indices=True)
-        return free_params
+            retval += self.get_free_jumps(fitter=fitter, convert_to_indices=True)
+        return retval
 
     def get_free_jumps(self, fitter: pint.fitter.Fitter | None = None, convert_to_indices: bool = False):
         """
@@ -154,9 +155,9 @@ class TimingConfiguration:
         retval = None
         if 'free-jumps' in self.config.keys():
             free_jumps = self.config['free-jumps']
-            retval = [] # new list, do not write over the data
+            retval = free_jumps[:] # copy list, do not write over the data
         
-            for free_jump in free_jumps:
+            for i, free_jump in enumerate(free_jumps):
                 flag, value = free_jump
                 if convert_to_indices:
                     pint_jumps = fitter.model.jumps
@@ -164,12 +165,12 @@ class TimingConfiguration:
                     for jump in pint_jumps:
                         if fitter.model[jump].key == flag and fitter.model[jump].key_value[0] == value: #assumes only one key_value
                             found = True
-                            retval.append(jump)
+                            retval[i] = jump
                             break
                     if not found:
                         raise KeyError("JUMP {flag} {value} not found in timing model.")
                 else:
-                    retval.append(f"JUMP {flag} {value}")
+                    retval[i] = f"JUMP {flag} {value}"
 
         return retval
 
