@@ -126,12 +126,54 @@ class TimingConfiguration:
             return os.path.join(self.par_directory, self.config['compare-model'])
         return None
 
-    def get_free_params(self, fitter):
-        """Return list of free parameters"""
-        if self.config["free-dmx"]:
-            return self.config['free-params'] + [p for p in fitter.model.params if p.startswith("DMX_")]
-        else:
-            return self.config['free-params']
+    def get_free_params(self, fitter: pint.fitter.Fitter):
+        """ Return list of free parameters """
+        free_params = self.config['free-params']
+        retval = free_params[:] # copy list, do not write over the data
+        if 'free-dmx' in self.config.keys() and self.config['free-dmx']:
+            retval += [p for p in fitter.model.params if p.startswith("DMX_")]
+        if 'free-jumps' in self.config.keys():
+            retval += self.get_free_jumps(fitter=fitter, convert_to_indices=True)
+        return retval
+
+    def get_free_jumps(self, fitter: pint.fitter.Fitter | None = None, convert_to_indices: bool = False):
+        """
+        Return list of free JUMPs
+
+        Parameters
+        ----------
+        fitter: pint.fitter.Fitter, default=None
+            Fitter object used if convert_to_indices==True. See below. 
+        convert_to_indices : bool, default=False
+            Returns JUMPs in the format JUMP1, JUMP2, etc., rather than JUMP -flag flag_value.
+            fitter cannot be None as it needs to reference this object. If it is None, the parameter is taken to be False regardless of how it was set.
+
+        """
+        if fitter is None:
+            convert_to_indices = False
+
+        retval = None
+        if 'free-jumps' in self.config.keys():
+            free_jumps = self.config['free-jumps']
+            retval = free_jumps[:] # copy list, do not write over the data
+        
+            for i, free_jump in enumerate(free_jumps):
+                flag, value = free_jump
+                if convert_to_indices:
+                    pint_jumps = fitter.model.jumps
+                    found = False
+                    for jump in pint_jumps:
+                        if fitter.model[jump].key == flag and fitter.model[jump].key_value[0] == value: #assumes only one key_value
+                            found = True
+                            retval[i] = jump
+                            break
+                    if not found:
+                        raise KeyError("JUMP {flag} {value} not found in timing model.")
+                else:
+                    retval[i] = f"JUMP {flag} {value}"
+
+        return retval
+
         
     #def get_febe_pairs(self):
     #    febe_list = []
