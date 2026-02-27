@@ -573,7 +573,7 @@ def model_noise(
         psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
             psr=e_psr,
             noise_dict={},
-            time_span=None,
+            tspan=None,
             model_kwargs=model_kwargs,
             return_args=False,
         )
@@ -600,7 +600,7 @@ def model_noise(
         psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
             psr=e_psr,
             noise_dict={},
-            time_span=None,
+            tspan=None,
             model_kwargs=model_kwargs,
             return_args=False,
         )
