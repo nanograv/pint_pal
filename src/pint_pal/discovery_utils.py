@@ -235,6 +235,8 @@ def red_noise_block(
     Any
         Discovery red-noise block from ``ds.makegp_fourier``.
     """
+    if tspan is None:
+        tspan = ds.getspan(psr)
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
@@ -312,6 +314,8 @@ def dm_noise_block(
     Any
         Discovery DM-noise block from ``ds.makegp_fourier``.
     """
+    if tspan is None:
+        tspan = ds.getspan(psr)
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
@@ -392,6 +396,8 @@ def chromatic_noise_block(
     Any
         Discovery chromatic-noise block from ``ds.makegp_fourier``.
     """
+    if tspan is None:
+        tspan = ds.getspan(psr)
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
@@ -469,6 +475,8 @@ def solar_wind_noise_block(
         (Fourier basis) or ``ds_solar.makegp_timedomain_solar_dm``
         (interpolation basis).
     """
+    if tspan is None:
+        tspan = ds.getspan(psr)
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
