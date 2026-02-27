@@ -296,7 +296,7 @@ def dm_noise_block(
     Nfreqs : int, optional
         Number of Fourier frequencies. Default is 100.
     logmode : int, optional
-        Log-binning mode for hybrid log/linear Fourier bases. Default is -1.
+        Log-binning mode for hybrid log/linear Fourier bases. Default is 2.
     f_min_frac : float, optional
         Fractional minimum Fourier frequency for hybrid log/linear bases
         (scaled to an absolute frequency using ``tspan``). Default is None.
