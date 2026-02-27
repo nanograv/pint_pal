@@ -570,10 +570,12 @@ def model_noise(
     ##########################################################
     elif likelihood == "discovery" and sampler == 'NUTS':
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
+        # make outdir here to expose directory issues before sampling
+        os.makedirs(outdir, exist_ok=True)
         psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
             psr=e_psr,
             noise_dict={},
-            time_span=None,
+            tspan=None,
             model_kwargs=model_kwargs,
             return_args=False,
         )
@@ -600,7 +602,7 @@ def model_noise(
         psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
             psr=e_psr,
             noise_dict={},
-            time_span=None,
+            tspan=None,
             model_kwargs=model_kwargs,
             return_args=False,
         )
@@ -609,6 +611,8 @@ def model_noise(
         prior_dict.update(pint_pal_priors)
         logL = disco_utils.make_numpyro_model(psl.logL, prior_dict)
         if not return_sampler_without_sampling:
+            # make outdir here to expose directory issues before sampling
+            os.makedirs(outdir, exist_ok=True)
             params = sorted(psl.logL.params)
             # reparameterize white noise since they have the largest gradients !
             repar_params = [p for p in params if 'efac' in p or 'equad' in p or 'ecorr' in p]
@@ -641,9 +645,10 @@ def model_noise(
                 difference_threshold = sampler_kwargs.get('difference_threshold', 5.0),
                 max_num_batches = sampler_kwargs.get('max_num_batches', 500),
                 diagnostics = sampler_kwargs.get('diagnostics', True),
+                outdir = outdir,
+                file_prefix = e_psr.name,
             )
             # write map params to file
-            os.makedirs(outdir, exist_ok=True)
             with open(os.path.join(outdir, f"{e_psr.name}_map_params.json"), "w") as f:
                 json.dump({k: float(v) for k, v in map_params.items()}, f, indent=4)
             try:

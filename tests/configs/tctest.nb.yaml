@@ -34,15 +34,28 @@ outlier: # control outlier analysis runs
   n-burn: 1000
   n-samples: 20000
 
-noise_run:
   model:
-      inc_rn: true
-      inc_dmgp: false
-      inc_chromgp: false
-  inference:
-     likelihood: enterprise
-     sampler: PTMCMCSampler
-     n_iter: 200000
+    timing_model:
+      svd: true
+      tm_marg: false
+    white_noise:
+      gp_ecorr: false
+      tn_equad: true
+      include_ecorr: true
+    red_noise:
+      basis: fourier
+      Nfreqs: 40
+      prior: powerlaw
+    dm_noise:
+      basis: fourier
+      Nfreqs: 100
+      prior: powerlaw
+    solar_wind:
+      basis: interpolation
+      basis_nodes: null  ### later we will pass in SW edge midpoints array
+      prior: square_exponential
+      interp_kind: linear
+    chromatic_noise: False
 
 intermediate-results: # use results from previous runs
   #noise-dir: /nanograv/share/15yr/timing/intermediate/20220301.Noise.nb.ac12e98/
