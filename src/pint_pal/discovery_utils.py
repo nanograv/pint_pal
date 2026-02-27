@@ -46,6 +46,43 @@ log.remove()
 log.add(sys.stderr, colorize=False, enqueue=True)
 log.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices")
 
+def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type):
+    "Convoluted helper function for setting log/lin Fourier bases of different types"
+    if nlog > 0:
+        if noise_type == 'red':
+            return lambda pulsar, comp, T : ds.log_fourierbasis(
+                psr, T=tspan, logmode=logmode,
+                f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                )
+        elif noise_type == 'dm':
+            return lambda pulsar, comp, T : ds.log_dm_fourierbasis(
+                psr, T=tspan, logmode=logmode,
+                f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                )
+        elif noise_type == 'chromatic':
+            return lambda pulsar, comp, T : ds.log_free_chromatic_fourierbasis(
+                psr, T=tspan, logmode=logmode,
+                f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                )
+        elif noise_type == 'solar':
+            return lambda pulsar, comp, T : ds_solar.log_solardm_fourierbasis(
+                psr, T=tspan, logmode=logmode,
+                f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                )  
+    elif nlog == 0:
+        if noise_type == 'red':
+            return ds.fourierbasis
+        elif noise_type == 'dm':
+            return ds.dmfourierbasis
+        elif noise_type == 'chromatic':
+            return ds.dmfourierbasis_alpha
+        elif noise_type == 'solar_wind':
+            return ds_solar.fourierbasis_solar_dm
+    else:
+        raise ValueError(f"Invalid nlog value in {noise_type} model. Must be a non-negative integer.")
+    
+
+
 
 def timing_model_block(
         psr: Any,
@@ -68,7 +105,7 @@ def timing_model_block(
     Returns
     -------
     Any
-        Discovery timing-model GP block.
+        Discovery timing-model GP block from ``ds.makegp_timing``.
     """
     return ds.makegp_timing(psr, svd=svd, variable=not tm_marg)
 
@@ -90,9 +127,10 @@ def white_noise_block(
     noise_dict : dict, optional
         Noise parameter dictionary. Default is empty dict.
     include_ecorr : bool, optional
-        Whether to include ECORR terms. Default is True.
+        Whether to include ECORR terms in the measurement model. Default is True.
     gp_ecorr : bool, optional
-        Whether to include GP ECORR terms. Default is False.
+        Placeholder to keep a shared interface with other block builders.
+        This argument is not used in this function. Default is False.
     tn_equad : bool, optional
         Whether to include EQUAD terms. Default is True.
     selection : Callable, optional
@@ -101,7 +139,7 @@ def white_noise_block(
     Returns
     -------
     Any
-        Discovery white-noise block.
+        Discovery white-noise block from ``ds.makenoise_measurement``.
     """
     return ds.makenoise_measurement(
         psr,
@@ -130,11 +168,11 @@ def gp_ecorr_block(
     noise_dict : dict, optional
         Noise parameter dictionary. Default is empty dict.
     include_ecorr : bool, optional
-        Unused placeholder to match white-noise interface.
+        Unused placeholder to match ``white_noise_block`` interface.
     gp_ecorr : bool, optional
-        Unused placeholder to match white-noise interface.
+        Unused placeholder to match ``white_noise_block`` interface.
     tn_equad : bool, optional
-        Unused placeholder to match white-noise interface.
+        Unused placeholder to match ``white_noise_block`` interface.
     selection : Callable, optional
         Backend selection function. Default is discovery.selection_backend_flags.
     gp_ecorr_name : str, optional
@@ -143,7 +181,7 @@ def gp_ecorr_block(
     Returns
     -------
     Any
-        Discovery GP ECORR block.
+        Discovery GP ECORR block from ``ds.makegp_ecorr``.
     """
     return ds.makegp_ecorr(
         psr,
@@ -154,10 +192,13 @@ def gp_ecorr_block(
 
 def red_noise_block(
         psr: Any,
+        tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        time_span: Optional[float] = None,
+        logmode=2,
+        f_min_frac=1/5,
+        nlog=0,
         name: str = 'red_noise',
         ) -> Any:
     """
@@ -167,28 +208,57 @@ def red_noise_block(
     ----------
     psr : Any
         Pulsar object.
+    tspan : float, optional
+        Total data span passed to Fourier basis construction. Default is None.
     basis : str, optional
-        Basis type for the GP. Default is "fourier".
+        Basis type for the GP. Currently only ``"fourier"`` is implemented.
+        Default is ``"fourier"``.
     prior : str, optional
-        Prior type for the GP amplitude. Default is "powerlaw".
+        Prior type or callable prior for the GP amplitude. Supported string
+        values are ``"powerlaw"``, ``"broken_powerlaw"``, and
+        ``"freespectrum"``. Default is ``"powerlaw"``.
     Nfreqs : int, optional
         Number of Fourier frequencies. Default is 100.
-    time_span : float, optional
-        Time span for the Fourier basis. Default is None.
+    logmode : int, optional
+        Log-binning mode for hybrid log/linear Fourier bases. Default is -1.
+    f_min : float, optional
+        Minimum Fourier frequency for hybrid log/linear bases. Default is None.
+    nlog : int, optional
+        Number of logarithmically spaced frequencies. If ``nlog > 0``,
+        ``_select_fourier_basis`` returns a log/linear helper basis.
+        Default is 0.
     name : str, optional
         Name of the noise component. Default is "red_noise".
 
     Returns
     -------
     Any
-        Discovery red-noise block.
+        Discovery red-noise block from ``ds.makegp_fourier``.
     """
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
+        elif prior == 'broken_powerlaw':
+            prior = ds.broken_powerlaw
+        elif prior == 'freespectrum':
+            prior = ds.freespectrum
+        elif callable(prior):
+            pass # pass a callable prior
         else:
-            raise ValueError("Invalid prior specified for solar wind noise. Must be 'powerlaw'.")
-        rn = ds.makegp_fourier(psr, prior, Nfreqs, T=time_span, name=name)
+            raise ValueError("Invalid *prior* specified for Fourier basis red noise. Try one of: ['powerlaw', 'broken_powerlaw', 'freespectrum']")
+
+        rn = ds.makegp_fourier(
+            psr,
+            prior,
+            Nfreqs,
+            T=tspan,
+            fourierbasis=_select_fourier_basis(
+                psr, Nfreqs, tspan, logmode,
+                f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
+                nlog, noise_type='red'
+            ),
+            name=name
+            )
     elif basis == 'interpolation':
         raise NotImplementedError("Interpolation basis for solar wind noise is not yet implemented.")
     else:
@@ -198,10 +268,13 @@ def red_noise_block(
 
 def dm_noise_block(
         psr: Any,
+        tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        time_span: Optional[float] = None,
+        logmode=2,
+        f_min_frac=1/5,
+        nlog=0,
         name: str = 'dm_gp',
         ) -> Any:
     """
@@ -211,30 +284,59 @@ def dm_noise_block(
     ----------
     psr : Any
         Pulsar object.
+    tspan : float, optional
+        Total data span passed to Fourier basis construction. Default is None.
     basis : str, optional
-        Basis type for the GP. Default is "fourier".
+        Basis type for the GP. Currently only ``"fourier"`` is implemented.
+        Default is ``"fourier"``.
     prior : str, optional
-        Prior type for the GP amplitude. Default is "powerlaw".
+        Prior type or callable prior for the GP amplitude. Supported string
+        values are ``"powerlaw"``, ``"broken_powerlaw"``, and
+        ``"freespectrum"``. Default is ``"powerlaw"``.
     Nfreqs : int, optional
         Number of Fourier frequencies. Default is 100.
-    time_span : float, optional
-        Time span for the Fourier basis. Default is None.
+    logmode : int, optional
+        Log-binning mode for hybrid log/linear Fourier bases. Default is -1.
+    f_min : float, optional
+        Minimum Fourier frequency for hybrid log/linear bases. Default is None.
+    nlog : int, optional
+        Number of logarithmically spaced frequencies. If ``nlog > 0``,
+        ``_select_fourier_basis`` returns a log/linear helper basis.
+        Default is 0.
     name : str, optional
         Name of the noise component. Default is "dm_gp".
 
     Returns
     -------
     Any
-        Discovery DM-noise block.
+        Discovery DM-noise block from ``ds.makegp_fourier``.
     """
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
+        elif prior == 'broken_powerlaw':
+            prior = ds.broken_powerlaw
+        elif prior == 'freespectrum':
+            prior = ds.freespectrum
+        elif callable(prior):
+            pass # pass a callable prior
         else:
-            raise ValueError("Invalid prior specified for dm noise. Must be 'powerlaw'.")
-        dmgp = ds.makegp_fourier(psr, prior, Nfreqs, T=time_span, name=name, fourierbasis=ds.dmfourierbasis)
+            raise ValueError("Invalid *prior* specified for Fourier basis DM noise. Try one of: ['powerlaw', 'broken_powerlaw', 'freespectrum']")
+
+        dmgp = ds.makegp_fourier(
+            psr,
+            prior,
+            Nfreqs,
+            T=tspan,
+            fourierbasis=_select_fourier_basis(
+                psr, Nfreqs, tspan, logmode,
+                f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
+                nlog, noise_type='dm'
+            ),
+            name=name
+            )
     elif basis == 'interpolation':
-        raise NotImplementedError("Interpolation basis for dm noise is not yet implemented.")
+        raise NotImplementedError("Time domain models for dm noise are not yet implemented.")
     else:
         raise ValueError("Invalid basis specified for dm noise. Must be 'fourier' or 'interpolation'.")
 
@@ -242,10 +344,13 @@ def dm_noise_block(
 
 def chromatic_noise_block(
         psr: Any,
+        tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        time_span: Optional[float] = None,
+        logmode=2,
+        f_min_frac=1/5,
+        nlog=0,
         name: str = 'chrom_gp',
         chromatic_idx: str = 'vary',
         ) -> Any:
@@ -256,35 +361,74 @@ def chromatic_noise_block(
     ----------
     psr : Any
         Pulsar object.
-    time_span : float, optional
-        Time span for the Fourier basis. Default is None.
+    basis : str, optional
+        Basis type for the GP. Currently only ``"fourier"`` is implemented.
+        Default is ``"fourier"``.
+    prior : str, optional
+        Prior type or callable prior for the GP amplitude. Supported string
+        values are ``"powerlaw"``, ``"broken_powerlaw"``, and
+        ``"freespectrum"``. Default is ``"powerlaw"``.
+    Nfreqs : int, optional
+        Number of Fourier frequencies. Default is 100.
+    tspan : float, optional
+        Total data span passed to Fourier basis construction. Default is None.
+    logmode : int, optional
+        Log-binning mode for hybrid log/linear Fourier bases. Default is -1.
+    f_min : float, optional
+        Minimum Fourier frequency for hybrid log/linear bases. Default is None.
+    nlog : int, optional
+        Number of logarithmically spaced frequencies. If ``nlog > 0``,
+        ``_select_fourier_basis`` returns a log/linear helper basis.
+        Default is 0.
+    name : str, optional
+        Name of the noise component. Default is ``"chrom_gp"``.
     chromatic_idx : str, optional
-        Chromatic index handling mode. Default is "vary".
+        Reserved argument for chromatic index handling mode. Currently not used
+        inside this function. Default is ``"vary"``.
 
     Returns
     -------
     Any
-        Discovery chromatic-noise block.
+        Discovery chromatic-noise block from ``ds.makegp_fourier``.
     """
-    chrom_gp = ds.makegp_fourier(
-        psr,
-        ds.powerlaw,
-        Nfreqs,
-        T=time_span,
-        name='chrom_gp',
-        basis=ds.dmfourerbasis_alpha
-    )
+    if basis == 'fourier':
+        if prior == 'powerlaw':
+            prior = ds.powerlaw
+        elif prior == 'broken_powerlaw':
+            prior = ds.broken_powerlaw
+        elif prior == 'freespectrum':
+            prior = ds.freespectrum
+        elif callable(prior):
+            pass # pass a callable prior
+        else:
+            raise ValueError("Invalid *prior* specified for Fourier basis chromatic noise. Try one of: ['powerlaw', 'broken_powerlaw', 'freespectrum']")
+
+        chrom_gp = ds.makegp_fourier(
+            psr,
+            prior,
+            Nfreqs,
+            T=tspan,
+            fourierbasis=_select_fourier_basis(
+                psr, Nfreqs, tspan, logmode,
+                f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
+                nlog, noise_type='chromatic'
+            ),
+            name=name
+            )
     return chrom_gp
 
 def solar_wind_noise_block(
         psr: Any,
+        tspan: Optional[float] = None,
         basis: str = 'fourier',
         basis_nodes: Optional[np.ndarray] = None,
         interp_dt: Optional[float] = 30.0,
         interp_kind: str = 'linear',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        time_span: Optional[float] = None,
+        logmode=2,
+        f_min_frac=1/5,
+        nlog=0,
         name: str = 'sw_gp',
         ) -> Any:
     """
@@ -310,7 +454,7 @@ def solar_wind_noise_block(
         Default is "powerlaw".
     Nfreqs : int, optional
         Number of Fourier frequencies. Default is 100. Only used for Fourier basis.
-    time_span : float, optional
+    tspan : float, optional
         Time span for the Fourier basis. Default is None.
     name : str, optional
         Name of the noise component. Default is "red_noise".
@@ -318,14 +462,34 @@ def solar_wind_noise_block(
     Returns
     -------
     Any
-        Discovery solar-wind noise block.
+        Discovery solar-wind noise block from either ``ds.makegp_fourier``
+        (Fourier basis) or ``ds_solar.makegp_timedomain_solar_dm``
+        (interpolation basis).
     """
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
+        elif prior == 'broken_powerlaw':
+            prior = ds.broken_powerlaw
+        elif prior == 'freespectrum':
+            prior = ds.freespectrum
+        elif callable(prior):
+            pass # pass a callable prior
         else:
-            raise ValueError("Invalid prior specified for solar wind noise. Must be 'powerlaw'.")
-        swgp = ds.makegp_fourier(psr, prior, Nfreqs, T=time_span, basis=ds_solar.fourierbasis_solar_dm, name=name)
+            raise ValueError("Invalid *prior* specified for Fourier basis solar wind noise. Try one of: ['powerlaw', 'broken_powerlaw', 'freespectrum']")
+
+        swgp = ds.makegp_fourier(
+            psr,
+            prior,
+            Nfreqs,
+            T=tspan,
+            fourierbasis=_select_fourier_basis(
+                psr, Nfreqs, tspan, logmode,
+                f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
+                nlog, noise_type='solar'
+            ),
+            name=name
+            )
     elif basis == 'interpolation':
         if basis_nodes is None:
             basis_nodes = np.arange(psr.toas.min()/86400, psr.toas.max()/86400, interp_dt)
@@ -344,9 +508,9 @@ def solar_wind_noise_block(
         elif prior == 'matern':
             prior_kernel = ds_solar.matern_kernel()
         elif prior == 'powerlaw':
-            raise ValueError("Power-law prior is not supported for interpolation basis solar wind noise. Please choose 'ridge', 'square_exponential', 'quasi_periodic', or 'matern'.")
+            raise ValueError("Power-law prior is not supported for time domain solar wind noise. Must be in ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
         else: 
-            raise ValueError("Invalid prior specified for interpolation basis solar wind noise. Must be 'ridge', 'square_exponential', 'quasi_periodic', or 'matern'.")
+            raise ValueError("Invalid prior specified for time domain solar wind noise. Must be in ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
         swgp = ds_solar.makegp_timedomain_solar_dm(
             psr,
             covariance=prior_kernel,
@@ -364,7 +528,7 @@ def solar_wind_noise_block(
 def make_single_pulsar_noise_likelihood_discovery(
         psr: Any,
         noise_dict: Optional[Dict[str, Any]] = None,
-        time_span: Optional[float] = None,
+        tspan: Optional[float] = None,
         model_kwargs: Optional[Dict[str, Any]] = None,
         return_args: bool = False,
 ) -> Union[ds.PulsarLikelihood, Sequence[Any]]:
@@ -377,7 +541,7 @@ def make_single_pulsar_noise_likelihood_discovery(
         Pulsar object.
     noise_dictionary : dict, optional
         Dictionary of noise parameters.
-    time_span : float, optional
+    tspan : float, optional
         Time span for the noise model.
     model_kwargs : dict, optional
         Dictionary of model keyword arguments.
@@ -391,15 +555,27 @@ def make_single_pulsar_noise_likelihood_discovery(
     """
     if noise_dict is None:
         noise_dict = {}
-    if time_span is None:
-        time_span = ds.getspan([psr])
+    if tspan is None:
+        tspan = ds.getspan([psr])
     # if marg_ne:
     #     psr.Mmat = np.hstack([psr.Mmat, np.array([ds.make_solardm(psr)(1.0)]).T])
     model_kwargs.update({ky: False for ky in ['timing_model', 'white_noise', 'red_noise', 'dm_noise', 'chromatic_noise', 'solar_wind'] if ky not in model_kwargs.keys()})
+    # model checks -- update your configs !!
+    if not model_kwargs['timing_model']:
+        log.error("Timing model must be included in the `noise_run` config block for the likelihood to be properly constructed.")
+    if not model_kwargs['white_noise']:
+        log.error("White noise must be included in the `noise_run` config block for the likelihood to be properly constructed.")
+    if not model_kwargs['red_noise']:
+        log.warn("Red noise is not included in the `noise_run` config block. Proceed with caution.")       
+    ## add pulsar's time spans to model for signals where not included
+    ## this allows individual signals to be passed specific timespans
+    for name, mod in model_kwargs.items():
+        if mod and name in ['red_noise', 'dm_noise', 'chromatic_noise', 'solar_wind']:
+            if 'tspan' not in list(mod.keys()):
+                model_kwargs[name].update({'tspan': tspan})
     ## timing model
     args = [psr.residuals]
     if model_kwargs['timing_model']:
-
         args.append(
             timing_model_block(psr, **model_kwargs['timing_model'])
         )
