@@ -5,6 +5,7 @@ These tests are performed on YAML configuration files
 '''
 import pytest
 from pathlib import Path
+from pint.fitter import DownhillGLSFitter
 from pint_pal.timingconfiguration import TimingConfiguration
 
 
@@ -31,6 +32,14 @@ def PSR():
 def test_get_source(tc, PSR):
     print(PSR)
     assert tc.get_source() == PSR
+
+def test_get_free_params(tc):
+    mo, to = tc.get_model_and_toas()
+    fo = DownhillGLSFitter(to, mo)
+    assert "ELONG" in tc.get_free_params(fo)
+    assert "JUMP1" in tc.get_free_params(fo)
+    assert tc.get_free_jumps()[0] == "JUMP -fe Rcvr_800"
+    assert tc.get_free_jumps(fitter=fo, convert_to_indices=True)[0] == "JUMP1"
 
 def test_get_model_and_toas(tc, PSR):
     mo, to = tc.get_model_and_toas()
