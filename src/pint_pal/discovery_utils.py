@@ -20,6 +20,7 @@ import arviz as az
 from discovery import matrix, selection_backend_flags
 from discovery import prior as ds_prior
 from discovery.pulsar import save_chain
+from discovery import solar as ds_solar
 import numpy as np
 import optax
 import jax
@@ -34,10 +35,6 @@ from numpyro.infer.elbo import ELBO
 from numpyro.infer.svi import SVIState
 #from numpyro.infer import SVI, SVIState
 from IPython.display import display, clear_output
-
-
-## copied from discovery to be deleted later
-from pint_pal import solar as ds_solar
 
 
 warnings.filterwarnings("ignore")
