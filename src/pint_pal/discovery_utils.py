@@ -262,9 +262,9 @@ def red_noise_block(
             name=name
             )
     elif basis == 'interpolation':
-        raise NotImplementedError("Interpolation basis for solar wind noise is not yet implemented.")
+        raise NotImplementedError("Interpolation basis for red noise is not yet implemented.")
     else:
-        raise ValueError("Invalid basis specified for solar wind noise. Must be 'fourier' or 'interpolation'.")
+        raise ValueError("Invalid basis specified for red noise. Must be 'fourier' or 'interpolation'.")
 
     return rn
 
