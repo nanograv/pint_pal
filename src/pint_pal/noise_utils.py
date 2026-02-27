@@ -570,6 +570,8 @@ def model_noise(
     ##########################################################
     elif likelihood == "discovery" and sampler == 'NUTS':
         log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
+        # make outdir here to expose directory issues before sampling
+        os.makedirs(outdir, exist_ok=True)
         psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
             psr=e_psr,
             noise_dict={},
@@ -927,7 +929,7 @@ def add_noise_to_model(
 
         rn_keys = np.array([key for key, val in noise_dict.items() if "_red_" in key])
         # this is the old convention. switching to TN convention to match DM, SW, CHROM noises.
-        #rn_comp.RNAMP.quantity = convert_to_RNAMP(
+	    #rn_comp.RNAMP.quantity = convert_to_RNAMP(
         #    noise_dict[psr_name + "_red_noise_log10_A"]
         #)
         rn_comp.TNREDAMP.quantity = noise_dict[psr_name + "_red_noise_log10_A"]
