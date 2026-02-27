@@ -49,12 +49,12 @@ log.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices
 def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type):
     "Convoluted helper function for setting log/lin Fourier bases of different types"
     if nlog > 0:
-        if noise_type == 'red':
+        if noise_type == 'red_noise':
             return lambda pulsar, comp, T : ds.log_fourierbasis(
                 psr, T=tspan, logmode=logmode,
                 f_min=f_min, nlin=Nfreqs, nlog=nlog,
                 )
-        elif noise_type == 'dm':
+        elif noise_type == 'dm_noise':
             return lambda pulsar, comp, T : ds.log_dm_fourierbasis(
                 psr, T=tspan, logmode=logmode,
                 f_min=f_min, nlin=Nfreqs, nlog=nlog,
@@ -64,15 +64,15 @@ def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type):
                 psr, T=tspan, logmode=logmode,
                 f_min=f_min, nlin=Nfreqs, nlog=nlog,
                 )
-        elif noise_type == 'solar':
+        elif noise_type == 'solar_wind':
             return lambda pulsar, comp, T : ds_solar.log_solardm_fourierbasis(
                 psr, T=tspan, logmode=logmode,
                 f_min=f_min, nlin=Nfreqs, nlog=nlog,
                 )  
     elif nlog == 0:
-        if noise_type == 'red':
+        if noise_type == 'red_noise':
             return ds.fourierbasis
-        elif noise_type == 'dm':
+        elif noise_type == 'dm_noise':
             return ds.dmfourierbasis
         elif noise_type == 'chromatic':
             return ds.dmfourierbasis_alpha
@@ -255,7 +255,7 @@ def red_noise_block(
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
-                nlog, noise_type='red'
+                nlog, noise_type='red_noise'
             ),
             name=name
             )
@@ -324,7 +324,7 @@ def dm_noise_block(
         else:
             raise ValueError("Invalid *prior* specified for Fourier basis DM noise. Try one of: ['powerlaw', 'broken_powerlaw', 'freespectrum']")
 
-        dmgp = ds.makegp_fourier(
+        dm_gp = ds.makegp_fourier(
             psr,
             prior,
             Nfreqs,
@@ -332,7 +332,7 @@ def dm_noise_block(
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
-                nlog, noise_type='dm'
+                nlog, noise_type='dm_noise'
             ),
             name=name
             )
@@ -341,7 +341,7 @@ def dm_noise_block(
     else:
         raise ValueError("Invalid basis specified for dm noise. Must be 'fourier' or 'interpolation'.")
 
-    return dmgp
+    return dm_gp
 
 def chromatic_noise_block(
         psr: Any,
@@ -481,7 +481,7 @@ def solar_wind_noise_block(
         else:
             raise ValueError("Invalid *prior* specified for Fourier basis solar wind noise. Try one of: ['powerlaw', 'broken_powerlaw', 'freespectrum']")
 
-        swgp = ds.makegp_fourier(
+        sw_gp = ds.makegp_fourier(
             psr,
             prior,
             Nfreqs,
@@ -489,7 +489,7 @@ def solar_wind_noise_block(
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
-                nlog, noise_type='solar'
+                nlog, noise_type='solar_wind'
             ),
             name=name
             )
@@ -514,7 +514,7 @@ def solar_wind_noise_block(
             raise ValueError("Power-law prior is not supported for time domain solar wind noise. Must be in ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
         else: 
             raise ValueError("Invalid prior specified for time domain solar wind noise. Must be in ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
-        swgp = ds_solar.makegp_timedomain_solar_dm(
+        sw_gp = ds_solar.makegp_timedomain_solar_dm(
             psr,
             covariance=prior_kernel,
             dt=None,
@@ -526,7 +526,7 @@ def solar_wind_noise_block(
     else:
         raise ValueError("Invalid basis specified for solar wind noise. Must be 'fourier' or 'interpolation'.")
 
-    return swgp
+    return sw_gp
 
 def make_single_pulsar_noise_likelihood_discovery(
         psr: Any,
