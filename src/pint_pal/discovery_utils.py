@@ -1258,8 +1258,9 @@ def run_svi_early_stopping(
         # Early stopping logic
         log.info(f"{current_val_loss=}")
         log.info(f"{best_val_loss=}")
-        difference = current_val_loss - best_val_loss if batch_num >= 1 else -np.inf
-        if difference < - difference_threshold:
+        # difference = current_val_loss - best_val_loss if batch_num >= 1 else -np.inf
+        difference = (current_val_loss - best_val_loss) / best_val_loss if batch_num >= 1 else -np.inf
+        if difference < difference_threshold:
             log.info(
                 f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f} {difference=}. Saving state.",
             )
