@@ -582,6 +582,7 @@ def model_noise(
         prior_dict = ds_pdict.copy()
         pint_pal_priors = json.load(open(os.path.join(os.path.dirname(__file__), "discovery_priors.json")))
         prior_dict.update(pint_pal_priors)
+        _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs)
         logL = disco_utils.make_numpyro_model(psl.logL, prior_dict)
         samp = disco_utils.make_sampler_nuts(
             logL,
@@ -609,6 +610,7 @@ def model_noise(
         prior_dict = ds_pdict.copy()
         pint_pal_priors = json.load(open(os.path.join(os.path.dirname(__file__), "discovery_priors.json")))
         prior_dict.update(pint_pal_priors)
+        _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs)
         logL = disco_utils.make_numpyro_model(psl.logL, prior_dict)
         if not return_sampler_without_sampling:
             # make outdir here to expose directory issues before sampling
@@ -685,6 +687,33 @@ def convert_to_RNAMP(value):
     Utility function to convert enterprise RN amplitude to tempo2/PINT parfile RN amplitude
     """
     return (86400.0 * 365.24 * 1e6) / (2.0 * np.pi * np.sqrt(3.0)) * 10**value
+
+
+def _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs):
+    """Update Nfreq_cutoff prior upper bounds from per-block Nfreqs settings."""
+    cutoff_prior_names = {'powerlaw_cutoff', 'psd_cutoff'}
+    cutoff_prior_keys = {
+        'red_noise': '(.*_)?red_noise_Nfreq_cutoff.*',
+        'dm_noise': '(.*_)?dm_gp_Nfreq_cutoff.*',
+        'chromatic_noise': '(.*_)?chrom_gp_Nfreq_cutoff.*',
+        'solar_wind': '(.*_)?sw_gp_Nfreq_cutoff.*',
+    }
+
+    for block_name, prior_key in cutoff_prior_keys.items():
+        block_kwargs = model_kwargs.get(block_name)
+        if not isinstance(block_kwargs, dict):
+            continue
+
+        prior_name = block_kwargs.get('prior', block_kwargs.get('psd'))
+        nfreqs = block_kwargs.get('Nfreqs')
+        if prior_name not in cutoff_prior_names or nfreqs is None or prior_key not in prior_dict:
+            continue
+
+        bounds = prior_dict[prior_key]
+        if isinstance(bounds, tuple):
+            prior_dict[prior_key] = (bounds[0], int(nfreqs))
+        else:
+            prior_dict[prior_key][1] = int(nfreqs)
 
 
 def _set_component_param_value(component, param_name, value):

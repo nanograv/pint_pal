@@ -1258,8 +1258,9 @@ def run_svi_early_stopping(
         # Early stopping logic
         log.info(f"{current_val_loss=}")
         log.info(f"{best_val_loss=}")
-        # difference = current_val_loss - best_val_loss if batch_num >= 1 else -np.inf
-        difference = (current_val_loss - best_val_loss) / best_val_loss if batch_num >= 1 else -np.inf
+        difference = current_val_loss - best_val_loss if batch_num >= 1 else -np.inf
+        # difference = (current_val_loss - best_val_loss) / best_val_loss if batch_num >= 1 else -np.inf
+        print("difference =", difference)
         if difference < difference_threshold:
             log.info(
                 f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f} {difference=}. Saving state.",
@@ -1289,10 +1290,13 @@ def run_svi_early_stopping(
     if final_params is None:
         final_params = svi.get_params(best_svi_state)
 
-    final_params = {
-        (name[:-9] if name.endswith("_auto_loc") else name): value
-        for name, value in final_params.items()
-    }
+    cleaned_final_params = {}
+    for name, value in final_params.items():
+        clean_name = name[:-9] if name.endswith("_auto_loc") else name
+        if clean_name.endswith("_base"):
+            clean_name = clean_name[:-5]
+        cleaned_final_params[clean_name] = value
+    final_params = cleaned_final_params
 
     if diagnostics:
         return final_params, (svi_states_list, global_norm_grads_list)
