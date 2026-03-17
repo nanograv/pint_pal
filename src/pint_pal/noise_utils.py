@@ -873,11 +873,8 @@ def add_noise_to_model(
             log.info('Adding Powerlaw DM GP noise as PLDMNoise to par file')
             # Add the ML RN parameters to their component
             dm_comp = pm.noise_model.PLDMNoise()
-            dm_keys = np.array([key for key, val in noise_dict.items() if "_red_" in key])
-            dm_comp.TNDMAMP.quantity = convert_to_RNAMP(
-                noise_dict[psr_name + "_dm_gp_log10_A"]
-            )
-            dm_comp.TNDMGAM.quantity = -1 * noise_dict[psr_name + "_dm_gp_gamma"]
+            dm_comp.TNDMAMP.quantity = noise_dict[psr_name + "_dm_gp_log10_A"]
+            dm_comp.TNDMGAM.quantity = noise_dict[psr_name + "_dm_gp_gamma"]
             ##### FIXMEEEEEEE : need to figure out some way to softcode this
             dm_comp.TNDMC.quantitity = 100
             # Add red noise to the timing model
@@ -896,10 +893,8 @@ def add_noise_to_model(
             # Add the ML RN parameters to their component
             chrom_comp = pm.noise_model.PLCMNoise()
             # chrom_keys = np.array([key for key, val in noise_dict.items() if "_chrom_gp_" in key])
-            chrom_comp.TNCMAMP.quantity = convert_to_RNAMP(
-                noise_dict[psr_name + "_chrom_gp_log10_A"]
-            )
-            chrom_comp.TNCMGAM.quantity = -1 * noise_dict[psr_name + "_chrom_gp_gamma"]
+            chrom_comp.TNCMAMP.quantity = noise_dict[psr_name + "_chrom_gp_log10_A"]
+            chrom_comp.TNCMGAM.quantity = noise_dict[psr_name + "_chrom_gp_gamma"]
             ##### FIXMEEEEEEE : need to figure out some way to softcode this
             chrom_comp.TNCMC.quantitity = 100
             # Add red noise to the timing model
@@ -910,7 +905,7 @@ def add_noise_to_model(
             raise NotImplementedError('CMWaveXNoise not yet implemented')
             
     # Check to see if solar wind is present
-    sw_pars = [key for key in noise_pars if "sw_r2" in key]
+    sw_pars = [key for key in noise_pars if "n_earth" in key]
     if len(sw_pars) > 0:
         log.info('Adding Solar Wind Dispersion to par file')
         all_components = Component.component_types
@@ -918,14 +913,15 @@ def add_noise_to_model(
         noise = noise_class()  # Make the dispersion instance.
         model.add_component(noise, validate=False, force=False)
         # add parameters
-        if f'{psr_name}_n_earth' in sw_pars:
-            model['NE_SW'].quantity = noise_dict[f'{psr_name}_n_earth']
+        if 'n_earth' in sw_pars:
+            model['NE_SW'].quantity = noise_dict['n_earth']
             model['NE_SW'].frozen = True
+            model['SWP'] = 2
         if f'{psr_name}_sw_gp_log10_A' in sw_pars:
             sw_comp = pm.noise_model.PLSWNoise()
-            sw_comp.TNSWAMP.quantity = convert_to_RNAMP(noise_dict[f'{psr_name}_sw_gp_log10_A'])
+            sw_comp.TNSWAMP.quantity = noise_dict[f'{psr_name}_sw_gp_log10_A']
             sw_comp.TNSWAMP.frozen = True
-            sw_comp.TNSWGAM.quantity = -1.*noise_dict[f'{psr_name}_sw_gp_gamma']
+            sw_comp.TNSWGAM.quantity = noise_dict[f'{psr_name}_sw_gp_gamma']
             sw_comp.TNSWGAM.frozen = True
             # FIXMEEEEEEE : need to figure out some way to softcode this
             sw_comp.TNSWC.quantity = 10
@@ -1055,9 +1051,9 @@ def make_emp_distr(core):
     # make 2ds for various related parameter subgroups
     for group in groups.values():
         _ = [dists.append(make2d(pars,core(list(pars)))) for pars in list(itertools.combinations(group,2)) if len(group)>1]
-    # make 2d cross groups
-    _ = [[dists.append(make2d([ecr, dm], core([ecr, dm]))) for ecr in groups['ecorr']] for dm in groups['dm_gp']]
-    _ = [[dists.append(make2d([dm, chrom], core([dm, chrom]))) for dm in groups['dm_gp']] for chrom in groups['chrom_gp']]
+    # # make 2d cross groups -- returns too many empirical distributions.. to memory intensive.
+    # _ = [[dists.append(make2d([ecr, dm], core([ecr, dm]))) for ecr in groups['ecorr']] for dm in groups['dm_gp']]
+    # _ = [[dists.append(make2d([dm, chrom], core([dm, chrom]))) for dm in groups['dm_gp']] for chrom in groups['chrom_gp']]
     
     return dists
 
@@ -1072,8 +1068,8 @@ def log_single_likelihood_evaluation_time(pta, sampler_kwargs):
     [pta.get_lnlikelihood(x1[i]) for i in range(1,11)]
     end_time = time.time()
     slet = (end_time-start_time)/10
-    log.info(f"Single likelihood evaluation time is approximately {slet:.1e} seconds")
-    log.info(f"4 times {sampler_kwargs['n_iter']} likelihood evaluations will take approximately: {4*slet*float(sampler_kwargs['n_iter'])/3600/24:.2f} days")
+    log.info(f"Single likelihood evaluation time is approximately {slet:.1e} seconds. Hopefully this is < 1 second or so...")
+    #log.info(f"4 times {sampler_kwargs['n_iter']} likelihood evaluations will take approximately: {4*slet*float(sampler_kwargs['n_iter'])/3600/24:.2f} days")
 
 
 
