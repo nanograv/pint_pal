@@ -19,7 +19,9 @@ import discovery as ds
 import arviz as az
 from discovery import matrix, selection_backend_flags
 from discovery import prior as ds_prior
+from discovery import signals as ds_signals
 from discovery.pulsar import save_chain
+from discovery import solar as ds_solar
 import numpy as np
 import optax
 import jax
@@ -36,15 +38,46 @@ from numpyro.infer.svi import SVIState
 from IPython.display import display, clear_output
 
 
-## copied from discovery to be deleted later
-from pint_pal import solar as ds_solar
-
-
 warnings.filterwarnings("ignore")
 log.disable("pint")
 log.remove()
 log.add(sys.stderr, colorize=False, enqueue=True)
 log.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices")
+
+def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type):
+    "Convoluted helper function for setting log/lin Fourier bases of different types"
+    if nlog > 0:
+        if noise_type == 'red_noise':
+            return lambda pulsar, comp, T : ds.log_fourierbasis(
+                psr, T=tspan, logmode=logmode,
+                f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                )
+        elif noise_type == 'dm_noise':
+            return lambda pulsar, comp, T : ds.log_dm_fourierbasis(
+                psr, T=tspan, logmode=logmode,
+                f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                )
+        elif noise_type == 'chromatic':
+            return lambda pulsar, comp, T : ds.log_free_chromatic_fourierbasis(
+                psr, T=tspan, logmode=logmode,
+                f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                )
+        elif noise_type == 'solar_wind':
+            return lambda pulsar, comp, T : ds_solar.log_solardm_fourierbasis(
+                psr, T=tspan, logmode=logmode,
+                f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                )  
+    elif nlog == 0:
+        if noise_type == 'red_noise':
+            return ds.fourierbasis
+        elif noise_type == 'dm_noise':
+            return ds.dmfourierbasis
+        elif noise_type == 'chromatic':
+            return ds.freechromaticfourierbasis
+        elif noise_type == 'solar_wind':
+            return ds_solar.fourierbasis_solar_dm
+    else:
+        raise ValueError(f"Invalid nlog value in {noise_type} model. Must be a non-negative integer.")
 
 
 def timing_model_block(
@@ -68,7 +101,7 @@ def timing_model_block(
     Returns
     -------
     Any
-        Discovery timing-model GP block.
+        Discovery timing-model GP block from ``ds.makegp_timing``.
     """
     return ds.makegp_timing(psr, svd=svd, variable=not tm_marg)
 
@@ -90,26 +123,34 @@ def white_noise_block(
     noise_dict : dict, optional
         Noise parameter dictionary. Default is empty dict.
     include_ecorr : bool, optional
-        Whether to include ECORR terms. Default is True.
+        Whether to include ECORR terms in the measurement model. Default is True.
     gp_ecorr : bool, optional
-        Whether to include GP ECORR terms. Default is False.
+        Placeholder to keep a shared interface with other block builders.
+        This argument is not used in this function. Default is False.
     tn_equad : bool, optional
         Whether to include EQUAD terms. Default is True.
     selection : Callable, optional
         Backend selection function. Default is discovery.selection_backend_flags.
+        `None` returns white noise with no selections.
 
     Returns
     -------
     Any
-        Discovery white-noise block.
+        Discovery white-noise block from ``ds.makenoise_measurement``.
     """
-    return ds.makenoise_measurement(
-        psr,
-        tnequad=tn_equad,
-        ecorr=include_ecorr,
-        selection=selection,
-        noisedict=noise_dict,
-    )
+    if selection is None:
+        return ds.makenoise_measurement_simple(
+            psr,
+            noisedict=noise_dict,
+        )
+    else:
+        return ds.makenoise_measurement(
+            psr,
+            tnequad=tn_equad,
+            ecorr=include_ecorr,
+            selection=selection,
+            noisedict=noise_dict,
+        )
 
 def gp_ecorr_block(
         psr: Any,
@@ -130,11 +171,11 @@ def gp_ecorr_block(
     noise_dict : dict, optional
         Noise parameter dictionary. Default is empty dict.
     include_ecorr : bool, optional
-        Unused placeholder to match white-noise interface.
+        Unused placeholder to match ``white_noise_block`` interface.
     gp_ecorr : bool, optional
-        Unused placeholder to match white-noise interface.
+        Unused placeholder to match ``white_noise_block`` interface.
     tn_equad : bool, optional
-        Unused placeholder to match white-noise interface.
+        Unused placeholder to match ``white_noise_block`` interface.
     selection : Callable, optional
         Backend selection function. Default is discovery.selection_backend_flags.
     gp_ecorr_name : str, optional
@@ -143,21 +184,30 @@ def gp_ecorr_block(
     Returns
     -------
     Any
-        Discovery GP ECORR block.
+        Discovery GP ECORR block from ``ds.makegp_ecorr``.
     """
-    return ds.makegp_ecorr(
-        psr,
-        noisedict=noise_dict,
-        selection=selection,
-        gp_ecorr_name=gp_ecorr_name,
-        )
+    if selection is None:
+        return ds.makegp_ecorr_simple(
+            psr,
+            noisedict=noise_dict,
+            )
+    else:
+        return ds.makegp_ecorr(
+            psr,
+            noisedict=noise_dict,
+            selection=selection,
+            #gp_ecorr_name=gp_ecorr_name,
+            )
 
 def red_noise_block(
         psr: Any,
+        tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        time_span: Optional[float] = None,
+        logmode=2,
+        f_min_frac=1/5,
+        nlog=0,
         name: str = 'red_noise',
         ) -> Any:
     """
@@ -167,41 +217,80 @@ def red_noise_block(
     ----------
     psr : Any
         Pulsar object.
+    tspan : float, optional
+        Total data span passed to Fourier basis construction. Default is None.
     basis : str, optional
-        Basis type for the GP. Default is "fourier".
+        Basis type for the GP. Currently only ``"fourier"`` is implemented.
+        Default is ``"fourier"``.
     prior : str, optional
-        Prior type for the GP amplitude. Default is "powerlaw".
+        Prior type or callable prior for the GP amplitude. Supported string
+        values are ``"powerlaw"``, ``"powerlaw_cutoff"``,
+        ``"broken_powerlaw"``, and ``"freespectrum"``.
+        Default is ``"powerlaw"``.
     Nfreqs : int, optional
         Number of Fourier frequencies. Default is 100.
-    time_span : float, optional
-        Time span for the Fourier basis. Default is None.
+    logmode : int, optional
+        Log-binning mode for hybrid log/linear Fourier bases. Default is -1.
+    f_min : float, optional
+        Minimum Fourier frequency for hybrid log/linear bases. Default is None.
+    nlog : int, optional
+        Number of logarithmically spaced frequencies. If ``nlog > 0``,
+        ``_select_fourier_basis`` returns a log/linear helper basis.
+        Default is 0.
     name : str, optional
         Name of the noise component. Default is "red_noise".
 
     Returns
     -------
     Any
-        Discovery red-noise block.
+        Discovery red-noise block from ``ds.makegp_fourier``.
     """
+    if tspan is None:
+        tspan = ds.getspan(psr)
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
+        elif prior == 'powerlaw_cutoff':
+            prior = ds.powerlaw_cutoff
+        elif prior == 'broken_powerlaw':
+            prior = ds.broken_powerlaw
+        elif prior == 'freespectrum':
+            prior = ds.freespectrum
+        elif prior == 'powerlaw_cutoff':
+            prior = ds.powerlaw_cutoff
+        elif callable(prior):
+            pass # pass a callable prior
         else:
-            raise ValueError("Invalid prior specified for solar wind noise. Must be 'powerlaw'.")
-        rn = ds.makegp_fourier(psr, prior, Nfreqs, T=time_span, name=name)
+            raise ValueError("Invalid *prior* specified for Fourier basis red noise. Try one of: ['powerlaw', 'powerlaw_cutoff', 'broken_powerlaw', 'freespectrum']")
+
+        rn = ds.makegp_fourier(
+            psr,
+            prior,
+            Nfreqs,
+            T=tspan,
+            fourierbasis=_select_fourier_basis(
+                psr, Nfreqs, tspan, logmode,
+                f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
+                nlog, noise_type='red_noise'
+            ),
+            name=name
+            )
     elif basis == 'interpolation':
-        raise NotImplementedError("Interpolation basis for solar wind noise is not yet implemented.")
+        raise NotImplementedError("Interpolation basis for red noise is not yet implemented.")
     else:
-        raise ValueError("Invalid basis specified for solar wind noise. Must be 'fourier' or 'interpolation'.")
+        raise ValueError("Invalid basis specified for red noise. Must be 'fourier' or 'interpolation'.")
 
     return rn
 
 def dm_noise_block(
         psr: Any,
+        tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        time_span: Optional[float] = None,
+        logmode=2,
+        f_min_frac=1/5,
+        nlog=0,
         name: str = 'dm_gp',
         ) -> Any:
     """
@@ -211,41 +300,81 @@ def dm_noise_block(
     ----------
     psr : Any
         Pulsar object.
+    tspan : float, optional
+        Total data span passed to Fourier basis construction. Default is None.
     basis : str, optional
-        Basis type for the GP. Default is "fourier".
+        Basis type for the GP. Currently only ``"fourier"`` is implemented.
+        Default is ``"fourier"``.
     prior : str, optional
-        Prior type for the GP amplitude. Default is "powerlaw".
+        Prior type or callable prior for the GP amplitude. Supported string
+        values are ``"powerlaw"``, ``"powerlaw_cutoff"``,
+        ``"broken_powerlaw"``, and ``"freespectrum"``.
+        Default is ``"powerlaw"``.
     Nfreqs : int, optional
         Number of Fourier frequencies. Default is 100.
-    time_span : float, optional
-        Time span for the Fourier basis. Default is None.
+    logmode : int, optional
+        Log-binning mode for hybrid log/linear Fourier bases. Default is 2.
+    f_min_frac : float, optional
+        Fractional minimum Fourier frequency for hybrid log/linear bases
+        (scaled to an absolute frequency using ``tspan``). Default is None.
+    nlog : int, optional
+        Number of logarithmically spaced frequencies. If ``nlog > 0``,
+        ``_select_fourier_basis`` returns a log/linear helper basis.
+        Default is 0.
     name : str, optional
         Name of the noise component. Default is "dm_gp".
 
     Returns
     -------
     Any
-        Discovery DM-noise block.
+        Discovery DM-noise block from ``ds.makegp_fourier``.
     """
+    if tspan is None:
+        tspan = ds.getspan(psr)
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
+        elif prior == 'powerlaw_cutoff':
+            prior = ds.powerlaw_cutoff
+        elif prior == 'broken_powerlaw':
+            prior = ds.broken_powerlaw
+        elif prior == 'freespectrum':
+            prior = ds.freespectrum
+        elif prior == 'powerlaw_cutoff':
+            prior = ds.powerlaw_cutoff
+        elif callable(prior):
+            pass # pass a callable prior
         else:
-            raise ValueError("Invalid prior specified for dm noise. Must be 'powerlaw'.")
-        dmgp = ds.makegp_fourier(psr, prior, Nfreqs, T=time_span, name=name, fourierbasis=ds.dmfourierbasis)
+            raise ValueError("Invalid *prior* specified for Fourier basis DM noise. Try one of: ['powerlaw', 'powerlaw_cutoff', 'broken_powerlaw', 'freespectrum']")
+
+        dm_gp = ds.makegp_fourier(
+            psr,
+            prior,
+            Nfreqs,
+            T=tspan,
+            fourierbasis=_select_fourier_basis(
+                psr, Nfreqs, tspan, logmode,
+                f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
+                nlog, noise_type='dm_noise'
+            ),
+            name=name
+            )
     elif basis == 'interpolation':
-        raise NotImplementedError("Interpolation basis for dm noise is not yet implemented.")
+        raise NotImplementedError("Time domain models for dm noise are not yet implemented.")
     else:
         raise ValueError("Invalid basis specified for dm noise. Must be 'fourier' or 'interpolation'.")
 
-    return dmgp
+    return dm_gp
 
 def chromatic_noise_block(
         psr: Any,
+        tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        time_span: Optional[float] = None,
+        logmode=2,
+        f_min_frac=1/5,
+        nlog=0,
         name: str = 'chrom_gp',
         chromatic_idx: str = 'vary',
         ) -> Any:
@@ -256,35 +385,83 @@ def chromatic_noise_block(
     ----------
     psr : Any
         Pulsar object.
-    time_span : float, optional
-        Time span for the Fourier basis. Default is None.
+    basis : str, optional
+        Basis type for the GP. Currently only ``"fourier"`` is implemented.
+        Default is ``"fourier"``.
+    prior : str, optional
+        Prior type or callable prior for the GP amplitude. Supported string
+        values are ``"powerlaw"``, ``"powerlaw_cutoff"``,
+        ``"broken_powerlaw"``, and ``"freespectrum"``.
+        Default is ``"powerlaw"``.
+    Nfreqs : int, optional
+        Number of Fourier frequencies. Default is 100.
+    tspan : float, optional
+        Total data span passed to Fourier basis construction. Default is None.
+    logmode : int, optional
+        Log-binning mode for hybrid log/linear Fourier bases. Default is -1.
+    f_min : float, optional
+        Minimum Fourier frequency for hybrid log/linear bases. Default is None.
+    nlog : int, optional
+        Number of logarithmically spaced frequencies. If ``nlog > 0``,
+        ``_select_fourier_basis`` returns a log/linear helper basis.
+        Default is 0.
+    name : str, optional
+        Name of the noise component. Default is ``"chrom_gp"``.
     chromatic_idx : str, optional
-        Chromatic index handling mode. Default is "vary".
+        Reserved argument for chromatic index handling mode. Currently not used
+        inside this function. Default is ``"vary"``.
 
     Returns
     -------
     Any
-        Discovery chromatic-noise block.
+        Discovery chromatic-noise block from ``ds.makegp_fourier``.
     """
-    chrom_gp = ds.makegp_fourier(
-        psr,
-        ds.powerlaw,
-        Nfreqs,
-        T=time_span,
-        name='chrom_gp',
-        basis=ds.dmfourerbasis_alpha
-    )
+    if tspan is None:
+        tspan = ds.getspan(psr)
+    if basis == 'fourier':
+        if prior == 'powerlaw':
+            prior = ds.powerlaw
+        elif prior == 'powerlaw_cutoff':
+            prior = ds.powerlaw_cutoff
+        elif prior == 'broken_powerlaw':
+            prior = ds.broken_powerlaw
+        elif prior == 'freespectrum':
+            prior = ds.freespectrum
+        elif prior == 'powerlaw_cutoff':
+            prior = ds.powerlaw_cutoff
+        elif callable(prior):
+            pass # pass a callable prior
+        else:
+            raise ValueError("Invalid *prior* specified for Fourier basis chromatic noise. Try one of: ['powerlaw', 'powerlaw_cutoff', 'broken_powerlaw', 'freespectrum']")
+
+        chrom_gp = ds.makegp_fourier(
+            psr,
+            prior,
+            Nfreqs,
+            T=tspan,
+            fourierbasis=_select_fourier_basis(
+                psr, Nfreqs, tspan, logmode,
+                f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
+                nlog, noise_type='chromatic'
+            ),
+            name=name
+            )
+    else:
+        raise ValueError("Invalid *basis* specified for chromatic noise. Supported basis types: ['fourier']")
     return chrom_gp
 
 def solar_wind_noise_block(
         psr: Any,
+        tspan: Optional[float] = None,
         basis: str = 'fourier',
         basis_nodes: Optional[np.ndarray] = None,
         interp_dt: Optional[float] = 30.0,
         interp_kind: str = 'linear',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        time_span: Optional[float] = None,
+        logmode=2,
+        f_min_frac=1/5,
+        nlog=0,
         name: str = 'sw_gp',
         ) -> Any:
     """
@@ -305,12 +482,12 @@ def solar_wind_noise_block(
         Interpolation kind for the basis. Default is "linear". Only used for interpolation basis.
     prior : str, optional
         Prior type for the GP amplitude. For Fourier basis this is a PSD. For time domain it is a covariance function.
-        Fourier basis supports ["powerlaw"].
+        Fourier basis supports ["powerlaw", "powerlaw_cutoff", "broken_powerlaw", "freespectrum"].
         Time-domain interpolation basis supports ["ridge", "square_exponential", "quasi_periodic", "matern"].
         Default is "powerlaw".
     Nfreqs : int, optional
         Number of Fourier frequencies. Default is 100. Only used for Fourier basis.
-    time_span : float, optional
+    tspan : float, optional
         Time span for the Fourier basis. Default is None.
     name : str, optional
         Name of the noise component. Default is "red_noise".
@@ -318,36 +495,62 @@ def solar_wind_noise_block(
     Returns
     -------
     Any
-        Discovery solar-wind noise block.
+        Discovery solar-wind noise block from either ``ds.makegp_fourier``
+        (Fourier basis) or ``ds_solar.makegp_timedomain_solar_dm``
+        (interpolation basis).
     """
+    if tspan is None:
+        tspan = ds.getspan(psr)
     if basis == 'fourier':
         if prior == 'powerlaw':
             prior = ds.powerlaw
+        elif prior == 'powerlaw_cutoff':
+            prior = ds.powerlaw_cutoff
+        elif prior == 'broken_powerlaw':
+            prior = ds.broken_powerlaw
+        elif prior == 'freespectrum':
+            prior = ds.freespectrum
+        elif prior == 'powerlaw_cutoff':
+            prior = ds.powerlaw_cutoff
+        elif callable(prior):
+            pass # pass a callable prior
         else:
-            raise ValueError("Invalid prior specified for solar wind noise. Must be 'powerlaw'.")
-        swgp = ds.makegp_fourier(psr, prior, Nfreqs, T=time_span, basis=ds_solar.fourierbasis_solar_dm, name=name)
+            raise ValueError("Invalid *prior* specified for Fourier basis solar wind noise. Try one of: ['powerlaw', 'powerlaw_cutoff', 'broken_powerlaw', 'freespectrum']")
+
+        sw_gp = ds.makegp_fourier(
+            psr,
+            prior,
+            Nfreqs,
+            T=tspan,
+            fourierbasis=_select_fourier_basis(
+                psr, Nfreqs, tspan, logmode,
+                f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
+                nlog, noise_type='solar_wind'
+            ),
+            name=name
+            )
     elif basis == 'interpolation':
         if basis_nodes is None:
             basis_nodes = np.arange(psr.toas.min()/86400, psr.toas.max()/86400, interp_dt)
         # else basis nodes are provided by user.
-        td_basis, nodes = ds_solar.custom_blocked_interpolation_basis(
+        td_basis, nodes = ds_signals.custom_blocked_interpolation_basis(
             psr.toas,
             nodes=basis_nodes,
             kind=interp_kind,
         )
         if prior == 'ridge':
-            prior_kernel = ds_solar.ridge_kernel()
+            prior_kernel = ds_signals.ridge_kernel()
         elif prior == 'square_exponential':
-            prior_kernel = ds_solar.square_exponential_kernel()
+            prior_kernel = ds_signals.square_exponential_kernel()
         elif prior == 'quasi_periodic':
-            prior_kernel = ds_solar.quasi_periodic_kernel()
+            prior_kernel = ds_signals.quasi_periodic_kernel()
         elif prior == 'matern':
-            prior_kernel = ds_solar.matern_kernel()
+            prior_kernel = ds_signals.matern_kernel()
         elif prior == 'powerlaw':
-            raise ValueError("Power-law prior is not supported for interpolation basis solar wind noise. Please choose 'ridge', 'square_exponential', 'quasi_periodic', or 'matern'.")
+            raise ValueError("Power-law prior is not supported for time domain solar wind noise. Must be in ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
         else: 
-            raise ValueError("Invalid prior specified for interpolation basis solar wind noise. Must be 'ridge', 'square_exponential', 'quasi_periodic', or 'matern'.")
-        swgp = ds_solar.makegp_timedomain_solar_dm(
+            raise ValueError("Invalid prior specified for time domain solar wind noise. Must be in ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
+        sw_gp = ds_solar.makegp_timedomain_solar_dm(
             psr,
             covariance=prior_kernel,
             dt=None,
@@ -359,12 +562,12 @@ def solar_wind_noise_block(
     else:
         raise ValueError("Invalid basis specified for solar wind noise. Must be 'fourier' or 'interpolation'.")
 
-    return swgp
+    return sw_gp
 
 def make_single_pulsar_noise_likelihood_discovery(
         psr: Any,
         noise_dict: Optional[Dict[str, Any]] = None,
-        time_span: Optional[float] = None,
+        tspan: Optional[float] = None,
         model_kwargs: Optional[Dict[str, Any]] = None,
         return_args: bool = False,
 ) -> Union[ds.PulsarLikelihood, Sequence[Any]]:
@@ -377,7 +580,7 @@ def make_single_pulsar_noise_likelihood_discovery(
         Pulsar object.
     noise_dictionary : dict, optional
         Dictionary of noise parameters.
-    time_span : float, optional
+    tspan : float, optional
         Time span for the noise model.
     model_kwargs : dict, optional
         Dictionary of model keyword arguments.
@@ -391,15 +594,27 @@ def make_single_pulsar_noise_likelihood_discovery(
     """
     if noise_dict is None:
         noise_dict = {}
-    if time_span is None:
-        time_span = ds.getspan([psr])
+    if tspan is None:
+        tspan = ds.getspan([psr])
     # if marg_ne:
     #     psr.Mmat = np.hstack([psr.Mmat, np.array([ds.make_solardm(psr)(1.0)]).T])
     model_kwargs.update({ky: False for ky in ['timing_model', 'white_noise', 'red_noise', 'dm_noise', 'chromatic_noise', 'solar_wind'] if ky not in model_kwargs.keys()})
+    # model checks -- update your configs !!
+    if not model_kwargs['timing_model']:
+        log.error("Timing model must be included in the `noise_run` config block for the likelihood to be properly constructed.")
+    if not model_kwargs['white_noise']:
+        log.error("White noise must be included in the `noise_run` config block for the likelihood to be properly constructed.")
+    if not model_kwargs['red_noise']:
+        log.warning("Red noise is not included in the `noise_run` config block. Proceed with caution.")       
+    ## add pulsar's time spans to model for signals where not included
+    ## this allows individual signals to be passed specific timespans
+    for name, mod in model_kwargs.items():
+        if mod and name in ['red_noise', 'dm_noise', 'chromatic_noise', 'solar_wind']:
+            if 'tspan' not in list(mod.keys()):
+                model_kwargs[name].update({'tspan': tspan})
     ## timing model
     args = [psr.residuals]
     if model_kwargs['timing_model']:
-
         args.append(
             timing_model_block(psr, **model_kwargs['timing_model'])
         )
@@ -490,18 +705,18 @@ def make_sampler_nuts(
         Configured MCMC sampler instance.
     """
     nutsargs = dict(
-        max_tree_depth=8,
-        dense_mass=False,
-        forward_mode_differentiation=False,
-        target_accept_prob=0.8,
-        **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.NUTS).args}
+        max_tree_depth=sampler_kwargs.get('max_tree_depth', 8), # these should be good defaults
+        dense_mass=sampler_kwargs.get('dense_mass', False),
+        forward_mode_differentiation=sampler_kwargs.get('forward_mode_differentiation', False),
+        target_accept_prob=sampler_kwargs.get('target_accept_prob', 0.8),
+        **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.NUTS).args and arg not in {'max_tree_depth', 'dense_mass', 'forward_mode_differentiation', 'target_accept_prob'}}
         )
     #samples_per_checkpoint = int(sampler_kwargs.get('num_samples', 1000) / sampler_kwargs.get('num_checkpoints', 5))
     mcmcargs = dict(
         num_samples=sampler_kwargs.get('num_samples', 2000),
         num_warmup=sampler_kwargs.get('num_warmup', 500),
         **{arg: val for arg, val in sampler_kwargs.items() if arg in inspect.getfullargspec(infer.MCMC).kwonlyargs
-           and not 'num_samples' and not 'num_warmup'
+              and arg not in {'num_samples', 'num_warmup'}
            }
         )
     sampler = infer.MCMC(infer.NUTS(numpyro_model, **nutsargs), **mcmcargs)
@@ -634,31 +849,45 @@ def run_nuts_with_checkpoints(
         if diagnostics:
             try:
                 idata = az.from_numpyro(sampler)
-                fig_trace = az.plot_trace(idata)
+                n_vars = len(idata.posterior.data_vars)
+                with az.rc_context({"plot.max_subplots": max(40, 2 * n_vars)}):
+                    fig_trace = az.plot_trace(idata)
                 fig_trace = fig_trace.ravel()[0].figure if hasattr(fig_trace, "ravel") else plt.gcf()
                 fig_trace.suptitle(f"Checkpoint {checkpoint + 1}/{num_checkpoints} trace")
                 fig_trace.tight_layout()
+                trace_file = outdir / f"{file_name}-checkpoint-trace.png"
+                fig_trace.savefig(trace_file, dpi=150, bbox_inches="tight")
 
 
-                rhat = az.rhat(idata)
-                rhat_vals = np.asarray(rhat.to_array(), dtype=float).ravel()
-                rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
+                chain_method = getattr(sampler, "chain_method", "unknown")
+                posterior_sizes = dict(getattr(idata.posterior, "sizes", {}))
+                n_chains = int(posterior_sizes.get("chain", 0))
+                n_draws = int(posterior_sizes.get("draw", 0))
                 clear_output(wait=True)
                 display(fig_trace)
-                if len(rhat_vals) > 0:
-                    n_high = int(np.sum(rhat_vals > 1.01))
-                    print(
-                        "R-hat summary: "
-                        f"median={np.median(rhat_vals):.4f}, "
-                        f"max={np.max(rhat_vals):.4f}, "
-                        f"n(>1.01)={n_high}/{len(rhat_vals)}"
-                    )
+                if chain_method in {"parallel", "vectorized", "sequential"} and n_chains >= 2 and n_draws >= 4:
+                    rhat = az.rhat(idata)
+                    rhat_vals = np.asarray(rhat.to_array(), dtype=float).ravel()
+                    rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
+                    if len(rhat_vals) > 0:
+                        n_high = int(np.sum(rhat_vals > 1.01))
+                        print(
+                            "R-hat summary: "
+                            f"median={np.median(rhat_vals):.4f}, "
+                            f"max={np.max(rhat_vals):.4f}, "
+                            f"n(>1.01)={n_high}/{len(rhat_vals)}"
+                        )
+                    else:
+                        print("R-hat summary: no finite values available")
                 else:
-                    print("R-hat summary: no finite values available")
+                    print(
+                        "R-hat skipped: "
+                        f"chain_method={chain_method}, chains={n_chains}, draws={n_draws}. "
+                        "Need at least 2 chains and 4 draws per chain."
+                    )
+                plt.close(fig_trace)
             except Exception as e:
                 log.warning(f"Diagnostics plotting failed at checkpoint {checkpoint + 1}: {e}")
-    if diagnostics:
-        plt.close(fig_trace)
 
 
 def setup_svi(
@@ -838,8 +1067,10 @@ def run_svi_early_stopping(
     batch_size: int = 1000,
     patience: int = 3,
     max_num_batches: int = 50,
-    difference_threshold: float = 1.0,
+    difference_threshold: float = 1e-3,
     diagnostics: bool = False,
+    outdir: str | Path | None = None,
+    file_prefix: str = "svi",
 ) -> Dict[str, Any]:
     """
     Run SVI optimization with early stopping based on loss plateau detection.
@@ -862,10 +1093,17 @@ def run_svi_early_stopping(
     max_num_batches : int, optional
         Maximum number of batches to run. Default is 50.
     difference_threshold : float, optional
-        Minimum decrease in loss required to reset the patience counter. Default is 1.0.
+        Minimum relative improvement in loss required to reset the patience counter.
+        Computed as ``(best_loss - current_loss) / |best_loss|``, so a value of
+        1e-3 means the loss must improve by at least 0.1% to count. Default is 1e-3.
     diagnostics : bool, optional
         If True, collect gradient norms and intermediate states at each step.
         This adds computational overhead. Default is False.
+    outdir : str | Path | None, optional
+        Directory to save diagnostics plots when `diagnostics=True`. If None,
+        plots are only displayed and not written to disk. Default is None.
+    file_prefix : str, optional
+        Prefix used for saved diagnostics plot filenames. Default is "svi".
 
     Returns
     -------
@@ -875,9 +1113,10 @@ def run_svi_early_stopping(
 
     Notes
     -----
-    The early stopping criterion requires the loss to improve by at least `difference_threshold`
-    to reset the patience counter. This threshold is configurable and may need
-    adjustment for different problem scales.
+    The early stopping criterion uses a scale-invariant relative improvement
+    measure: ``(best_loss - current_loss) / |best_loss|``. This makes the
+    threshold independent of the number of TOAs, parameters, or overall
+    likelihood scale.
 
     Examples
     --------
@@ -901,6 +1140,12 @@ def run_svi_early_stopping(
     log.info(f"Starting training with batches of {batch_size} steps.")
 
     final_params = None
+    diagnostics_plot_dir = None
+    diagnostics_plot_path = None
+    if diagnostics and outdir is not None:
+        diagnostics_plot_dir = Path(outdir)
+        diagnostics_plot_dir.mkdir(parents=True, exist_ok=True)
+        diagnostics_plot_path = diagnostics_plot_dir / f"{file_prefix}_svi_diagnostics.png"
     if diagnostics:
         # once, before loop so plot updates in place
         plt.ioff()  # optional: avoids duplicate auto-displays
@@ -992,6 +1237,8 @@ def run_svi_early_stopping(
 
             fig.suptitle(f"SVI Diagnostics (Batch {batch_num + 1}/{max_num_batches})")
             fig.tight_layout()
+            if diagnostics_plot_path is not None:
+                fig.savefig(diagnostics_plot_path, dpi=150, bbox_inches="tight")
             clear_output(wait=True)
             display(fig)
 
@@ -1011,13 +1258,20 @@ def run_svi_early_stopping(
             f"Batch {batch_num + 1}/{max_num_batches} | Total steps taken: {total_steps}",
         )
 
-        # Early stopping logic
+        # Early stopping logic — scale-invariant relative improvement
         log.info(f"{current_val_loss=}")
         log.info(f"{best_val_loss=}")
-        difference = current_val_loss - best_val_loss if batch_num >= 1 else -np.inf
-        if difference < - difference_threshold:
+        print(f"current_val_loss = {float(current_val_loss):.4f}  |  best_val_loss = {float(best_val_loss):.4f}")
+        if batch_num == 0:
+            rel_improvement = np.inf  # always accept first batch
+        else:
+            rel_improvement = (best_val_loss - current_val_loss) / max(abs(best_val_loss), 1e-30)
+        print(f"relative_improvement = {rel_improvement:.6g}  (threshold = {difference_threshold:.6g})")
+        log.info(f"{rel_improvement=:.6g}")
+        if rel_improvement > difference_threshold:
             log.info(
-                f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f} {difference=}. Saving state.",
+                f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f} "
+                f"(relative_improvement={rel_improvement:.6g}). Saving state.",
             )
             best_val_loss = current_val_loss
             best_svi_state = svi_state
@@ -1025,7 +1279,8 @@ def run_svi_early_stopping(
         else:
             patience_counter += 1
             log.info(
-                f"Loss did not improve. Patience: {patience_counter}/{patience} {difference=}",
+                f"Loss did not improve sufficiently. Patience: {patience_counter}/{patience} "
+                f"(relative_improvement={rel_improvement:.6g}, threshold={difference_threshold:.6g})",
             )
 
             if patience_counter >= patience:
@@ -1044,10 +1299,13 @@ def run_svi_early_stopping(
     if final_params is None:
         final_params = svi.get_params(best_svi_state)
 
-    final_params = {
-        (name[:-9] if name.endswith("_auto_loc") else name): value
-        for name, value in final_params.items()
-    }
+    cleaned_final_params = {}
+    for name, value in final_params.items():
+        clean_name = name[:-9] if name.endswith("_auto_loc") else name
+        if clean_name.endswith("_base"):
+            clean_name = clean_name[:-5]
+        cleaned_final_params[clean_name] = value
+    final_params = cleaned_final_params
 
     if diagnostics:
         return final_params, (svi_states_list, global_norm_grads_list)

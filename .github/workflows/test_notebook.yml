@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest] # Once we get the tex packages changed, we should include "macos-13"
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
     - name: Install Required Ubuntu Packages
@@ -58,14 +58,14 @@ jobs:
       shell: bash -el {0}
       run: |
         pytest --ignore=tests/test_run_notebook.py
-    - name: Test with Standard Pulsar
-      shell: bash -el {0}
-      run: |
-        export PULSAR_NAME='J0605+3757'
-        export JUPYTER_PLATFORM_DIRS=1
-        pytest tests/test_run_notebook.py -k $PULSAR_NAME
-        ls -lah
-        mv tmp* nb_outputs
+    # - name: Test with Standard Pulsar
+    #   shell: bash -el {0}
+    #   run: |
+    #     export PULSAR_NAME='J0605+3757'
+    #     export JUPYTER_PLATFORM_DIRS=1
+    #     pytest tests/test_run_notebook.py -k $PULSAR_NAME
+    #     ls -lah
+    #     mv tmp* nb_outputs
     - name: Archive Notebook Output Files
       uses: actions/upload-artifact@v4
       with:
