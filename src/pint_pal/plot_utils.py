@@ -5445,6 +5445,78 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None):
     return tm_signal, used_names
 
 
+def get_tm_delays(payload, psr_name=None):
+    """Return the timing-model delay (seconds) for each marginalized parameter.
+
+    For every timing-model fit parameter, this computes
+    ``F_tm[:, i] * coefficients[:, i]`` — the time-domain delay contribution
+    of that single parameter across all realizations.
+
+    Parameters
+    ----------
+    payload : dict
+        Loaded GP realizations payload (from ``load_gp_realizations`` or
+        ``generate_gp_realizations``).
+    psr_name : str, optional
+        Pulsar name to help classify GP keys.
+
+    Returns
+    -------
+    dict
+        ``{param_name: np.ndarray}`` where each array has shape
+        ``(n_realizations, n_toas)`` and is in **seconds**.
+        Returns an empty dict if the TM key or fitpars are unavailable.
+    """
+    psr_name = psr_name or payload.get('pulsar_name', '')
+    tm_key = _get_tm_gp_key(payload, psr_name)
+    if tm_key is None:
+        log.warning("No timing-model GP key found in payload.")
+        return {}
+
+    fitpars = payload.get('tm_fitpars')
+    if fitpars is None:
+        log.warning("No tm_fitpars in payload.")
+        return {}
+
+    F_tm = payload['F_columns'].get(tm_key)
+    coeffs_tm = payload['realizations'].get(tm_key)
+    if F_tm is None or coeffs_tm is None:
+        return {}
+
+    F_tm = np.asarray(F_tm)            # (n_toas, n_cols)
+    coeffs_tm = np.asarray(coeffs_tm)  # (n_real, n_cols)
+    n_cols = min(F_tm.shape[1], len(fitpars))
+
+    out = {}
+    for i in range(n_cols):
+        # (n_real, n_toas) = outer product of coeff column × basis column
+        out[fitpars[i]] = coeffs_tm[:, i:i+1] * F_tm[:, i:i+1].T
+    return out, F_tm, coeffs_tm
+
+
+def _extract_ne_sw_reference(model):
+    """Extract the reference NE_SW value from a PINT timing model.
+
+    Parameters
+    ----------
+    model : pint.models.TimingModel or None
+        PINT timing model.
+
+    Returns
+    -------
+    float or None
+        NE_SW in cm\ :sup:`-3`, or None.
+    """
+    if model is None:
+        return None
+    try:
+        if hasattr(model, 'NE_SW'):
+            return float(model.NE_SW.value)
+    except Exception:
+        pass
+    return None
+
+
 def _convert_units(
     signal,
     freqs_mhz,
@@ -5721,6 +5793,7 @@ def plot_gp_realizations_combined(
     show_median=True,
     show_solar_conjunctions=True,
     include_tm_components=False,
+    model=None,
     figsize=(10, 3),
     toa_units='mjd',
     exclude=None,
@@ -5750,6 +5823,9 @@ def plot_gp_realizations_combined(
     include_tm_components : bool, optional
         Add relevant timing-model column realizations to each GP.
         Default False.
+    model : pint.models.TimingModel, optional
+        If provided, reference parameter values (DM, NE_SW) are added
+        to the relevant panels so they show total quantities.
     figsize : tuple, optional
         ``(width, height_per_panel)``. Default ``(10, 3)``.
     toa_units : str, optional
@@ -5820,6 +5896,7 @@ def plot_gp_realizations_combined(
                 show_median=show_median,
                 show_solar_conjunctions=show_solar_conjunctions,
                 include_tm_components=include_tm_components,
+                model=model,
                 ax=axes[i], toa_units=toa_units,
             )
         else:
@@ -6007,87 +6084,6 @@ def plot_gp_total_signal(
     return fig, ax
 
 
-def _sw_tm_ne_at_nodes(payload, psr_name=None):
-    """Compute the timing-model SW contribution in n_E units at the SW nodes.
-
-    Extracts the TM columns for the ``'sw'`` category (NE_SW, NE1, …),
-    computes the corresponding timing-delay signal at each TOA (seconds),
-    divides by the stored SW shape factor (delay per unit n_E) to convert
-    to electron density, and resamples onto the interpolation node grid.
-
-    Parameters
-    ----------
-    payload : dict
-        GP realizations payload (must contain ``sw_shape_at_toas``).
-    psr_name : str, optional
-        Pulsar name for classifying GP keys.
-
-    Returns
-    -------
-    tm_ne_at_nodes : np.ndarray or None
-        Shape ``(n_realizations, n_nodes)`` — the TM contribution in
-        n_E [cm^-3] at each SW interpolation node.  None if the required
-        data are unavailable.
-    used_names : list of str
-        TM parameter names that were included (e.g. ``['NE_SW']``).
-    """
-    from scipy.interpolate import interp1d
-
-    # Get TM signal at TOAs (seconds)
-    tm_signal_toas, used_names = _get_tm_component_signal(
-        payload, 'sw', psr_name
-    )
-    if tm_signal_toas is None or len(used_names) == 0:
-        return None, []
-
-    shape = payload.get('sw_shape_at_toas')
-    if shape is None:
-        log.warning(
-            "No sw_shape_at_toas in payload; cannot convert TM delay to n_E. "
-            "Re-run generate_gp_realizations with current pint_pal to store it."
-        )
-        return None, []
-
-    shape = np.asarray(shape)  # (n_toas,)
-    nodes_mjd = payload.get('sw_nodes_mjd')
-    if nodes_mjd is None:
-        return None, []
-
-    nodes_mjd = np.asarray(nodes_mjd)
-    toas_mjd = np.asarray(payload['toas_mjd'])
-
-    # Convert TM timing delay --> n_E at each TOA:
-    #   n_E(t) = delay(t) / shape(t)
-    # where shape(t) = dm_solar(1, theta, r) * K_DM / nu^2  is the delay produced
-    # by 1 cm^-3 of electron density at time t and frequency ν.
-    # Guard against zero/near-zero shape at solar conjunction.
-    safe_shape = np.where(np.abs(shape) > 1e-30, shape, np.nan)
-    tm_ne_toas = tm_signal_toas / safe_shape[np.newaxis, :]  # (n_real, n_toas)
-
-    # Resample the smooth TM n_E from TOAs onto the node grid.
-    # Sort by time for the interpolation.
-    tsort = np.argsort(toas_mjd)
-    t_sorted = toas_mjd[tsort]
-
-    tm_ne_nodes = np.empty(
-        (tm_ne_toas.shape[0], len(nodes_mjd)), dtype=np.float64
-    )
-    ### this interpolation is really just for plotting purposes.
-    for i in range(tm_ne_toas.shape[0]):
-        ne_sorted = tm_ne_toas[i, tsort]
-        ut, inv = np.unique(t_sorted, return_inverse=True)
-        ne_binned = np.array(
-            [np.nanmedian(ne_sorted[inv == j]) for j in range(len(ut))]
-        )
-        f_interp = interp1d(
-            ut, ne_binned, kind='linear',
-            fill_value='extrapolate', bounds_error=False,
-        )
-        tm_ne_nodes[i] = f_interp(nodes_mjd)
-
-    return tm_ne_nodes, used_names
-
-
 def plot_gp_sw_ne(
     payload,
     gp_key=None,
@@ -6097,6 +6093,7 @@ def plot_gp_sw_ne(
     show_solar_conjunctions=True,
     show_nodes=True,
     include_tm_components=False,
+    model=None,
     ax=None,
     figsize=(10, 4),
     title=None,
@@ -6107,16 +6104,18 @@ def plot_gp_sw_ne(
     """
     Plot solar wind GP realizations in electron density (n_E) units.
 
-    This applies when the SW GP uses an interpolation basis where the
-    GP coefficients directly represent electron density perturbations
-    (Δn_E) at the interpolation nodes.
+    Computes the SW timing delay via ``F @ coefficients`` (seconds at each
+    TOA), then divides by the stored ``sw_shape_at_toas`` (the delay
+    produced by 1 cm⁻³ of n_E) to recover n_E at every TOA.  This is
+    robust to any choice of GP basis (interpolation, Fourier, etc.).
 
-    When ``include_tm_components=True``, the mean timing-model solar wind
-    contribution (NE_SW and any other fitted SW parameters such as NE1)
-    is converted from timing delay (seconds) to n_E [cm^-3] using the
-    stored SW geometric shape factor, resampled onto the node grid, and
-    added to the GP perturbations so that the plot shows the **total**
-    solar wind electron density.
+    When ``include_tm_components=True``, the timing-model SW columns
+    (NE_SW, NE1, …) are added **in seconds** before dividing by the shape
+    factor, so the plot shows the total n_E.
+
+    When ``model`` is provided, the reference ``NE_SW`` value from the
+    timing model is added so the plot shows the **total** electron
+    density rather than perturbations.
 
     Parameters
     ----------
@@ -6133,10 +6132,14 @@ def plot_gp_sw_ne(
     show_solar_conjunctions : bool, optional
         Draw conjunction lines. Default True.
     show_nodes : bool, optional
-        Show node positions as tick marks. Default True.
+        Show SW interpolation node positions as tick marks (if available).
+        Default True.
     include_tm_components : bool, optional
-        If True, add NE_SW (and other TM SW parameters) to the GP
-        perturbations so the plot shows total n_E. Default False.
+        If True, add NE_SW (and other TM SW parameters) so the plot
+        shows total n_E rather than perturbations. Default False.
+    model : pint.models.TimingModel, optional
+        If provided, ``model.NE_SW.value`` is added so the plot shows
+        the total n_E.  Default None.
     ax : matplotlib Axes, optional
     figsize : tuple, optional
     title : str, optional
@@ -6161,33 +6164,60 @@ def plot_gp_sw_ne(
             log.warning("No solar wind GP key found in payload.")
             return None, None
 
-    nodes_mjd = payload.get('sw_nodes_mjd')
-    if nodes_mjd is None:
+    # Need the shape factor to convert seconds → n_E
+    shape = payload.get('sw_shape_at_toas')
+    if shape is None:
         log.warning(
-            "No SW interpolation nodes saved; cannot plot in n_e units. "
-            "Use plot_gp_realization() for time-domain delay instead."
+            "No sw_shape_at_toas in payload; cannot convert to n_E. "
+            "Re-run generate_gp_realizations with current pint_pal."
         )
         return None, None
 
-    nodes_mjd = np.array(nodes_mjd)
-    coeffs = np.asarray(payload['realizations'][gp_key])  # (n_real, n_nodes)
+    shape = np.asarray(shape)  # (n_toas,)
 
-    # Optionally add TM SW contributions (NE_SW, NE1, …) converted to n_E
+    # Compute F @ coefficients → seconds at each TOA
+    sw_delay = _gp_time_domain(payload, gp_key)  # (n_real, n_toas)
+
+    # Optionally add TM SW contribution (also in seconds)
     tm_names_used = []
     if include_tm_components:
-        tm_ne_nodes, tm_names_used = _sw_tm_ne_at_nodes(payload, psr_name)
-        if tm_ne_nodes is not None:
-            coeffs = coeffs + tm_ne_nodes
+        tm_signal, tm_names_used = _get_tm_component_signal(
+            payload, 'sw', psr_name
+        )
+        if tm_signal is not None:
+            sw_delay = sw_delay + tm_signal
             log.info(
-                f"Added TM columns {tm_names_used} to SW n_E realizations."
+                f"Added TM columns {tm_names_used} to SW signal (seconds)."
             )
 
+    # Convert seconds → n_E: n_E(t) = delay(t) / shape(t)
+    safe_shape = np.where(np.abs(shape) > 1e-30, shape, np.nan)
+    ne_signal = sw_delay / safe_shape[np.newaxis, :]  # (n_real, n_toas)
+
+    # Add timing-model reference NE_SW for total n_E
+    ref_ne = _extract_ne_sw_reference(model)
+    if ref_ne is not None:
+        ne_signal = ne_signal + ref_ne
+        log.info(f"Added NE_SW={ref_ne} cm^-3 to SW n_E signal.")
+
+    # Decide whether we are showing total or perturbations
+    _showing_total = (
+        (ref_ne is not None)
+        or (include_tm_components and tm_names_used)
+    )
+
+    # Time axis
+    toas = np.asarray(payload['toas_mjd'])
     if toa_units == 'yr':
-        nodes_plot = (nodes_mjd - 51544.0) / 365.25 + 2000.0
+        tplot = (toas - 51544.0) / 365.25 + 2000.0
         xlabel = 'Year'
     else:
-        nodes_plot = nodes_mjd
+        tplot = toas
         xlabel = 'MJD'
+
+    sort_idx = np.argsort(tplot)
+    tplot = tplot[sort_idx]
+    ne_signal = ne_signal[:, sort_idx]
 
     if color is None:
         color = _GP_COLORS.get('sw', '#9467BD')
@@ -6197,44 +6227,46 @@ def plot_gp_sw_ne(
     else:
         fig = ax.get_figure()
 
-    # CI bands over nodes
-    sort_idx = np.argsort(nodes_plot)
-    nodes_plot = nodes_plot[sort_idx]
-    coeffs = coeffs[:, sort_idx]
-
-    median = np.median(coeffs, axis=0)
+    # CI bands
+    median = np.median(ne_signal, axis=0)
     for ci in sorted(ci_levels, reverse=True):
-        lo = np.percentile(coeffs, 50 - 50 * ci, axis=0)
-        hi = np.percentile(coeffs, 50 + 50 * ci, axis=0)
-        ax.fill_between(nodes_plot, lo, hi, color=color, alpha=alpha_ci,
+        lo = np.percentile(ne_signal, 50 - 50 * ci, axis=0)
+        hi = np.percentile(ne_signal, 50 + 50 * ci, axis=0)
+        ax.fill_between(tplot, lo, hi, color=color, alpha=alpha_ci,
                         label=f'{int(ci*100)}% CI' if ci == ci_levels[0] else None)
 
     if show_median:
         lbl = 'SW $n_E$ (median)'
         if tm_names_used:
             lbl += ' + ' + ','.join(tm_names_used)
-        ax.plot(nodes_plot, median, color=color, lw=1.5, label=lbl)
+        ax.plot(tplot, median, color=color, lw=1.5, label=lbl)
 
     if show_realizations > 0:
-        n_show = min(show_realizations, coeffs.shape[0])
+        n_show = min(show_realizations, ne_signal.shape[0])
         for i in range(n_show):
-            ax.plot(nodes_plot, coeffs[i], color=color, alpha=0.08, lw=0.5)
+            ax.plot(tplot, ne_signal[i], color=color, alpha=0.08, lw=0.5)
 
     # Solar conjunctions
     if show_solar_conjunctions and payload.get('solar_conjunctions_mjd'):
         for tc in payload['solar_conjunctions_mjd']:
             tc_plot = tc if toa_units == 'mjd' else (tc - 51544.0) / 365.25 + 2000.0
-            if nodes_plot.min() <= tc_plot <= nodes_plot.max():
+            if tplot.min() <= tc_plot <= tplot.max():
                 ax.axvline(tc_plot, color='grey', ls='-', lw=0.8, alpha=0.4,
                            zorder=0)
 
-    # Node tick marks
-    if show_nodes:
-        ax.plot(nodes_plot, np.zeros_like(nodes_plot), '|', color='grey',
-                ms=6, alpha=0.4)
+    # SW interpolation node tick marks (if available)
+    nodes_mjd = payload.get('sw_nodes_mjd')
+    if show_nodes and nodes_mjd is not None:
+        nodes_mjd = np.array(nodes_mjd)
+        if toa_units == 'yr':
+            nodes_plot = (nodes_mjd - 51544.0) / 365.25 + 2000.0
+        else:
+            nodes_plot = nodes_mjd
+        ax.plot(nodes_plot, np.full_like(nodes_plot, ax.get_ylim()[0]),
+                '|', color='grey', ms=6, alpha=0.4)
 
     ax.set_xlabel(xlabel, fontsize=_GP_FONTSIZE_LABEL)
-    if include_tm_components and tm_names_used:
+    if _showing_total:
         ax.set_ylabel(r'$n_E$ (cm$^{-3}$)', fontsize=_GP_FONTSIZE_LABEL)
     else:
         ax.set_ylabel(r'$\Delta n_E$ (cm$^{-3}$)', fontsize=_GP_FONTSIZE_LABEL)
@@ -6242,7 +6274,7 @@ def plot_gp_sw_ne(
                    length=6, width=1)
     ax.tick_params(axis='both', which='minor', length=3, width=0.8)
     if title is None:
-        if include_tm_components and tm_names_used:
+        if _showing_total:
             title = f'{psr_name} — Solar Wind $n_E$ (total)'
         else:
             title = f'{psr_name} — Solar Wind $\\Delta n_E$ Perturbations'
