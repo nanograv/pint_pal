@@ -1,5 +1,5 @@
 from xml.parsers.expat import model
-import numpy as np, os, json, itertools, time, pathlib
+import numpy as np, os, json, itertools, time, pathlib, copy
 import pandas as pd
 from loguru import logger as log
 from astropy.time import Time
@@ -33,6 +33,7 @@ import numpyro.distributions as dist
 from numpyro.infer.initialization import init_to_value, init_to_sample
 from numpyro.infer.reparam import ExplicitReparam
 from numpyro.distributions import constraints
+import jax
 
 
 
@@ -582,6 +583,7 @@ def model_noise(
         prior_dict = ds_pdict.copy()
         pint_pal_priors = json.load(open(os.path.join(os.path.dirname(__file__), "discovery_priors.json")))
         prior_dict.update(pint_pal_priors)
+        _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs)
         logL = disco_utils.make_numpyro_model(psl.logL, prior_dict)
         samp = disco_utils.make_sampler_nuts(
             logL,
@@ -609,6 +611,7 @@ def model_noise(
         prior_dict = ds_pdict.copy()
         pint_pal_priors = json.load(open(os.path.join(os.path.dirname(__file__), "discovery_priors.json")))
         prior_dict.update(pint_pal_priors)
+        _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs)
         logL = disco_utils.make_numpyro_model(psl.logL, prior_dict)
         if not return_sampler_without_sampling:
             # make outdir here to expose directory issues before sampling
@@ -685,6 +688,33 @@ def convert_to_RNAMP(value):
     Utility function to convert enterprise RN amplitude to tempo2/PINT parfile RN amplitude
     """
     return (86400.0 * 365.24 * 1e6) / (2.0 * np.pi * np.sqrt(3.0)) * 10**value
+
+
+def _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs):
+    """Update Nfreq_cutoff prior upper bounds from per-block Nfreqs settings."""
+    cutoff_prior_names = {'powerlaw_cutoff', 'psd_cutoff'}
+    cutoff_prior_keys = {
+        'red_noise': '(.*_)?red_noise_Nfreq_cutoff.*',
+        'dm_noise': '(.*_)?dm_gp_Nfreq_cutoff.*',
+        'chromatic_noise': '(.*_)?chrom_gp_Nfreq_cutoff.*',
+        'solar_wind': '(.*_)?sw_gp_Nfreq_cutoff.*',
+    }
+
+    for block_name, prior_key in cutoff_prior_keys.items():
+        block_kwargs = model_kwargs.get(block_name)
+        if not isinstance(block_kwargs, dict):
+            continue
+
+        prior_name = block_kwargs.get('prior', block_kwargs.get('psd'))
+        nfreqs = block_kwargs.get('Nfreqs')
+        if prior_name not in cutoff_prior_names or nfreqs is None or prior_key not in prior_dict:
+            continue
+
+        bounds = prior_dict[prior_key]
+        if isinstance(bounds, tuple):
+            prior_dict[prior_key] = (bounds[0], int(nfreqs))
+        else:
+            prior_dict[prior_key][1] = int(nfreqs)
 
 
 def _set_component_param_value(component, param_name, value):
@@ -1414,3 +1444,338 @@ def get_model_and_sampler_default_settings():
         'dense_mass': False,
         }
     return model_defaults, sampler_defaults
+
+
+def generate_gp_realizations(
+    mo,
+    to,
+    noise_params,
+    model_kwargs,
+    n_realizations=100,
+    outdir="./gp_realizations/",
+    seed=42,
+    using_wideband=False,
+    force_gp_ecorr=True,
+    return_psl_likelihood_for_debug=False,
+):
+    """
+    Generate conditional GP realizations for all GP processes in a noise model.
+
+    Builds a Discovery single-pulsar likelihood from the supplied timing model,
+    TOAs, and model kwargs, then draws ``n_realizations`` from the conditional
+    posterior of each GP (timing model, ecorr, red noise, DM GP, chromatic GP,
+    solar wind GP) given the inferred noise parameters.
+
+    Results are saved to ``outdir`` as a JSON file containing the coefficient
+    realizations, the design-matrix mapping metadata, TOA times, frequencies,
+    and (for interpolation-basis solar wind) the time-domain node positions.
+
+    Parameters
+    ----------
+    mo : pint.models.TimingModel
+        The PINT timing model.
+    to : pint.toa.TOAs
+        The PINT TOAs object.
+    noise_params : dict
+        Dictionary of inferred noise parameter values ``{name: float}``.
+        Typically from ``get_map_noise_values()`` or a chain MAP.
+    model_kwargs : dict
+        Model keyword arguments (same structure as used in ``model_noise``).
+        Must include ``'timing_model'``, ``'white_noise'``, and any GP blocks.
+    n_realizations : int, optional
+        Number of conditional realizations to draw per GP. Default 100.
+    outdir : str or Path, optional
+        Output directory for the saved feather file. Default ``'./gp_realizations/'``.
+    seed : int, optional
+        Base seed for JAX PRNG. Default 42.
+    using_wideband : bool, optional
+        Whether to use wideband mode. Default False.
+    force_gp_ecorr : bool, optional
+        If True (default), forces GP-basis ECORR even if the original model
+        used kernel ECORR, so that ECORR realizations can be generated.
+    return_psl_likelihood_for_debug : bool, optional
+        If True, returns the Discovery likelihood object instead of drawing realizations, for debugging purposes. Default False.
+
+    Returns
+    -------
+    dict
+        The realizations payload (same structure written to feather).
+    """
+    import discovery as ds
+    from discovery import solar as ds_solar
+    import pyarrow  # noqa: F401 — ensure feather backend available
+
+    outdir = pathlib.Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Strip '_base' suffix from all noise parameter keys.
+    # The SVI optimizer appends '_base' to numpyro parameter names, but
+    # Discovery's internal blocks expect the original names.
+    noise_params = {
+        (k[:-5] if k.endswith('_base') else k): v
+        for k, v in noise_params.items()
+    }
+
+    # Deep copy model_kwargs so we don't mutate the caller's dict
+    mk = copy.deepcopy(model_kwargs)
+
+    # Force GP ecorr so we get ecorr realizations
+    if force_gp_ecorr and mk.get('white_noise'):
+        had_kernel_ecorr = mk['white_noise'].get('include_ecorr', False)
+        mk['white_noise']['gp_ecorr'] = True
+        # include_ecorr will be set to False automatically by
+        # make_single_pulsar_noise_likelihood_discovery
+    # don't use the timing model svd because this will scramble the design matrix columns and make it hard to reconstruct realizations in the time domain.
+    mk['timing_model']['svd'] = False
+
+    # Build enterprise pulsar
+    log.info(f"Creating enterprise.Pulsar object for GP realizations...")
+    e_psr = Pulsar(mo, to, pint=True, t2=None)
+
+    # Build tspan
+    tspan = ds.getspan([e_psr])
+
+    # Pass an EMPTY noise_dict to the likelihood builder so that ALL
+    # parameters (efac, equad, ecorr, GP hyperparams) remain variable.
+    # This produces a WoodburyKernel_varNP which supports
+    # make_kernelsolve_simple and therefore sample_conditional.
+    # All VariableGPs — including ecorr — are concatenated into one
+    # compound design matrix, so sample_conditional draws coefficients
+    # for every GP simultaneously (TM, ecorr, RN, DM, SW, …).
+    # The actual noise parameter values are passed to the conditional
+    # at draw time via noise_params.
+    log.info("Building likelihood with all WN params variable (varNP mode).")
+
+    # Build likelihood
+    log.info(f"Building Discovery likelihood for {e_psr.name}...")
+    psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
+        psr=e_psr,
+        noise_dict={},
+        tspan=tspan,
+        model_kwargs=mk,
+        return_args=False,
+    )
+    if return_psl_likelihood_for_debug:
+        return psl
+
+    # Validate that all required noise params are present
+    required = set(psl.logL.params)
+    provided = set(noise_params.keys())
+    missing = required - provided
+    if missing:
+        log.warning(
+            f"Missing {len(missing)} noise parameters for likelihood evaluation. "
+            f"Missing: {sorted(missing)}"
+        )
+
+    # Draw conditional realizations
+    log.info(
+        f"Drawing {n_realizations} conditional GP realizations for {e_psr.name}..."
+    )
+    key = jax.random.PRNGKey(seed)
+
+    # First draw to get the keys/structure
+    key, first_draw = psl.sample_conditional(key, noise_params)
+    gp_keys = sorted(first_draw.keys())
+    log.info(f"GP components found: {gp_keys}")
+
+    # Collect realizations
+    realizations = {gp_name: [] for gp_name in gp_keys}
+    realizations[gp_keys[0]].append(np.asarray(first_draw[gp_keys[0]]).tolist())
+    for gk in gp_keys[1:]:
+        realizations[gk].append(np.asarray(first_draw[gk]).tolist())
+
+    for i in range(1, n_realizations):
+        key, draw = psl.sample_conditional(key, noise_params)
+        for gp_name in gp_keys:
+            realizations[gp_name].append(np.asarray(draw[gp_name]).tolist())
+
+    # Build the design matrix index map: for each GP key, record the
+    # slice into the compound F matrix so downstream plotting can
+    # reconstruct time-domain realizations as F[:, sli] @ coefficients
+    index_map = {}
+
+    # Because we only fix efac/equad (not ecorr), Discovery puts ALL
+    # VariableGPs (ecorr, TM, RN, DM, SW, …) into one compound
+    # WoodburyKernel_varP.  Its .F and .index are on psl.N directly.
+    N_gp = psl.N
+
+    # Extract index map from the GP block
+    if hasattr(N_gp, 'index') and N_gp.index is not None:
+        for gp_name, sli in N_gp.index.items():
+            index_map[gp_name] = [sli.start, sli.stop]
+
+    # Extract the compound F matrix columns per GP
+    F_columns = {}
+    if hasattr(N_gp, 'F'):
+        F_full = np.asarray(N_gp.F)
+        log.info(f"Compound GP F matrix shape: {F_full.shape}, index_map keys: {list(index_map.keys())}")
+        for gp_name, (start, stop) in index_map.items():
+            F_columns[gp_name] = F_full[:, start:stop].tolist()
+
+    # Solar wind: save node positions if interpolation basis
+    sw_nodes = None
+    sw_block = mk.get('solar_wind', False)
+    if sw_block and isinstance(sw_block, dict):
+        if sw_block.get('basis') == 'interpolation':
+            # Reconstruct nodes the same way as the block builder
+            from discovery.signals import custom_blocked_interpolation_basis
+            basis_nodes = sw_block.get('basis_nodes', None)
+            interp_dt = sw_block.get('interp_dt', 30.0)
+            interp_kind = sw_block.get('interp_kind', 'linear')
+            if basis_nodes is None:
+                basis_nodes = np.arange(
+                    e_psr.toas.min() / 86400,
+                    e_psr.toas.max() / 86400,
+                    interp_dt,
+                )
+            _, nodes = custom_blocked_interpolation_basis(
+                e_psr.toas, nodes=basis_nodes, kind=interp_kind
+            )
+            sw_nodes = (nodes / 86400).tolist()  # back to MJD
+
+    # Compute the SW geometric "shape" factor at each TOA.
+    # shape[toa] = timing delay (seconds) produced by n_E = 1 cm^-3.
+    # This is needed by plot_gp_sw_ne to convert TM timing-delay
+    # realizations (seconds) back to n_E (cm^-3).  The conversion is
+    #   n_E(t) = delay(t) / shape(t)
+    # where delay(t) comes from _get_tm_component_signal for the 'sw'
+    # category (NE_SW, NE1, …).
+    sw_shape_at_toas = None
+    if sw_block and isinstance(sw_block, dict):
+        try:
+            _th, _re, _, _ = ds_solar.theta_impact(e_psr)
+            _dm_per_ne = np.asarray(ds_solar.dm_solar(1.0, _th, _re))
+            sw_shape_at_toas = (_dm_per_ne * 4.148808e3 / e_psr.freqs**2).tolist()
+        except Exception as exc:
+            log.warning(f"Could not compute SW shape factor: {exc}")
+
+    # Solar conjunctions (for plotting metadata)
+    # Find local minima of the solar impact angle to identify conjunctions
+    solar_conjunctions_mjd = None
+    try:
+        theta, _, _, _ = ds_solar.theta_impact(e_psr)
+        toas_mjd_arr = e_psr.toas / 86400
+        # Sort by time for local-minimum search
+        sort_idx = np.argsort(toas_mjd_arr)
+        theta_sorted = theta[sort_idx]
+        toas_sorted = toas_mjd_arr[sort_idx]
+        # Find yearly windows and take the minimum in each
+        yr_day = 365.25
+        t0 = toas_sorted.min()
+        t1 = toas_sorted.max()
+        conj_times = []
+        window_start = t0 - yr_day / 2
+        while window_start < t1 + yr_day / 2:
+            window_end = window_start + yr_day
+            mask = (toas_sorted >= window_start) & (toas_sorted < window_end)
+            if np.any(mask):
+                idx_min = np.argmin(theta_sorted[mask])
+                conj_times.append(float(toas_sorted[mask][idx_min]))
+            window_start += yr_day
+        solar_conjunctions_mjd = conj_times if conj_times else None
+    except Exception as e:
+        log.warning(f"Could not compute solar conjunctions: {e}")
+
+    # Extract timing model column labels from the enterprise Pulsar
+    # These let downstream plotting identify specific TM columns
+    # (F0, F1, DM, DM1, DM2, NE_SW, etc.)
+    tm_fitpars = list(e_psr.fitpars) if hasattr(e_psr, 'fitpars') else None
+    log.info(f"Timing model fitpars ({len(tm_fitpars) if tm_fitpars else 0} cols): {tm_fitpars}")
+
+    # Assemble output payload for feather format
+    # Create main metadata dictionary
+    metadata = {
+        'pulsar_name': e_psr.name,
+        'n_realizations': n_realizations, 
+        'noise_params': noise_params,
+        'model_kwargs': _serialize_model_kwargs(mk),
+        'gp_keys': gp_keys,
+        'index_map': index_map,
+        'toas_mjd': (e_psr.toas / 86400).tolist(),
+        'freqs_mhz': e_psr.freqs.tolist()
+            if hasattr(e_psr.freqs, 'tolist')
+            else list(e_psr.freqs),
+        'tspan_sec': float(tspan),
+        'backend_flags': list(e_psr.backend_flags)
+            if hasattr(e_psr, 'backend_flags')
+            else None,
+        'solar_conjunctions_mjd': solar_conjunctions_mjd,
+        'sw_nodes_mjd': sw_nodes,
+        'sw_shape_at_toas': sw_shape_at_toas,
+        'tm_fitpars': tm_fitpars,
+    }
+    
+    # --- Efficient feather serialization ---
+    # Build one row per (gp_key, data_type) with the flattened array stored
+    # as a list-column.  This avoids O(n_toas * n_coeff * n_real) rows.
+    data_rows = []
+    
+    for gp_key in gp_keys:
+        # Realizations: shape (n_realizations, n_coeffs)
+        real_array = np.asarray(realizations[gp_key])
+        data_rows.append({
+            'data_type': 'realization',
+            'gp_key': gp_key,
+            'shape0': int(real_array.shape[0]),
+            'shape1': int(real_array.shape[1]),
+            'values': real_array.ravel().tolist(),
+        })
+        
+        # F_columns: shape (n_toas, n_coeffs)
+        f_key = gp_key
+        if gp_key not in F_columns and len(F_columns) == 1 and len(gp_keys) == 1:
+            f_key = list(F_columns.keys())[0]
+            log.info(f"Matching generic key '{gp_key}' with original key '{f_key}'")
+        if f_key in F_columns:
+            f_array = np.asarray(F_columns[f_key])
+            data_rows.append({
+                'data_type': 'F_column',
+                'gp_key': gp_key,
+                'shape0': int(f_array.shape[0]),
+                'shape1': int(f_array.shape[1]),
+                'values': f_array.ravel().tolist(),
+            })
+        else:
+            log.warning(f"No F_columns found for GP key '{gp_key}'.")
+    
+    # Create DataFrame
+    df = pd.DataFrame(data_rows)
+    
+    # Add metadata as a single JSON column
+    df['metadata_json'] = json.dumps(metadata)
+
+    # Save as feather
+    outfile = outdir / f"{e_psr.name}_gp_realizations.feather"
+    log.info(f"Saving GP realizations to {outfile}")
+    df.to_feather(outfile)
+    
+    # Return payload in original format for backward compatibility
+    payload = {
+        **metadata,
+        'realizations': {k: np.asarray(v) for k, v in realizations.items()},
+        'F_columns': {k: np.asarray(v) for k, v in F_columns.items()},
+    }
+
+    log.info(f"Done. Saved {n_realizations} realizations for {len(gp_keys)} GP components.")
+    return payload
+
+
+def _serialize_model_kwargs(mk):
+    """Convert model_kwargs to a JSON-serializable dict."""
+    out = {}
+    for key, val in mk.items():
+        if isinstance(val, dict):
+            out[key] = {}
+            for k, v in val.items():
+                if isinstance(v, np.ndarray):
+                    out[key][k] = v.tolist()
+                elif isinstance(v, (np.integer, np.floating)):
+                    out[key][k] = float(v)
+                else:
+                    out[key][k] = v
+        elif isinstance(val, np.ndarray):
+            out[key] = val.tolist()
+        else:
+            out[key] = val
+    return out

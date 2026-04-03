@@ -196,7 +196,7 @@ def gp_ecorr_block(
             psr,
             noisedict=noise_dict,
             selection=selection,
-            gp_ecorr_name=gp_ecorr_name,
+            #gp_ecorr_name=gp_ecorr_name,
             )
 
 def red_noise_block(
@@ -605,7 +605,7 @@ def make_single_pulsar_noise_likelihood_discovery(
     if not model_kwargs['white_noise']:
         log.error("White noise must be included in the `noise_run` config block for the likelihood to be properly constructed.")
     if not model_kwargs['red_noise']:
-        log.warn("Red noise is not included in the `noise_run` config block. Proceed with caution.")       
+        log.warning("Red noise is not included in the `noise_run` config block. Proceed with caution.")       
     ## add pulsar's time spans to model for signals where not included
     ## this allows individual signals to be passed specific timespans
     for name, mod in model_kwargs.items():
@@ -1067,7 +1067,7 @@ def run_svi_early_stopping(
     batch_size: int = 1000,
     patience: int = 3,
     max_num_batches: int = 50,
-    difference_threshold: float = 1.0,
+    difference_threshold: float = 1e-3,
     diagnostics: bool = False,
     outdir: str | Path | None = None,
     file_prefix: str = "svi",
@@ -1093,7 +1093,9 @@ def run_svi_early_stopping(
     max_num_batches : int, optional
         Maximum number of batches to run. Default is 50.
     difference_threshold : float, optional
-        Minimum decrease in loss required to reset the patience counter. Default is 1.0.
+        Minimum relative improvement in loss required to reset the patience counter.
+        Computed as ``(best_loss - current_loss) / |best_loss|``, so a value of
+        1e-3 means the loss must improve by at least 0.1% to count. Default is 1e-3.
     diagnostics : bool, optional
         If True, collect gradient norms and intermediate states at each step.
         This adds computational overhead. Default is False.
@@ -1111,9 +1113,10 @@ def run_svi_early_stopping(
 
     Notes
     -----
-    The early stopping criterion requires the loss to improve by at least `difference_threshold`
-    to reset the patience counter. This threshold is configurable and may need
-    adjustment for different problem scales.
+    The early stopping criterion uses a scale-invariant relative improvement
+    measure: ``(best_loss - current_loss) / |best_loss|``. This makes the
+    threshold independent of the number of TOAs, parameters, or overall
+    likelihood scale.
 
     Examples
     --------
@@ -1255,13 +1258,20 @@ def run_svi_early_stopping(
             f"Batch {batch_num + 1}/{max_num_batches} | Total steps taken: {total_steps}",
         )
 
-        # Early stopping logic
+        # Early stopping logic — scale-invariant relative improvement
         log.info(f"{current_val_loss=}")
         log.info(f"{best_val_loss=}")
-        difference = current_val_loss - best_val_loss if batch_num >= 1 else -np.inf
-        if difference < - difference_threshold:
+        print(f"current_val_loss = {float(current_val_loss):.4f}  |  best_val_loss = {float(best_val_loss):.4f}")
+        if batch_num == 0:
+            rel_improvement = np.inf  # always accept first batch
+        else:
+            rel_improvement = (best_val_loss - current_val_loss) / max(abs(best_val_loss), 1e-30)
+        print(f"relative_improvement = {rel_improvement:.6g}  (threshold = {difference_threshold:.6g})")
+        log.info(f"{rel_improvement=:.6g}")
+        if rel_improvement > difference_threshold:
             log.info(
-                f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f} {difference=}. Saving state.",
+                f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f} "
+                f"(relative_improvement={rel_improvement:.6g}). Saving state.",
             )
             best_val_loss = current_val_loss
             best_svi_state = svi_state
@@ -1269,7 +1279,8 @@ def run_svi_early_stopping(
         else:
             patience_counter += 1
             log.info(
-                f"Loss did not improve. Patience: {patience_counter}/{patience} {difference=}",
+                f"Loss did not improve sufficiently. Patience: {patience_counter}/{patience} "
+                f"(relative_improvement={rel_improvement:.6g}, threshold={difference_threshold:.6g})",
             )
 
             if patience_counter >= patience:
@@ -1288,10 +1299,13 @@ def run_svi_early_stopping(
     if final_params is None:
         final_params = svi.get_params(best_svi_state)
 
-    final_params = {
-        (name[:-9] if name.endswith("_auto_loc") else name): value
-        for name, value in final_params.items()
-    }
+    cleaned_final_params = {}
+    for name, value in final_params.items():
+        clean_name = name[:-9] if name.endswith("_auto_loc") else name
+        if clean_name.endswith("_base"):
+            clean_name = clean_name[:-5]
+        cleaned_final_params[clean_name] = value
+    final_params = cleaned_final_params
 
     if diagnostics:
         return final_params, (svi_states_list, global_norm_grads_list)
