@@ -1083,9 +1083,9 @@ def add_noise_to_model(
         ###### POWERLAW CHROMATIC NOISE ######
         if f'{psr_name}_chrom_gp_log10_A' in chrom_pars:
             chrom_kwargs = model_kwargs.get('chromatic_noise', {})
-            log.info('Adding Powerlaw CHROM GP noise as PLCMNoise to par file')
+            log.info('Adding Powerlaw CHROM GP noise as PLChromNoise to par file')
             # Add the ML RN parameters to their component
-            chrom_comp = pm.PLCMNoise()
+            chrom_comp = pm.PLChromNoise()
             # chrom_keys = np.array([key for key, val in noise_dict.items() if "_chrom_gp_" in key])
             chrom_comp.TNCMAMP.quantity = noise_dict[psr_name + "_chrom_gp_log10_A"]
             chrom_comp.TNCMGAM.quantity = noise_dict[psr_name + "_chrom_gp_gamma"]
@@ -1505,7 +1505,7 @@ def generate_gp_realizations(
     from discovery import solar as ds_solar
     import pyarrow  # noqa: F401 — ensure feather backend available
 
-    outdir = pathlib.Path(outdir)
+    outdir = pathlib.Path(format_chain_dir(outdir, mo, using_wideband=using_wideband))
     outdir.mkdir(parents=True, exist_ok=True)
 
     # Strip '_base' suffix from all noise parameter keys.
