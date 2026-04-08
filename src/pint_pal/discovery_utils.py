@@ -256,8 +256,6 @@ def red_noise_block(
             prior = ds.broken_powerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
-        elif prior == 'powerlaw_cutoff':
-            prior = ds.powerlaw_cutoff
         elif callable(prior):
             pass # pass a callable prior
         else:
@@ -340,8 +338,6 @@ def dm_noise_block(
             prior = ds.broken_powerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
-        elif prior == 'powerlaw_cutoff':
-            prior = ds.powerlaw_cutoff
         elif callable(prior):
             pass # pass a callable prior
         else:
@@ -427,8 +423,6 @@ def chromatic_noise_block(
             prior = ds.broken_powerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
-        elif prior == 'powerlaw_cutoff':
-            prior = ds.powerlaw_cutoff
         elif callable(prior):
             pass # pass a callable prior
         else:
@@ -510,8 +504,6 @@ def solar_wind_noise_block(
             prior = ds.broken_powerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
-        elif prior == 'powerlaw_cutoff':
-            prior = ds.powerlaw_cutoff
         elif callable(prior):
             pass # pass a callable prior
         else:
