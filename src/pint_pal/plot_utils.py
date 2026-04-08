@@ -5597,7 +5597,7 @@ def _convert_units(
     freqs_mhz,
     gp_category,
     target_units='us',
-    chrom_idx=None,
+    chromatic_idx=None,
     ref_freq_mhz=1400.0,
 ):
     """
@@ -5622,7 +5622,7 @@ def _convert_units(
         ``'dm'`` for DM in 10^-3 pc cm^-3, ``'dm_full'`` for DM in pc cm^-3,
         ``'ne'`` for solar wind electron density n_E [cm^-3] (SW only),
         ``'us@800'`` for chromatic GP normalised to 800 MHz.
-    chrom_idx : float or None
+    chromatic_idx : float or None
         Chromatic index (needed for ``'us@800'`` or ``'dm'`` for chrom GP).
     ref_freq_mhz : float
         Reference frequency for chromatic GP. Default 1400 MHz.
@@ -5644,16 +5644,16 @@ def _convert_units(
         #   dt(f) = dt_ref * (f / f_ref)^{-idx}
         # We want dt(800), so multiply by (f_toa / 800)^idx to "undo" the
         # per-TOA chromatic scaling and re-evaluate at 800 MHz.
-        if chrom_idx is None:
-            chrom_idx = 4.0  # default chromatic index
-        ratio = (freqs_mhz / 800.0) ** chrom_idx  # (n_toas,)
+        if chromatic_idx is None:
+            chromatic_idx = 4.0  # default chromatic index
+        ratio = (freqs_mhz / 800.0) ** chromatic_idx  # (n_toas,)
         return signal * ratio * 1e6, r'$\Delta t$ ($\mu$s @800MHz)'
     elif target_units == 'dm':
         # dt = DM * DMconst / freq^2  =>  DM = dt * freq^2 / DMconst
         if gp_category in ('dm_gp', 'dm', 'sw', 'solar_wind'):
             dm_signal = signal * freqs_mhz**2 / _DMCONST_MHZ2_S * 1e3
             return dm_signal, r'$\Delta$DM ($10^{-3}$ pc cm$^{-3}$)'
-        elif gp_category in ('chrom', 'chrom_gp') and chrom_idx is not None:
+        elif gp_category in ('chrom', 'chrom_gp') and chromatic_idx is not None:
             log.warning(
                 "DM units not well-defined for chromatic GP (idx != 2). "
                 "Returning microseconds."
@@ -5666,7 +5666,7 @@ def _convert_units(
         if gp_category in ('dm_gp', 'dm', 'sw', 'solar_wind'):
             dm_signal = signal * freqs_mhz**2 / _DMCONST_MHZ2_S
             return dm_signal, r'$\Delta$DM (pc cm$^{-3}$)'
-        elif gp_category in ('chrom', 'chrom_gp') and chrom_idx is not None:
+        elif gp_category in ('chrom', 'chrom_gp') and chromatic_idx is not None:
             log.warning(
                 "DM units not well-defined for chromatic GP (idx != 2). "
                 "Returning microseconds."
@@ -5706,7 +5706,7 @@ def plot_gp_realization(
     color=None,
     alpha_ci=0.15,
     alpha_real=0.08,
-    chrom_idx=None,
+    chromatic_idx=None,
     ref_freq_mhz=1400.0,
     label=None,
     toa_units='mjd',
@@ -5760,7 +5760,7 @@ def plot_gp_realization(
         Alpha for CI fill. Default 0.15.
     alpha_real : float, optional
         Alpha for individual realizations. Default 0.08.
-    chrom_idx : float, optional
+    chromatic_idx : float, optional
         Chromatic index for unit conversion (used for chrom GP with
         ``'dm'`` or ``'us@800'`` units).
     ref_freq_mhz : float, optional
@@ -5806,7 +5806,7 @@ def plot_gp_realization(
     # Convert units
     all_signals, ylabel = _convert_units(
         all_signals, freqs, category, target_units=units,
-        chrom_idx=chrom_idx, ref_freq_mhz=ref_freq_mhz,
+        chromatic_idx=chromatic_idx, ref_freq_mhz=ref_freq_mhz,
     )
 
     # Remove delta symbol from ylabel when showing total values
@@ -5910,7 +5910,7 @@ def plot_gp_realizations_combined(
     figsize=(10, 3),
     toa_units='mjd',
     exclude=None,
-    chrom_idx=None,
+    chromatic_idx=None,
     compact=False,
 ):
     """
@@ -5950,7 +5950,7 @@ def plot_gp_realizations_combined(
         ``'mjd'`` or ``'yr'``. Default ``'mjd'``.
     exclude : list of str, optional
         GP categories to exclude, e.g. ``['timing_model', 'ecorr']``.
-    chrom_idx : float, optional
+    chromatic_idx : float, optional
         Chromatic index (passed through for ``'us@800'`` unit conversion).
     compact : bool, optional
         If True, remove vertical space between subplots and hide per-panel
@@ -6025,7 +6025,7 @@ def plot_gp_realizations_combined(
                 include_tm_perturbations=include_tm_perturbations,
                 include_tm_values=include_tm_values,
                 model=model,
-                ax=axes[i], toa_units=toa_units, chrom_idx=chrom_idx,
+                ax=axes[i], toa_units=toa_units, chromatic_idx=chromatic_idx,
             )
 
         if compact:
@@ -6369,13 +6369,7 @@ def plot_gp_sw_ne(
 
     # Solar conjunctions
     if show_solar_conjunctions and payload.get('solar_conjunctions_mjd'):
-        conj = payload['solar_conjunctions_mjd']
-        log.info(f"Solar conjunctions (MJD): {conj}")
-        if len(conj) > 1:
-            diffs = np.diff(conj)
-            log.info(f"Differences between consecutive conjunctions (days): {diffs}")
-            log.info(f"Mean spacing (days): {np.mean(diffs):.2f}, Expected (~365.25 days/year)")
-        for tc in conj:
+        for tc in payload['solar_conjunctions_mjd']:
             tc = float(tc)  # Ensure tc is a Python float, not numpy scalar
             tc_plot = tc if toa_units == 'mjd' else (tc - 51544.0) / 365.25 + 2000.0
             if tplot.min() <= tc_plot <= tplot.max():

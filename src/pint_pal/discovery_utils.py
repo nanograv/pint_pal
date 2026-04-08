@@ -44,7 +44,7 @@ log.remove()
 log.add(sys.stderr, colorize=False, enqueue=True)
 log.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices")
 
-def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type):
+def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, chromatic_idx=None):
     "Convoluted helper function for setting log/lin Fourier bases of different types"
     if nlog > 0:
         if noise_type == 'red_noise':
@@ -58,10 +58,18 @@ def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type):
                 f_min=f_min, nlin=Nfreqs, nlog=nlog,
                 )
         elif noise_type == 'chromatic':
-            return lambda pulsar, comp, T : ds.log_free_chromatic_fourierbasis(
-                psr, T=tspan, logmode=logmode,
-                f_min=f_min, nlin=Nfreqs, nlog=nlog,
-                )
+            if chromatic_idx is not None:
+                # Fixed chromatic index: use log_fixed_chromatic_fourierbasis (returns matrix)
+                return lambda pulsar, comp, T : ds.log_fixed_chromatic_fourierbasis(
+                    psr, chromatic_idx=chromatic_idx, T=tspan, logmode=logmode,
+                    f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                    )
+            else:
+                # Varying chromatic index: use log_free_chromatic_fourierbasis (returns callable)
+                return lambda pulsar, comp, T : ds.log_free_chromatic_fourierbasis(
+                    psr, T=tspan, logmode=logmode,
+                    f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                    )
         elif noise_type == 'solar_wind':
             return lambda pulsar, comp, T : ds_solar.log_solardm_fourierbasis(
                 psr, T=tspan, logmode=logmode,
@@ -73,7 +81,12 @@ def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type):
         elif noise_type == 'dm_noise':
             return ds.dmfourierbasis
         elif noise_type == 'chromatic':
-            return ds.freechromaticfourierbasis
+            if chromatic_idx is not None:
+                # Fixed chromatic index: bind it so freechromaticfourierbasis returns a matrix
+                return partial(ds.freechromaticfourierbasis, chromatic_idx=chromatic_idx)
+            else:
+                # Varying chromatic index: freechromaticfourierbasis returns callable fmat
+                return ds.freechromaticfourierbasis
         elif noise_type == 'solar_wind':
             return ds_solar.fourierbasis_solar_dm
     else:
@@ -428,6 +441,9 @@ def chromatic_noise_block(
         else:
             raise ValueError("Invalid *prior* specified for Fourier basis chromatic noise. Try one of: ['powerlaw', 'powerlaw_cutoff', 'broken_powerlaw', 'freespectrum']")
 
+        # Resolve chromatic index: None means 'vary' (callable fmat), else fixed (matrix fmat)
+        chrom_idx_val = None if chromatic_idx == 'vary' else chromatic_idx
+
         chrom_gp = ds.makegp_fourier(
             psr,
             prior,
@@ -436,7 +452,8 @@ def chromatic_noise_block(
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
-                nlog, noise_type='chromatic'
+                nlog, noise_type='chromatic',
+                chromatic_idx=chrom_idx_val,
             ),
             name=name
             )
