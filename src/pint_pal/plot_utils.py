@@ -5189,12 +5189,12 @@ _GP_LABELS = {
     'rn': 'Red Noise',
     'dm_gp': 'DM GP',
     'dm': 'DM GP',
-    'chrom': 'Chromatic GP',
-    'chrom_gp': 'Chromatic GP',
+    'chrom': 'Free Chromatic GP',
+    'chrom_gp': 'Free Chromatic GP',
     'sw': 'Solar Wind GP',
     'solar_wind': 'Solar Wind GP',
-    'timing_model': 'Timing Model',
-    'tm': 'Timing Model',
+    'timing_model': 'Timing Model Perturbations',
+    'tm': 'Timing Model Perturbations',
     'ecorr': 'ECORR (GP)',
     'gp_ecorr': 'ECORR (GP)',
 }
@@ -5367,7 +5367,7 @@ _TM_PARAMS_FOR_CATEGORY = {
     'red_noise': ['F0', 'F1', 'F2'],
     'dm_gp':     ['DM', 'DM1', 'DM2', 'DM3'],
     'sw':        ['NE_SW', 'NE1', 'SWPRBETA1', 'sw_proxy_beta'],
-    'chrom':     [],        # no standard TM term for chromatic
+    'chrom':     ['CM', 'CM1', 'CM2'],        # we don't often use these but they could be included in principle
 }
 
 
@@ -5380,28 +5380,81 @@ def _get_tm_gp_key(payload, psr_name=None):
     return None
 
 
-def _get_tm_component_signal(payload, gp_category, psr_name=None):
+def _extract_tm_reference_values(model, gp_category):
+    """Extract reference values from timing model for a given GP category.
+
+    Extracts the mean/reference value (e.g., F0.value, DM.value) for each
+    timing model parameter relevant to the category.
+
+    Parameters
+    ----------
+    model : pint.models.TimingModel or None
+        PINT timing model.
+    gp_category : str
+        One of ``'red_noise'``, ``'dm_gp'``, ``'chrom'``, ``'sw'``.
+
+    Returns
+    -------
+    dict
+        ``{param_name: value}`` for parameters found in the model.
+        Empty dict if model is None or no parameters found.
+    """
+    if model is None:
+        return {}
+    
+    param_names = _TM_PARAMS_FOR_CATEGORY.get(gp_category, [])
+    ref_vals = {}
+    
+    for pname in param_names:
+        try:
+            if hasattr(model, pname):
+                ref_vals[pname] = float(getattr(model, pname).value)
+        except Exception:
+            pass
+    
+    return ref_vals
+
+
+def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, include_reference_values=False):
     """Compute the timing-model contribution for a given GP category.
 
     For each realization, the timing-model coefficient draw is multiplied by
     the corresponding TM design-matrix column.  Only the columns relevant to
     ``gp_category`` (according to ``_TM_PARAMS_FOR_CATEGORY``) are included.
 
+    If ``model`` is provided and ``include_reference_values=True``, the
+    reference values for each parameter are converted to time delays and added
+    to the fitted perturbations.  The conversion is done via multiplication by
+    the design matrix column:
+        ref_delay = ref_value * F[toa, column]
+                  = ref_value * d(delay)/d(param)
+    This gives the time-delay contribution of the reference value at each TOA,
+    which is then broadcasted across all realizations.
+
     Parameters
     ----------
     payload : dict
         Loaded GP realizations payload.
     gp_category : str
-        One of ``'red_noise'``, ``'dm_gp'``, ``'sw'``.
+        One of ``'red_noise'``, ``'dm_gp'``, ``'chrom'``, ``'sw'``.
     psr_name : str, optional
         Pulsar name to help classify GP keys.
+    model : pint.models.TimingModel, optional
+        PINT timing model to extract reference parameter values. Default None.
+    include_reference_values : bool, optional
+        If True and model is provided, add reference parameter values
+        (converted to time delays) to the fitted perturbations. Default False.
+        Reference values are never added for the 'sw' category (handled
+        separately in plot_gp_sw_ne).
 
     Returns
     -------
     np.ndarray or None
         Shape ``(n_realizations, n_toas)`` — the timing-model contribution
-        for the requested category summed over relevant TM columns.
-        Returns *None* if the TM key is missing or no relevant column found.
+        for the requested category summed over relevant TM columns, in seconds.
+        Includes fitted perturbations, and reference contributions if both
+        model and include_reference_values are provided. Returns *None* if the
+        TM key is missing or no relevant column found.
     list of str
         Names of the TM columns that were included.
     """
@@ -5438,9 +5491,31 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None):
         return None, []
 
     # sum_k F[:, k] * c[:, k]  for every realization
+    # This gives fitted perturbations in seconds.
     F_sub = F_tm[:, col_idx]            # (n_toas, n_sel)
     c_sub = coeffs_tm[:, col_idx]       # (n_real, n_sel)
     tm_signal = c_sub @ F_sub.T         # (n_real, n_toas)
+
+    # Add reference contributions if requested, model provided, and category is not 'sw'.
+    # Each parameter's reference value is converted to a time delay by multiplying
+    # by the corresponding design matrix column:
+    #   ref_delay[toa] = ref_value * F_tm[toa, col]
+    #                  = ref_value * d(delay)/d(param)  (units: seconds)
+    # This works for all categories:
+    #   - red_noise (F0, F1, F2): delay = dfreq * d(delay)/d(freq)
+    #   - dm_gp (DM, DM1, DM2): delay = DM * d(delay)/d(DM)
+    #   - chrom (CM, CM1, CM2): delay = CM * d(delay)/d(CM)
+    #   (SW handled separately in plot_gp_sw_ne, not here)
+    if include_reference_values and model is not None and gp_category != 'sw':
+        ref_vals = _extract_tm_reference_values(model, gp_category)
+        if ref_vals:
+            for pname, col_i in zip(used_names, col_idx):
+                if pname in ref_vals:
+                    # Design matrix column: d(delay)/d(param) at each TOA
+                    # Multiply by reference value to get reference delay contribution
+                    ref_delay = ref_vals[pname] * F_tm[:, col_i]  # (n_toas,)
+                    # Broadcast to all realizations and add
+                    tm_signal = tm_signal + ref_delay[np.newaxis, :]
 
     return tm_signal, used_names
 
@@ -5544,7 +5619,7 @@ def _convert_units(
         ``'timing_model'``, ``'ecorr'``.
     target_units : str
         ``'us'`` for microseconds, ``'s'`` for seconds,
-        ``'dm'`` for DM in pc cm^-3 (only meaningful for DM/SW GPs),
+        ``'dm'`` for DM in 10^-3 pc cm^-3, ``'dm_full'`` for DM in pc cm^-3,
         ``'ne'`` for solar wind electron density n_E [cm^-3] (SW only),
         ``'us@800'`` for chromatic GP normalised to 800 MHz.
     chrom_idx : float or None
@@ -5586,6 +5661,19 @@ def _convert_units(
             return signal * 1e6, r'$\Delta t$ ($\mu$s)'
         else:
             return signal * 1e6, r'$\Delta t$ ($\mu$s)'
+    elif target_units == 'dm_full':
+        # Convert to pc cm^-3 (without the 1e3 scaling factor)
+        if gp_category in ('dm_gp', 'dm', 'sw', 'solar_wind'):
+            dm_signal = signal * freqs_mhz**2 / _DMCONST_MHZ2_S
+            return dm_signal, r'$\Delta$DM (pc cm$^{-3}$)'
+        elif gp_category in ('chrom', 'chrom_gp') and chrom_idx is not None:
+            log.warning(
+                "DM units not well-defined for chromatic GP (idx != 2). "
+                "Returning microseconds."
+            )
+            return signal * 1e6, r'$\Delta t$ ($\mu$s)'
+        else:
+            return signal * 1e6, r'$\Delta t$ ($\mu$s)'
     elif target_units == 'ne':
         # Convert SW timing delay to n_E [cm^-3].  The SW design matrix
         # already contains the geometric factor S(t) * DMconst / f^2, so:
@@ -5609,7 +5697,9 @@ def plot_gp_realization(
     show_realizations=0,
     show_solar_conjunctions=True,
     show_sw_nodes=False,
-    include_tm_components=False,
+    include_tm_perturbations=False,
+    include_tm_values=False,
+    model=None,
     ax=None,
     figsize=(10, 4),
     title=None,
@@ -5645,10 +5735,19 @@ def plot_gp_realization(
         Draw vertical lines at solar conjunctions. Default True.
     show_sw_nodes : bool, optional
         Mark SW interpolation node positions. Default False.
-    include_tm_components : bool, optional
-        If True, add the relevant timing-model column realizations
+    include_tm_perturbations : bool, optional
+        If True, add the fitted timing-model column perturbations
         (e.g. F0/F1 for red noise, DM/DM1/DM2 for DM GP, NE_SW for SW GP)
-        to the GP realizations before plotting. Default False.
+        to the GP realizations before plotting. Shows deviations from the
+        reference values. Default False.
+    include_tm_values : bool, optional
+        If True and model is provided, also add the reference parameter values
+        (converted to time delays) so the plot shows total quantities instead
+        of just perturbations. Requires include_tm_perturbations=True.
+        Default False.
+    model : pint.models.TimingModel, optional
+        PINT timing model to extract reference values (e.g. F0.value, DM.value).
+        Only used if include_tm_values=True. Default None.
     ax : matplotlib Axes, optional
         If None, a new figure is created.
     figsize : tuple, optional
@@ -5682,19 +5781,21 @@ def plot_gp_realization(
     # Auto-detect units based on GP category
     if units == 'auto':
         if category == 'dm_gp':
-            units = 'dm'
+            units = 'dm_full' if include_tm_values else 'dm'
         elif category in ('chrom', 'chrom_gp'):
             units = 'us@800'
         else:
-            units = 'us'
+            units = 's' if include_tm_values else 'us'
 
     # Compute time-domain realizations
     all_signals = _gp_time_domain(payload, gp_key)  # (n_real, n_toas)
 
     # Optionally add timing-model component contributions
     tm_names_used = []
-    if include_tm_components and category in _TM_PARAMS_FOR_CATEGORY:
-        tm_signal, tm_names_used = _get_tm_component_signal(payload, category, psr_name)
+    if include_tm_perturbations and category in _TM_PARAMS_FOR_CATEGORY:
+        tm_signal, tm_names_used = _get_tm_component_signal(
+            payload, category, psr_name, model=model, include_reference_values=include_tm_values
+        )
         if tm_signal is not None:
             all_signals = all_signals + tm_signal
             log.info(f"Added TM columns {tm_names_used} to {category} GP realizations.")
@@ -5707,6 +5808,10 @@ def plot_gp_realization(
         all_signals, freqs, category, target_units=units,
         chrom_idx=chrom_idx, ref_freq_mhz=ref_freq_mhz,
     )
+
+    # Remove delta symbol from ylabel when showing total values
+    if include_tm_values and include_tm_perturbations and units in ('dm', 'dm_full', 's'):
+        ylabel = ylabel.replace(r'$\Delta$', '').replace(r'$\Delta t$', r'$t$')
 
     # Time axis
     if toa_units == 'yr':
@@ -5742,7 +5847,8 @@ def plot_gp_realization(
     # Median
     if show_median:
         lbl = label if label else _GP_LABELS.get(category, gp_key)
-        if tm_names_used:
+        # Only append TM column names if showing perturbations without reference values
+        if tm_names_used and not include_tm_values:
             lbl += ' + ' + ','.join(tm_names_used)
         ax.plot(tplot, median, color=color, lw=1.5, label=lbl)
 
@@ -5756,6 +5862,7 @@ def plot_gp_realization(
     if show_solar_conjunctions and payload.get('solar_conjunctions_mjd'):
         conj = payload['solar_conjunctions_mjd']
         for tc in conj:
+            tc = float(tc)  # Ensure tc is a Python float, not numpy scalar
             tc_plot = tc if toa_units == 'mjd' else (tc - 51544.0) / 365.25 + 2000.0
             if tplot.min() <= tc_plot <= tplot.max():
                 ax.axvline(tc_plot, color='grey', ls='-', lw=0.8, alpha=0.4,
@@ -5774,6 +5881,11 @@ def plot_gp_realization(
     ax.tick_params(axis='both', which='major', labelsize=_GP_FONTSIZE_TICK,
                    length=6, width=1)
     ax.tick_params(axis='both', which='minor', length=3, width=0.8)
+    
+    # Disable offset notation for DM when showing reference values (total quantities)
+    if include_tm_values and units in ('dm', 'dm_full'):
+        ax.ticklabel_format(style='plain', axis='y')
+    
     if title is None:
         pretty_name, _ = _classify_gp(gp_key, psr_name)
         title = f'{psr_name} — {pretty_name}'
@@ -5792,7 +5904,8 @@ def plot_gp_realizations_combined(
     ci_levels=(0.68, 0.95),
     show_median=True,
     show_solar_conjunctions=True,
-    include_tm_components=False,
+    include_tm_perturbations=False,
+    include_tm_values=False,
     model=None,
     figsize=(10, 3),
     toa_units='mjd',
@@ -5820,12 +5933,17 @@ def plot_gp_realizations_combined(
         Plot median. Default True.
     show_solar_conjunctions : bool, optional
         Draw solar conjunction lines. Default True.
-    include_tm_components : bool, optional
-        Add relevant timing-model column realizations to each GP.
+    include_tm_perturbations : bool, optional
+        If True, add fitted timing-model column perturbations to each GP.
+        Shows deviations from reference values. Default False.
+    include_tm_values : bool, optional
+        If True and model is provided, also add reference parameter values
+        (converted to time delays) so panels show total quantities instead
+        of just perturbations. Requires include_tm_perturbations=True.
         Default False.
     model : pint.models.TimingModel, optional
-        If provided, reference parameter values (DM, NE_SW) are added
-        to the relevant panels so they show total quantities.
+        PINT timing model to extract reference parameter values (DM, etc.).
+        Only used if include_tm_values=True. Default None.
     figsize : tuple, optional
         ``(width, height_per_panel)``. Default ``(10, 3)``.
     toa_units : str, optional
@@ -5895,7 +6013,7 @@ def plot_gp_realizations_combined(
                 payload, gp_key=gp_key, ci_levels=ci_levels,
                 show_median=show_median,
                 show_solar_conjunctions=show_solar_conjunctions,
-                include_tm_components=include_tm_components,
+                include_tm_components=include_tm_perturbations,
                 model=model,
                 ax=axes[i], toa_units=toa_units,
             )
@@ -5904,7 +6022,9 @@ def plot_gp_realizations_combined(
                 payload, gp_key, units=panel_units, ci_levels=ci_levels,
                 show_median=show_median,
                 show_solar_conjunctions=show_solar_conjunctions,
-                include_tm_components=include_tm_components,
+                include_tm_perturbations=include_tm_perturbations,
+                include_tm_values=include_tm_values,
+                model=model,
                 ax=axes[i], toa_units=toa_units, chrom_idx=chrom_idx,
             )
 
@@ -6030,7 +6150,7 @@ def plot_gp_total_signal(
 
         # Optionally add TM components
         if include_tm_components and category in _TM_PARAMS_FOR_CATEGORY:
-            tm_signal, _ = _get_tm_component_signal(payload, category, psr_name)
+            tm_signal, _ = _get_tm_component_signal(payload, category, psr_name, model=model)
             if tm_signal is not None:
                 sig = sig + tm_signal
 
@@ -6236,8 +6356,9 @@ def plot_gp_sw_ne(
                         label=f'{int(ci*100)}% CI' if ci == ci_levels[0] else None)
 
     if show_median:
-        lbl = 'SW $n_E$ (median)'
-        if tm_names_used:
+        lbl = 'SWGP [$n_E$]'
+        # Only append TM column names if showing perturbations without total values
+        if tm_names_used and not _showing_total:
             lbl += ' + ' + ','.join(tm_names_used)
         ax.plot(tplot, median, color=color, lw=1.5, label=lbl)
 
@@ -6248,7 +6369,14 @@ def plot_gp_sw_ne(
 
     # Solar conjunctions
     if show_solar_conjunctions and payload.get('solar_conjunctions_mjd'):
-        for tc in payload['solar_conjunctions_mjd']:
+        conj = payload['solar_conjunctions_mjd']
+        log.info(f"Solar conjunctions (MJD): {conj}")
+        if len(conj) > 1:
+            diffs = np.diff(conj)
+            log.info(f"Differences between consecutive conjunctions (days): {diffs}")
+            log.info(f"Mean spacing (days): {np.mean(diffs):.2f}, Expected (~365.25 days/year)")
+        for tc in conj:
+            tc = float(tc)  # Ensure tc is a Python float, not numpy scalar
             tc_plot = tc if toa_units == 'mjd' else (tc - 51544.0) / 365.25 + 2000.0
             if tplot.min() <= tc_plot <= tplot.max():
                 ax.axvline(tc_plot, color='grey', ls='-', lw=0.8, alpha=0.4,
@@ -6273,6 +6401,11 @@ def plot_gp_sw_ne(
     ax.tick_params(axis='both', which='major', labelsize=_GP_FONTSIZE_TICK,
                    length=6, width=1)
     ax.tick_params(axis='both', which='minor', length=3, width=0.8)
+    
+    # Disable offset notation when showing total values
+    if _showing_total:
+        ax.ticklabel_format(style='plain', axis='y')
+    
     if title is None:
         if _showing_total:
             title = f'{psr_name} — Solar Wind $n_E$ (total)'

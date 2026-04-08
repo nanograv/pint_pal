@@ -1651,28 +1651,36 @@ def generate_gp_realizations(
             log.warning(f"Could not compute SW shape factor: {exc}")
 
     # Solar conjunctions (for plotting metadata)
-    # Find local minima of the solar impact angle to identify conjunctions
+    # Find the overall solar minimum and estimate conjunctions at ~1 year intervals
     solar_conjunctions_mjd = None
     try:
         theta, _, _, _ = ds_solar.theta_impact(e_psr)
         toas_mjd_arr = e_psr.toas / 86400
-        # Sort by time for local-minimum search
-        sort_idx = np.argsort(toas_mjd_arr)
-        theta_sorted = theta[sort_idx]
-        toas_sorted = toas_mjd_arr[sort_idx]
-        # Find yearly windows and take the minimum in each
+        
+        # Find the global minimum of theta (solar conjunction)
+        idx_global_min = np.argmin(theta)
+        t_min_global = toas_mjd_arr[idx_global_min]
+        
+        # Generate conjunctions at approximately yearly intervals relative to the global minimum
+        t0 = toas_mjd_arr.min()
+        t1 = toas_mjd_arr.max()
         yr_day = 365.25
-        t0 = toas_sorted.min()
-        t1 = toas_sorted.max()
         conj_times = []
-        window_start = t0 - yr_day / 2
-        while window_start < t1 + yr_day / 2:
-            window_end = window_start + yr_day
-            mask = (toas_sorted >= window_start) & (toas_sorted < window_end)
-            if np.any(mask):
-                idx_min = np.argmin(theta_sorted[mask])
-                conj_times.append(float(toas_sorted[mask][idx_min]))
-            window_start += yr_day
+        
+        # Add conjunctions going backward from t_min_global
+        t_conj = t_min_global
+        while t_conj >= t0:
+            conj_times.append(float(t_conj))
+            t_conj -= yr_day
+        
+        # Add conjunctions going forward from t_min_global
+        t_conj = t_min_global + yr_day
+        while t_conj <= t1:
+            conj_times.append(float(t_conj))
+            t_conj += yr_day
+        
+        # Sort by time
+        conj_times.sort()
         solar_conjunctions_mjd = conj_times if conj_times else None
     except Exception as e:
         log.warning(f"Could not compute solar conjunctions: {e}")
