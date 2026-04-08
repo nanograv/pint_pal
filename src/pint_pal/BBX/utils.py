@@ -7,7 +7,7 @@ import re
 import glob
 from datetime import datetime
 from collections import Counter
-from typing import Any, Callable, Iterable, Mapping, Optional, Union, Sequence, Tuple
+from typing import Any, Callable, Iterable, Mapping, Optional, Union, Sequence, Tuple, List
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -169,6 +169,22 @@ def handle_diagnostics_multi(
                     plt.close(fig)
                 except Exception:
                     pass
+
+def mask_toas_from_gaps(mjd_toa: np.ndarray, gaps) -> np.ndarray:
+    """
+    Build a TOA-level boolean mask from (start, stop) gap intervals.
+
+    Returns
+    -------
+    keep_mask : ndarray[bool]
+        True for TOAs *kept* (outside gaps), False for TOAs inside any gap.
+    """
+    mjd_toa = np.asarray(mjd_toa, float)
+    in_gap = np.zeros_like(mjd_toa, dtype=bool)
+    for (g1, g2) in gaps:
+        g1 = float(g1); g2 = float(g2)
+        in_gap |= (mjd_toa >= g1) & (mjd_toa <= g2)
+    return ~in_gap
                     
 # =============================================================================
 # Data manipulation utilities
@@ -221,6 +237,40 @@ def combine_repeated_toas(
         out_e.append(float(np.sqrt(np.mean(e_s[g] ** 2))))
 
     return np.asarray(out_t, float), np.asarray(out_y, float), np.asarray(out_e, float)
+
+def remove_gap_nodes(
+    basis_nodes: np.ndarray, 
+    gap_nodes: np.ndarray, 
+    atol: float = 1e-10):
+    """
+    Remove gap-node entries from a basis-node array by nearest-neighbor matching.
+    
+    Each gap node is matched to at most one unused basis node within a fixed
+    absolute tolerance, and matched basis nodes are removed. Returns the cleaned
+    array and the indices of removed entries.
+    """
+    basis_nodes = np.asarray(basis_nodes, dtype=float)
+    gap_nodes = np.asarray(gap_nodes, dtype=float)
+
+    # Track which indices in basis_nodes have already been assigned
+    used = np.zeros(len(basis_nodes), dtype=bool)
+    matched_idx = []
+
+    for g in gap_nodes:
+        d = np.abs(basis_nodes - g)
+
+        # prevent reusing the same node for multiple gap nodes
+        d[used] = np.inf
+
+        i = np.argmin(d)
+        if d[i] <= atol:
+            matched_idx.append(i)
+            used[i] = True
+
+    matched_idx = np.array(sorted(matched_idx), dtype=int)
+    cleaned = np.delete(basis_nodes, matched_idx)
+
+    return cleaned, matched_idx
 
 # =============================================================================
 # Time / coordinate utilities

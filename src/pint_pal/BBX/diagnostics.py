@@ -345,14 +345,14 @@ def plot_swx_bb_diagnostics(
 
     # Add suptitle with pulsar name
     if pulsar_name is not None:
-        fig.suptitle(f"{pulsar_name} — {title}", fontsize=14, y=1.02)
+        fig.suptitle(f"{pulsar_name} — {title}", fontsize=14, y=0.95)
     fig.tight_layout(rect=[0, 0.05, 1, 0.97]) # leave space for legend + title
 
     return fig
 
 def extract_swx_params(model: pint.models.timing_model.TimingModel) -> Dict[str, Any]:
     """
-    Extract SWX (time-variable solar-wind) segment parameters from a PINT model.
+    Extract SWX (time-variable solar wind) segment parameters from a PINT model.
 
     Returns
     -------
@@ -592,12 +592,12 @@ def plot_swx_dm_series(fitter, min_elong_mjds, SWX_bin=None, bb=False, z_thresh=
     ax.set_xlabel("MJD")
     ax.set_ylabel(r"DM$_{\rm SWX}$ [pc cm$^{-3}$]")
     if bb:
-        ax.set_title("SWX-modeled solar-wind DM(t) — BB bins")
+        ax.set_title("SWX-modeled solar wind DM(t) — BB bins")
     else:
         if SWX_bin is None:
-            ax.set_title("SWX-modeled solar-wind DM(t)")
+            ax.set_title("SWX-modeled solar wind DM(t)")
         else:
-            ax.set_title(f"SWX-modeled solar-wind DM(t) — {SWX_bin:.2f} d bins")
+            ax.set_title(f"SWX-modeled solar wind DM(t) — {SWX_bin:.2f} d bins")
 
     # Auto y-limits based on filtered data to avoid blown scale
     if autolim and np.any(keep_mask):
@@ -829,7 +829,7 @@ def plot_all_epoch_fit_overlay(
         0.5,
         -0.01,
         "Each line shows a weighted least-squares fit performed within a single epoch across observing frequencies. "
-        "Colors indicate per-epoch signal quality (|b|/σ_b) or number of TOAs (n_used). A well-behaved DM proxy fit has consistent slopes "
+        "Colors indicate per-epoch signal quality (|b|/sigma_b) or number of TOAs (n_used). A well-behaved DM proxy fit has consistent slopes "
         "across epochs and a broad range of x-values, showing stable separation between achromatic (a) and chromatic (b) terms.",
         ha="center",
         va="top",
@@ -949,7 +949,7 @@ def plot_epoch_fit_examples(
         ax.set_xlabel("x (dispersion regressor)")
         ax.set_ylabel("residual")
         ax.set_title(
-            f"MJD~{r['mid_mjd']:.1f}  n={r['n_used']}  |b|/σ={abs(r['b'])/r['sb']:.2g}"
+            f"MJD~{r['mid_mjd']:.1f}  n={r['n_used']}  |b|/$\sigma$={abs(r['b'])/r['sb']:.2g}"
             if (np.isfinite(r["sb"]) and r["sb"] > 0)
             else f"MJD~{r['mid_mjd']:.1f}  n={r['n_used']}"
         )
@@ -962,9 +962,9 @@ def plot_epoch_fit_examples(
     fig.text(
         0.5,
         -0.01,
-        "Each panel shows a single epoch’s WLS fit of residuals vs. dispersion regressor (either x=1/ν² or x=(ν_ref/ν)²). "
+        "Each panel shows a single epoch’s WLS fit of residuals vs. dispersion regressor (either $x=1/\nu^2$ or $x=(\nu_{ref}/\nu)^2$). "
         "The blue points are TOAs within that epoch; the orange line is the fitted model y = a + b·x. "
-        "Epochs with few TOAs, narrow x-span, or weak slope (low |b|/σ_b) indicate poor chromatic–achromatic separation. "
+        "Epochs with few TOAs, narrow x-span, or weak slope (low |b|/$\sigma_b$) indicate poor chromatic–achromatic separation. "
         "Consistent slopes across epochs suggest a stable DM proxy; scattered or flat fits may signal overfitting or inadequate sampling.",
         ha="center",
         va="top",
@@ -974,7 +974,6 @@ def plot_epoch_fit_examples(
 
     fig.tight_layout()
     return fig
-
 
 def plot_points_per_epoch_arrays(
     epoch_mjd,
@@ -1026,7 +1025,7 @@ def plot_points_per_epoch_arrays(
     ax.legend(loc="best")
 
     fc = fit_conditions if isinstance(fit_conditions, dict) else {}
-    reg_label = fc.get("regressor", "1/ν²")
+    reg_label = fc.get("regressor", "$1/\nu^2$")
     min_ch = fc.get("min_channels")
     min_uniq = fc.get("min_unique_channels")
     min_span = fc.get("min_x_span")
@@ -1039,7 +1038,7 @@ def plot_points_per_epoch_arrays(
 
     if min_span is not None:
         min_span_str = (
-            f"{float(min_span):.2e} 1/MHz²" if reg_label == "1/ν²" else f"{float(min_span):.2e} (in {reg_label})"
+            f"{float(min_span):.2e} 1/MHz²" if reg_label == "$1/\nu^2$" else f"{float(min_span):.2e} (in {reg_label})"
         )
     else:
         min_span_str = None
@@ -1052,11 +1051,11 @@ def plot_points_per_epoch_arrays(
     if min_span_str:
         bullets.append(f"min_x_span={min_span_str}")
     if isinstance(min_snr, (int, float)) and min_snr > 0:
-        bullets.append(f"SNR cut |b|/σ_b≥{min_snr:g}")
+        bullets.append(f"SNR cut |b|/$\sigma_b$≥{min_snr:g}")
     if req_err:
         bullets.append("require positive finite y-errors")
     if clip_out:
-        bullets.append(f"MAD clip (±{mad_sig}σ)" if mad_sig is not None else "MAD clip")
+        bullets.append(f"MAD clip (±{mad_sig}$\sigma$)" if mad_sig is not None else "MAD clip")
     if norm_x:
         bullets.append(f"x normalized ({norm_meth})" if norm_meth else "x normalized")
 
@@ -1078,7 +1077,7 @@ def plot_b_snr_vs_time(
     style: Optional["PlotStyleConfig"] = None,
 ) -> Figure:
     """
-    Plot |b|/σ_b vs epoch time on log y-axis.
+    Plot |b|/sigma_b vs epoch time on log y-axis.
     """
     epoch_mjd = np.asarray(epoch_mjd, float)
     b_chrom = np.asarray(b_chrom, float)
@@ -1105,20 +1104,20 @@ def plot_b_snr_vs_time(
         edgecolors="black",
         linewidths=0.3,
         alpha=0.7,
-        label="|b|/σ_b",
+        label="|b|/$\sigma_b$",
     )
-    ax.axhline(2.0, linestyle="--", color="tab:red", linewidth=1.2, alpha=0.9, label="2σ")
-    ax.axhline(3.0, linestyle="--", color="tab:green", linewidth=1.2, alpha=0.9, label="3σ")
+    ax.axhline(2.0, linestyle="--", color="tab:red", linewidth=1.2, alpha=0.9, label="2$\sigma$")
+    ax.axhline(3.0, linestyle="--", color="tab:green", linewidth=1.2, alpha=0.9, label="3$\sigma$")
     ax.set_yscale("log")
     ax.grid(True, which="both", linestyle="--", alpha=0.5)
     ax.set_xlabel("Epoch MJD")
-    ax.set_ylabel("|b| / σ_b (log)")
+    ax.set_ylabel("|b| / $\sigma_b$ (log)")
     ax.set_title("Chromatic slope significance over time")
 
     fig.text(
         0.5,
         -0.01,
-        "Shows how significant the chromatic slope (b) is in each epoch. Good DM proxy fits have many epochs above 2–3σ, "
+        "Shows how significant the chromatic slope (b) is in each epoch. Good DM proxy fits have many epochs above 2–3$\sigma$, "
         "indicating measurable dispersion trends.",
         ha="center",
         va="top",
@@ -1131,55 +1130,78 @@ def plot_b_snr_vs_time(
 
 
 def plot_a_vs_b_correlation(
-    a_achrom,
-    b_chrom,
+    a_achrom, b_chrom,
+    a_err, b_err,
     *,
     style: Optional["PlotStyleConfig"] = None,
 ) -> Figure:
     """
-    Plot |a| vs |b| on log–log axes with optional log–log trend line.
+    Plot the correlation between achromatic and chromatic *significances* across epochs:
+        x = |a| / sigma_a   (achromatic significance)
+        y = |b| / sigma_b   (chromatic significance)
+
+    This is unit-invariant and remains valid regardless of whether b was returned in
+    time-slope units (us MHz^2) or DM units (pc cm^-3).
+
+    Parameters
+    ----------
+    a_achrom, b_chrom : array-like
+        Per-epoch WLS coefficients.
+    a_err, b_err : array-like
+        Corresponding 1-sigma uncertainties for a and b.
+    style : PlotStyleConfig, optional
+        Plot styling.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
     """
     a = np.asarray(a_achrom, float)
     b = np.asarray(b_chrom, float)
+    sa = np.asarray(a_err, float)
+    sb = np.asarray(b_err, float)
 
-    mask = np.isfinite(a) & np.isfinite(b)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        xa = np.abs(a) / sa
+        yb = np.abs(b) / sb
+
+    mask = np.isfinite(xa) & np.isfinite(yb) & (xa > 0) & (yb > 0)
 
     fig, ax = plt.subplots(figsize=(9, 4))
     _apply_style(fig, style)
 
     if not np.any(mask):
-        ax.text(0.5, 0.5, "No finite (a,b) pairs.", ha="center", va="center")
+        ax.text(0.5, 0.5, "No finite |a|/$\sigma_a$ and |b|/$\sigma_b$ pairs.", ha="center", va="center")
         ax.set_axis_off()
         return fig
 
-    a = np.abs(a[mask])
-    b = np.abs(b[mask])
-
     ax.scatter(
-        a,
-        b,
+        xa[mask],
+        yb[mask],
         s=16,
         facecolors="tab:blue",
         edgecolors="black",
         linewidths=0.3,
         alpha=0.7,
-        label="|b| vs |a|",
+        label=r"(|a|/$\sigma_a$, |b|/$\sigma_b$)",
     )
 
+    # Optional log–log trend line
+    ax.set_xscale("log")
+    ax.set_yscale("log")
     try:
-        m, c = np.polyfit(np.log10(a), np.log10(b), 1)
-        xx = np.logspace(np.log10(a.min()), np.log10(a.max()), 50)
+        m, c = np.polyfit(np.log10(xa[mask]), np.log10(yb[mask]), 1)
+        xx = np.logspace(np.log10(xa[mask].min()), np.log10(xa[mask].max()), 50)
         yy = 10 ** (m * np.log10(xx) + c)
         ax.plot(xx, yy, color="tab:orange", linewidth=1.2, alpha=0.9, label=f"log–log trend (slope={m:.2f})")
     except Exception:
         pass
 
-    ax.set_xscale("log")
-    ax.set_yscale("log")
     ax.grid(True, which="both", linestyle="--", alpha=0.5)
-    ax.set_xlabel(r"|a| (achromatic, log)")
-    ax.set_ylabel(r"|b| (chromatic, log)")
-    ax.set_title("Magnitude correlation between achromatic and chromatic terms (|a|–|b|)")
+    ax.set_xlabel(r"|a| / $\sigma_a$ (achromatic significance)")
+    ax.set_ylabel(r"|b| / $\sigma_b$ (chromatic significance)")
+    ax.set_title("Achromatic vs chromatic significance correlation")
+    ax.legend(loc="best")
 
     fig.text(
         0.5,
@@ -1196,69 +1218,382 @@ def plot_a_vs_b_correlation(
     fig.tight_layout()
     return fig
 
-
 def plot_a_b_time_scatter(
     epoch_mjd,
     a_achrom,
     b_chrom,
+    a_err,
+    b_err,
     *,
-    y_label="Coefficient value",
-    title="Per-epoch achromatic (a) and chromatic (b) terms",
+    title="Per-epoch achromatic and chromatic significances",
     legend=True,
     style: Optional["PlotStyleConfig"] = None,
 ) -> Figure:
     """
-    Scatter plot of a(t) and b(t) vs epoch MJD on the same axes.
+    Scatter plot of per-epoch *significances* vs time:
+        |a(t)|/sigma_a(t)  (achromatic significance)
+        |b(t)|/sigma_b(t)  (chromatic significance)
 
-    Pure plotter policy:
-    - Does not show or save.
-    - Returns a matplotlib Figure.
+    This is unit-invariant and remains valid regardless of whether b was returned in
+    time-slope units (us MHz^2) or DM units (pc cm^-3).
     """
-    epoch_mjd = np.asarray(epoch_mjd, float)
+    t = np.asarray(epoch_mjd, float)
     a = np.asarray(a_achrom, float)
     b = np.asarray(b_chrom, float)
+    sa = np.asarray(a_err, float)
+    sb = np.asarray(b_err, float)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        za = np.abs(a) / sa
+        zb = np.abs(b) / sb
+
+    m_a = np.isfinite(t) & np.isfinite(za) & (za > 0)
+    m_b = np.isfinite(t) & np.isfinite(zb) & (zb > 0)
 
     fig, ax = plt.subplots(figsize=(9, 4))
     _apply_style(fig, style)
 
+    if not (np.any(m_a) or np.any(m_b)):
+        ax.text(0.5, 0.5, "No finite |a|/$\sigma_a$ or |b|/$\sigma_b$ values to plot.", ha="center", va="center")
+        ax.set_axis_off()
+        return fig
+
     ax.scatter(
-        epoch_mjd,
-        a,
+        t[m_a], za[m_a],
         s=16,
         facecolors="tab:orange",
         edgecolors="black",
         linewidths=0.3,
         alpha=0.7,
-        label="a (achromatic)",
+        label=r"|a|/$\sigma_a$ (achromatic)",
     )
     ax.scatter(
-        epoch_mjd,
-        b,
+        t[m_b], zb[m_b],
         s=16,
         facecolors="tab:blue",
         edgecolors="black",
         linewidths=0.3,
         alpha=0.7,
-        label="b (chromatic)",
+        label=r"|b|/$\sigma_b$ (chromatic)",
     )
 
     ax.grid(True, linestyle="--", alpha=0.5)
     ax.set_xlabel("Epoch MJD")
-    ax.set_ylabel(y_label)
+    ax.set_ylabel("Significance (dimensionless)")
     ax.set_title(title)
     if legend:
         ax.legend(loc="best")
 
-    caption = (
-        "Shows the achromatic (a, orange) and chromatic (b, blue) components derived from per-epoch WLS fits. "
-        "Temporal structure in a(t) may reflect broadband systematics, while variations in b(t) trace "
-        "frequency-dependent (DM-like) behavior."
+    fig.text(
+        0.5, -0.03,
+        "Per-epoch WLS significance for the achromatic intercept (a) and chromatic slope (b). "
+        "Large |b|/$\sigma_b$ indicates a well-measured chromatic (DM-like) trend in that epoch; "
+        "large |a|/$\sigma_a$ indicates a well-measured broadband offset.",
+        ha="center", va="top", fontsize=9, wrap=True,
     )
-    fig.text(0.5, -0.03, caption, ha="center", va="top", fontsize=9, wrap=True)
 
     fig.tight_layout()
     return fig
 
+def plot_proxy_segmentation_overlay(
+    *,
+    # segmentation products
+    edges: np.ndarray,                          # BB edges (MJD), shape (nbins+1,)
+    gaps: Optional[Sequence[Tuple[float, float]]] = None,  # list of (start, stop) MJDs
+    # residual background (TOA-space)
+    resid_mjd: np.ndarray,                      # TOA MJDs, shape (N,)
+    resid_us: np.ndarray,                       # TOA residuals [us], shape (N,)
+    resid_mask: Optional[np.ndarray] = None,    # True=keep; False=masked (e.g., gap mask), shape (N,)
+    # proxy series overlay (proxy-space)
+    proxy_t: np.ndarray,                        # proxy MJDs, shape (M,)
+    proxy_y: np.ndarray,                        # proxy values (units depend on proxy), shape (M,)
+    proxy_yerr: Optional[np.ndarray] = None,    # proxy errors, shape (M,)
+    # labels/titles
+    title: str = "Proxy + BB segmentation + gaps (with residual background)",
+    resid_ylabel: str = r"Residuals",
+    proxy_ylabel: str = "Proxy value",
+    show_proxy_err: bool = True,
+    # normalization (default)
+    normalize: bool = True,
+    norm_method: str = "robust_z",                      # {"robust_z", "z", "mad"}
+    normalized_ylabel_suffix: str = " ($\sigma$ normalized)",  # used when normalize=True
+    show_units_when_normalized: bool = False,   # if True, append raw-unit label in parentheses
+    # aesthetics
+    figsize: Tuple[float, float] = (11, 5),
+    alpha_resid_bg: float = 0.20,
+    alpha_masked: float = 0.9,
+    alpha_bin: float = 0.10,
+    alpha_gap: float = 0.20,
+):
+    """
+    Combined visualization:
+      - Alternating BB bins (vertical spans)
+      - Gap regions (red shaded spans)
+      - TOA residuals in background (pale gray)
+      - Masked TOA points (cyan)
+      - Proxy series on top (black), optional errorbars
+
+    Notes
+    -----
+    - This plot intentionally overlays two different observables (residuals vs proxy).
+      By default, both are robustly normalized to a dimensionless scale (robust sigma)
+      so their temporal structure can be compared visually without unit confusion.
+    - Residuals are shown on the left axis; proxy on the right axis.
+    """
+    # Helpers for normalization
+    def _robust_center_scale(x: np.ndarray) -> Tuple[float, float]:
+        """Return (center, scale) with robust scale via MAD (1.4826 * median(|x-med|))."""
+        med = float(np.nanmedian(x))
+        mad = float(1.4826 * np.nanmedian(np.abs(x - med)))
+        if (not np.isfinite(mad)) or mad <= 0:
+            # fallback: finite std, else 1
+            std = float(np.nanstd(x))
+            if (not np.isfinite(std)) or std <= 0:
+                return med, 1.0
+            return med, std
+        return med, mad
+
+    def _z_center_scale(x: np.ndarray) -> Tuple[float, float]:
+        mu = float(np.nanmean(x))
+        sd = float(np.nanstd(x))
+        if (not np.isfinite(sd)) or sd <= 0:
+            return mu, 1.0
+        return mu, sd
+
+    def _mad_center_scale(x: np.ndarray) -> Tuple[float, float]:
+        med = float(np.nanmedian(x))
+        mad = float(np.nanmedian(np.abs(x - med)))
+        if (not np.isfinite(mad)) or mad <= 0:
+            return med, 1.0
+        return med, mad
+
+    def _normalize(x: np.ndarray, method: str) -> Tuple[np.ndarray, float, float]:
+        x = np.asarray(x, float)
+        m = str(method).lower()
+        if m == "robust_z":
+            c, s = _robust_center_scale(x)
+        elif m == "z":
+            c, s = _z_center_scale(x)
+        elif m == "mad":
+            c, s = _mad_center_scale(x)
+        else:
+            raise ValueError(f"Unknown norm_method={method!r}. Use 'robust_z', 'z', or 'mad'.")
+        z = (x - c) / s
+        return z, c, s
+
+    # Input validation
+    edges = np.asarray(edges, float)
+    resid_mjd = np.asarray(resid_mjd, float)
+    resid_us = np.asarray(resid_us, float)
+    proxy_t = np.asarray(proxy_t, float)
+    proxy_y = np.asarray(proxy_y, float)
+    proxy_yerr = None if proxy_yerr is None else np.asarray(proxy_yerr, float)
+
+    if edges.ndim != 1 or edges.size < 2:
+        raise ValueError("edges must be 1D with >= 2 elements.")
+    if resid_mjd.shape != resid_us.shape:
+        raise ValueError("resid_mjd and resid_us must have the same shape.")
+    if resid_mask is not None and np.asarray(resid_mask, bool).shape != resid_mjd.shape:
+        raise ValueError("resid_mask must have the same shape as resid_mjd.")
+    if proxy_t.shape != proxy_y.shape:
+        raise ValueError("proxy_t and proxy_y must have the same shape.")
+    if proxy_yerr is not None and proxy_yerr.shape != proxy_y.shape:
+        raise ValueError("proxy_yerr must have the same shape as proxy_y.")
+
+    # Normalize 
+    if normalize:
+        resid_plot, r_c, r_s = _normalize(resid_us, norm_method)
+        proxy_plot, p_c, p_s = _normalize(proxy_y, norm_method)
+        proxy_yerr_plot = None if proxy_yerr is None else (proxy_yerr / p_s)
+        resid_ylabel_plot = f"{resid_ylabel}{normalized_ylabel_suffix}"
+        proxy_ylabel_plot = f"{proxy_ylabel}{normalized_ylabel_suffix}"
+        if show_units_when_normalized:
+            resid_ylabel_plot += " (raw units)"
+            proxy_ylabel_plot += " (raw units)"
+    else:
+        resid_plot = resid_us
+        proxy_plot = proxy_y
+        proxy_yerr_plot = proxy_yerr
+        resid_ylabel_plot = resid_ylabel
+        proxy_ylabel_plot = proxy_ylabel
+
+    # Plot!
+    fig, ax_res = plt.subplots(figsize=figsize)
+
+    # BB bin spans (alternating)
+    for i, (l, r) in enumerate(zip(edges[:-1], edges[1:])):
+        ax_res.axvspan(float(l), float(r), alpha=alpha_bin, color=("C0" if i % 2 == 0 else "C1"), zorder=0)
+
+    # Gaps 
+    if gaps:
+        for (g1, g2) in gaps:
+            ax_res.axvspan(float(g1), float(g2), alpha=alpha_gap, color="red", zorder=1)
+
+    # Residual background (pale gray)
+    ax_res.scatter(
+        resid_mjd,
+        resid_plot,
+        s=6,
+        color="gray",
+        alpha=alpha_resid_bg,
+        linewidths=0,
+        label="TOA residuals (all)" if not normalize else "TOA residuals (normalized)",
+        zorder=2,
+    )
+
+    # Masked residual points (cyan)
+    if resid_mask is not None:
+        m = np.asarray(resid_mask, bool)
+        if np.any(~m):
+            ax_res.scatter(
+                resid_mjd[~m],
+                resid_plot[~m],
+                s=10,
+                color="cyan",
+                alpha=alpha_masked,
+                edgecolors="black",
+                linewidths=0.2,
+                label="Masked TOA residuals",
+                zorder=3,
+            )
+
+    ax_res.set_xlabel("MJD")
+    ax_res.set_ylabel(resid_ylabel_plot)
+    ax_res.grid(True, linestyle="--", alpha=0.4)
+    ax_res.set_title(title)
+
+    # Proxy overlay on a twin y-axis
+    ax_prx = ax_res.twinx()
+    ax_prx.set_ylabel(proxy_ylabel_plot)
+
+    if show_proxy_err and (proxy_yerr_plot is not None):
+        ax_prx.errorbar(
+            proxy_t,
+            proxy_plot,
+            yerr=proxy_yerr_plot,
+            fmt="o",
+            markersize=4,
+            color="black",
+            ecolor="black",
+            elinewidth=0.8,
+            capsize=0,
+            alpha=0.9,
+            label="Proxy (with errors)" if not normalize else "Proxy (normalized, with errors)",
+            zorder=5,
+        )
+    else:
+        ax_prx.plot(
+            proxy_t,
+            proxy_plot,
+            "o",
+            markersize=2,
+            color="black",
+            alpha=0.9,
+            label="Proxy" if not normalize else "Proxy (normalized)",
+            zorder=5,
+        )
+
+    # Combined legend
+    h1, l1 = ax_res.get_legend_handles_labels()
+    h2, l2 = ax_prx.get_legend_handles_labels()
+    if (h1 or h2):
+        ax_res.legend(h1 + h2, l1 + l2, loc="upper right", fontsize="small")
+
+    # Optional: add small normalization footer
+    if normalize:
+        footer = (
+            f"Normalization: {norm_method}. "
+            f"Residuals: center={r_c:.3g}, scale={r_s:.3g}. "
+            f"Proxy: center={p_c:.3g}, scale={p_s:.3g}."
+        )
+        fig.text(0.5, -0.02, footer, ha="center", va="top", fontsize=8, wrap=True)
+
+    fig.tight_layout()
+    return fig
+
+def plot_failed_epochs_by_reason(
+    *,
+    mjd: np.ndarray,
+    resid: np.ndarray,
+    groups: Sequence[np.ndarray],
+    failures: Mapping[str, Any],
+    style: Optional["PlotStyleConfig"] = None,
+    title: str = "Failed epochs by rejection reason",
+) -> "Figure":
+    """
+    Overlay TOA residuals and highlight TOAs belonging to epochs rejected by the proxy builder,
+    color-coded by the primary rejection reason.
+
+    Notes
+    -----
+    - `groups` is the epoch partition returned by `_group_epochs` (indices into TOA arrays).
+    - `failures` is the dict returned by `build_chromatic_achromatic_series`.
+    """
+    mjd = np.asarray(mjd, float)
+    resid = np.asarray(resid, float)
+
+    f_idx = np.asarray(failures.get("epoch_idx", []), int)
+    f_reason = np.asarray(failures.get("reason", []), object)
+
+    # Defensive: keep arrays aligned between reasons
+    n = min(f_idx.size, f_reason.size)
+    f_idx = f_idx[:n]
+    f_reason = f_reason[:n]
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    _apply_style(fig, style)
+
+    ax.scatter(mjd, resid, s=6, color="0.6", alpha=0.22, edgecolors="none", label="All TOAs")
+
+    if f_idx.size == 0:
+        ax.text(0.5, 0.5, "No failed epochs recorded.", ha="center", va="center")
+        ax.set_axis_off()
+        return fig
+
+    reason_str = np.asarray([str(r) for r in f_reason], dtype=object)
+    reasons = sorted(set(reason_str))
+
+    # Map reason -> default color cycle
+    colors = {r: f"C{i % 10}" for i, r in enumerate(reasons)}
+
+    for r in reasons:
+        which = np.where(reason_str == r)[0]
+        if which.size == 0:
+            continue
+
+        # Collect TOA indices for all epochs failing for reason r
+        idx_list = []
+        for k in f_idx[which]:
+            k = int(k)
+            if 0 <= k < len(groups):
+                gi = np.asarray(groups[k], int)
+                if gi.size:
+                    idx_list.append(gi)
+
+        if not idx_list:
+            continue
+
+        idx = np.concatenate(idx_list)
+        idx = idx[np.isfinite(mjd[idx]) & np.isfinite(resid[idx])]
+
+        ax.scatter(
+            mjd[idx],
+            resid[idx],
+            s=10,
+            alpha=0.85,
+            color=colors[r],
+            edgecolors="k",
+            linewidths=0.2,
+            label=f"{r} (Nepochs={which.size})",
+        )
+
+    ax.set_xlabel("MJD")
+    ax.set_ylabel(r"Residual [$\mu s$]")
+    ax.set_title(title)
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend(loc="best", fontsize="x-small", ncol=2)
+    fig.tight_layout()
+    return fig
 
 def plot_wls_epoch_summaries(
     metrics_list,
@@ -1306,18 +1641,18 @@ def plot_wls_epoch_summaries(
             alpha=0.7,
             label="epochs",
         )
-    ax1.axhline(2.0, linestyle="--", color="tab:red", linewidth=1.2, alpha=0.9, label="2σ")
-    ax1.axhline(3.0, linestyle="--", color="tab:green", linewidth=1.2, alpha=0.9, label="3σ")
+    ax1.axhline(2.0, linestyle="--", color="tab:red", linewidth=1.2, alpha=0.9, label="2$\sigma$")
+    ax1.axhline(3.0, linestyle="--", color="tab:green", linewidth=1.2, alpha=0.9, label="3$\sigma$")
     ax1.set_yscale("log")
     ax1.grid(True, which="both", linestyle="--", alpha=0.5)
     ax1.set_xlabel("Epoch index")
-    ax1.set_ylabel("|b| / σ_b (log)")
+    ax1.set_ylabel("|b| / $\sigma_b$ (log)")
     ax1.set_title("Per-epoch slope significance")
 
     fig1.text(
         0.5,
         -0.01,
-        "Shows how often chromatic slopes exceed 2–3σ. A good DM proxy fit has consistent epochs above these thresholds, "
+        "Shows how often chromatic slopes exceed 2–3$\sigma$. A good DM proxy fit has consistent epochs above these thresholds, "
         "indicating robust detection of dispersion.",
         ha="center",
         va="top",
@@ -1358,7 +1693,7 @@ def plot_wls_epoch_summaries(
         label="x-span",
     )
     axs[1].set_xlabel("Epoch index")
-    axs[1].set_ylabel("x-span (range of 1/ν²)")
+    axs[1].set_ylabel("x-span (range of $1/\nu^2$)")
     axs[1].set_title("Frequency coverage per epoch")
     axs[1].grid(True, linestyle="--", alpha=0.5)
     axs[1].legend(loc="best")
@@ -1387,15 +1722,29 @@ def plot_wls_epoch_summaries(
 def plot_dmx_segmentation_by_slice_diagnostics(
     diag: "DMXGapAdjustDiagnostics",
     *,
+    bg_mjds: Optional[np.ndarray] = None,
+    bg_resids: Optional[np.ndarray] = None,
+    bg_mask: Optional[np.ndarray] = None,  # True=keep, False=masked
+    bg_label: str = "All points (background)",
+    masked_label: str = "Masked points",
     style: Optional["PlotStyleConfig"] = None,
 ) -> Figure:
     """
-    Plot DMX segmentation-by-slice diagnostics, using shaded BB spans (axvspan)
-    instead of alternating +/- block lines.
+    Plot DMX segmentation-by-slice diagnostics with BB spans and optional background points.
+
+    Why background points?
+    - The slice object typically only carries the *used* (kept) points.
+    - If gaps/trim masks removed points, the plot can look like "no data existed" in that span.
+    - Providing bg_mjds/bg_resids (and optional bg_mask) lets the plot show:
+        * all points in faint gray,
+        * masked points in cyan,
+        * used points in the foreground.
     """
     c_bb0 = getattr(style, "cBB", "C0") if style is not None else "C0"
-    c_bb1 = "C1"  # second alternating color
-    c_pts = "k"
+    c_bb1 = "C1"
+    c_used = "C1"
+    c_bg = "0.6"  # gray
+    c_masked = "cyan"
 
     fig, ax = plt.subplots(figsize=(10, 5))
     if style is not None:
@@ -1404,19 +1753,64 @@ def plot_dmx_segmentation_by_slice_diagnostics(
         except Exception:
             pass
 
-    first_zero = True
-    first_slice = True
+    # Validate background arrays
+    if (bg_mjds is None) ^ (bg_resids is None):
+        raise ValueError("Provide both bg_mjds and bg_resids, or neither.")
+    if bg_mjds is not None:
+        bg_mjds = np.asarray(bg_mjds, float)
+        bg_resids = np.asarray(bg_resids, float)
+        if bg_mjds.shape != bg_resids.shape:
+            raise ValueError("bg_mjds and bg_resids must have the same shape.")
+        if bg_mask is not None:
+            bg_mask = np.asarray(bg_mask, bool)
+            if bg_mask.shape != bg_mjds.shape:
+                raise ValueError("bg_mask must have the same shape as bg_mjds.")
 
-    # Plot each slice
+    # Plot all residuals as background
+    if bg_mjds is not None:
+        finite = np.isfinite(bg_mjds) & np.isfinite(bg_resids)
+        if np.any(finite):
+            ax.scatter(
+                bg_mjds[finite],
+                bg_resids[finite],
+                s=8,
+                alpha=0.18,
+                color=c_bg,
+                edgecolors="none",
+                label=bg_label,
+                zorder=1,
+            )
+    
+            if bg_mask is not None:
+                masked = finite & (~bg_mask)
+                if np.any(masked):
+                    ax.scatter(
+                        bg_mjds[masked],
+                        bg_resids[masked],
+                        s=10,
+                        alpha=0.75,
+                        color=c_masked,
+                        edgecolors="k",
+                        linewidths=0.2,
+                        label=masked_label,
+                        zorder=2,
+                    )
+
+    first_zero = True
+    first_spans = True
+    first_bg = True
+    first_masked = True
+    first_used = True
+
     for s in diag.slices:
         start, stop = float(s.start), float(s.stop)
 
-        # Zero line over the slice
+        # Zero line
         z_lbl = "Zero line" if first_zero else "_nolegend_"
-        ax.hlines(0.0, start, stop, colors="k", linewidth=1, label=z_lbl)
+        ax.hlines(0.0, start, stop, colors="k", linewidth=1, ls="--", label=z_lbl)
         first_zero = False
 
-        # Shaded BB spans for this slice (only within [start, stop])
+        # BB spans
         edges = np.asarray(s.seg_edges, float)
         if edges.size >= 2:
             for i, (bs, be) in enumerate(zip(edges[:-1], edges[1:])):
@@ -1426,32 +1820,161 @@ def plot_dmx_segmentation_by_slice_diagnostics(
                     continue
                 color = c_bb0 if (i % 2 == 0) else c_bb1
                 ax.axvspan(
-                    bs,
-                    be,
+                    bs, be,
                     alpha=0.12,
                     color=color,
-                    label=("BB spans" if first_slice and i == 0 else "_nolegend_"),
+                    label=("BB spans" if first_spans and i == 0 else "_nolegend_"),
+                    zorder=0,
                 )
-            first_slice = False
+            first_spans = False
 
-        # Residuals scatter (label by slice)
-        ax.scatter(
-            np.asarray(s.seg_mjds, float),
-            np.asarray(s.seg_resids, float),
-            s=10,
-            alpha=0.7,
-            color=c_pts,
-            edgecolors="black",
-            linewidths=0.2,
-            label=f"Slice {s.slice_index}: {start:.1f}–{stop:.1f}",
-            zorder=3,  # keep points above spans
-        )
+        # Used points
+        used_m = np.asarray(s.seg_mjds, float)
+        used_r = np.asarray(s.seg_resids, float)
+        if used_m.size:
+            ax.scatter(
+                used_m,
+                used_r,
+                s=10,
+                alpha=0.7,
+                color=c_used,
+                edgecolors="k",
+                linewidths=0.2,
+                label=(f"Used points (slice {s.slice_index})" if first_used else "_nolegend_"),
+                zorder=3,
+            )
+            first_used = False
 
     ax.set_xlabel("MJD")
-    ax.set_ylabel("Residual (μs)")
+    ax.set_ylabel(r"Residual [$\mu$s]")
     ax.set_title("DMX segmentation-by-slice diagnostics")
     ax.grid(True, linestyle="--", alpha=0.5)
     ax.legend(ncol=2, fontsize="small", loc="upper right")
+    fig.tight_layout()
+    return fig
+
+def plot_epoch_fit_status_timeline(
+    *,
+    results: Sequence[Mapping[str, Any]],
+    failures: Optional[Mapping[str, Any]] = None,
+    style: Optional["PlotStyleConfig"] = None,
+    title: str = "Epochwise WLS status timeline (pass/fail + |b|/$\sigma_b$)",
+) -> "Figure":
+    """
+    Summarize epochwise WLS outcomes.
+
+    - PASS epochs: epochs that produced a valid chromatic slope b (i.e. appear in `results`)
+      are plotted at y=0 (gray) and their |b|/sigma_b is overplotted on a secondary axis.
+
+    - FAIL epochs: epochs rejected by quality cuts are plotted at y=1, color-coded by
+      failure reason (min_channels, min_x_span, min_snr_b, etc.).
+
+    Parameters
+    ----------
+    results : sequence of dict
+        From build_chromatic_achromatic_series(): per-epoch summaries.
+        Expected keys per element: mid_mjd, b, sb (or b, sb), or at least mid_mjd.
+    failures : mapping or None
+        failures dict with keys: mid_mjd, reason (and optional epoch_idx, etc.).
+    """
+    # style hooks (optional)
+    def _apply_style(fig):
+        if style is None:
+            return
+        try:
+            fig.set_dpi(int(style.dpi))
+        except Exception:
+            pass
+
+    # PASS epochs
+    res_mid = np.array([float(r.get("mid_mjd", np.nan)) for r in results], float)
+    res_b   = np.array([float(r.get("b", np.nan))       for r in results], float)
+    res_sb  = np.array([float(r.get("sb", np.nan))      for r in results], float)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        res_snr = np.abs(res_b) / res_sb
+
+    pass_mask = np.isfinite(res_mid)
+    res_mid = res_mid[pass_mask]
+    res_snr = res_snr[pass_mask]
+
+    # FAIL epochs
+    fail_mid = np.array([], float)
+    fail_reason = np.array([], object)
+    if failures is not None:
+        fail_mid = np.asarray(failures.get("mid_mjd", []), float)
+        fail_reason = np.asarray(failures.get("reason", []), object)
+
+        good = np.isfinite(fail_mid) & np.asarray([r is not None for r in fail_reason], bool)
+        fail_mid = fail_mid[good]
+        fail_reason = fail_reason[good]
+
+    fig, ax = plt.subplots(figsize=(11, 4))
+    _apply_style(fig)
+
+    # PASS markers at y=0
+    if res_mid.size:
+        ax.scatter(
+            res_mid,
+            np.zeros_like(res_mid),
+            s=16,
+            color="0.4",
+            alpha=0.7,
+            edgecolors="none",
+            label="PASS epochs",
+            zorder=2,
+        )
+
+    # FAIL markers at y=1, colored by reason
+    if fail_mid.size:
+        reasons = sorted(set(map(str, fail_reason)))
+        color_map = {r: f"C{i % 10}" for i, r in enumerate(reasons)}
+
+        for r in reasons:
+            m = np.array([str(x) == r for x in fail_reason], bool)
+            if not np.any(m):
+                continue
+            ax.scatter(
+                fail_mid[m],
+                np.ones(np.sum(m)),
+                s=22,
+                color=color_map[r],
+                alpha=0.9,
+                edgecolors="k",
+                linewidths=0.2,
+                label=f"FAIL: {r} (N={np.sum(m)})",
+                zorder=3,
+            )
+
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["PASS", "FAIL"])
+    ax.set_xlabel("Epoch MJD")
+    ax.set_title(title)
+    ax.grid(True, linestyle="--", alpha=0.35)
+
+    # Secondary axis: |b|/sigma_b for PASS epochs
+    ax2 = ax.twinx()
+    if res_mid.size and np.any(np.isfinite(res_snr)):
+        m2 = np.isfinite(res_snr) & (res_snr >= 0)
+        if np.any(m2):
+            ax2.plot(
+                res_mid[m2],
+                res_snr[m2],
+                ".",
+                markersize=5,
+                color="tab:green",
+                alpha=0.8,
+                label=r"|b|/$\sigma_b$",
+                zorder=4,
+            )
+            ax2.set_ylabel(r"|b| / $\sigma_b$")
+
+    # Merge legends
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    if h1 or h2:
+        ax.legend(h1 + h2, l1 + l2, loc="best", fontsize="x-small", ncol=2)
+
     fig.tight_layout()
     return fig
 
@@ -1692,8 +2215,8 @@ def summarize_swx_dmx_correlations(
           - p1          : name of parameter 1 (e.g. "SWXDM_0001")
           - p2          : name of parameter 2 (e.g. "DMX_0001")
           - rho         : correlation coefficient between p1 and p2
-          - sigma_p1    : 1σ uncertainty of p1
-          - sigma_p2    : 1σ uncertainty of p2
+          - sigma_p1    : 1-sigma uncertainty of p1
+          - sigma_p2    : 1-sigma uncertainty of p2
         Sorted by descending |rho|.
     """
     m = fitter.model
@@ -1867,7 +2390,7 @@ def plot_param_ellipses_from_fitter(
         )
 
     # One-sigma rectangles in each coordinate, as in PINT tut.
-    ax.axvspan(-sigmas[0], sigmas[0], alpha=0.3, label="1σ in " + p1)
+    ax.axvspan(-sigmas[0], sigmas[0], alpha=0.3, label="1$\sigma$ in " + p1)
     ax.axhspan(-sigmas[1], sigmas[1], alpha=0.3)
 
     ax.set_xlabel(r"$\Delta$" + f"{p1}")
