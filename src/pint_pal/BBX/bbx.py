@@ -3579,7 +3579,7 @@ class BBX:
         did_any : bool
             True if any figure was produced.
         """
-        from BBX.utils import handle_diagnostics, mask_toas_from_gaps
+        from .utils import handle_diagnostics, mask_toas_from_gaps
 
         did_any = False
         stem = stem_prefix
@@ -3595,7 +3595,7 @@ class BBX:
         # 1) WLS / proxy quality diagnostics (only for chromatic_suite)
         if data is not None:
             # (a) epoch gap histogram (epoch_tol_days tuning)
-            from BBX.diagnostics import plot_epoch_gap_histogram
+            from .diagnostics import plot_epoch_gap_histogram
     
             handle_diagnostics(
                 out=out,
@@ -3619,7 +3619,7 @@ class BBX:
             if failures is not None:
                 f_idx = np.asarray(failures.get("epoch_idx", []), int)
                 if f_idx.size > 0:
-                    from BBX.diagnostics import plot_failed_epochs_by_reason
+                    from .diagnostics import plot_failed_epochs_by_reason
     
                     handle_diagnostics(
                         out=out,
@@ -3652,7 +3652,7 @@ class BBX:
                 print("[DM diagnostics] gaps missing; minimal overlay skipped.")
                 return did_any
     
-            from BBX.diagnostics import plot_proxy_segmentation_overlay
+            from .diagnostics import plot_proxy_segmentation_overlay
     
             resid_mjd = np.asarray(data["mjd"], float)    # (N,)
             resid_us  = np.asarray(data["resid"], float)  # (N,)
@@ -3702,7 +3702,7 @@ class BBX:
     
         if data is not None:
             # 1) a-vs-b significance correlation (unit-safe)
-            from BBX.diagnostics import plot_a_vs_b_correlation
+            from .diagnostics import plot_a_vs_b_correlation
     
             handle_diagnostics(
                 out=out,
@@ -3723,7 +3723,7 @@ class BBX:
             did_any = True
     
             # 2) PASS/FAIL timeline with |b|/sigma_b overplotted
-            from BBX.diagnostics import plot_epoch_fit_status_timeline
+            from .diagnostics import plot_epoch_fit_status_timeline
     
             results = data.get("results", [])
             failures = data.get("failures", None)
@@ -3747,7 +3747,7 @@ class BBX:
         # 3) proxy-space gap diagnostics
         gaps = pipe.get("gaps", None)
         if gaps is not None:
-            from BBX.diagnostics import plot_data_gaps_diagnostics
+            from .diagnostics import plot_data_gaps_diagnostics
     
             gap_mask = np.asarray(pipe.get("gap_mask", np.ones_like(pipe["mjds_for_bb"], bool)), bool)
     
@@ -3774,7 +3774,7 @@ class BBX:
         # 4) segmentation-by-slice diagnostics (with background, if possible)
         gap_diag = pipe.get("gap_adjust_diag", None)
         if gap_diag is not None:
-            from BBX.diagnostics import plot_dmx_segmentation_by_slice_diagnostics
+            from .diagnostics import plot_dmx_segmentation_by_slice_diagnostics
     
             bg_mjds = None
             bg_resids = None
