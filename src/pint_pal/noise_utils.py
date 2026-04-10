@@ -1140,7 +1140,7 @@ def add_noise_to_model(
         elif f'{psr_name}_sw_gp_log10_sigma_ridge' in sw_pars:
             log.info("Including Time Domain Ride SW Noise for this pulsar")
             # Add the ML RN parameters to their component
-            sw_comp = pm.TimeDomainRideSWNoise()
+            sw_comp = pm.TimeDomainRidgeSWNoise()
             sw_comp.TDSWLOGSIG.quantity = noise_dict[f'{psr_name}_sw_gp_log10_sigma_ridge']
             sw_comp.TDSWLOGSIG.frozen = True
             dt = sw_kwargs.get('dt', False)
@@ -1153,7 +1153,7 @@ def add_noise_to_model(
                 for node in basis_nodes:
                     sw_comp.add_tdsw_node_component(node)
             else:
-                raise ValueError("Must specify either dt or basis_nodes for TimeDomainRideSWNoise component.")
+                raise ValueError("Must specify either dt or basis_nodes for TimeDomainRidgeSWNoise component.")
             model.add_component(sw_comp, validate=False, force=True)
         elif f'{psr_name}_sw_gp_log10_sigma_sq_exp' in sw_pars:
             log.info("Including Time Domain Square Exponential SW Noise for this pulsar")
