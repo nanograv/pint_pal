@@ -6357,8 +6357,8 @@ def plot_gp_sw_ne(
 
     if show_median:
         lbl = 'SWGP [$n_E$]'
-        # Only append TM column names if showing perturbations without total values
-        if tm_names_used and not _showing_total:
+        # Append TM column names if they were included
+        if tm_names_used:
             lbl += ' + ' + ','.join(tm_names_used)
         ax.plot(tplot, median, color=color, lw=1.5, label=lbl)
 

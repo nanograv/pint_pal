@@ -843,16 +843,18 @@ def add_noise_to_model(
     ecorr_params = []
     dmefac_params = []
     dmequad_params = []
+    tneq_params = []  # NEW: for TNEQUAD parameters
 
     efac_idx = 1
     equad_idx = 1
     ecorr_idx = 1
     dmefac_idx = 1
     dmequad_idx = 1
+    tneq_idx = 1  # NEW: index for TNEQ parameters
     
     psr_name = list(noise_dict.keys())[0].split("_")[0]
     noise_pars = np.array(list(noise_dict.keys()))
-    wn_dict = {key: val for key, val in noise_dict.items() if "efac" in key or "equad" in key or "ecorr" in key}
+    wn_dict = {key: val for key, val in noise_dict.items() if "efac" in key or "equad" in key or "ecorr" in key or "tnequad" in key}
     for key, val in wn_dict.items():
         
         if "_efac" in key:
@@ -891,7 +893,7 @@ def add_noise_to_model(
             equad_params.append(tp)
             equad_idx += 1
 
-        # ..._tnequad uses temponest convention, resulting in total variance EFAC^2 toaerr^2 + EQUAD^2
+        # ..._tnequad uses temponest convention with separate TNEQ parameters
         elif "_tnequad" in key:
 
             param_name = (
@@ -899,16 +901,16 @@ def add_noise_to_model(
             )
 
             tp = maskParameter(
-                name="EQUAD",
-                index=equad_idx,
+                name="TNEQ",
+                index=tneq_idx,
                 key="-f",
                 key_value=param_name,
                 value=10**val / 1e-6,
                 units="us",
                 convert_tcb2tdb=False,
             )
-            equad_params.append(tp)
-            equad_idx += 1
+            tneq_params.append(tp)
+            tneq_idx += 1
 
         # ..._equad uses temponest convention; generated with enterprise pre-v3.3.0
         elif "_equad" in key:
@@ -997,11 +999,15 @@ def add_noise_to_model(
     ef_eq_comp = pm.ScaleToaError()
     ef_eq_comp.remove_param(param="EFAC1")
     ef_eq_comp.remove_param(param="EQUAD1")
-    ef_eq_comp.remove_param(param="TNEQ1")
+    if len(tneq_params) == 0:
+        # Only remove TNEQ1 if we're not adding TNEQ parameters
+        ef_eq_comp.remove_param(param="TNEQ1")
     for efac_param in efac_params:
         ef_eq_comp.add_param(param=efac_param, setup=True)
     for equad_param in equad_params:
         ef_eq_comp.add_param(param=equad_param, setup=True)
+    for tneq_param in tneq_params:
+        ef_eq_comp.add_param(param=tneq_param, setup=True)
     model.add_component(ef_eq_comp, validate=True, force=True)
 
     if len(dmefac_params) > 0 or len(dmequad_params) > 0:
