@@ -9,6 +9,7 @@ import time
 import warnings
 from datetime import datetime
 from datetime import date
+from typing import Union
 import yaml
 import os
 import pint_pal.par_checker as pc
@@ -835,6 +836,87 @@ def add_DM1_DM2_and_unfreeze_DM(
         model.DM2.frozen = True
         log.warning('DM2 is not fittable after setup; forcing DM2 frozen=True.')
 
+    return
+
+def add_chromatic_model_to_model(
+        model: models.TimingModel,
+        CM: Union[float, bool] = 0.0,
+        CM1: Union[float, bool] = 0.0,
+        CM2: Union[float, bool] = 0.0,
+        TNCHROMIDX: float = 4.0,
+        frozen: bool = False,
+        set_CMEPOCH_to_DMEPOCH: bool = True
+    ) -> None:
+    """
+    Add a deterministic chromatic measure (CM) model to the timing model.
+
+    Parameters
+    ==========
+    model : pint.models.TimingModel
+        PINT timing model object to which the ChromaticCM component will be added.
+    CM : float or False, optional
+        Value for the chromatic measure. Pass False to skip setting this parameter.
+        Default is 0.0.
+    CM1 : float or False, optional
+        Value for the first time derivative of chromatic measure. Pass False to skip.
+        Default is 0.0.
+    CM2 : float or False, optional
+        Value for the second time derivative of chromatic measure. Pass False to skip.
+        Default is 0.0.
+    TNCHROMIDX : float, optional
+        Chromatic index to use in model. Default is 4.0.
+    frozen : bool, optional
+        If True, ChromaticCM parameters will be frozen in fits; if False, they will be
+        free to vary. Default is False.
+    set_CMEPOCH_to_DMEPOCH : bool, optional
+        If True, sets CMEPOCH to DMEPOCH; if False, leaves CMEPOCH unchanged.
+        Default is True.
+
+    Returns
+    =======
+    None
+        Updates the ChromaticCM component in the model in-place.
+    """
+    log.info('Adding ChromaticCM model to par file')
+    all_components = Component.component_types
+    noise_class = all_components["ChromaticCM"]
+    noise = noise_class()  # Make the noise instance.
+    model.add_component(noise, validate=False, force=True)
+    # add parameters
+    if CM is not False:
+        model['CM'].value = CM
+    if CM1 is not False:
+        model['CM1'].value = CM1
+    if frozen:
+        if CM is not False:
+            model['CM'].frozen = True
+        if CM1 is not False:
+            model['CM1'].frozen = True
+    elif not frozen:
+        if CM is not False:
+            model['CM'].frozen = False
+        if CM1 is not False:
+            model['CM1'].frozen = False
+    if CM2 is not False:
+        cm_comp = model.components['ChromaticCM']
+        cm_comp.add_param(
+            prefixParameter(
+                parameter_type='float',
+                name='CM2',
+                units='pc cm^-3/yr^2/MHz^2',
+                description='2nd order time derivative of the chromatic measure',
+                long_double=True,
+                convert_tcb2tdb=False,
+            )
+        )
+        model['CM2'].value = CM2
+        model['CM2'].frozen = True if frozen else False
+    if set_CMEPOCH_to_DMEPOCH:
+        if model.DMEPOCH.value is not None:
+            model.CMEPOCH.quantity = model.DMEPOCH.quantity
+        else:
+            log.warning("DMEPOCH is not set; SWEPOCH will not be set to DMEPOCH.")
+    model['TNCHROMIDX'].value = TNCHROMIDX
     return
 
 def add_deteriministic_solar_wind_to_model(
