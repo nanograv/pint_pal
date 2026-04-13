@@ -5621,9 +5621,9 @@ def _convert_units(
         ``'us'`` for microseconds, ``'s'`` for seconds,
         ``'dm'`` for DM in 10^-3 pc cm^-3, ``'dm_full'`` for DM in pc cm^-3,
         ``'ne'`` for solar wind electron density n_E [cm^-3] (SW only),
-        ``'us@800'`` for chromatic GP normalised to 800 MHz.
+        ``'us@1400'`` for chromatic GP normalised to 800 MHz.
     chromatic_idx : float or None
-        Chromatic index (needed for ``'us@800'`` or ``'dm'`` for chrom GP).
+        Chromatic index (needed for ``'us@1400'`` or ``'dm'`` for chrom GP).
     ref_freq_mhz : float
         Reference frequency for chromatic GP. Default 1400 MHz.
 
@@ -5638,7 +5638,7 @@ def _convert_units(
         return signal * 1e6, r'$\Delta t$ ($\mu$s)'
     elif target_units == 's':
         return signal, r'$\Delta t$ (s)'
-    elif target_units == 'us@800':
+    elif target_units == 'us@1400':
         # Normalise chromatic GP delay to 800 MHz reference.
         # The design matrix encodes timing delay *at the TOA frequencies*:
         #   dt(f) = dt_ref * (f / f_ref)^{-idx}
@@ -5646,8 +5646,8 @@ def _convert_units(
         # per-TOA chromatic scaling and re-evaluate at 800 MHz.
         if chromatic_idx is None:
             chromatic_idx = 4.0  # default chromatic index
-        ratio = (freqs_mhz / 800.0) ** chromatic_idx  # (n_toas,)
-        return signal * ratio * 1e6, r'$\Delta t$ ($\mu$s @800MHz)'
+        ratio = (freqs_mhz / 1400.0) ** chromatic_idx  # (n_toas,)
+        return signal * ratio * 1e6, r'$\Delta t$ ($\mu$s @1400MHz)'
     elif target_units == 'dm':
         # dt = DM * DMconst / freq^2  =>  DM = dt * freq^2 / DMconst
         if gp_category in ('dm_gp', 'dm', 'sw', 'solar_wind'):
@@ -5722,9 +5722,9 @@ def plot_gp_realization(
         The GP key to plot (must be in ``payload['gp_keys']``).
     units : str, optional
         ``'us'`` (µs), ``'s'`` (s), ``'dm'`` (pc cm^-3), ``'ne'``
-        (n_E for SW), ``'us@800'`` (µs normalised to 800 MHz for
+        (n_E for SW), ``'us@1400'`` (µs normalised to 800 MHz for
         chromatic GP), or ``'auto'`` (DM GPs use 'dm', chromatic GPs
-        use 'us@800', others use 'us'). Default ``'auto'``.
+        use 'us@1400', others use 'us'). Default ``'auto'``.
     ci_levels : tuple of float, optional
         Credible interval levels. Default ``(0.68, 0.95)``.
     show_median : bool, optional
@@ -5762,7 +5762,7 @@ def plot_gp_realization(
         Alpha for individual realizations. Default 0.08.
     chromatic_idx : float, optional
         Chromatic index for unit conversion (used for chrom GP with
-        ``'dm'`` or ``'us@800'`` units).
+        ``'dm'`` or ``'us@1400'`` units).
     ref_freq_mhz : float, optional
         Reference frequency. Default 1400 MHz.
     label : str, optional
@@ -5783,7 +5783,7 @@ def plot_gp_realization(
         if category == 'dm_gp':
             units = 'dm_full' if include_tm_values else 'dm'
         elif category in ('chrom', 'chrom_gp'):
-            units = 'us@800'
+            units = 'us@1400'
         else:
             units = 's' if include_tm_values else 'us'
 
@@ -5925,7 +5925,7 @@ def plot_gp_realizations_combined(
         or category names like ``'dm_gp'``, ``'red_noise'``, ``'chrom'``, ``'sw'``,
         ``'timing_model'``, ``'ecorr'``. If None, plots all GP components.
     units : str, optional
-        ``'us'``, ``'s'``, ``'dm'``, ``'us@800'``, or ``'auto'``.
+        ``'us'``, ``'s'``, ``'dm'``, ``'us@1400'``, or ``'auto'``.
         Default ``'auto'``.
     ci_levels : tuple, optional
         CI levels. Default ``(0.68, 0.95)``.
@@ -5951,7 +5951,7 @@ def plot_gp_realizations_combined(
     exclude : list of str, optional
         GP categories to exclude, e.g. ``['timing_model', 'ecorr']``.
     chromatic_idx : float, optional
-        Chromatic index (passed through for ``'us@800'`` unit conversion).
+        Chromatic index (passed through for ``'us@1400'`` unit conversion).
     compact : bool, optional
         If True, remove vertical space between subplots and hide per-panel
         titles. If False (default), each subplot has its own title with
