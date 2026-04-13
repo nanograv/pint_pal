@@ -843,16 +843,18 @@ def add_noise_to_model(
     ecorr_params = []
     dmefac_params = []
     dmequad_params = []
+    tneq_params = []  # NEW: for TNEQUAD parameters
 
     efac_idx = 1
     equad_idx = 1
     ecorr_idx = 1
     dmefac_idx = 1
     dmequad_idx = 1
+    tneq_idx = 1  # NEW: index for TNEQ parameters
     
     psr_name = list(noise_dict.keys())[0].split("_")[0]
     noise_pars = np.array(list(noise_dict.keys()))
-    wn_dict = {key: val for key, val in noise_dict.items() if "efac" in key or "equad" in key or "ecorr" in key}
+    wn_dict = {key: val for key, val in noise_dict.items() if "efac" in key or "equad" in key or "ecorr" in key or "tnequad" in key}
     for key, val in wn_dict.items():
         
         if "_efac" in key:
@@ -891,7 +893,7 @@ def add_noise_to_model(
             equad_params.append(tp)
             equad_idx += 1
 
-        # ..._tnequad uses temponest convention, resulting in total variance EFAC^2 toaerr^2 + EQUAD^2
+        # ..._tnequad uses temponest convention with separate TNEQ parameters
         elif "_tnequad" in key:
 
             param_name = (
@@ -899,16 +901,16 @@ def add_noise_to_model(
             )
 
             tp = maskParameter(
-                name="EQUAD",
-                index=equad_idx,
+                name="TNEQ",
+                index=tneq_idx,
                 key="-f",
                 key_value=param_name,
                 value=10**val / 1e-6,
                 units="us",
                 convert_tcb2tdb=False,
             )
-            equad_params.append(tp)
-            equad_idx += 1
+            tneq_params.append(tp)
+            tneq_idx += 1
 
         # ..._equad uses temponest convention; generated with enterprise pre-v3.3.0
         elif "_equad" in key:
@@ -997,11 +999,15 @@ def add_noise_to_model(
     ef_eq_comp = pm.ScaleToaError()
     ef_eq_comp.remove_param(param="EFAC1")
     ef_eq_comp.remove_param(param="EQUAD1")
-    ef_eq_comp.remove_param(param="TNEQ1")
+    if len(tneq_params) == 0:
+        # Only remove TNEQ1 if we're not adding TNEQ parameters
+        ef_eq_comp.remove_param(param="TNEQ1")
     for efac_param in efac_params:
         ef_eq_comp.add_param(param=efac_param, setup=True)
     for equad_param in equad_params:
         ef_eq_comp.add_param(param=equad_param, setup=True)
+    for tneq_param in tneq_params:
+        ef_eq_comp.add_param(param=tneq_param, setup=True)
     model.add_component(ef_eq_comp, validate=True, force=True)
 
     if len(dmefac_params) > 0 or len(dmequad_params) > 0:
@@ -1651,28 +1657,36 @@ def generate_gp_realizations(
             log.warning(f"Could not compute SW shape factor: {exc}")
 
     # Solar conjunctions (for plotting metadata)
-    # Find local minima of the solar impact angle to identify conjunctions
+    # Find the overall solar minimum and estimate conjunctions at ~1 year intervals
     solar_conjunctions_mjd = None
     try:
         theta, _, _, _ = ds_solar.theta_impact(e_psr)
         toas_mjd_arr = e_psr.toas / 86400
-        # Sort by time for local-minimum search
-        sort_idx = np.argsort(toas_mjd_arr)
-        theta_sorted = theta[sort_idx]
-        toas_sorted = toas_mjd_arr[sort_idx]
-        # Find yearly windows and take the minimum in each
+        
+        # Find the global minimum of theta (solar conjunction)
+        idx_global_min = np.argmin(theta)
+        t_min_global = toas_mjd_arr[idx_global_min]
+        
+        # Generate conjunctions at approximately yearly intervals relative to the global minimum
+        t0 = toas_mjd_arr.min()
+        t1 = toas_mjd_arr.max()
         yr_day = 365.25
-        t0 = toas_sorted.min()
-        t1 = toas_sorted.max()
         conj_times = []
-        window_start = t0 - yr_day / 2
-        while window_start < t1 + yr_day / 2:
-            window_end = window_start + yr_day
-            mask = (toas_sorted >= window_start) & (toas_sorted < window_end)
-            if np.any(mask):
-                idx_min = np.argmin(theta_sorted[mask])
-                conj_times.append(float(toas_sorted[mask][idx_min]))
-            window_start += yr_day
+        
+        # Add conjunctions going backward from t_min_global
+        t_conj = t_min_global
+        while t_conj >= t0:
+            conj_times.append(float(t_conj))
+            t_conj -= yr_day
+        
+        # Add conjunctions going forward from t_min_global
+        t_conj = t_min_global + yr_day
+        while t_conj <= t1:
+            conj_times.append(float(t_conj))
+            t_conj += yr_day
+        
+        # Sort by time
+        conj_times.sort()
         solar_conjunctions_mjd = conj_times if conj_times else None
     except Exception as e:
         log.warning(f"Could not compute solar conjunctions: {e}")

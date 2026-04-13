@@ -459,6 +459,134 @@ def test_stack_plot_tree_and_svi_early_stopping(monkeypatch):
     assert diag is None
 
 
+# ---------------------------------------------------------------------------
+# Chromatic basis: fixed vs. varying chromatic_idx
+# ---------------------------------------------------------------------------
+
+class TestChromaticBasisSelection:
+    """Tests for _select_fourier_basis chromatic path and chromatic_noise_block."""
+
+    # --- _select_fourier_basis, nlog==0 ---
+
+    def test_nlog0_vary_returns_freechromaticfourierbasis(self):
+        """chromatic_idx=None → bare ds.freechromaticfourierbasis (callable fmat)."""
+        result = du._select_fourier_basis(
+            psr=object(), Nfreqs=10, tspan=100.0,
+            logmode=2, f_min=1e-3, nlog=0,
+            noise_type='chromatic', chromatic_idx=None,
+        )
+        assert result is du.ds.freechromaticfourierbasis
+
+    def test_nlog0_fixed_returns_partial(self):
+        """chromatic_idx=4.0 → partial(..., chromatic_idx=4.0)."""
+        from functools import partial
+        result = du._select_fourier_basis(
+            psr=object(), Nfreqs=10, tspan=100.0,
+            logmode=2, f_min=1e-3, nlog=0,
+            noise_type='chromatic', chromatic_idx=4.0,
+        )
+        assert isinstance(result, partial)
+        assert result.func is du.ds.freechromaticfourierbasis
+        assert result.keywords == {'chromatic_idx': 4.0}
+
+    # --- _select_fourier_basis, nlog>0 ---
+
+    def test_nlog_positive_vary_calls_log_free(self, monkeypatch):
+        """nlog>0 + chromatic_idx=None → lambda calling log_free_chromatic_fourierbasis."""
+        calls = {}
+        def fake_log_free(psr, T, logmode, f_min, nlin, nlog):
+            calls['log_free'] = True
+            return 'f', 'df', lambda alpha: 'FMAT'
+        monkeypatch.setattr(du.ds, 'log_free_chromatic_fourierbasis', fake_log_free)
+
+        psr = object()
+        result = du._select_fourier_basis(
+            psr=psr, Nfreqs=10, tspan=100.0,
+            logmode=2, f_min=1e-3, nlog=5,
+            noise_type='chromatic', chromatic_idx=None,
+        )
+        # Result is a lambda; calling it should call the log_free function
+        assert callable(result)
+        result(psr, 10, 100.0)
+        assert 'log_free' in calls
+
+    def test_nlog_positive_fixed_calls_log_fixed(self, monkeypatch):
+        """nlog>0 + chromatic_idx=4.0 → lambda calling log_fixed_chromatic_fourierbasis."""
+        calls = {}
+        def fake_log_fixed(psr, chromatic_idx, T, logmode, f_min, nlin, nlog):
+            calls['chromatic_idx'] = chromatic_idx
+            return 'f', 'df', 'FMAT'
+        monkeypatch.setattr(du.ds, 'log_fixed_chromatic_fourierbasis', fake_log_fixed)
+
+        psr = object()
+        result = du._select_fourier_basis(
+            psr=psr, Nfreqs=10, tspan=100.0,
+            logmode=2, f_min=1e-3, nlog=5,
+            noise_type='chromatic', chromatic_idx=4.0,
+        )
+        assert callable(result)
+        result(psr, 10, 100.0)
+        assert calls['chromatic_idx'] == 4.0
+
+    # --- chromatic_noise_block wiring ---
+
+    def test_chromatic_block_vary_passes_none(self, monkeypatch):
+        """chromatic_idx='vary' → _select_fourier_basis gets chromatic_idx=None."""
+        captured = {}
+        def fake_select(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, chromatic_idx=None):
+            captured['chromatic_idx'] = chromatic_idx
+            return 'BASIS'
+        monkeypatch.setattr(du, '_select_fourier_basis', fake_select)
+        monkeypatch.setattr(du.ds, 'getspan', lambda _: 100.0)
+        monkeypatch.setattr(du.ds, 'powerlaw', object())
+        monkeypatch.setattr(du.ds, 'makegp_fourier', lambda *a, **k: 'GP')
+
+        du.chromatic_noise_block(object(), tspan=100.0, chromatic_idx='vary')
+        assert captured['chromatic_idx'] is None
+
+    def test_chromatic_block_fixed_passes_value(self, monkeypatch):
+        """chromatic_idx=4.0 → _select_fourier_basis gets chromatic_idx=4.0."""
+        captured = {}
+        def fake_select(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, chromatic_idx=None):
+            captured['chromatic_idx'] = chromatic_idx
+            return 'BASIS'
+        monkeypatch.setattr(du, '_select_fourier_basis', fake_select)
+        monkeypatch.setattr(du.ds, 'getspan', lambda _: 100.0)
+        monkeypatch.setattr(du.ds, 'powerlaw', object())
+        monkeypatch.setattr(du.ds, 'makegp_fourier', lambda *a, **k: 'GP')
+
+        du.chromatic_noise_block(object(), tspan=100.0, chromatic_idx=4.0)
+        assert captured['chromatic_idx'] == 4.0
+
+    def test_chromatic_block_vary_no_chromatic_idx_in_makegp_kwargs(self, monkeypatch):
+        """makegp_fourier must NOT receive a chromatic_idx kwarg (it doesn't accept one)."""
+        makegp_kwargs = {}
+        def fake_makegp(psr, prior, nfreqs, T=None, fourierbasis=None, name=None, **kwargs):
+            makegp_kwargs.update(kwargs)
+            return 'GP'
+        monkeypatch.setattr(du, '_select_fourier_basis', lambda *a, **k: 'BASIS')
+        monkeypatch.setattr(du.ds, 'getspan', lambda _: 100.0)
+        monkeypatch.setattr(du.ds, 'powerlaw', object())
+        monkeypatch.setattr(du.ds, 'makegp_fourier', fake_makegp)
+
+        du.chromatic_noise_block(object(), tspan=100.0, chromatic_idx='vary')
+        assert 'chromatic_idx' not in makegp_kwargs
+
+    def test_chromatic_block_fixed_no_chromatic_idx_in_makegp_kwargs(self, monkeypatch):
+        """makegp_fourier must NOT receive chromatic_idx even when a value is passed."""
+        makegp_kwargs = {}
+        def fake_makegp(psr, prior, nfreqs, T=None, fourierbasis=None, name=None, **kwargs):
+            makegp_kwargs.update(kwargs)
+            return 'GP'
+        monkeypatch.setattr(du, '_select_fourier_basis', lambda *a, **k: 'BASIS')
+        monkeypatch.setattr(du.ds, 'getspan', lambda _: 100.0)
+        monkeypatch.setattr(du.ds, 'powerlaw', object())
+        monkeypatch.setattr(du.ds, 'makegp_fourier', fake_makegp)
+
+        du.chromatic_noise_block(object(), tspan=100.0, chromatic_idx=4.0)
+        assert 'chromatic_idx' not in makegp_kwargs
+
+
 @pytest.mark.parametrize("prior_name,prior_attr", [("powerlaw", "powerlaw"), ("broken_powerlaw", "broken_powerlaw"), ("freespectrum", "freespectrum")])
 def test_fourier_blocks_accept_supported_prior_values(monkeypatch, prior_name, prior_attr):
     sentinel_prior = object()
