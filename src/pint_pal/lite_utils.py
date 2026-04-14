@@ -9,6 +9,7 @@ import time
 import warnings
 from datetime import datetime
 from datetime import date
+from typing import Union
 import yaml
 import os
 import pint_pal.par_checker as pc
@@ -729,27 +730,50 @@ def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
     return
 
 def add_DM1_DM2_and_unfreeze_DM(
-        model,
-        DM1=True,
-        DM2=True,
-        frozen=False
-    ):
-    """Adds DM1 and DM2 to the model and the parameters.
+        model: models.TimingModel,
+        DM1: Union[float, bool] = True,
+        DM2: Union[float, bool] = True,
+        frozen: bool = False
+    ) -> None:
+    """
+    Add DM1 and/or DM2 dispersion measure derivatives to the timing model.
+
+    This function adds higher-order dispersion measure time derivatives (DM1 for
+    first-order, DM2 for second-order) as prefixParameters to the DispersionDM component.
+    Pass False to skip adding a parameter.
 
     Parameters
     ==========
-    model: PINT model object
+    model : pint.models.TimingModel
+        PINT timing model object to which DM1 and/or DM2 will be added.
+    DM1 : float or True or False, optional
+        First-order DM time derivative. Pass True to add with default value 0.0,
+        a float value to add with that initialized value, or False to skip.
+        Default is True (add and initialize to 0.0).
+    DM2 : float or True or False, optional
+        Second-order DM time derivative. Pass True to add with default value 0.0,
+        a float value to add with that initialized value, or False to skip.
+        Default is True (add and initialize to 0.0).
+    frozen : bool, optional
+        Whether to freeze the DM, DM1, and DM2 parameters. Default is False.
+
+    Returns
+    =======
+    None
     """
     if 'DispersionDM' not in model.components:
         raise ValueError("DispersionDM component is required before adding DM1/DM2.")
 
     disp_dm = model.components['DispersionDM']
 
-    if DM1:
+    # Determine DM1 value to initialize to (0.0 if True, otherwise use the provided float)
+    dm1_value = 0.0 if DM1 is True else DM1
+
+    if DM1 is not False:
         if hasattr(model, 'DM1'):
             if getattr(model.DM1, 'is_prefix', False):
-                log.info('DM1 already exists as prefix; setting DM1=0.0')
-                model.DM1.value = 0.0
+                log.info(f'DM1 already exists as prefix; setting DM1={dm1_value}')
+                model.DM1.value = dm1_value
             else:
                 log.warning('DM1 exists but is not a prefixParameter. Replacing with prefixParameter.')
                 disp_dm.remove_param('DM1')
@@ -763,7 +787,7 @@ def add_DM1_DM2_and_unfreeze_DM(
                         tcb2tdb_scale_factor=DMconst,
                     )
                 )
-                model.DM1.value = 0.0
+                model.DM1.value = dm1_value
         else:
             log.info('Adding DM1 to the model as prefixParameter...')
             disp_dm.add_param(
@@ -776,13 +800,16 @@ def add_DM1_DM2_and_unfreeze_DM(
                     tcb2tdb_scale_factor=DMconst,
                 )
             )
-            model.DM1.value = 0.0
+            model.DM1.value = dm1_value
 
-    if DM2:
+    # Determine DM2 value to initialize to (0.0 if True, otherwise use the provided float)
+    dm2_value = 0.0 if DM2 is True else DM2
+
+    if DM2 is not False:
         if hasattr(model, 'DM2'):
             if getattr(model.DM2, 'is_prefix', False):
-                log.info('DM2 already exists as prefix; setting DM2=0.0')
-                model.DM2.value = 0.0
+                log.info(f'DM2 already exists as prefix; setting DM2={dm2_value}')
+                model.DM2.value = dm2_value
             else:
                 log.warning('DM2 exists but is not a prefixParameter. Replacing with prefixParameter.')
                 disp_dm.remove_param('DM2')
@@ -796,7 +823,7 @@ def add_DM1_DM2_and_unfreeze_DM(
                         tcb2tdb_scale_factor=DMconst,
                     )
                 )
-                model.DM2.value = 0.0
+                model.DM2.value = dm2_value
         else:
             log.info('Adding DM2 to the model as prefixParameter...')
             disp_dm.add_param(
@@ -809,32 +836,114 @@ def add_DM1_DM2_and_unfreeze_DM(
                     tcb2tdb_scale_factor=DMconst,
                 )
             )
-            model.DM2.value = 0.0
+            model.DM2.value = dm2_value
 
     model.setup()
     model.validate()
     if frozen:
         log.info('Freezing DM, DM1, and DM2...')
         model.DM.frozen = True
-        if DM1:
+        if DM1 is not False:
             model.DM1.frozen = True
-        if DM2:
+        if DM2 is not False:
             model.DM2.frozen = True
     else:
         log.info('Unfreezing DM, DM1, and DM2...')
         model.DM.frozen = False
-        if DM1:
+        if DM1 is not False:
             model.DM1.frozen = False
-        if DM2:
+        if DM2 is not False:
             model.DM2.frozen = False
 
-    if DM1 and not model.DM1.frozen and 'DM1' not in model.fittable_params:
+    if DM1 is not False and not model.DM1.frozen and 'DM1' not in model.fittable_params:
         model.DM1.frozen = True
         log.warning('DM1 is not fittable after setup; forcing DM1 frozen=True.')
-    if DM2 and not model.DM2.frozen and 'DM2' not in model.fittable_params:
+    if DM2 is not False and not model.DM2.frozen and 'DM2' not in model.fittable_params:
         model.DM2.frozen = True
         log.warning('DM2 is not fittable after setup; forcing DM2 frozen=True.')
 
+    return
+
+def add_chromatic_model_to_model(
+        model: models.TimingModel,
+        CM: Union[float, bool] = 0.0,
+        CM1: Union[float, bool] = 0.0,
+        CM2: Union[float, bool] = 0.0,
+        TNCHROMIDX: float = 4.0,
+        frozen: bool = False,
+        set_CMEPOCH_to_DMEPOCH: bool = True
+    ) -> None:
+    """
+    Add a deterministic chromatic measure (CM) model to the timing model.
+
+    Parameters
+    ==========
+    model : pint.models.TimingModel
+        PINT timing model object to which the ChromaticCM component will be added.
+    CM : float or False, optional
+        Value for the chromatic measure. Pass False to skip setting this parameter.
+        Default is 0.0.
+    CM1 : float or False, optional
+        Value for the first time derivative of chromatic measure. Pass False to skip.
+        Default is 0.0.
+    CM2 : float or False, optional
+        Value for the second time derivative of chromatic measure. Pass False to skip.
+        Default is 0.0.
+    TNCHROMIDX : float, optional
+        Chromatic index to use in model. Default is 4.0.
+    frozen : bool, optional
+        If True, ChromaticCM parameters will be frozen in fits; if False, they will be
+        free to vary. Default is False.
+    set_CMEPOCH_to_DMEPOCH : bool, optional
+        If True, sets CMEPOCH to DMEPOCH; if False, leaves CMEPOCH unchanged.
+        Default is True.
+
+    Returns
+    =======
+    None
+        Updates the ChromaticCM component in the model in-place.
+    """
+    log.info('Adding ChromaticCM model to par file')
+    all_components = Component.component_types
+    noise_class = all_components["ChromaticCM"]
+    noise = noise_class()  # Make the noise instance.
+    model.add_component(noise, validate=False, force=True)
+    # add parameters
+    if CM is not False:
+        model['CM'].value = CM
+    if CM1 is not False:
+        model['CM1'].value = CM1
+    if frozen:
+        if CM is not False:
+            model['CM'].frozen = True
+        if CM1 is not False:
+            model['CM1'].frozen = True
+    elif not frozen:
+        if CM is not False:
+            model['CM'].frozen = False
+        if CM1 is not False:
+            model['CM1'].frozen = False
+    if CM2 is not False:
+        cm_comp = model.components['ChromaticCM']
+        cm_comp.add_param(
+            prefixParameter(
+                parameter_type='float',
+                name='CM2',
+                units='pc cm^-3/yr^2/MHz^2',
+                description='2nd order time derivative of the chromatic measure',
+                long_double=True,
+                convert_tcb2tdb=False,
+            )
+        )
+        model['CM2'].value = CM2
+        model['CM2'].frozen = True if frozen else False
+    if set_CMEPOCH_to_DMEPOCH:
+        if model.DMEPOCH.value is not None:
+            model.CMEPOCH.quantity = model.DMEPOCH.quantity
+        else:
+            log.warning("DMEPOCH is not set; SWEPOCH will not be set to DMEPOCH.")
+    model['TNCHROMIDX'].value = TNCHROMIDX
+    model.setup()
     return
 
 def add_deteriministic_solar_wind_to_model(
