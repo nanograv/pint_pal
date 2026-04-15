@@ -38,10 +38,10 @@ from numpyro.infer.svi import SVIState
 from IPython.display import display, clear_output
 
 
-warnings.filterwarnings("ignore")
-log.disable("pint")
-log.remove()
-log.add(sys.stderr, colorize=False, enqueue=True)
+#warnings.filterwarnings("ignore")
+#log.disable("pint")
+#log.remove()
+#log.add(sys.stderr, colorize=False, enqueue=True)
 log.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices")
 
 def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, chromatic_idx=None):
