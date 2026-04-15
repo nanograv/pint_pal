@@ -23,6 +23,7 @@ from enterprise_extensions.empirical_distr import (EmpiricalDistribution1D,
                                                    EmpiricalDistribution2D)
 
 from pint_pal import discovery_utils as disco_utils
+from pint_pal import lite_utils as lu
 from jax.random import PRNGKey
 from discovery import priordict_standard as ds_pdict
 from discovery import samplers
@@ -30,7 +31,7 @@ from discovery.samplers import numpyro as ds_numpyro
 import numpyro
 from numpyro.infer import SVI, Trace_ELBO
 import numpyro.distributions as dist
-from numpyro.infer.initialization import init_to_value, init_to_sample
+from numpyro.infer.initialization import init_to_value, init_to_sample, init_to_median
 from numpyro.infer.reparam import ExplicitReparam
 from numpyro.distributions import constraints
 import jax
@@ -618,18 +619,22 @@ def model_noise(
             os.makedirs(outdir, exist_ok=True)
             params = sorted(psl.logL.params)
             # reparameterize white noise since they have the largest gradients !
-            repar_params = [p for p in params if 'efac' in p or 'equad' in p or 'ecorr' in p]
-            if len(repar_params) > 0:
-                if not set(repar_params) < set(params):
-                    err = f"{repar_params=} but is not in model {params=}."
-                    raise KeyError(err)
-            config = {
-                param: ExplicitReparam(dist.transforms.AffineTransform(0, 1))
-                    for param in repar_params
-                }
-            logL = numpyro.handlers.reparam(logL, config=config)
 
-            autoguide_map = numpyro.infer.autoguide.AutoDelta(logL)
+            # test commenting out the reparameterization
+            # repar_params = [p for p in params if 'efac' in p or 'equad' in p or 'ecorr' in p]
+            # if len(repar_params) > 0:
+            #     if not set(repar_params) < set(params):
+            #         err = f"{repar_params=} but is not in model {params=}."
+            #         raise KeyError(err)
+            # config = {
+            #     param: ExplicitReparam(dist.transforms.AffineTransform(0, 1))
+            #         for param in repar_params
+            #     }
+            # logL = numpyro.handlers.reparam(logL, config=config)
+
+            # Use AutoNormal (full variational family) instead of AutoDelta (point mass)
+            # AutoNormal can capture posterior geometry better and avoid local minima
+            autoguide_map = numpyro.infer.autoguide.AutoNormal(logL, init_loc_fn=init_to_median(num_samples=10))
 
             svi = disco_utils.setup_svi(
                 model=logL,
@@ -1086,6 +1091,10 @@ def add_noise_to_model(
     # Check to see if higher order chromatic noise is present
     chrom_pars = [key for key in noise_pars if "_chrom_gp" in key]
     if len(chrom_pars) > 0:
+        if 'ChromaticCM' not in model.components:
+            log.info("Adding ChromaticCM component to model since chromatic noise parameters detected.")
+            lu.add_chromatic_model_to_model(model, 0.0, 0.0, False,
+                                            frozen=True, TNCHROMIDX=noise_dict.get(f'{psr_name}_chrom_idx', 4.0))
         ###### POWERLAW CHROMATIC NOISE ######
         if f'{psr_name}_chrom_gp_log10_A' in chrom_pars:
             chrom_kwargs = model_kwargs.get('chromatic_noise', {})
