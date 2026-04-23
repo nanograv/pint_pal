@@ -398,7 +398,7 @@ def dm_noise_block(
             raise ValueError("Power-law prior is not supported for time domain DM noise. Must be one of ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
         else: 
             raise ValueError("Invalid prior specified for time domain DM noise. Must be one of ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
-        dm_gp = ds_solar.makegp_timedomain_dm(
+        dm_gp = ds_signals.makegp_timedomain_dm(
             psr,
             covariance=prior_kernel,
             dt=None,
