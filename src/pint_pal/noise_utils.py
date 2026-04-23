@@ -632,9 +632,9 @@ def model_noise(
             #     }
             # logL = numpyro.handlers.reparam(logL, config=config)
 
-            # Use AutoNormal (full variational family) instead of AutoDelta (point mass)
-            # AutoNormal can capture posterior geometry better and avoid local minima
-            autoguide_map = numpyro.infer.autoguide.AutoNormal(logL, init_loc_fn=init_to_median(num_samples=10))
+            #autoguide_map = numpyro.infer.autoguide.AutoNormal(logL, init_loc_fn=init_to_median(num_samples=10))
+            autoguide_map = numpyro.infer.autoguide.AutoDelta(logL, init_loc_fn=init_to_median(num_samples=50))
+
 
             svi = disco_utils.setup_svi(
                 model=logL,
