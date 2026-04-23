@@ -297,6 +297,9 @@ def dm_noise_block(
         psr: Any,
         tspan: Optional[float] = None,
         basis: str = 'fourier',
+        basis_nodes: Optional[np.ndarray] = None,
+        interp_dt: Optional[float] = 30.0,
+        interp_kind: str = 'linear',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
         logmode=2,
@@ -316,10 +319,16 @@ def dm_noise_block(
     basis : str, optional
         Basis type for the GP. Currently only ``"fourier"`` is implemented.
         Default is ``"fourier"``.
+    basis_nodes : np.ndarray, optional
+        Nodes for the basis. Default is None. Only used for interpolation basis.
+    interp_dt : float, optional
+        Time step for interpolation nodes in days. Default is 30. Only used for interpolation basis.
+    interp_kind : str, optional
+        Interpolation kind for the basis. Default is "linear". Only used for interpolation basis.
     prior : str, optional
-        Prior type or callable prior for the GP amplitude. Supported string
-        values are ``"powerlaw"``, ``"powerlaw_cutoff"``,
-        ``"broken_powerlaw"``, and ``"freespectrum"``.
+        Prior type for the GP amplitude. For Fourier basis this is a PSD. For time domain it is a covariance function.
+        Fourier basis supports ["powerlaw", "powerlaw_cutoff", "broken_powerlaw", "freespectrum"].
+        Time-domain interpolation basis supports ["ridge", "square_exponential", "quasi_periodic", "matern"].
         Default is ``"powerlaw"``.
     Nfreqs : int, optional
         Number of Fourier frequencies. Default is 100.
@@ -369,7 +378,35 @@ def dm_noise_block(
             name=name
             )
     elif basis == 'interpolation':
-        raise NotImplementedError("Time domain models for dm noise are not yet implemented.")
+        if basis_nodes is None:
+            basis_nodes = np.arange(psr.toas.min()/86400, psr.toas.max()/86400, interp_dt)
+        # else basis nodes are provided by user.
+        td_basis, nodes = ds_signals.custom_blocked_interpolation_basis(
+            psr.toas,
+            nodes=basis_nodes,
+            kind=interp_kind,
+        )
+        if prior == 'ridge':
+            prior_kernel = ds_signals.ridge_kernel()
+        elif prior == 'square_exponential':
+            prior_kernel = ds_signals.square_exponential_kernel()
+        elif prior == 'quasi_periodic':
+            prior_kernel = ds_signals.quasi_periodic_kernel()
+        elif prior == 'matern':
+            prior_kernel = ds_signals.matern_kernel()
+        elif prior == 'powerlaw':
+            raise ValueError("Power-law prior is not supported for time domain DM noise. Must be one of ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
+        else: 
+            raise ValueError("Invalid prior specified for time domain DM noise. Must be one of ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
+        dm_gp = ds_solar.makegp_timedomain_dm(
+            psr,
+            covariance=prior_kernel,
+            dt=None,
+            Umat=td_basis,
+            nodes=nodes,
+            common=[],
+            name=name,
+        )
     else:
         raise ValueError("Invalid basis specified for dm noise. Must be 'fourier' or 'interpolation'.")
 
