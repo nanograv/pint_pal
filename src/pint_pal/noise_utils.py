@@ -632,8 +632,12 @@ def model_noise(
             #     }
             # logL = numpyro.handlers.reparam(logL, config=config)
 
+            #autoguide_map = numpyro.infer.autoguide.AutoDelta(logL)
+            # Initialize AutoDelta guide at median of prior distributions for better convergence
+            autoguide_map = numpyro.infer.autoguide.AutoDelta(logL, init_loc_fn=init_to_median(num_samples=10))
+            #autoguide_map = numpyro.infer.autoguide.AutoDelta(logL, init_loc_fn=init_to_sample())
+            # autoguid normal does not work it seems.
             #autoguide_map = numpyro.infer.autoguide.AutoNormal(logL, init_loc_fn=init_to_median(num_samples=10))
-            autoguide_map = numpyro.infer.autoguide.AutoDelta(logL, init_loc_fn=init_to_median(num_samples=50))
 
 
             svi = disco_utils.setup_svi(
