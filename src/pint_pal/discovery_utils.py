@@ -124,6 +124,9 @@ def white_noise_block(
         include_ecorr: bool = True,
         gp_ecorr: bool = False,
         tn_equad: bool = True,
+        chromequad: bool = False,
+        chromequad_idx_per_backend: bool = False,
+        fref: Optional[float] = 1400,
         selection: Callable = ds.selection_backend_flags,
     ) -> Any:
     """
@@ -141,10 +144,20 @@ def white_noise_block(
         Placeholder to keep a shared interface with other block builders.
         This argument is not used in this function. Default is False.
     tn_equad : bool, optional
-        Whether to include EQUAD terms. Default is True.
+        Whether to use the TNEquad convention. Default is True.
+    chromequad : bool, optional
+        Whether to include a per-backend frequency-dependent noise floor term
+        (CHROMEQUAD). The noise variance gains an additive term
+        ``CHROMEQUAD^2 * (fref / freq)^chrom_idx`` per backend. Default is False.
+    chromequad_idx_per_backend : bool, optional
+        If True, a separate chromatic index is floated for each backend.
+        If False (default), a single per-pulsar chromatic index is used, which
+        is better constrained when comparing across backends.
+    fref : float, optional
+        Reference frequency for the CHROMEQUAD term. Default is 1400 MHz.
     selection : Callable, optional
         Backend selection function. Default is discovery.selection_backend_flags.
-        `None` returns white noise with no selections.
+        ``None`` returns white noise with no selections.
 
     Returns
     -------
@@ -161,16 +174,22 @@ def white_noise_block(
             psr,
             tnequad=tn_equad,
             ecorr=include_ecorr,
+            chromequad=chromequad,
+            chromequad_idx_per_backend=chromequad_idx_per_backend,
             selection=selection,
             noisedict=noise_dict,
+            fref=fref,
         )
 
 def gp_ecorr_block(
         psr: Any,
         noise_dict: Dict[str, Any] = {},
-        include_ecorr: bool = True, # dummy vars
+        include_ecorr: bool = True,    # dummy vars to match white_noise_block interface
         gp_ecorr: bool = False,
         tn_equad: bool = True,
+        chromequad: bool = False,
+        chromequad_idx_per_backend: bool = False,
+        fref: Optional[float] = 1400,
         selection: Callable = ds.selection_backend_flags,
         gp_ecorr_name: str = 'ecorrGP'
     ) -> Any:
@@ -188,6 +207,12 @@ def gp_ecorr_block(
     gp_ecorr : bool, optional
         Unused placeholder to match ``white_noise_block`` interface.
     tn_equad : bool, optional
+        Unused placeholder to match ``white_noise_block`` interface.
+    chromequad : bool, optional
+        Unused placeholder to match ``white_noise_block`` interface.
+    chromequad_idx_per_backend : bool, optional
+        Unused placeholder to match ``white_noise_block`` interface.
+    fref : float, optional
         Unused placeholder to match ``white_noise_block`` interface.
     selection : Callable, optional
         Backend selection function. Default is discovery.selection_backend_flags.
