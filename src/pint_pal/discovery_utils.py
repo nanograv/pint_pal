@@ -629,7 +629,13 @@ def make_single_pulsar_noise_likelihood_discovery(
     tspan : float, optional
         Time span for the noise model.
     model_kwargs : dict, optional
-        Dictionary of model keyword arguments.
+        Dictionary of model keyword arguments. Recognised keys are
+        ``timing_model``, ``white_noise``, ``red_noise``, ``dm_noise``,
+        ``chromatic_noise``, ``solar_wind``, and ``extra_signals``.
+        ``extra_signals`` may be a single pre-built signal or a list/tuple of
+        signals; each is appended to the args tuple after all standard noise
+        blocks, allowing the caller to inject custom models that are not
+        covered by the built-in noise blocks.
     return_args : bool, optional
         If True, return the raw argument list instead of the PulsarLikelihood instance.
 
@@ -642,14 +648,12 @@ def make_single_pulsar_noise_likelihood_discovery(
         noise_dict = {}
     if tspan is None:
         tspan = ds.getspan([psr])
-    # if marg_ne:
-    #     psr.Mmat = np.hstack([psr.Mmat, np.array([ds.make_solardm(psr)(1.0)]).T])
-    model_kwargs.update({ky: False for ky in ['timing_model', 'white_noise', 'red_noise', 'dm_noise', 'chromatic_noise', 'solar_wind'] if ky not in model_kwargs.keys()})
+    model_kwargs.update({ky: False for ky in ['timing_model', 'white_noise', 'red_noise', 'dm_noise', 'chromatic_noise', 'solar_wind', 'extra_signals'] if ky not in model_kwargs.keys()})
     # model checks -- update your configs !!
     if not model_kwargs['timing_model']:
         log.error("Timing model must be included in the `noise_run` config block for the likelihood to be properly constructed.")
     if not model_kwargs['white_noise']:
-        log.error("White noise must be included in the `noise_run` config block for the likelihood to be properly constructed.")
+        log.warning("White noise must be included in the `noise_run` config block for the likelihood to be properly constructed.")
     if not model_kwargs['red_noise']:
         log.warning("Red noise is not included in the `noise_run` config block. Proceed with caution.")       
     ## add pulsar's time spans to model for signals where not included
@@ -725,6 +729,12 @@ def make_single_pulsar_noise_likelihood_discovery(
                 **model_kwargs['solar_wind']
             )
         )
+    if model_kwargs['extra_signals']:
+        extra = model_kwargs['extra_signals']
+        if not isinstance(extra, (list, tuple)):
+            extra = [extra]
+        log.info(f"Adding {len(extra)} extra signal(s) to the model.")
+        args.extend(extra)
     if return_args:
         return args
     else:
