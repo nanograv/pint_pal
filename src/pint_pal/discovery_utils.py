@@ -128,6 +128,8 @@ def white_noise_block(
         chromequad_idx_per_backend: bool = False,
         fref: Optional[float] = 1400,
         selection: Callable = ds.selection_backend_flags,
+        outliers: bool = False,
+        variable: bool = False,
     ) -> Any:
     """
     Build the white-noise measurement block.
@@ -179,6 +181,7 @@ def white_noise_block(
             selection=selection,
             noisedict=noise_dict,
             fref=fref,
+            outliers=outliers,
         )
 
 def gp_ecorr_block(
@@ -191,7 +194,9 @@ def gp_ecorr_block(
         chromequad_idx_per_backend: bool = False,
         fref: Optional[float] = 1400,
         selection: Callable = ds.selection_backend_flags,
-        gp_ecorr_name: str = 'ecorrGP'
+        gp_ecorr_name: str = 'ecorrGP',
+        outliers: bool = False,
+        variable: bool = False,
     ) -> Any:
     """
     Build the Gaussian-process ECORR block.
@@ -234,6 +239,7 @@ def gp_ecorr_block(
             psr,
             noisedict=noise_dict,
             selection=selection,
+            variable=variable,
             #gp_ecorr_name=gp_ecorr_name,
             )
 

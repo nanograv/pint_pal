@@ -132,7 +132,7 @@ def test_basic_noise_blocks_delegate(monkeypatch):
     monkeypatch.setattr(
         du.ds,
         "makegp_ecorr",
-        lambda psr, noisedict, selection: (psr, noisedict, selection),
+        lambda psr, noisedict, selection, **kwargs: (psr, noisedict, selection),
     )
 
     psr = object()

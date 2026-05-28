@@ -13,6 +13,69 @@ from pint_pal.utils import apply_cut_flag, apply_cut_select
 from pint_pal.lite_utils import write_tim
 from pint_pal.dmx_utils import *
 
+
+def make_outlier_likelihood_discovery(psr, noise_dict=None, tspan=None, model_kwargs=None):
+    """
+    Build a discovery ``PulsarLikelihood`` configured for outlier analysis.
+
+    This is a thin wrapper around
+    :func:`~pint_pal.discovery_utils.make_single_pulsar_noise_likelihood_discovery`
+    that enforces the three requirements of the Wang & Taylor (2022) HMC-Gibbs
+    outlier model:
+
+    1. ``outliers=True`` on the measurement noise — introduces the per-TOA
+       variance-scaling parameter ``alpha_scaling``.
+    2. ``gp_ecorr=True`` — uses the GP-basis ECORR instead of the kernel
+       ECORR (required for ``variable=True`` ECORR via
+       ``psrl.sample_conditional``).
+    3. ``variable=True`` on the ECORR GP — coefficients are sampled rather
+       than marginalised so the Gibbs draws can update them.
+    4. ``tm_marg=False`` — timing-model GP coefficients are sampled rather
+       than marginalised (i.e. ``variable=True`` on the timing GP).
+
+    The caller's ``model_kwargs`` dict is deep-copied so it is never mutated.
+
+    Parameters
+    ----------
+    psr : Any
+        Pulsar object.
+    noise_dict : dict, optional
+        Noise parameter dictionary. Default is None.
+    tspan : float, optional
+        Time span for the noise model. Default is None.
+    model_kwargs : dict, optional
+        Model keyword arguments (same schema as
+        ``make_single_pulsar_noise_likelihood_discovery``). Forced keys:
+        ``timing_model.tm_marg=False``, ``white_noise.gp_ecorr=True``,
+        ``white_noise.variable=True``, ``white_noise.outliers=True``.
+
+    Returns
+    -------
+    discovery.PulsarLikelihood
+        Likelihood configured for outlier detection.
+    """
+    from pint_pal.discovery_utils import make_single_pulsar_noise_likelihood_discovery
+    import copy
+
+    mk = copy.deepcopy(model_kwargs) if model_kwargs is not None else {}
+
+    # -- timing model: sample coefficients rather than marginalise
+    if not mk.get('timing_model'):
+        mk['timing_model'] = {}
+    mk['timing_model']['tm_marg'] = False
+
+    # -- white noise: GP-basis ECORR, variable coefficients, outlier scaling
+    if not mk.get('white_noise'):
+        mk['white_noise'] = {}
+    mk['white_noise']['gp_ecorr'] = True
+    mk['white_noise']['variable'] = True
+    mk['white_noise']['outliers'] = True
+
+    return make_single_pulsar_noise_likelihood_discovery(
+        psr, noise_dict=noise_dict, tspan=tspan, model_kwargs=mk
+    )
+
+
 def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     """Necessary set-up to run gibbs sampler, and run it. Return pout.
     """
