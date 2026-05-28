@@ -19,8 +19,10 @@ import la_forge.core as co
 
 from enterprise_extensions.sampler import group_from_params, get_parameter_groups
 from enterprise_extensions import model_utils
-from enterprise_extensions.empirical_distr import (EmpiricalDistribution1D,
-                                                   EmpiricalDistribution2D)
+from enterprise_extensions.empirical_distr import (
+    EmpiricalDistribution1D,
+    EmpiricalDistribution2D,
+)
 
 from pint_pal import discovery_utils as disco_utils
 from pint_pal import lite_utils as lu
@@ -37,12 +39,7 @@ from numpyro.distributions import constraints
 import jax
 
 
-
-
-
-def setup_sampling_groups(pta,
-                          write_groups=True,
-                          outdir='./'):
+def setup_sampling_groups(pta, write_groups=True, outdir="./"):
     """
     Sets sampling groups for PTMCMCSampler.
     The sampling groups can help ensure the sampler does not get stuck.
@@ -50,58 +47,88 @@ def setup_sampling_groups(pta,
 
     Params
     ------
-    pta: the enterprise pta object 
+    pta: the enterprise pta object
     write_groups: bool, write the groups to a file
     outdir: str, directory to write the groups to
-    
+
     returns
     -------
     groups: list of lists of indices corresponding to parameter groups
-    
+
     """
-        
-        # groups
+
+    # groups
     pnames = pta.param_names
     groups = get_parameter_groups(pta)
     # add per-backend white noise
-    backends = np.unique([p[p.index('_')+1:p.index('efac')-1] for p in pnames if 'efac' in p])
+    backends = np.unique(
+        [p[p.index("_") + 1 : p.index("efac") - 1] for p in pnames if "efac" in p]
+    )
     for be in backends:
-        groups.append(group_from_params(pta,[be]))
+        groups.append(group_from_params(pta, [be]))
     # group red noise parameters
-    exclude = ['linear_timing_model','sw_r2','sw_4p39','measurement_noise',
-            'ecorr_sherman-morrison', 'ecorr_fast-sherman-morrison']
-    red_signals = [p[p.index('_')+1:] for p in list(pta.signals.keys())
-                if not p[p.index('_')+1:] in exclude]
+    exclude = [
+        "linear_timing_model",
+        "sw_r2",
+        "sw_4p39",
+        "measurement_noise",
+        "ecorr_sherman-morrison",
+        "ecorr_fast-sherman-morrison",
+    ]
+    red_signals = [
+        p[p.index("_") + 1 :]
+        for p in list(pta.signals.keys())
+        if not p[p.index("_") + 1 :] in exclude
+    ]
     rn_ct = 0
     for rs in red_signals:
-        if len(group_from_params(pta,[rs])) > 0:
+        if len(group_from_params(pta, [rs])) > 0:
             rn_ct += 1
-            groups.append(group_from_params(pta,[rs]))
+            groups.append(group_from_params(pta, [rs]))
     if rn_ct > 1:
-        groups.append(group_from_params(pta,red_signals))
+        groups.append(group_from_params(pta, red_signals))
     # add cross chromatic groups
-    if 'n_earth' in pnames or 'log10_sigma_ne' in pnames:
+    if "n_earth" in pnames or "log10_sigma_ne" in pnames:
         # cross SW and chrom groups
-        dmgp_sw = [idx for idx, nm in enumerate(pnames)
-                if any([flag in nm for flag in ['dm_gp','n_earth', 'log10_sigma_ne']])]
+        dmgp_sw = [
+            idx
+            for idx, nm in enumerate(pnames)
+            if any([flag in nm for flag in ["dm_gp", "n_earth", "log10_sigma_ne"]])
+        ]
         groups.append(dmgp_sw)
-        if np.any(['chrom' in param for param in pnames]):
-            chromgp_sw = [idx for idx, nm in enumerate(pnames)
-                        if any([flag in nm for flag in ['chrom_gp','n_earth', 'log10_sigma_ne']])]
-            dmgp_chromgp_sw = [idx for idx, nm in enumerate(pnames)
-                            if any([flag in nm for flag in ['dm_gp','chrom','n_earth', 'log10_sigma_ne']])]
+        if np.any(["chrom" in param for param in pnames]):
+            chromgp_sw = [
+                idx
+                for idx, nm in enumerate(pnames)
+                if any(
+                    [flag in nm for flag in ["chrom_gp", "n_earth", "log10_sigma_ne"]]
+                )
+            ]
+            dmgp_chromgp_sw = [
+                idx
+                for idx, nm in enumerate(pnames)
+                if any(
+                    [
+                        flag in nm
+                        for flag in ["dm_gp", "chrom", "n_earth", "log10_sigma_ne"]
+                    ]
+                )
+            ]
             groups.append(chromgp_sw)
             groups.append(dmgp_chromgp_sw)
-    if np.any(['chrom' in param for param in pnames]):
+    if np.any(["chrom" in param for param in pnames]):
         # cross dmgp and chromgp group
-        dmgp_chromgp = [idx for idx, nm in enumerate(pnames)
-                        if any([flag in nm for flag in ['dm_gp','chrom']])]
+        dmgp_chromgp = [
+            idx
+            for idx, nm in enumerate(pnames)
+            if any([flag in nm for flag in ["dm_gp", "chrom"]])
+        ]
         groups.append(dmgp_chromgp)
     # everything
     groups.append([i for i in range(len(pnames))])
     # save list of params corresponding to groups
     if write_groups is True:
-        with open(f'{outdir}/groups.txt', 'w') as fi:
+        with open(f"{outdir}/groups.txt", "w") as fi:
             for group in groups:
                 line = np.array(pnames)[np.array(group)]
                 fi.write("[" + " ".join(line) + "]\n")
@@ -110,7 +137,7 @@ def setup_sampling_groups(pta,
 
 
 def get_mean_large_likelihoods(core, N=10):
-    '''
+    """
     Calculate the mean of the top N likelihood samples from the chain.
     This is an alternate to fixing the noise values in the timing model to
     the MAP or the median.
@@ -122,17 +149,17 @@ def get_mean_large_likelihoods(core, N=10):
     Returns
     =======
     mean_data: np.array, mean of the top N likelihood samples
-    '''
-    chain = core.chain[core.burn:,:]
-    lnlike_idx = core.params.index('lnlike')
+    """
+    chain = core.chain[core.burn :, :]
+    lnlike_idx = core.params.index("lnlike")
     sorted_data = chain[chain[:, lnlike_idx].argsort()[::-1]]
-    vals = np.mean(sorted_data[:N,:],axis=0)
+    vals = np.mean(sorted_data[:N, :], axis=0)
     return {par: vals[p] for p, par in enumerate(core.params)}
 
 
 def analyze_enterprise_noise(
     chaindir="./noise_run_chains/",
-    use_noise_point='mean_large_likelihood',
+    use_noise_point="mean_large_likelihood",
     likelihoods_to_average=50,
     burn_frac=0.25,
     save_corner=True,
@@ -149,7 +176,7 @@ def analyze_enterprise_noise(
     chaindir: path to enterprise noise run chain; Default: './noise_run_chains/'
     use_noise_point: point to use for noise analysis; Default: 'MAP'.
         Options: 'MAP', 'median', 'mean_large_likelihood',
-        Note that the MAP is the the same as the maximum likelihood value when all the priors are uniform. 
+        Note that the MAP is the the same as the maximum likelihood value when all the priors are uniform.
     likelihoods_to_average: number of top likelihood samples to average; Default: 50
         Only applicable if use_noise_point is 'mean_large_likelihood'.
     burn_frac: fraction of chain to use for burn-in; Default: 0.25
@@ -170,35 +197,55 @@ def analyze_enterprise_noise(
     sampler_defaults.update(sampler_kwargs)
     model_kwargs = model_defaults.copy()
     sampler_kwargs = sampler_defaults.copy()
-    sampler = sampler_kwargs['sampler']
-    likelihood = sampler_kwargs['likelihood']
+    sampler = sampler_kwargs["sampler"]
+    likelihood = sampler_kwargs["likelihood"]
     try:
         noise_core = co.Core(chaindir=chaindir)
     except:
         if os.path.isfile(chaindir):
-            log.error(f"Could not load noise run from {chaindir}. Make sure the path is correct. " \
-                      +"Also make sure you have an up-to-date la_forge installation. ")
-            raise ValueError(f"Could not load noise run from {chaindir}. Check path and la_forge installation.")
+            log.error(
+                f"Could not load noise run from {chaindir}. Make sure the path is correct. "
+                + "Also make sure you have an up-to-date la_forge installation. "
+            )
+            raise ValueError(
+                f"Could not load noise run from {chaindir}. Check path and la_forge installation."
+            )
         else:
-            log.error(f"No noise runs found in {chaindir}. Make sure the path is correct.") 
+            log.error(
+                f"No noise runs found in {chaindir}. Make sure the path is correct."
+            )
             raise ValueError(f"Could not load noise run from {chaindir}. Check path.")
-    if sampler == 'PTMCMCSampler':
+    if sampler == "PTMCMCSampler":
         # standard burn ins
         noise_core.set_burn(burn_frac)
     else:
         noise_core.set_burn(burn_frac)
     chain = noise_core.chain[int(burn_frac * len(noise_core.chain)) :, :-4]
     psr_name = noise_core.params[0].split("_")[0]
-    pars =  np.array([p for p in noise_core.params if p not in ['lnlike', 'lnpost', 'chain_accept', 'pt_chain_accept']])
+    pars = np.array(
+        [
+            p
+            for p in noise_core.params
+            if p not in ["lnlike", "lnpost", "chain_accept", "pt_chain_accept"]
+        ]
+    )
     # if len(pars)+2 != chain.shape[1]:
     #     chain = chain[:, :len(pars)+2]
-    
+
     # load in same for comparison noise model
     if chaindir_compare is not None:
         compare_core = co.Core(chaindir=chaindir)
         compare_core.set_burn(noise_core.burn)
-        chain_compare = compare_core.chain[int(burn_frac * len(noise_core.chain)) :, :-4]
-        pars_compare = np.array([p for p in compare_core.params if p not in ['lnlike', 'lnpost', 'chain_accept', 'pt_chain_accept']])
+        chain_compare = compare_core.chain[
+            int(burn_frac * len(noise_core.chain)) :, :-4
+        ]
+        pars_compare = np.array(
+            [
+                p
+                for p in compare_core.params
+                if p not in ["lnlike", "lnpost", "chain_accept", "pt_chain_accept"]
+            ]
+        )
         # if len(pars_compare)+2 != chain_compare.shape[1]:
         #     chain_compare = chain_compare[:, :len(pars_compare)+2]
 
@@ -209,7 +256,6 @@ def analyze_enterprise_noise(
             )
             chaindir_compare = None
 
-            
     if save_corner and not no_corner_plot:
         pars_short = [p.split("_", 1)[1] for p in pars]
         log.info(f"Chain parameter names are {pars_short}")
@@ -219,19 +265,17 @@ def analyze_enterprise_noise(
             compare_pars_short = [p.split("_", 1)[1] for p in pars_compare]
             log.info(f"Comparison chain parameter names are {compare_pars_short}")
             log.info(
-               f"Comparison chain parameter convention: {test_equad_convention(compare_pars_short)}"
+                f"Comparison chain parameter convention: {test_equad_convention(compare_pars_short)}"
             )
             # don't plot comparison if the parameter names don't match
             if compare_pars_short != pars_short:
                 log.warning(
-                   "Parameter names for comparison noise chains do not match, not plotting the compare-noise-dir chains"
+                    "Parameter names for comparison noise chains do not match, not plotting the compare-noise-dir chains"
                 )
                 chaindir_compare = None
             else:
                 normalization_factor = (
-                    np.ones(len(chain_compare))
-                    * len(chain)
-                    / len(chain_compare)
+                    np.ones(len(chain_compare)) * len(chain) / len(chain_compare)
                 )
                 fig = corner.corner(
                     chain_compare,
@@ -241,9 +285,7 @@ def analyze_enterprise_noise(
                     labels=compare_pars_short,
                 )
                 # normal corner plot
-                corner.corner(
-                    chain, fig=fig, color="black", labels=pars_short
-                )
+                corner.corner(chain, fig=fig, color="black", labels=pars_short)
         if chaindir_compare is None:
             corner.corner(chain, labels=pars_short)
 
@@ -288,9 +330,7 @@ def analyze_enterprise_noise(
                 chaindir_compare = None
             else:
                 normalization_factor = (
-                    np.ones(len(chain_compare))
-                    * len(chain)
-                    / len(chain_compare)
+                    np.ones(len(chain_compare)) * len(chain) / len(chain_compare)
                 )
 
         # Set the shape of the subplots
@@ -304,9 +344,17 @@ def analyze_enterprise_noise(
         nrows = 5  # number of rows per page
 
         mp_idx = noise_core.map_idx
-        param_medians = [noise_core.get_param_median(p) for p in noise_core.params if p not in ['lnlike', 'lnpost']]
-        param_medians_dict = {p: noise_core.get_param_median(p) for p in noise_core.params if p not in ['lnlike', 'lnpost']}
-        #mp_idx = np.argmax(chain[:, a])
+        param_medians = [
+            noise_core.get_param_median(p)
+            for p in noise_core.params
+            if p not in ["lnlike", "lnpost"]
+        ]
+        param_medians_dict = {
+            p: noise_core.get_param_median(p)
+            for p in noise_core.params
+            if p not in ["lnlike", "lnpost"]
+        }
+        # mp_idx = np.argmax(chain[:, a])
         if chaindir_compare is not None:
             mp_compare_idx = compare_core.map_idx
 
@@ -328,11 +376,11 @@ def analyze_enterprise_noise(
                 denity=True,
             )
             ax.axvline(chain[:, idx][mp_idx], ls="--", color="black", label="MAP")
-            if use_noise_point == 'mean_large_likelihood':
+            if use_noise_point == "mean_large_likelihood":
                 lbl = "mean of 50 MLVs"
-            if use_noise_point == 'MAP':
+            if use_noise_point == "MAP":
                 lbl = "MAP"
-            if use_noise_point == 'median':
+            if use_noise_point == "median":
                 lbl = "median"
             ax.axvline(param_medians[idx], ls="--", color="green", label=lbl)
             if chaindir_compare is not None:
@@ -362,20 +410,24 @@ def analyze_enterprise_noise(
         # ax[nr][nc].legend(loc = 'best')
         plt.legend(loc="best")
         plt.show()
-    
-    if use_noise_point == 'MAP':
+
+    if use_noise_point == "MAP":
         noise_dict = noise_core.get_map_dict()
-    elif use_noise_point == 'median':
+    elif use_noise_point == "median":
         noise_dict = param_medians_dict
-    elif use_noise_point == 'mean_large_likelihood':
+    elif use_noise_point == "mean_large_likelihood":
         noise_dict = get_mean_large_likelihoods(noise_core, N=likelihoods_to_average)
     else:
         log.error(f"Invalid noise point {use_noise_point}. Must be 'MAP' or 'median' ")
-        raise ValueError(f"Invalid noise point {use_noise_point}. Must be 'MAP' or 'median' or 'mean_large_likelihood' ")
+        raise ValueError(
+            f"Invalid noise point {use_noise_point}. Must be 'MAP' or 'median' or 'mean_large_likelihood' "
+        )
 
     # Print bayes factor for red noise in pulsar
-    rn_amp_nm = psr_name+"_red_noise_log10_A"
-    rn_bf = model_utils.bayes_fac(noise_core(rn_amp_nm), ntol=1, logAmax=-11, logAmin=-20)[0]
+    rn_amp_nm = psr_name + "_red_noise_log10_A"
+    rn_bf = model_utils.bayes_fac(
+        noise_core(rn_amp_nm), ntol=1, logAmax=-11, logAmin=-20
+    )[0]
 
     return noise_core, noise_dict, rn_bf
 
@@ -406,7 +458,7 @@ def model_noise(
     noise_kwargs: dictionary of noise model parameters; Default: {}
     sampler_kwargs: dictionary of sampler parameters; Default: {}
     return_sampler: Flag to return the sampler object; Default: False
-    
+
     Recommended to pass model_kwargs and sampler_kwargs from the config file.
     Default kwargs given by function `get_model_and_sampler_default_settings`.
     Import configuration parameters:
@@ -424,13 +476,13 @@ def model_noise(
     # get the default settings
     model_defaults, sampler_defaults = get_model_and_sampler_default_settings()
     # update with args passed in
-    #model_defaults.update(model_kwargs)
-    #sampler_defaults.update(sampler_kwargs)
-    #model_kwargs = model_defaults.copy()
-    #sampler_kwargs = sampler_defaults.copy()
-    likelihood = sampler_kwargs['likelihood']
-    sampler = sampler_kwargs['sampler']
-    
+    # model_defaults.update(model_kwargs)
+    # sampler_defaults.update(sampler_kwargs)
+    # model_kwargs = model_defaults.copy()
+    # sampler_kwargs = sampler_defaults.copy()
+    likelihood = sampler_kwargs["likelihood"]
+    sampler = sampler_kwargs["sampler"]
+
     outdir = format_chain_dir(base_op_dir, mo, using_wideband=using_wideband)
 
     if os.path.exists(outdir) and run_noise_analysis and not resume:
@@ -454,46 +506,51 @@ def model_noise(
         )
         return None
 
-
     # Create enterprise Pulsar object for supplied pulsar timing model (mo) and toas (to)
-    log.info(f"Creating enterprise.Pulsar object from model with {mo.NTOA.value} toas...")
+    log.info(
+        f"Creating enterprise.Pulsar object from model with {mo.NTOA.value} toas..."
+    )
     e_psr = Pulsar(mo, to, pint=True, t2=None)
     ##########################################################
     ################     PTMCMCSampler      ##################
     ##########################################################
-    if likelihood == "enterprise" and sampler == 'PTMCMCSampler':
-        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
+    if likelihood == "enterprise" and sampler == "PTMCMCSampler":
+        log.info(
+            f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}"
+        )
         # Setup a single pulsar PTA using enterprise_extensions
         # Ensure n_iter is an integer
-        sampler_kwargs['n_iter'] = int(float(sampler_kwargs['n_iter'].get('n_iter', 25000)))
+        sampler_kwargs["n_iter"] = int(
+            float(sampler_kwargs["n_iter"].get("n_iter", 25000))
+        )
 
-        if sampler_kwargs['n_iter'] < 1e4:
+        if sampler_kwargs["n_iter"] < 1e4:
             log.warning(
-            f"Such a small number of iterations with {sampler} is unlikely to yield accurate posteriors. STRONGLY recommend increasing the number of iterations to at least 5e4"
+                f"Such a small number of iterations with {sampler} is unlikely to yield accurate posteriors. STRONGLY recommend increasing the number of iterations to at least 5e4"
             )
         if not using_wideband:
             pta = models.model_singlepsr_noise(
                 e_psr,
                 white_vary=True,
-                red_var=True if model_kwargs['red_noise'] else False, # defaults True
+                red_var=True if model_kwargs["red_noise"] else False,  # defaults True
                 is_wideband=False,
                 use_dmdata=False,
                 dmjump_var=False,
                 wb_efac_sigma=wb_efac_sigma,
-                tm_svd=True if model_kwargs['tm_svd'] else False, # defaults True
+                tm_svd=True if model_kwargs["tm_svd"] else False,  # defaults True
                 # FIXME -- should update this so dmgp kwargs work in enterprise likelihood as well.
                 # DM GP
-                #dm_var=model_kwargs['inc_dmgp'],
-                #dm_Nfreqs=model_kwargs['dmgp_nfreqs'],
+                # dm_var=model_kwargs['inc_dmgp'],
+                # dm_Nfreqs=model_kwargs['dmgp_nfreqs'],
                 # CHROM GP
-                #chrom_gp=model_kwargs['inc_chromgp'],
-                #chrom_Nfreqs=model_kwargs['chromgp_nfreqs'],
-                #chrom_gp_kernel='diag', # Fourier basis chromg_gp
+                # chrom_gp=model_kwargs['inc_chromgp'],
+                # chrom_Nfreqs=model_kwargs['chromgp_nfreqs'],
+                # chrom_gp_kernel='diag', # Fourier basis chromg_gp
                 # DM SOLAR WIND
-                #dm_sw_deter=model_kwargs['inc_sw_deter'],
-                #ACE_prior=model_kwargs['ACE_prior'],
+                # dm_sw_deter=model_kwargs['inc_sw_deter'],
+                # ACE_prior=model_kwargs['ACE_prior'],
                 # can pass extra signals in here
-                #extra_sigs=model_kwargs['extra_sigs'],
+                # extra_sigs=model_kwargs['extra_sigs'],
             )
             pta.set_default_params({})
         else:
@@ -502,7 +559,7 @@ def model_noise(
                 is_wideband=True,
                 use_dmdata=True,
                 white_vary=True,
-                red_var=True if model_kwargs['red_noise'] else False, # defaults True
+                red_var=True if model_kwargs["red_noise"] else False,  # defaults True
                 dmjump_var=False,
                 wb_efac_sigma=wb_efac_sigma,
                 ng_twg_setup=True,
@@ -520,12 +577,16 @@ def model_noise(
         groups = setup_sampling_groups(pta, write_groups=False, outdir=outdir)
         #######
         # setup sampler using enterprise_extensions
-        if sampler_kwargs['emp_distribution'] is not None:
+        if sampler_kwargs["emp_distribution"] is not None:
             try:
-                log.info(f"Attempting to load chains for an empirical distributions from {sampler_kwargs['emp_distribution']}")
-                core = co.Core(chaindir=sampler_kwargs['emp_distribution'])
+                log.info(
+                    f"Attempting to load chains for an empirical distributions from {sampler_kwargs['emp_distribution']}"
+                )
+                core = co.Core(chaindir=sampler_kwargs["emp_distribution"])
             except:
-                log.warning(f"Failed to load chains for empirical distributions from {sampler_kwargs['emp_distribution']}.\nCheck path. Need absolute path to chain directory with `pars.txt` and `chain_1.txt`. files")
+                log.warning(
+                    f"Failed to load chains for empirical distributions from {sampler_kwargs['emp_distribution']}.\nCheck path. Need absolute path to chain directory with `pars.txt` and `chain_1.txt`. files"
+                )
                 core = None
             try:
                 if core is not None:
@@ -533,16 +594,21 @@ def model_noise(
                     log.info(f"Successfully created empirical distributions !!")
                     log.info("Setting up sampler ...")
             except:
-                log.warning(f"Failed to create empirical distributions from successfully loaded directory.")
+                log.warning(
+                    f"Failed to create empirical distributions from successfully loaded directory."
+                )
                 emp_dist = None
         else:
-            log.warning("Setting up sampler without empirical distributions... Consider adding one for faster sampling by adding `emp_distribution`: /<path to old noise chain>/<psr name>_nb to the `noise_run`->`inference` section of the config file.")
+            log.warning(
+                "Setting up sampler without empirical distributions... Consider adding one for faster sampling by adding `emp_distribution`: /<path to old noise chain>/<psr name>_nb to the `noise_run`->`inference` section of the config file."
+            )
             emp_dist = None
-        samp = ee_sampler.setup_sampler(pta,
-                                        outdir=outdir,
-                                        resume=resume,
-                                        groups=groups,
-                                        empirical_distr = emp_dist,
+        samp = ee_sampler.setup_sampler(
+            pta,
+            outdir=outdir,
+            resume=resume,
+            groups=groups,
+            empirical_distr=emp_dist,
         )
         if emp_dist is not None:
             try:
@@ -552,7 +618,9 @@ def model_noise(
         # Initial sample
         # try to initialize the sampler to the maximum likelihood value from a previous run
         # initialize to a random point if any points are missing
-        x0 = get_init_sample_from_chain_path(pta, chaindir=sampler_kwargs['emp_distribution'])
+        x0 = get_init_sample_from_chain_path(
+            pta, chaindir=sampler_kwargs["emp_distribution"]
+        )
         try:
             log_single_likelihood_evaluation_time(pta, sampler_kwargs)
         except:
@@ -561,17 +629,27 @@ def model_noise(
             # Start sampling
             log.info("Beginnning to sample...")
             samp.sample(
-                x0, sampler_kwargs['n_iter'], SCAMweight=30, AMweight=15, DEweight=50, #**sampler_kwargs
+                x0,
+                sampler_kwargs["n_iter"],
+                SCAMweight=30,
+                AMweight=15,
+                DEweight=50,  # **sampler_kwargs
             )
             log.info("Finished sampling.")
-    elif likelihood == "enterprise" and sampler == 'GibbsSampler':
-        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
-        raise NotImplementedError("GibbsSampler not yet implemented for enterprise likelihood")
+    elif likelihood == "enterprise" and sampler == "GibbsSampler":
+        log.info(
+            f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}"
+        )
+        raise NotImplementedError(
+            "GibbsSampler not yet implemented for enterprise likelihood"
+        )
     ##########################################################
     ################     discovery      ######################
     ##########################################################
-    elif likelihood == "discovery" and sampler == 'NUTS':
-        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
+    elif likelihood == "discovery" and sampler == "NUTS":
+        log.info(
+            f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}"
+        )
         # make outdir here to expose directory issues before sampling
         os.makedirs(outdir, exist_ok=True)
         psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
@@ -582,7 +660,9 @@ def model_noise(
             return_args=False,
         )
         prior_dict = ds_pdict.copy()
-        pint_pal_priors = json.load(open(os.path.join(os.path.dirname(__file__), "discovery_priors.json")))
+        pint_pal_priors = json.load(
+            open(os.path.join(os.path.dirname(__file__), "discovery_priors.json"))
+        )
         prior_dict.update(pint_pal_priors)
         _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs)
         logL = disco_utils.make_numpyro_model(psl.logL, prior_dict)
@@ -593,15 +673,20 @@ def model_noise(
         if not return_sampler_without_sampling:
             disco_utils.run_nuts_with_checkpoints(
                 sampler=samp,
-                num_samples_per_checkpoint=sampler_kwargs.get('num_samples_per_checkpoint', 1000),
+                num_samples_per_checkpoint=sampler_kwargs.get(
+                    "num_samples_per_checkpoint", 1000
+                ),
                 rng_key=PRNGKey(seed),
                 outdir=outdir,
                 file_name=f"{e_psr.name}_nuts_samples",
                 resume=resume,
-                diagnostics=sampler_kwargs.get('diagnostics', True),
-                )
-    elif likelihood == "discovery" and sampler == 'optimizer':
-        log.info(f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}")
+                diagnostics=sampler_kwargs.get("diagnostics", True),
+                model=logL,
+            )
+    elif likelihood == "discovery" and sampler == "optimizer":
+        log.info(
+            f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}"
+        )
         psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
             psr=e_psr,
             noise_dict={},
@@ -610,7 +695,9 @@ def model_noise(
             return_args=False,
         )
         prior_dict = ds_pdict.copy()
-        pint_pal_priors = json.load(open(os.path.join(os.path.dirname(__file__), "discovery_priors.json")))
+        pint_pal_priors = json.load(
+            open(os.path.join(os.path.dirname(__file__), "discovery_priors.json"))
+        )
         prior_dict.update(pint_pal_priors)
         _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs)
         logL = disco_utils.make_numpyro_model(psl.logL, prior_dict)
@@ -632,39 +719,40 @@ def model_noise(
             #     }
             # logL = numpyro.handlers.reparam(logL, config=config)
 
-            #autoguide_map = numpyro.infer.autoguide.AutoDelta(logL)
+            # autoguide_map = numpyro.infer.autoguide.AutoDelta(logL)
             # Initialize AutoDelta guide at median of prior distributions for better convergence
-            autoguide_map = numpyro.infer.autoguide.AutoDelta(logL, init_loc_fn=init_to_median(num_samples=10))
-            #autoguide_map = numpyro.infer.autoguide.AutoDelta(logL, init_loc_fn=init_to_sample())
+            autoguide_map = numpyro.infer.autoguide.AutoDelta(
+                logL, init_loc_fn=init_to_median(num_samples=10)
+            )
+            # autoguide_map = numpyro.infer.autoguide.AutoDelta(logL, init_loc_fn=init_to_sample())
             # autoguid normal does not work it seems.
-            #autoguide_map = numpyro.infer.autoguide.AutoNormal(logL, init_loc_fn=init_to_median(num_samples=10))
-
+            # autoguide_map = numpyro.infer.autoguide.AutoNormal(logL, init_loc_fn=init_to_median(num_samples=10))
 
             svi = disco_utils.setup_svi(
                 model=logL,
                 guide=autoguide_map,
-                loss=None, #defauls to trace elbo
-                num_warmup_steps=sampler_kwargs.get('num_warmup_steps', 500),
-                max_epochs=sampler_kwargs.get('max_epochs', 1000),
-                peak_learning_rate=sampler_kwargs.get('peak_learning_rate', 0.01),
-                gradient_clipping_val=sampler_kwargs.get('gradient_clipping_val', None),
+                loss=None,  # defauls to trace elbo
+                num_warmup_steps=sampler_kwargs.get("num_warmup_steps", 500),
+                max_epochs=sampler_kwargs.get("max_epochs", 1000),
+                peak_learning_rate=sampler_kwargs.get("peak_learning_rate", 0.01),
+                gradient_clipping_val=sampler_kwargs.get("gradient_clipping_val", None),
             )
             map_params, diagnostics = disco_utils.run_svi_early_stopping(
-                rng_key= PRNGKey(seed),
+                rng_key=PRNGKey(seed),
                 svi=svi,
-                batch_size = sampler_kwargs.get('batch_size', 100),
-                patience = sampler_kwargs.get('patience', 3),
-                difference_threshold = sampler_kwargs.get('difference_threshold', 5.0),
-                max_num_batches = sampler_kwargs.get('max_num_batches', 500),
-                diagnostics = sampler_kwargs.get('diagnostics', True),
-                outdir = outdir,
-                file_prefix = e_psr.name,
+                batch_size=sampler_kwargs.get("batch_size", 100),
+                patience=sampler_kwargs.get("patience", 3),
+                difference_threshold=sampler_kwargs.get("difference_threshold", 5.0),
+                max_num_batches=sampler_kwargs.get("max_num_batches", 500),
+                diagnostics=sampler_kwargs.get("diagnostics", True),
+                outdir=outdir,
+                file_prefix=e_psr.name,
             )
             # write map params to file
             with open(os.path.join(outdir, f"{e_psr.name}_map_params.json"), "w") as f:
                 json.dump({k: float(v) for k, v in map_params.items()}, f, indent=4)
             try:
-                if sampler_kwargs.get('diagnostics', False):
+                if sampler_kwargs.get("diagnostics", False):
                     if diagnostics is None:
                         diagnostics_payload = {}
                     elif isinstance(diagnostics, dict):
@@ -679,17 +767,19 @@ def model_noise(
                         }
                     else:
                         diagnostics_payload = {"diagnostics": str(diagnostics)}
-                    with open(os.path.join(outdir, f"{e_psr.name}_svi_diagnostics.json"), "w") as f:
+                    with open(
+                        os.path.join(outdir, f"{e_psr.name}_svi_diagnostics.json"), "w"
+                    ) as f:
                         json.dump(diagnostics_payload, f, indent=4)
             except Exception as e:
                 log.warning(f"Failed to save diagnostics: {e}")
     else:
         log.error(
-            f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination." \
+            f"Invalid likelihood ({likelihood}) and sampler ({sampler}) combination."
             + "\nCan only use enterprise with PTMCMCSampler or GibbsSampler."
         )
     if return_sampler_without_sampling:
-        return samp if 'samp' in locals() else None
+        return samp if "samp" in locals() else None
 
 
 def convert_to_RNAMP(value):
@@ -701,12 +791,12 @@ def convert_to_RNAMP(value):
 
 def _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs):
     """Update Nfreq_cutoff prior upper bounds from per-block Nfreqs settings."""
-    cutoff_prior_names = {'powerlaw_cutoff', 'psd_cutoff'}
+    cutoff_prior_names = {"powerlaw_cutoff", "psd_cutoff"}
     cutoff_prior_keys = {
-        'red_noise': '(.*_)?red_noise_Nfreq_cutoff.*',
-        'dm_noise': '(.*_)?dm_gp_Nfreq_cutoff.*',
-        'chromatic_noise': '(.*_)?chrom_gp_Nfreq_cutoff.*',
-        'solar_wind': '(.*_)?sw_gp_Nfreq_cutoff.*',
+        "red_noise": "(.*_)?red_noise_Nfreq_cutoff.*",
+        "dm_noise": "(.*_)?dm_gp_Nfreq_cutoff.*",
+        "chromatic_noise": "(.*_)?chrom_gp_Nfreq_cutoff.*",
+        "solar_wind": "(.*_)?sw_gp_Nfreq_cutoff.*",
     }
 
     for block_name, prior_key in cutoff_prior_keys.items():
@@ -714,9 +804,13 @@ def _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs):
         if not isinstance(block_kwargs, dict):
             continue
 
-        prior_name = block_kwargs.get('prior', block_kwargs.get('psd'))
-        nfreqs = block_kwargs.get('Nfreqs')
-        if prior_name not in cutoff_prior_names or nfreqs is None or prior_key not in prior_dict:
+        prior_name = block_kwargs.get("prior", block_kwargs.get("psd"))
+        nfreqs = block_kwargs.get("Nfreqs")
+        if (
+            prior_name not in cutoff_prior_names
+            or nfreqs is None
+            or prior_key not in prior_dict
+        ):
             continue
 
         bounds = prior_dict[prior_key]
@@ -781,7 +875,9 @@ def _translate_logfreq_kwargs(noise_kwargs):
     return nlog, flog_factor, tspan_year
 
 
-def _apply_pl_component_logfreq_settings(component, noise_kwargs, flog_name, factor_name, tspan_name=None):
+def _apply_pl_component_logfreq_settings(
+    component, noise_kwargs, flog_name, factor_name, tspan_name=None
+):
     """Apply log-spaced Fourier-basis settings to a PINT PL* noise component."""
     nlog, flog_factor, tspan_year = _translate_logfreq_kwargs(noise_kwargs)
     if nlog is None:
@@ -793,10 +889,41 @@ def _apply_pl_component_logfreq_settings(component, noise_kwargs, flog_name, fac
         _set_component_param_value(component, tspan_name, tspan_year)
 
 
+def _apply_tdsw_interp_settings(sw_comp, sw_kwargs, kernel_name):
+    """Apply interpolation settings to a ``TimeDomainSWNoise`` component.
+
+    Sets ``TDSWDT`` or ``TDSWNODE_*`` entries (and ``TDSWINTERP_KIND``) on
+    *sw_comp* from *sw_kwargs*.  Either ``dt`` or ``basis_nodes`` must be
+    provided; otherwise a ``ValueError`` is raised.
+
+    Parameters
+    ----------
+    sw_comp : pm.TimeDomainSWNoise
+        The component to configure.
+    sw_kwargs : dict
+        Keyword arguments from the ``solar_wind`` model block, typically
+        containing ``dt``, ``basis_nodes``, and/or ``interp_kind``.
+    kernel_name : str
+        Human-readable kernel name used in error messages (e.g. ``"ridge"``).
+    """
+    dt = sw_kwargs.get("dt", False)
+    basis_nodes = sw_kwargs.get("basis_nodes", None)
+    kind = sw_kwargs.get("interp_kind", "linear")
+    sw_comp.TDSWINTERP_KIND.value = kind
+    if dt:
+        sw_comp.TDSWDT.quantity = dt
+    elif basis_nodes is not None:
+        for node in basis_nodes:
+            sw_comp.add_tdsw_node_component(node)
+    else:
+        raise ValueError(
+            f"Must specify either dt or basis_nodes for TimeDomainSWNoise "
+            f"component (kernel='{kernel_name}')."
+        )
+
+
 def format_chain_dir(
-    root_dir: str,
-    model: pm.timing_model.TimingModel,
-    using_wideband: bool = False
+    root_dir: str, model: pm.timing_model.TimingModel, using_wideband: bool = False
 ) -> str:
     """
     Appropriately formats a chain directory. This must end in PSR_[nw]b/
@@ -812,7 +939,7 @@ def format_chain_dir(
     if last_dir == sub_dir:
         chain_dir = root_dir
     else:
-        chain_dir = os.path.join(root_dir, sub_dir, '')
+        chain_dir = os.path.join(root_dir, sub_dir, "")
 
     return chain_dir
 
@@ -860,12 +987,16 @@ def add_noise_to_model(
     dmefac_idx = 1
     dmequad_idx = 1
     tneq_idx = 1  # NEW: index for TNEQ parameters
-    
+
     psr_name = list(noise_dict.keys())[0].split("_")[0]
     noise_pars = np.array(list(noise_dict.keys()))
-    wn_dict = {key: val for key, val in noise_dict.items() if "efac" in key or "equad" in key or "ecorr" in key or "tnequad" in key}
+    wn_dict = {
+        key: val
+        for key, val in noise_dict.items()
+        if "efac" in key or "equad" in key or "ecorr" in key or "tnequad" in key
+    }
     for key, val in wn_dict.items():
-        
+
         if "_efac" in key:
 
             param_name = key.split("_efac")[0].split(psr_name)[1][1:]
@@ -1039,18 +1170,18 @@ def add_noise_to_model(
     rn_keys = np.array([key for key, val in noise_dict.items() if "red_noise" in key])
     if len(rn_keys) > 0:
         log.info("Including red noise for this pulsar")
-        rn_kwargs = model_kwargs.get('red_noise', {})
+        rn_kwargs = model_kwargs.get("red_noise", {})
         # Add the ML RN parameters to their component
         rn_comp = pm.PLRedNoise()
 
         rn_keys = np.array([key for key, val in noise_dict.items() if "_red_" in key])
         # this is the old convention. switching to TN convention to match DM, SW, CHROM noises.
-	    #rn_comp.RNAMP.quantity = convert_to_RNAMP(
+        # rn_comp.RNAMP.quantity = convert_to_RNAMP(
         #    noise_dict[psr_name + "_red_noise_log10_A"]
-        #)
+        # )
         rn_comp.TNREDAMP.quantity = noise_dict[psr_name + "_red_noise_log10_A"]
         rn_comp.TNREDGAM.quantity = noise_dict[psr_name + "_red_noise_gamma"]
-        rn_comp.TNREDC.quantity = rn_kwargs.get('Nfreqs', 30)
+        rn_comp.TNREDC.quantity = rn_kwargs.get("Nfreqs", 30)
         _apply_pl_component_logfreq_settings(
             rn_comp,
             rn_kwargs,
@@ -1062,22 +1193,22 @@ def add_noise_to_model(
         model.add_component(rn_comp, validate=True, force=True)
     else:
         log.info("Not including red noise for this pulsar")
-        
+
     # Check to see if dm noise is present
     dm_pars = [key for key in noise_pars if "_dm_gp" in key]
     if len(dm_pars) > 0:
-        dm_kwargs = model_kwargs.get('dm_noise', {})
+        dm_kwargs = model_kwargs.get("dm_noise", {})
         ###### POWERLAW DM NOISE ######
-        if f'{psr_name}_dm_gp_log10_A' in dm_pars:
-            #dm_bf = model_utils.bayes_fac(noise_core(rn_amp_nm), ntol=1, logAmax=-11, logAmin=-20)[0] 
-            #log.info(f"The SD Bayes factor for dm noise in this pulsar is: {dm_bf}") 
-            log.info('Adding Powerlaw DM GP noise as PLDMNoise to par file')
+        if f"{psr_name}_dm_gp_log10_A" in dm_pars:
+            # dm_bf = model_utils.bayes_fac(noise_core(rn_amp_nm), ntol=1, logAmax=-11, logAmin=-20)[0]
+            # log.info(f"The SD Bayes factor for dm noise in this pulsar is: {dm_bf}")
+            log.info("Adding Powerlaw DM GP noise as PLDMNoise to par file")
             # Add the ML RN parameters to their component
             dm_comp = pm.PLDMNoise()
             dm_comp.TNDMAMP.quantity = noise_dict[psr_name + "_dm_gp_log10_A"]
             dm_comp.TNDMGAM.quantity = noise_dict[psr_name + "_dm_gp_gamma"]
             ##### FIXMEEEEEEE : need to figure out some way to softcode this
-            dm_comp.TNDMC.quantitity = dm_kwargs.get('Nfreqs', 100)
+            dm_comp.TNDMC.quantitity = dm_kwargs.get("Nfreqs", 100)
             _apply_pl_component_logfreq_settings(
                 dm_comp,
                 dm_kwargs,
@@ -1088,63 +1219,81 @@ def add_noise_to_model(
             # Add red noise to the timing model
             model.add_component(dm_comp, validate=True, force=True)
         ###### FREE SPECTRAL (WaveX) DM NOISE ######
-        elif f'{psr_name}_dm_gp_log10_rho_0' in dm_pars:
-            log.info('Adding Free Spectral DM GP as DMWaveXnoise to par file')
-            raise NotImplementedError('DMWaveXNoise not yet implemented')
+        elif f"{psr_name}_dm_gp_log10_rho_0" in dm_pars:
+            log.info("Adding Free Spectral DM GP as DMWaveXnoise to par file")
+            raise NotImplementedError("DMWaveXNoise not yet implemented")
 
     # Check to see if higher order chromatic noise is present
     chrom_pars = [key for key in noise_pars if "_chrom_gp" in key]
     if len(chrom_pars) > 0:
-        if 'ChromaticCM' not in model.components:
-            log.info("Adding ChromaticCM component to model since chromatic noise parameters detected.")
-            lu.add_chromatic_model_to_model(model, 0.0, 0.0, False,
-                                            frozen=True, TNCHROMIDX=noise_dict.get(f'{psr_name}_chrom_idx', 4.0))
+        if "ChromaticCM" not in model.components:
+            log.info(
+                "Adding ChromaticCM component to model since chromatic noise parameters detected."
+            )
+            lu.add_chromatic_model_to_model(
+                model,
+                0.0,
+                0.0,
+                False,
+                frozen=True,
+                TNCHROMIDX=noise_dict.get(f"{psr_name}_chrom_idx", 4.0),
+            )
         ###### POWERLAW CHROMATIC NOISE ######
-        if f'{psr_name}_chrom_gp_log10_A' in chrom_pars:
-            chrom_kwargs = model_kwargs.get('chromatic_noise', {})
-            log.info('Adding Powerlaw CHROM GP noise as PLChromNoise to par file')
+        if f"{psr_name}_chrom_gp_log10_A" in chrom_pars:
+            chrom_kwargs = model_kwargs.get("chromatic_noise", {})
+            log.info("Adding Powerlaw CHROM GP noise as PLChromNoise to par file")
             # Add the ML RN parameters to their component
             chrom_comp = pm.PLChromNoise()
             # chrom_keys = np.array([key for key, val in noise_dict.items() if "_chrom_gp_" in key])
             chrom_comp.TNCHROMAMP.quantity = noise_dict[psr_name + "_chrom_gp_log10_A"]
             chrom_comp.TNCHROMGAM.quantity = noise_dict[psr_name + "_chrom_gp_gamma"]
-            chrom_comp.TNCHROMC.quantitity = chrom_kwargs.get('Nfreqs', 100)
+            chrom_comp.TNCHROMC.quantitity = chrom_kwargs.get("Nfreqs", 100)
             _apply_pl_component_logfreq_settings(
                 chrom_comp,
                 chrom_kwargs,
-                flog_name="TNCHROMFLOG" if hasattr(chrom_comp, "TNCHROMFLOG") else "TNCMFLOG",
-                factor_name="TNCHROMFLOG_FACTOR" if hasattr(chrom_comp, "TNCHROMFLOG_FACTOR") else "TNCMFLOG_FACTOR",
-                tspan_name="TNCHROMTSPAN" if hasattr(chrom_comp, "TNCHROMTSPAN") else "TNCMTSPAN",
+                flog_name=(
+                    "TNCHROMFLOG" if hasattr(chrom_comp, "TNCHROMFLOG") else "TNCMFLOG"
+                ),
+                factor_name=(
+                    "TNCHROMFLOG_FACTOR"
+                    if hasattr(chrom_comp, "TNCHROMFLOG_FACTOR")
+                    else "TNCMFLOG_FACTOR"
+                ),
+                tspan_name=(
+                    "TNCHROMTSPAN"
+                    if hasattr(chrom_comp, "TNCHROMTSPAN")
+                    else "TNCMTSPAN"
+                ),
             )
             # Add red noise to the timing model
             model.add_component(chrom_comp, validate=True, force=True)
         ###### FREE SPECTRAL (WaveX) DM NOISE ######
-        elif f'{psr_name}_chrom_gp_log10_rho_0' in chrom_pars:
-            log.info('Adding Free Spectral CHROM GP as CMWaveXnoise to par file')
-            raise NotImplementedError('CMWaveXNoise not yet implemented')
-            
+        elif f"{psr_name}_chrom_gp_log10_rho_0" in chrom_pars:
+            log.info("Adding Free Spectral CHROM GP as CMWaveXnoise to par file")
+            raise NotImplementedError("CMWaveXNoise not yet implemented")
+
     # Check to see if solar wind is present
     sw_pars = [key for key in noise_pars if "n_earth" in key or "sw_gp" in key]
     if len(sw_pars) > 0:
-        sw_kwargs = model_kwargs.get('solar_wind', {})
-        log.info('Adding Solar Wind Dispersion to par file')
+        sw_kwargs = model_kwargs.get("solar_wind", {})
+        log.info("Adding Solar Wind Dispersion to par file")
         all_components = Component.component_types
         noise_class = all_components["SolarWindDispersion"]
         noise = noise_class()  # Make the dispersion instance.
         model.add_component(noise, validate=False, force=True)
         # add parameters
-        if 'n_earth' in sw_pars:
-            model['NE_SW'].quantity = noise_dict['n_earth']
-            model['NE_SW'].frozen = True
-            model['SWM'] = 1
-            model['SWP'] = 2
-        if f'{psr_name}_sw_gp_log10_A' in sw_pars:
+        if "n_earth" in sw_pars:
+            model["NE_SW"].quantity = noise_dict["n_earth"]
+            model["NE_SW"].frozen = True
+            model["SWM"] = 1
+            model["SWP"] = 2
+        if f"{psr_name}_sw_gp_log10_A" in sw_pars:
             sw_comp = pm.PLSWNoise()
-            sw_comp.TNSWAMP.quantity = noise_dict[f'{psr_name}_sw_gp_log10_A']
+            sw_comp.TNSWAMP.quantity = noise_dict[f"{psr_name}_sw_gp_log10_A"]
             sw_comp.TNSWAMP.frozen = True
-            sw_comp.TNSWGAM.quantity = noise_dict[f'{psr_name}_sw_gp_gamma']
+            sw_comp.TNSWGAM.quantity = noise_dict[f"{psr_name}_sw_gp_gamma"]
             sw_comp.TNSWGAM.frozen = True
-            sw_comp.TNSWC.quantity = sw_kwargs.get('Nfreqs', 100)
+            sw_comp.TNSWC.quantity = sw_kwargs.get("Nfreqs", 100)
             sw_comp.TNSWC.frozen = True
             _apply_pl_component_logfreq_settings(
                 sw_comp,
@@ -1154,100 +1303,74 @@ def add_noise_to_model(
                 tspan_name=None,
             )
             model.add_component(sw_comp, validate=False, force=True)
-        elif f'{psr_name}_sw_gp_log10_rho' in sw_pars:
-            raise NotImplementedError('Solar Wind Dispersion free spec GP not yet implemented')
-        elif f'{psr_name}_sw_gp_log10_sigma_ridge' in sw_pars:
-            log.info("Including Time Domain Ride SW Noise for this pulsar")
-            # Add the ML RN parameters to their component
-            sw_comp = pm.TimeDomainRideSWNoise()
-            sw_comp.TDSWLOGSIG.quantity = noise_dict[f'{psr_name}_sw_gp_log10_sigma_ridge']
+        elif f"{psr_name}_sw_gp_log10_rho" in sw_pars:
+            raise NotImplementedError(
+                "Solar Wind Dispersion free spec GP not yet implemented"
+            )
+        elif f"{psr_name}_sw_gp_log10_sigma_ridge" in sw_pars:
+            log.info("Including Time Domain Ridge SW Noise for this pulsar")
+            sw_comp = pm.TimeDomainSWNoise()
+            sw_comp.TDSWKERNEL.value = "ridge"
+            sw_comp.TDSWLOGSIG.quantity = noise_dict[
+                f"{psr_name}_sw_gp_log10_sigma_ridge"
+            ]
             sw_comp.TDSWLOGSIG.frozen = True
-            dt = sw_kwargs.get('dt', False)
-            basis_nodes = sw_kwargs.get('basis_nodes', None)
-            kind = sw_kwargs.get('interp_kind', 'linear')
-            sw_comp.TDSWINTERP_KIND.value = kind
-            if dt:
-                sw_comp.TDSWDT.quantity = dt
-            elif basis_nodes is not None:
-                for node in basis_nodes:
-                    sw_comp.add_tdsw_node_component(node)
-            else:
-                raise ValueError("Must specify either dt or basis_nodes for TimeDomainRideSWNoise component.")
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "ridge")
             model.add_component(sw_comp, validate=False, force=True)
-        elif f'{psr_name}_sw_gp_log10_sigma_sq_exp' in sw_pars:
-            log.info("Including Time Domain Square Exponential SW Noise for this pulsar")
-            # Add the ML RN parameters to their component
-            sw_comp = pm.TimeDomainSqExpSWNoise()
-            sw_comp.TDSWLOGSIG.quantity = noise_dict[f'{psr_name}_sw_gp_log10_sigma_sq_exp']
+        elif f"{psr_name}_sw_gp_log10_sigma_sq_exp" in sw_pars:
+            log.info(
+                "Including Time Domain Square-Exponential SW Noise for this pulsar"
+            )
+            sw_comp = pm.TimeDomainSWNoise()
+            sw_comp.TDSWKERNEL.value = "sqexp"
+            sw_comp.TDSWLOGSIG.quantity = noise_dict[
+                f"{psr_name}_sw_gp_log10_sigma_sq_exp"
+            ]
             sw_comp.TDSWLOGSIG.frozen = True
-            sw_comp.TDSWLOGELL.quantity = noise_dict[f'{psr_name}_sw_gp_log10_ell']
+            sw_comp.TDSWLOGELL.quantity = noise_dict[f"{psr_name}_sw_gp_log10_ell"]
             sw_comp.TDSWLOGELL.frozen = True
-            dt = sw_kwargs.get('dt', False)
-            basis_nodes = sw_kwargs.get('basis_nodes', None)
-            kind = sw_kwargs.get('interp_kind', 'linear')
-            sw_comp.TDSWINTERP_KIND.value = kind
-            if dt:
-                sw_comp.TDSWDT.quantity = dt
-            elif basis_nodes is not None:
-                for node in basis_nodes:
-                    sw_comp.add_tdsw_node_component(node)
-            else:
-                raise ValueError("Must specify either dt or basis_nodes for TimeDomainSqExpSWNoise component.")
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "sqexp")
             model.add_component(sw_comp, validate=False, force=True)
-        elif f'{psr_name}_sw_gp_log10_sigma_quasi_periodic' in sw_pars:
+        elif f"{psr_name}_sw_gp_log10_sigma_quasi_periodic" in sw_pars:
             log.info("Including Time Domain Quasi-Periodic SW Noise for this pulsar")
-            # Add the ML RN parameters to their component
-            sw_comp = pm.TimeDomainQuasiPeriodicSWNoise()
-            sw_comp.TDSWLOGSIG.quantity = noise_dict[f'{psr_name}_sw_gp_log10_sigma_quasi_periodic']
+            sw_comp = pm.TimeDomainSWNoise()
+            sw_comp.TDSWKERNEL.value = "quasi_periodic"
+            sw_comp.TDSWLOGSIG.quantity = noise_dict[
+                f"{psr_name}_sw_gp_log10_sigma_quasi_periodic"
+            ]
             sw_comp.TDSWLOGSIG.frozen = True
-            sw_comp.TDSWLOGELL.quantity = noise_dict[f'{psr_name}_sw_gp_log10_ell']
+            sw_comp.TDSWLOGELL.quantity = noise_dict[f"{psr_name}_sw_gp_log10_ell"]
             sw_comp.TDSWLOGELL.frozen = True
-            sw_comp.TDSWLOGGAMP.quantity = noise_dict[f'{psr_name}_sw_gp_log10_gamma_p']
+            sw_comp.TDSWLOGGAMP.quantity = noise_dict[f"{psr_name}_sw_gp_log10_gamma_p"]
             sw_comp.TDSWLOGGAMP.frozen = True
-            sw_comp.TDSWLOGP.quantity = noise_dict[f'{psr_name}_sw_gp_log10_p']
-            dt = sw_kwargs.get('dt', False)
-            basis_nodes = sw_kwargs.get('basis_nodes', None)
-            kind = sw_kwargs.get('interp_kind', 'linear')
-            sw_comp.TDSWINTERP_KIND.value = kind
-            if dt:
-                sw_comp.TDSWDT.quantity = dt
-            elif basis_nodes is not None:
-                for node in basis_nodes:
-                    sw_comp.add_tdsw_node_component(node)
-            else:
-                raise ValueError("Must specify either dt or basis_nodes for TimeDomainQuasiPeriodicSWNoise component.")
+            sw_comp.TDSWLOGP.quantity = noise_dict[f"{psr_name}_sw_gp_log10_p"]
+            sw_comp.TDSWLOGP.frozen = True
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "quasi_periodic")
             model.add_component(sw_comp, validate=False, force=True)
-        elif f'{psr_name}_sw_gp_log10_sigma_matern' in sw_pars:
+        elif f"{psr_name}_sw_gp_log10_sigma_matern" in sw_pars:
             log.info("Including Time Domain Matern SW Noise for this pulsar")
-            # Add the ML RN parameters to their component
-            sw_comp = pm.TimeDomainMaternSWNoise()
-            sw_comp.TDSWLOGSIG.quantity = noise_dict[f'{psr_name}_sw_gp_log10_sigma_matern']
+            sw_comp = pm.TimeDomainSWNoise()
+            sw_comp.TDSWKERNEL.value = "matern"
+            sw_comp.TDSWLOGSIG.quantity = noise_dict[
+                f"{psr_name}_sw_gp_log10_sigma_matern"
+            ]
             sw_comp.TDSWLOGSIG.frozen = True
-            sw_comp.TDSWLOGELL.quantity = noise_dict[f'{psr_name}_sw_gp_log10_ell']
+            sw_comp.TDSWLOGELL.quantity = noise_dict[f"{psr_name}_sw_gp_log10_ell"]
             sw_comp.TDSWLOGELL.frozen = True
-            sw_comp.TDSWNU.quantity = sw_kwargs.get('nu', 1.5)
+            sw_comp.TDSWNU.quantity = sw_kwargs.get("nu", 1.5)
             sw_comp.TDSWNU.frozen = True
-            dt = sw_kwargs.get('dt', False)
-            basis_nodes = sw_kwargs.get('basis_nodes', None)
-            kind = sw_kwargs.get('interp_kind', 'linear')
-            sw_comp.TDSWINTERP_KIND.value = kind
-            if dt:
-                sw_comp.TDSWDT.quantity = dt
-            elif basis_nodes is not None:
-                for node in basis_nodes:
-                    sw_comp.add_tdsw_node_component(node)
-            else:
-                raise ValueError("Must specify either dt or basis_nodes for TimeDomainMaternSWNoise component.")
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "matern")
             model.add_component(sw_comp, validate=False, force=True)
         else:
-            log.warning('Solar wind parameters not recognized. Check parameter names and ensure match standard noise conventions.')
-
+            log.warning(
+                "Solar wind parameters not recognized. Check parameter names and ensure match standard noise conventions."
+            )
 
     # Setup and validate the timing model to ensure things are correct
     model.setup()
     model.validate()
-    #mtime = Time(os.path.getmtime(chainfile), format="unix")
-    #model.meta['noise_mtime'] = mtime.isot
+    # mtime = Time(os.path.getmtime(chainfile), format="unix")
+    # model.meta['noise_mtime'] = mtime.isot
 
     if convert_equad_to_t2:
         from pint_pal.lite_utils import convert_enterprise_equads
@@ -1299,7 +1422,9 @@ def get_init_sample_from_chain_path(pta, chaindir=None, json_path=None):
     """
     try:
         if chaindir is not None:
-            log.info(f"Attempting to initialize sampler from MAP of chain directory {chaindir}")
+            log.info(
+                f"Attempting to initialize sampler from MAP of chain directory {chaindir}"
+            )
             core = co.Core(chaindir)
             starting_point = core.get_map_dict()
             x0_dict = {}
@@ -1307,17 +1432,17 @@ def get_init_sample_from_chain_path(pta, chaindir=None, json_path=None):
                 if par_name in starting_point.keys():
                     x0_dict.update({par_name: starting_point[par_name]})
                 else:
-                    x0_dict.update({par_name:  prior.sample()})
+                    x0_dict.update({par_name: prior.sample()})
             x0 = np.hstack([x0_dict[p] for p in pta.param_names])
         elif json_path is not None:
-            with open(json_path, 'r') as fin:
+            with open(json_path, "r") as fin:
                 starting_point = json.load(fin)
             x0_dict = {}
             for prior, par_name in zip(pta.params, pta.param_names):
                 if par_name in starting_point.keys():
                     x0_dict.update({par_name: starting_point[par_name]})
                 else:
-                    x0_dict.update({par_name:  prior.sample()})
+                    x0_dict.update({par_name: prior.sample()})
             x0 = np.hstack([x0_dict[p] for p in pta.param_names])
         else:
             x0 = np.hstack([p.sample() for p in pta.params])
@@ -1326,20 +1451,23 @@ def get_init_sample_from_chain_path(pta, chaindir=None, json_path=None):
         x0_dict = None
         log.warning(
             f"Unable to initialize sampler from chain directory or json file. Drawing random initial sample."
-            )
+        )
     return x0
+
 
 def make1d(par, samples, bins=None, nbins=81):
     if bins is None:
         bins = np.linspace(min(samples), max(samples), nbins)
-        
+
     return EmpiricalDistribution1D(par, samples, bins)
 
+
 def make2d(pars, samples, bins=None, nbins=81):
-    idx = [0,1]
+    idx = [0, 1]
     if bins is None:
         bins = [np.linspace(min(samples[:, i]), max(samples[:, i]), nbins) for i in idx]
     return EmpiricalDistribution2D(pars, samples.T, bins)
+
 
 def make_emp_distr(core):
     """
@@ -1352,20 +1480,35 @@ def make_emp_distr(core):
     =======
     dists: list of EmpiricalDistribution1D and EmpiricalDistribution2D objects
     """
-    types = ['dm_gp', 'chrom_gp', 'red_noise', 'ecorr', 'chrom_s1yr', 'dm_s1yr', 'exp',]
+    types = [
+        "dm_gp",
+        "chrom_gp",
+        "red_noise",
+        "ecorr",
+        "chrom_s1yr",
+        "dm_s1yr",
+        "exp",
+    ]
     # made 1d hist for everything
-    dists = [make1d(par, core(par)) for par in core.params[:-4] if 'chrom_gp_idx' not in par]
+    dists = [
+        make1d(par, core(par)) for par in core.params[:-4] if "chrom_gp_idx" not in par
+    ]
     # get list of parameters minus chrom_gp_idx cuz this prior is weird.
-    params = [p for p in core.params if 'chrom_gp_idx' not in p]
+    params = [p for p in core.params if "chrom_gp_idx" not in p]
     groups = {ii: [par for par in params if ii in par] for ii in types}
     # make 2ds for various related parameter subgroups
     for group in groups.values():
-        _ = [dists.append(make2d(pars,core(list(pars)))) for pars in list(itertools.combinations(group,2)) if len(group)>1]
+        _ = [
+            dists.append(make2d(pars, core(list(pars))))
+            for pars in list(itertools.combinations(group, 2))
+            if len(group) > 1
+        ]
     # # make 2d cross groups -- returns too many empirical distributions.. to memory intensive.
     # _ = [[dists.append(make2d([ecr, dm], core([ecr, dm]))) for ecr in groups['ecorr']] for dm in groups['dm_gp']]
     # _ = [[dists.append(make2d([dm, chrom], core([dm, chrom]))) for dm in groups['dm_gp']] for chrom in groups['chrom_gp']]
-    
+
     return dists
+
 
 def log_single_likelihood_evaluation_time(pta, sampler_kwargs):
     """
@@ -1375,27 +1518,63 @@ def log_single_likelihood_evaluation_time(pta, sampler_kwargs):
     x1 = [[p.sample() for p in pta.params] for _ in range(11)]
     pta.get_lnlikelihood(x1[0])
     start_time = time.time()
-    [pta.get_lnlikelihood(x1[i]) for i in range(1,11)]
+    [pta.get_lnlikelihood(x1[i]) for i in range(1, 11)]
     end_time = time.time()
-    slet = (end_time-start_time)/10
-    log.info(f"Single likelihood evaluation time is approximately {slet:.1e} seconds. Hopefully this is < 1 second or so...")
-    #log.info(f"4 times {sampler_kwargs['n_iter']} likelihood evaluations will take approximately: {4*slet*float(sampler_kwargs['n_iter'])/3600/24:.2f} days")
+    slet = (end_time - start_time) / 10
+    log.info(
+        f"Single likelihood evaluation time is approximately {slet:.1e} seconds. Hopefully this is < 1 second or so..."
+    )
+    # log.info(f"4 times {sampler_kwargs['n_iter']} likelihood evaluations will take approximately: {4*slet*float(sampler_kwargs['n_iter'])/3600/24:.2f} days")
 
 
-def get_map_noise_values(outdir, model):
+def get_map_noise_values(outdir, model, N=1):
     """Load noise values from a discovery output directory.
 
-    If a map JSON exists, return it. Otherwise read a feather chain and return
-    per-column means over numeric columns.
+    Parameters
+    ----------
+    outdir : str or Path
+        Discovery output directory (or its parent; ``format_chain_dir`` is
+        applied automatically).
+    model : pint.models.TimingModel
+        Timing model used to resolve the chain sub-directory name.
+    N : int, optional
+        Number of top-posterior samples to average over.
+
+        * ``N=1`` (default) — return the single MAP sample (highest
+          ``lnpost`` in the chain), or the MAP JSON written by the SVI
+          optimizer if no feather chain is present.
+        * ``N>1`` — sort the chain by ``lnpost`` (descending) and return
+          the column-wise mean of the top-*N* rows.  A JSON map file is
+          ignored when ``N>1`` since it contains only a single point.
+
+        If the feather chain does not contain a ``lnpost`` column (chains
+        produced before log-probability logging was added), a warning is
+        emitted and the column-wise mean of the entire chain is returned
+        instead.
+
+    Returns
+    -------
+    dict
+        ``{parameter_name: float}`` mapping.
     """
-    outdir = pathlib.Path(format_chain_dir(outdir, model=model))  # ensure correct formatting of chain directory
+    outdir = pathlib.Path(
+        format_chain_dir(outdir, model=model)
+    )  # ensure correct formatting of chain directory
     if not outdir.exists() or not outdir.is_dir():
         raise ValueError(f"Invalid outdir: {outdir}")
 
-
+    # SVI MAP JSON — only used when N == 1 (it is a single point)
     map_file = next(outdir.glob("*_map_params.json"), None)
+    if map_file is not None and N == 1:
+        with map_file.open("r") as fin:
+            data = json.load(fin)
+        return {k: float(v) for k, v in data.items()}
 
-    if map_file is not None:
+    if map_file is not None and N > 1:
+        log.warning(
+            f"N={N}>1 requested but only a MAP JSON exists in {outdir}; "
+            "falling back to the single-point MAP JSON."
+        )
         with map_file.open("r") as fin:
             data = json.load(fin)
         return {k: float(v) for k, v in data.items()}
@@ -1410,58 +1589,70 @@ def get_map_noise_values(outdir, model):
     if df.empty:
         raise ValueError(f"Feather chain is empty: {feather_file}")
 
-    numeric_df = df.select_dtypes(include=[np.number])
+    # Drop internal log-prob bookkeeping columns from the parameter set
+    _log_cols = {'lnlike', 'lnprior', 'lnpost'}
+    param_df = df.drop(columns=[c for c in _log_cols if c in df.columns], errors='ignore')
+    numeric_df = param_df.select_dtypes(include=[np.number])
     if numeric_df.shape[1] == 0:
         raise ValueError(f"No numeric columns found in feather chain: {feather_file}")
 
-    return {k: float(v) for k, v in numeric_df.mean(axis=0).to_dict().items()}
-
+    if 'lnpost' in df.columns:
+        sorted_df = numeric_df.iloc[df['lnpost'].values.argsort()[::-1]]
+        top_N = sorted_df.head(N)
+        return {k: float(v) for k, v in top_N.mean(axis=0).to_dict().items()}
+    else:
+        log.warning(
+            "Chain feather file does not contain a 'lnpost' column — this chain "
+            "was saved before log-probability logging was added.  "
+            "Returning the column-wise mean over the full chain instead of the top-N MAP."
+        )
+        return {k: float(v) for k, v in numeric_df.mean(axis=0).to_dict().items()}
 
 
 def get_model_and_sampler_default_settings():
     model_defaults = {
         # white noise
-        'inc_wn': True, 
-        'tnequad': True,
+        "inc_wn": True,
+        "tnequad": True,
         # acrhomatic red noise
-        'inc_rn': True,
-        'rn_psd': 'powerlaw',
-        'rn_nfreqs': 30,
+        "inc_rn": True,
+        "rn_psd": "powerlaw",
+        "rn_nfreqs": 30,
         # dm gp
-        'inc_dmgp': False,
-        'dmgp_psd': 'powerlaw',
-        'dmgp_nfreqs': 100,
+        "inc_dmgp": False,
+        "dmgp_psd": "powerlaw",
+        "dmgp_nfreqs": 100,
         # higher order chromatic gp
-        'inc_chromgp': False,
-        'chromgp_psd': 'powerlaw',
-        'chromgp_nfreqs': 100,
-        'chrom_idx': 4,
-        'chrom_quad': False,
+        "inc_chromgp": False,
+        "chromgp_psd": "powerlaw",
+        "chromgp_nfreqs": 100,
+        "chrom_idx": 4,
+        "chrom_quad": False,
         # solar wind
-        'inc_sw_deter': False,
+        "inc_sw_deter": False,
         # GP perturbations ontop of the deterministic model
-        'inc_swgp': False,
-        'ACE_prior': False,
-        # 
-        'extra_sigs': None,
+        "inc_swgp": False,
+        "ACE_prior": False,
+        #
+        "extra_sigs": None,
         # misc
-        'tm_svd': True
-        }
+        "tm_svd": True,
+    }
     sampler_defaults = {
-        'likelihood': 'enterprise',
-        'sampler': 'PTMCMCSampler',
+        "likelihood": "enterprise",
+        "sampler": "PTMCMCSampler",
         # ptmcmc kwargs
-        'n_iter': 2.5e5,
-        'emp_distribution': None,
+        "n_iter": 2.5e5,
+        "emp_distribution": None,
         # numpyro kwargs
-        'num_steps': 25,
-        'num_warmup': 500,
-        'num_samples': 2500,
-        'num_chains': 4,
-        'chain_method': 'parallel',
-        'max_tree_depth': 5,
-        'dense_mass': False,
-        }
+        "num_steps": 25,
+        "num_warmup": 500,
+        "num_samples": 2500,
+        "num_chains": 4,
+        "chain_method": "parallel",
+        "max_tree_depth": 5,
+        "dense_mass": False,
+    }
     return model_defaults, sampler_defaults
 
 
@@ -1531,21 +1722,20 @@ def generate_gp_realizations(
     # The SVI optimizer appends '_base' to numpyro parameter names, but
     # Discovery's internal blocks expect the original names.
     noise_params = {
-        (k[:-5] if k.endswith('_base') else k): v
-        for k, v in noise_params.items()
+        (k[:-5] if k.endswith("_base") else k): v for k, v in noise_params.items()
     }
 
     # Deep copy model_kwargs so we don't mutate the caller's dict
     mk = copy.deepcopy(model_kwargs)
 
     # Force GP ecorr so we get ecorr realizations
-    if force_gp_ecorr and mk.get('white_noise'):
-        had_kernel_ecorr = mk['white_noise'].get('include_ecorr', False)
-        mk['white_noise']['gp_ecorr'] = True
+    if force_gp_ecorr and mk.get("white_noise"):
+        had_kernel_ecorr = mk["white_noise"].get("include_ecorr", False)
+        mk["white_noise"]["gp_ecorr"] = True
         # include_ecorr will be set to False automatically by
         # make_single_pulsar_noise_likelihood_discovery
     # don't use the timing model svd because this will scramble the design matrix columns and make it hard to reconstruct realizations in the time domain.
-    mk['timing_model']['svd'] = False
+    mk["timing_model"]["svd"] = False
 
     # Build enterprise pulsar
     log.info(f"Creating enterprise.Pulsar object for GP realizations...")
@@ -1620,28 +1810,31 @@ def generate_gp_realizations(
     N_gp = psl.N
 
     # Extract index map from the GP block
-    if hasattr(N_gp, 'index') and N_gp.index is not None:
+    if hasattr(N_gp, "index") and N_gp.index is not None:
         for gp_name, sli in N_gp.index.items():
             index_map[gp_name] = [sli.start, sli.stop]
 
     # Extract the compound F matrix columns per GP
     F_columns = {}
-    if hasattr(N_gp, 'F'):
+    if hasattr(N_gp, "F"):
         F_full = np.asarray(N_gp.F)
-        log.info(f"Compound GP F matrix shape: {F_full.shape}, index_map keys: {list(index_map.keys())}")
+        log.info(
+            f"Compound GP F matrix shape: {F_full.shape}, index_map keys: {list(index_map.keys())}"
+        )
         for gp_name, (start, stop) in index_map.items():
             F_columns[gp_name] = F_full[:, start:stop].tolist()
 
     # Solar wind: save node positions if interpolation basis
     sw_nodes = None
-    sw_block = mk.get('solar_wind', False)
+    sw_block = mk.get("solar_wind", False)
     if sw_block and isinstance(sw_block, dict):
-        if sw_block.get('basis') == 'interpolation':
+        if sw_block.get("basis") == "interpolation":
             # Reconstruct nodes the same way as the block builder
             from discovery.signals import custom_blocked_interpolation_basis
-            basis_nodes = sw_block.get('basis_nodes', None)
-            interp_dt = sw_block.get('interp_dt', 30.0)
-            interp_kind = sw_block.get('interp_kind', 'linear')
+
+            basis_nodes = sw_block.get("basis_nodes", None)
+            interp_dt = sw_block.get("interp_dt", 30.0)
+            interp_kind = sw_block.get("interp_kind", "linear")
             if basis_nodes is None:
                 basis_nodes = np.arange(
                     e_psr.toas.min() / 86400,
@@ -1675,29 +1868,29 @@ def generate_gp_realizations(
     try:
         theta, _, _, _ = ds_solar.theta_impact(e_psr)
         toas_mjd_arr = e_psr.toas / 86400
-        
+
         # Find the global minimum of theta (solar conjunction)
         idx_global_min = np.argmin(theta)
         t_min_global = toas_mjd_arr[idx_global_min]
-        
+
         # Generate conjunctions at approximately yearly intervals relative to the global minimum
         t0 = toas_mjd_arr.min()
         t1 = toas_mjd_arr.max()
         yr_day = 365.25
         conj_times = []
-        
+
         # Add conjunctions going backward from t_min_global
         t_conj = t_min_global
         while t_conj >= t0:
             conj_times.append(float(t_conj))
             t_conj -= yr_day
-        
+
         # Add conjunctions going forward from t_min_global
         t_conj = t_min_global + yr_day
         while t_conj <= t1:
             conj_times.append(float(t_conj))
             t_conj += yr_day
-        
+
         # Sort by time
         conj_times.sort()
         solar_conjunctions_mjd = conj_times if conj_times else None
@@ -1707,48 +1900,54 @@ def generate_gp_realizations(
     # Extract timing model column labels from the enterprise Pulsar
     # These let downstream plotting identify specific TM columns
     # (F0, F1, DM, DM1, DM2, NE_SW, etc.)
-    tm_fitpars = list(e_psr.fitpars) if hasattr(e_psr, 'fitpars') else None
-    log.info(f"Timing model fitpars ({len(tm_fitpars) if tm_fitpars else 0} cols): {tm_fitpars}")
+    tm_fitpars = list(e_psr.fitpars) if hasattr(e_psr, "fitpars") else None
+    log.info(
+        f"Timing model fitpars ({len(tm_fitpars) if tm_fitpars else 0} cols): {tm_fitpars}"
+    )
 
     # Assemble output payload for feather format
     # Create main metadata dictionary
     metadata = {
-        'pulsar_name': e_psr.name,
-        'n_realizations': n_realizations, 
-        'noise_params': noise_params,
-        'model_kwargs': _serialize_model_kwargs(mk),
-        'gp_keys': gp_keys,
-        'index_map': index_map,
-        'toas_mjd': (e_psr.toas / 86400).tolist(),
-        'freqs_mhz': e_psr.freqs.tolist()
-            if hasattr(e_psr.freqs, 'tolist')
-            else list(e_psr.freqs),
-        'tspan_sec': float(tspan),
-        'backend_flags': list(e_psr.backend_flags)
-            if hasattr(e_psr, 'backend_flags')
-            else None,
-        'solar_conjunctions_mjd': solar_conjunctions_mjd,
-        'sw_nodes_mjd': sw_nodes,
-        'sw_shape_at_toas': sw_shape_at_toas,
-        'tm_fitpars': tm_fitpars,
+        "pulsar_name": e_psr.name,
+        "n_realizations": n_realizations,
+        "noise_params": noise_params,
+        "model_kwargs": _serialize_model_kwargs(mk),
+        "gp_keys": gp_keys,
+        "index_map": index_map,
+        "toas_mjd": (e_psr.toas / 86400).tolist(),
+        "freqs_mhz": (
+            e_psr.freqs.tolist()
+            if hasattr(e_psr.freqs, "tolist")
+            else list(e_psr.freqs)
+        ),
+        "tspan_sec": float(tspan),
+        "backend_flags": (
+            list(e_psr.backend_flags) if hasattr(e_psr, "backend_flags") else None
+        ),
+        "solar_conjunctions_mjd": solar_conjunctions_mjd,
+        "sw_nodes_mjd": sw_nodes,
+        "sw_shape_at_toas": sw_shape_at_toas,
+        "tm_fitpars": tm_fitpars,
     }
-    
+
     # --- Efficient feather serialization ---
     # Build one row per (gp_key, data_type) with the flattened array stored
     # as a list-column.  This avoids O(n_toas * n_coeff * n_real) rows.
     data_rows = []
-    
+
     for gp_key in gp_keys:
         # Realizations: shape (n_realizations, n_coeffs)
         real_array = np.asarray(realizations[gp_key])
-        data_rows.append({
-            'data_type': 'realization',
-            'gp_key': gp_key,
-            'shape0': int(real_array.shape[0]),
-            'shape1': int(real_array.shape[1]),
-            'values': real_array.ravel().tolist(),
-        })
-        
+        data_rows.append(
+            {
+                "data_type": "realization",
+                "gp_key": gp_key,
+                "shape0": int(real_array.shape[0]),
+                "shape1": int(real_array.shape[1]),
+                "values": real_array.ravel().tolist(),
+            }
+        )
+
         # F_columns: shape (n_toas, n_coeffs)
         f_key = gp_key
         if gp_key not in F_columns and len(F_columns) == 1 and len(gp_keys) == 1:
@@ -1756,35 +1955,39 @@ def generate_gp_realizations(
             log.info(f"Matching generic key '{gp_key}' with original key '{f_key}'")
         if f_key in F_columns:
             f_array = np.asarray(F_columns[f_key])
-            data_rows.append({
-                'data_type': 'F_column',
-                'gp_key': gp_key,
-                'shape0': int(f_array.shape[0]),
-                'shape1': int(f_array.shape[1]),
-                'values': f_array.ravel().tolist(),
-            })
+            data_rows.append(
+                {
+                    "data_type": "F_column",
+                    "gp_key": gp_key,
+                    "shape0": int(f_array.shape[0]),
+                    "shape1": int(f_array.shape[1]),
+                    "values": f_array.ravel().tolist(),
+                }
+            )
         else:
             log.warning(f"No F_columns found for GP key '{gp_key}'.")
-    
+
     # Create DataFrame
     df = pd.DataFrame(data_rows)
-    
+
     # Add metadata as a single JSON column
-    df['metadata_json'] = json.dumps(metadata)
+    df["metadata_json"] = json.dumps(metadata)
 
     # Save as feather
     outfile = outdir / f"{e_psr.name}_gp_realizations.feather"
     log.info(f"Saving GP realizations to {outfile}")
     df.to_feather(outfile)
-    
+
     # Return payload in original format for backward compatibility
     payload = {
         **metadata,
-        'realizations': {k: np.asarray(v) for k, v in realizations.items()},
-        'F_columns': {k: np.asarray(v) for k, v in F_columns.items()},
+        "realizations": {k: np.asarray(v) for k, v in realizations.items()},
+        "F_columns": {k: np.asarray(v) for k, v in F_columns.items()},
     }
 
-    log.info(f"Done. Saved {n_realizations} realizations for {len(gp_keys)} GP components.")
+    log.info(
+        f"Done. Saved {n_realizations} realizations for {len(gp_keys)} GP components."
+    )
     return payload
 
 

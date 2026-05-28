@@ -246,6 +246,7 @@ def red_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
+        modes=None,
         name: str = 'red_noise',
         ) -> Any:
     """
@@ -275,6 +276,10 @@ def red_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
+    modes : array-like, optional
+        User-supplied array of Fourier mode frequencies (in Hz). When provided
+        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
+        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is "red_noise".
 
@@ -304,6 +309,7 @@ def red_noise_block(
             prior,
             Nfreqs,
             T=tspan,
+            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
@@ -330,6 +336,7 @@ def dm_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
+        modes=None,
         name: str = 'dm_gp',
         ) -> Any:
     """
@@ -366,6 +373,10 @@ def dm_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
+    modes : array-like, optional
+        User-supplied array of Fourier mode frequencies (in Hz). When provided
+        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
+        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is "dm_gp".
 
@@ -395,6 +406,7 @@ def dm_noise_block(
             prior,
             Nfreqs,
             T=tspan,
+            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
@@ -446,6 +458,7 @@ def chromatic_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
+        modes=None,
         name: str = 'chrom_gp',
         chromatic_idx: str = 'vary',
         ) -> Any:
@@ -476,6 +489,10 @@ def chromatic_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
+    modes : array-like, optional
+        User-supplied array of Fourier mode frequencies (in Hz). When provided
+        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
+        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is ``"chrom_gp"``.
     chromatic_idx : str, optional
@@ -511,6 +528,7 @@ def chromatic_noise_block(
             prior,
             Nfreqs,
             T=tspan,
+            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
@@ -535,6 +553,7 @@ def solar_wind_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
+        modes=None,
         name: str = 'sw_gp',
         ) -> Any:
     """
@@ -562,8 +581,12 @@ def solar_wind_noise_block(
         Number of Fourier frequencies. Default is 100. Only used for Fourier basis.
     tspan : float, optional
         Time span for the Fourier basis. Default is None.
+    modes : array-like, optional
+        User-supplied array of Fourier mode frequencies (in Hz). When provided
+        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
+        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
-        Name of the noise component. Default is "red_noise".
+        Name of the noise component. Default is "sw_gp".
 
     Returns
     -------
@@ -593,6 +616,7 @@ def solar_wind_noise_block(
             prior,
             Nfreqs,
             T=tspan,
+            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
@@ -807,31 +831,103 @@ def make_sampler_nuts(
 
     return sampler
 
-def make_numpyro_model(input_lnlike: Any, priordict: Dict[str, Any] = {}) -> Callable[[], None]:
+def make_numpyro_model(
+        input_lnlike: Any,
+        priordict: Dict[str, Any] = {},
+        transform: Optional[Callable] = None,
+) -> Callable[[], None]:
     """
-    Wrap a discovery likelihood into a NumPyro model.
+    Wrap a discovery likelihood into a NumPyro model using a tanh parameter
+    transformation.
+
+    The tanh (uniform) transform maps each bounded prior interval
+    ``[a, b]`` to the real line via
+
+    .. math::
+
+        x = \\frac{a + b}{2} + \\frac{b - a}{2} \\tanh(y)
+
+    so NUTS samples the unconstrained ``y`` values from
+    ``Normal(0, 10)`` instead of the bounded physical parameters directly.
+    This improves sampling efficiency near the prior boundaries and allows
+    JAX to compile the likelihood without the parameter-dictionary overhead.
 
     Parameters
     ----------
     input_lnlike : Any
-        Likelihood object that provides a callable interface and a .params list.
+        Likelihood object that provides a callable interface and a ``.params``
+        list.  Must be compatible with
+        ``discovery.prior.makelogtransform_uniform``.
     priordict : dict, optional
-        Dictionary of prior overrides. Default is empty dict.
+        Dictionary of prior overrides merged on top of
+        ``ds.priordict_standard``.  Default is empty dict.
+    transform : callable, optional
+        Transform factory with the signature
+        ``transform(lnlike, priordict) -> logx`` where ``logx`` is callable
+        on a flat JAX array of unconstrained parameters.  Defaults to
+        ``ds_prior.makelogtransform_uniform``.
 
     Returns
     -------
     Callable[[], None]
-        NumPyro model function with attached .to_df convenience method.
+        NumPyro model function with an attached ``.to_df(chain)`` method that
+        converts the raw ``chain['pars']`` samples back to a
+        ``pandas.DataFrame`` of physical parameters.
     """
+    if transform is None:
+        transform = ds_prior.makelogtransform_uniform
+
     priors_dict = ds.priordict_standard.copy()
     priors_dict.update(priordict)
-    def numpyro_model() -> None:
-        """NumPyro model that samples parameters and factors in the log-likelihood."""
-        lnlike = input_lnlike({par: numpyro.sample(par, dist.Uniform(*ds_prior.getprior_uniform(par, priordict)))
-            for par in input_lnlike.params})
 
-        numpyro.factor('logl', lnlike)
-    numpyro_model.to_df = lambda chain: pd.DataFrame(chain)
+    logx = transform(input_lnlike, priordict=priors_dict)
+
+    # Total number of unconstrained scalar dimensions (accounts for
+    # vector-valued parameters encoded as "name(N)" in .params).
+    parlen = sum(
+        int(par[par.index('(') + 1: par.index(')')])
+        if '(' in par else 1
+        for par in logx.params
+    )
+
+    def numpyro_model() -> None:
+        """NumPyro model using tanh-transformed parameters."""
+        pars = numpyro.sample('pars', dist.Normal(0, 10).expand([parlen]))
+        numpyro.factor('logl', logx(pars))
+
+    numpyro_model.to_df = lambda chain: logx.to_df(chain['pars'])
+
+    def _compute_log_probs(chain):
+        """Compute lnlike, lnprior, and lnpost for each sample in *chain*.
+
+        Parameters
+        ----------
+        chain : dict
+            Raw MCMC sample dict as returned by ``sampler.get_samples()``.
+            Must contain key ``'pars'`` with shape ``(N, parlen)``.
+
+        Returns
+        -------
+        dict with keys ``lnlike``, ``lnprior``, ``lnpost`` — each a 1-D
+        JAX array of length N.
+
+        Notes
+        -----
+        ``lnlike`` is ``logx(pars)`` — the tanh-transformed log-likelihood
+        including the change-of-variables Jacobian from the uniform prior
+        interval to the real line.
+        ``lnprior`` is the log-probability of *pars* under the ``Normal(0,10)``
+        proposal distribution used by NUTS in the unconstrained space.
+        ``lnpost = lnlike + lnprior`` is the log-posterior (up to a constant).
+        """
+        pars = jnp.asarray(chain['pars'])          # (N, parlen)
+        lnlike = jax.vmap(logx)(pars)              # (N,)
+        lnprior = jax.vmap(
+            lambda p: jnp.sum(dist.Normal(0, 10).log_prob(p))
+        )(pars)                                     # (N,)
+        return {'lnlike': lnlike, 'lnprior': lnprior, 'lnpost': lnlike + lnprior}
+
+    numpyro_model.compute_log_probs = _compute_log_probs
 
     return numpyro_model
 
@@ -843,6 +939,7 @@ def run_nuts_with_checkpoints(
     file_name="numpyro_samples",
     resume=False,
     diagnostics=True,
+    model=None,
 ):
     """Run NumPyro MCMC and save checkpoints.
     This function performs multiple iterations of MCMC sampling, saving checkpoints
@@ -860,6 +957,11 @@ def run_nuts_with_checkpoints(
         The directory for output files.
     resume : bool
         Whether to look for a state to resume from.
+    model : callable, optional
+        NumPyro model returned by ``make_numpyro_model``.  When supplied and
+        the model exposes a ``compute_log_probs`` method, ``lnlike``,
+        ``lnprior``, and ``lnpost`` columns are appended to every checkpoint
+        DataFrame before it is written to disk.  Default is None.
     Returns
     -------
     None
@@ -916,6 +1018,18 @@ def run_nuts_with_checkpoints(
         sampler.run(rng_key)
 
         df_new = sampler.to_df()
+
+        # --- append log-probability columns if model supports it ---
+        if model is not None and hasattr(model, 'compute_log_probs'):
+            try:
+                raw_samples = sampler.get_samples(group_by_chain=False)
+                lp = model.compute_log_probs(raw_samples)
+                df_new = df_new.copy()
+                df_new['lnlike']  = np.asarray(lp['lnlike'])
+                df_new['lnprior'] = np.asarray(lp['lnprior'])
+                df_new['lnpost']  = np.asarray(lp['lnpost'])
+            except Exception as _lp_err:
+                log.warning(f"Could not compute log-probability columns: {_lp_err}")
 
         df = pd.concat([df, df_new]) if df is not None else df_new
 
