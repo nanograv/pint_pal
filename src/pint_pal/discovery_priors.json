@@ -2,6 +2,8 @@
   "(.*_)?efac": [0.1, 10],
   "(.*_)?t2equad": [-10, -5],
   "(.*_)?tnequad": [-10, -5],
+  "(.*_)?chromequad": [-10, -5],
+  "(.*_)?chromequad_idx": [0, 7],
   "(.*_)?log10_ecorr": [-10, -5],
   "(.*_)?red_noise_log10_A.*": [-20, -11],
   "(.*_)?red_noise_Nfreq_cutoff.*": [30, 120],
