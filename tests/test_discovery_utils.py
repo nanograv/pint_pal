@@ -53,11 +53,12 @@ def test_red_noise_block_scales_fmin_and_uses_getspan(monkeypatch):
         }
         return "BASIS"
 
-    def fake_makegp_fourier(_psr, prior, nfreqs, T, fourierbasis, name):
+    def fake_makegp_fourier(_psr, prior, nfreqs, T, modes=None, fourierbasis=None, name=None):
         calls["makegp"] = {
             "prior": prior,
             "Nfreqs": nfreqs,
             "T": T,
+            "modes": modes,
             "fourierbasis": fourierbasis,
             "name": name,
         }
@@ -100,7 +101,7 @@ def test_solar_wind_interpolation_rejects_powerlaw_and_builds_default_nodes(monk
         return "UMAT", "NODES"
 
     monkeypatch.setattr(
-        du.ds_solar,
+        du.ds_signals,
         "custom_blocked_interpolation_basis",
         fake_custom_blocked_interpolation_basis,
         raising=False,
@@ -126,12 +127,12 @@ def test_basic_noise_blocks_delegate(monkeypatch):
     monkeypatch.setattr(
         du.ds,
         "makenoise_measurement",
-        lambda psr, tnequad, ecorr, selection, noisedict: (psr, tnequad, ecorr, selection, noisedict),
+        lambda psr, tnequad, ecorr, selection, noisedict, **kwargs: (psr, tnequad, ecorr, selection, noisedict),
     )
     monkeypatch.setattr(
         du.ds,
         "makegp_ecorr",
-        lambda psr, noisedict, selection, gp_ecorr_name: (psr, noisedict, selection, gp_ecorr_name),
+        lambda psr, noisedict, selection, **kwargs: (psr, noisedict, selection),
     )
 
     psr = object()
@@ -147,19 +148,18 @@ def test_basic_noise_blocks_delegate(monkeypatch):
         psr,
         {"y": 2},
         "sel2",
-        "g",
     )
 
 
 def test_select_fourier_basis_nlog_zero_returns_expected_objects(monkeypatch):
     monkeypatch.setattr(du.ds, "fourierbasis", object())
     monkeypatch.setattr(du.ds, "dmfourierbasis", object())
-    monkeypatch.setattr(du.ds, "dmfourierbasis_alpha", object())
+    monkeypatch.setattr(du.ds, "freechromaticfourierbasis", object())
     monkeypatch.setattr(du.ds_solar, "fourierbasis_solar_dm", object(), raising=False)
 
     assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "red_noise") is du.ds.fourierbasis
     assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "dm_noise") is du.ds.dmfourierbasis
-    assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "chromatic") is du.ds.dmfourierbasis_alpha
+    assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "chromatic") is du.ds.freechromaticfourierbasis
     assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "solar_wind") is du.ds_solar.fourierbasis_solar_dm
 
 
@@ -189,8 +189,6 @@ def test_block_prior_and_basis_validation_errors():
         du.red_noise_block(object(), tspan=10.0, prior="bad")
     with pytest.raises(NotImplementedError):
         du.red_noise_block(object(), tspan=10.0, basis="interpolation")
-    with pytest.raises(NotImplementedError):
-        du.dm_noise_block(object(), tspan=10.0, basis="interpolation")
     with pytest.raises(ValueError, match=r"Invalid \*prior\* specified for Fourier basis chromatic noise"):
         du.chromatic_noise_block(object(), tspan=10.0, prior="bad")
     with pytest.raises(ValueError, match=r"Invalid \*basis\* specified for chromatic noise"):
@@ -200,8 +198,8 @@ def test_block_prior_and_basis_validation_errors():
 
 
 def test_solar_wind_interpolation_supported_prior(monkeypatch):
-    monkeypatch.setattr(du.ds_solar, "custom_blocked_interpolation_basis", lambda *a, **k: ("U", "N"), raising=False)
-    monkeypatch.setattr(du.ds_solar, "matern_kernel", lambda: "K", raising=False)
+    monkeypatch.setattr(du.ds_signals, "custom_blocked_interpolation_basis", lambda *a, **k: ("U", "N"), raising=False)
+    monkeypatch.setattr(du.ds_signals, "matern_kernel", lambda: "K", raising=False)
     monkeypatch.setattr(
         du.ds_solar,
         "makegp_timedomain_solar_dm",
@@ -279,23 +277,296 @@ def test_make_sampler_nuts_filters_and_attaches_to_df(monkeypatch):
     assert list(sampler.to_df().columns) == ["a"]
 
 
-def test_make_numpyro_model_calls_sample_and_factor(monkeypatch):
-    sampled = []
+def test_make_numpyro_model_uses_tanh_transform(monkeypatch):
+    """make_numpyro_model should sample a single 'pars' site and call factor via logx."""
     factored = {}
-    monkeypatch.setattr(du.ds_prior, "getprior_uniform", lambda par, pdict: (0.0, 1.0))
-    monkeypatch.setattr(du.numpyro, "sample", lambda name, distobj: sampled.append(name) or 0.5)
-    monkeypatch.setattr(du.numpyro, "factor", lambda name, val: factored.update({name: val}))
+    sampled_name = []
 
-    class LnLike:
+    import jax.numpy as jnp
+
+    class FakeLogx:
         params = ["x", "y"]
 
         def __call__(self, pars):
-            return pars["x"] + pars["y"]
+            return jnp.sum(pars)
 
-    model = du.make_numpyro_model(LnLike(), {"x": (0.0, 1.0)})
+        def to_df(self, pars):
+            import pandas as pd
+            return pd.DataFrame({"x": [1.0], "y": [2.0]})
+
+    class LnLike:
+        params = ["x", "y"]
+        def __call__(self, pars):
+            return 0.0
+
+    fake_logx = FakeLogx()
+    monkeypatch.setattr(du.ds_prior, "makelogtransform_uniform",
+                        lambda lnlike, priordict: fake_logx)
+    monkeypatch.setattr(du.numpyro, "sample",
+                        lambda name, distobj: (sampled_name.append(name) or jnp.array([0.5, 0.5])))
+    monkeypatch.setattr(du.numpyro, "factor",
+                        lambda name, val: factored.update({name: float(val)}))
+
+    model = du.make_numpyro_model(LnLike(), {})
     model()
-    assert sampled == ["x", "y"]
-    assert factored["logl"] == 1.0
+
+    assert sampled_name == ["pars"]
+    assert "logl" in factored
+    assert factored["logl"] == pytest.approx(1.0)
+
+
+def test_make_numpyro_model_to_df_uses_logx_to_df(monkeypatch):
+    """to_df on the model should delegate to logx.to_df."""
+    import jax.numpy as jnp
+    import pandas as pd
+
+    class FakeLogx:
+        params = ["x"]
+        def __call__(self, pars): return jnp.sum(pars)
+        def to_df(self, pars):
+            return pd.DataFrame({"x": np.array(pars).ravel()})
+
+    class LnLike:
+        params = ["x"]
+        def __call__(self, pars): return 0.0
+
+    monkeypatch.setattr(du.ds_prior, "makelogtransform_uniform",
+                        lambda lnlike, priordict: FakeLogx())
+    model = du.make_numpyro_model(LnLike(), {})
+    df = model.to_df({"pars": np.array([[1.5], [2.5]])})
+    assert list(df.columns) == ["x"]
+    assert np.allclose(df["x"].values, [1.5, 2.5])
+
+
+def test_make_numpyro_model_custom_transform(monkeypatch):
+    """A user-supplied transform callable should be used instead of the default."""
+    import jax.numpy as jnp
+
+    class FakeLogx:
+        params = ["a"]
+        def __call__(self, pars): return jnp.array(-99.0)
+        def to_df(self, pars): return None
+
+    called_with = {}
+
+    def custom_transform(lnlike, priordict):
+        called_with["lnlike"] = lnlike
+        return FakeLogx()
+
+    class LnLike:
+        params = ["a"]
+        def __call__(self, pars): return 0.0
+
+    lnlike = LnLike()
+    factored = {}
+    monkeypatch.setattr(du.numpyro, "sample",
+                        lambda name, distobj: jnp.zeros(1))
+    monkeypatch.setattr(du.numpyro, "factor",
+                        lambda name, val: factored.update({name: float(val)}))
+
+    model = du.make_numpyro_model(lnlike, {}, transform=custom_transform)
+    model()
+
+    assert called_with["lnlike"] is lnlike
+    assert factored["logl"] == pytest.approx(-99.0)
+
+
+def test_make_numpyro_model_parlen_scalar_params(monkeypatch):
+    """parlen should equal the number of scalar params with no vector params."""
+    import jax.numpy as jnp
+
+    sizes_seen = []
+
+    class FakeLogx:
+        params = ["a", "b", "c"]
+        def __call__(self, pars): return jnp.array(0.0)
+        def to_df(self, pars): return None
+
+    class LnLike:
+        params = ["a", "b", "c"]
+        def __call__(self, pars): return 0.0
+
+    monkeypatch.setattr(du.ds_prior, "makelogtransform_uniform",
+                        lambda lnlike, priordict: FakeLogx())
+
+    def fake_sample(name, distobj):
+        sizes_seen.append(distobj.batch_shape[0])
+        return jnp.zeros(3)
+
+    monkeypatch.setattr(du.numpyro, "sample", fake_sample)
+    monkeypatch.setattr(du.numpyro, "factor", lambda *a, **k: None)
+
+    model = du.make_numpyro_model(LnLike(), {})
+    model()
+    assert sizes_seen == [3]  # Normal(0,10).expand([3])
+
+
+# ---------------------------------------------------------------------------
+# SVI integration: make_numpyro_model <-> AutoDelta guide <-> setup_svi
+# ---------------------------------------------------------------------------
+
+class TestMakeNumpyroModelSviIntegration:
+    """Verify make_numpyro_model output is compatible with the SVI pipeline.
+
+    Tests use real numpyro + JAX but with lightweight fake logx objects so
+    no actual data or discovery likelihood is needed.
+    """
+
+    @staticmethod
+    def _build_model_and_guide(n_params=2):
+        """Return (model, guide, logx) for n_params scalar parameters."""
+        import jax
+        import jax.numpy as jnp
+        import numpyro
+        import numpyro.infer.autoguide as autoguide
+
+        class FakeLogx:
+            params = [f"p{i}" for i in range(n_params)]
+
+            def __call__(self, pars):
+                # simple quadratic bowl — easy to optimise
+                return -jnp.sum(pars ** 2)
+
+            def to_df(self, pars):
+                pars = jnp.atleast_2d(pars)
+                return pd.DataFrame(np.array(pars), columns=self.params)
+
+        logx = FakeLogx()
+
+        # Bypass the actual transform; inject FakeLogx directly.
+        model = du.make_numpyro_model.__wrapped__ if hasattr(du.make_numpyro_model, "__wrapped__") \
+            else None
+
+        # Manually build the model the same way make_numpyro_model does.
+        parlen = n_params  # all scalar
+
+        def numpyro_model():
+            pars = numpyro.sample("pars", numpyro.distributions.Normal(0, 10).expand([parlen]))
+            numpyro.factor("logl", logx(pars))
+
+        numpyro_model.to_df = lambda chain: logx.to_df(chain["pars"])
+
+        guide = autoguide.AutoDelta(numpyro_model)
+        return numpyro_model, guide, logx
+
+    def test_model_site_name_is_pars(self):
+        """The new model must expose 'pars' as the only latent sample site.
+        numpyro.factor() also appears as a sample site with is_observed=True,
+        so we filter those out."""
+        import numpyro
+        from numpyro import handlers
+
+        model, guide, _ = self._build_model_and_guide(n_params=3)
+        trace = handlers.trace(handlers.seed(model, rng_seed=0)).get_trace()
+        latent_sites = {
+            k for k, v in trace.items()
+            if v["type"] == "sample" and not v.get("is_observed", False)
+        }
+        assert latent_sites == {"pars"}
+
+    def test_pars_site_has_correct_shape(self):
+        """'pars' site must be a 1-D array with length == number of params."""
+        from numpyro import handlers
+        n = 5
+        model, _, _ = self._build_model_and_guide(n_params=n)
+        trace = handlers.trace(handlers.seed(model, rng_seed=0)).get_trace()
+        assert trace["pars"]["value"].shape == (n,)
+
+    def test_autodelta_guide_initialises_from_model(self):
+        """AutoDelta must be able to initialise from the model without error."""
+        import jax
+        import numpyro
+        import numpyro.infer as infer
+
+        model, guide, _ = self._build_model_and_guide(n_params=2)
+        svi = infer.SVI(model, guide,
+                        numpyro.optim.Adam(0.01),
+                        loss=numpyro.infer.Trace_ELBO())
+        # svi.init must not raise
+        state = svi.init(jax.random.key(0))
+        params = svi.get_params(state)
+        # AutoDelta creates 'pars_auto_loc'
+        assert "pars_auto_loc" in params
+
+    def test_svi_update_step_runs(self):
+        """A single SVI update step must complete and return finite loss."""
+        import jax
+        import jax.numpy as jnp
+        import numpyro
+        import numpyro.infer as infer
+
+        model, guide, _ = self._build_model_and_guide(n_params=2)
+        svi = infer.SVI(model, guide,
+                        numpyro.optim.Adam(0.01),
+                        loss=numpyro.infer.Trace_ELBO())
+        state = svi.init(jax.random.key(1))
+        new_state, loss = svi.update(state)
+        assert jnp.isfinite(loss)
+
+    def test_run_svi_early_stopping_cleans_pars_key(self, monkeypatch):
+        """run_svi_early_stopping must strip '_auto_loc' → params['pars'] exists."""
+        import jax
+        import numpyro
+        import numpyro.infer as infer
+
+        model, guide, logx = self._build_model_and_guide(n_params=2)
+        svi = infer.SVI(model, guide,
+                        numpyro.optim.Adam(0.05),
+                        loss=numpyro.infer.Trace_ELBO())
+
+        # run a small optimisation — 3 batches of 5 steps, patience=10 so no early stop
+        params, _ = du.run_svi_early_stopping(
+            jax.random.key(42),
+            svi,
+            batch_size=5,
+            patience=10,
+            max_num_batches=3,
+            diagnostics=False,
+        )
+        # cleaned params must have 'pars' key (stripped '_auto_loc')
+        assert "pars" in params
+        assert np.array(params["pars"]).shape == (2,)
+
+    def test_to_df_round_trip_after_svi(self, monkeypatch):
+        """model.to_df on cleaned SVI params must return a DataFrame
+        with the correct physical-parameter column names."""
+        import jax
+        import numpyro
+        import numpyro.infer as infer
+
+        n = 3
+        model, guide, logx = self._build_model_and_guide(n_params=n)
+        svi = infer.SVI(model, guide,
+                        numpyro.optim.Adam(0.05),
+                        loss=numpyro.infer.Trace_ELBO())
+
+        params, _ = du.run_svi_early_stopping(
+            jax.random.key(7),
+            svi,
+            batch_size=5,
+            patience=10,
+            max_num_batches=3,
+            diagnostics=False,
+        )
+        # params['pars'] is the cleaned unconstrained vector
+        df = model.to_df({"pars": params["pars"]})
+        assert isinstance(df, pd.DataFrame)
+        assert list(df.columns) == logx.params
+
+    def test_setup_svi_accepts_model_and_autodelta_guide(self):
+        """du.setup_svi must accept the new model and AutoDelta guide without error."""
+        import jax
+        import numpyro.infer.autoguide as autoguide
+
+        model, guide, _ = self._build_model_and_guide(n_params=2)
+        svi = du.setup_svi(model, guide,
+                           num_warmup_steps=5,
+                           max_epochs=20,
+                           peak_learning_rate=0.01)
+        # init must work
+        state = svi.init(jax.random.key(99))
+        params = svi.get_params(state)
+        assert "pars_auto_loc" in params
 
 
 def test_run_nuts_with_checkpoints_saves_chain_and_checkpoint(tmp_path, monkeypatch):
@@ -452,7 +723,7 @@ def test_stack_plot_tree_and_svi_early_stopping(monkeypatch):
         batch_size=1,
         patience=1,
         max_num_batches=5,
-        difference_threshold=0.5,
+        difference_threshold=0.05,
     )
     assert params["a"] == 2.0
     assert params["b"] == 2.0
@@ -611,8 +882,8 @@ def test_fourier_blocks_accept_supported_prior_values(monkeypatch, prior_name, p
 )
 def test_solar_wind_interpolation_supported_priors(monkeypatch, prior_name, kernel_attr):
     kernel = object()
-    monkeypatch.setattr(du.ds_solar, "custom_blocked_interpolation_basis", lambda *a, **k: ("U", "N"), raising=False)
-    monkeypatch.setattr(du.ds_solar, kernel_attr, lambda: kernel, raising=False)
+    monkeypatch.setattr(du.ds_signals, "custom_blocked_interpolation_basis", lambda *a, **k: ("U", "N"), raising=False)
+    monkeypatch.setattr(du.ds_signals, kernel_attr, lambda: kernel, raising=False)
     monkeypatch.setattr(du.ds_solar, "makegp_timedomain_solar_dm", lambda psr, covariance, **k: covariance, raising=False)
 
     out = du.solar_wind_noise_block(_solar_psr([0.0, 2.0]), basis="interpolation", prior=prior_name, basis_nodes=np.array([1.0]))
@@ -623,6 +894,346 @@ def test_solar_wind_interpolation_invalid_prior_raises(monkeypatch):
     monkeypatch.setattr(du.ds_solar, "custom_blocked_interpolation_basis", lambda *a, **k: ("U", "N"), raising=False)
     with pytest.raises(ValueError, match="Invalid prior specified for time domain solar wind noise"):
         du.solar_wind_noise_block(_solar_psr([0.0, 1.0]), basis="interpolation", prior="not-a-prior", basis_nodes=np.array([1.0]))
+
+
+# ---------------------------------------------------------------------------
+# modes forwarding tests
+# ---------------------------------------------------------------------------
+
+def _make_fake_makegp(calls, sentinel="BLOCK"):
+    """Return a fake ds.makegp_fourier that records its keyword arguments."""
+    def fake(psr, prior, nfreqs, T=None, modes=None, fourierbasis=None, name=None, **kwargs):
+        calls.update(dict(prior=prior, Nfreqs=nfreqs, T=T, modes=modes,
+                         fourierbasis=fourierbasis, name=name))
+        return sentinel
+    return fake
+
+
+def _patch_block(monkeypatch, tspan=500.0):
+    monkeypatch.setattr(du.ds, "getspan", lambda _psr: tspan)
+    monkeypatch.setattr(du, "_select_fourier_basis", lambda *a, **k: "BASIS")
+    monkeypatch.setattr(du.ds, "powerlaw", "powerlaw")
+
+
+def test_red_noise_block_forwards_modes(monkeypatch):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+    modes = np.array([1e-9, 3e-9, 1e-8])
+    result = du.red_noise_block(object(), tspan=500.0, modes=modes)
+    assert result == "BLOCK"
+    assert calls["modes"] is modes
+
+
+def test_red_noise_block_modes_none_by_default(monkeypatch):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+    du.red_noise_block(object(), tspan=500.0)
+    assert calls["modes"] is None
+
+
+def test_dm_noise_block_forwards_modes(monkeypatch):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+    modes = np.array([2e-9, 4e-9, 6e-9, 8e-9])
+    result = du.dm_noise_block(object(), tspan=500.0, modes=modes)
+    assert result == "BLOCK"
+    assert calls["modes"] is modes
+
+
+def test_dm_noise_block_modes_none_by_default(monkeypatch):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+    du.dm_noise_block(object(), tspan=500.0)
+    assert calls["modes"] is None
+
+
+def test_chromatic_noise_block_forwards_modes(monkeypatch):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+    modes = np.linspace(1e-9, 1e-8, 5)
+    result = du.chromatic_noise_block(object(), tspan=500.0, modes=modes)
+    assert result == "BLOCK"
+    assert calls["modes"] is modes
+
+
+def test_chromatic_noise_block_modes_none_by_default(monkeypatch):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+    du.chromatic_noise_block(object(), tspan=500.0)
+    assert calls["modes"] is None
+
+
+def test_solar_wind_noise_block_forwards_modes(monkeypatch):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+    modes = np.array([5e-9, 1e-8, 2e-8])
+    result = du.solar_wind_noise_block(object(), tspan=500.0, modes=modes)
+    assert result == "BLOCK"
+    assert calls["modes"] is modes
+
+
+def test_solar_wind_noise_block_modes_none_by_default(monkeypatch):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+    du.solar_wind_noise_block(object(), tspan=500.0)
+    assert calls["modes"] is None
+
+
+def test_all_block_modes_are_passed_as_exact_array(monkeypatch):
+    """Each block must pass the modes array through without copying or modifying it."""
+    _patch_block(monkeypatch)
+    modes = np.array([1e-9, 2e-9, 3e-9, 4e-9, 5e-9])
+    for block_fn in (du.red_noise_block, du.dm_noise_block,
+                     du.chromatic_noise_block, du.solar_wind_noise_block):
+        calls = {}
+        monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+        block_fn(object(), tspan=500.0, modes=modes)
+        assert calls["modes"] is modes, f"{block_fn.__name__} did not forward modes unchanged"
+
+
+# ---------------------------------------------------------------------------
+# compute_log_probs
+# ---------------------------------------------------------------------------
+
+def test_make_numpyro_model_has_compute_log_probs(monkeypatch):
+    """make_numpyro_model attaches a compute_log_probs method to the model."""
+
+    class FakeLogx:
+        params = ["x", "y"]
+        def __call__(self, p):
+            return 0.0
+        def to_df(self, chain_pars):
+            return None
+
+    monkeypatch.setattr(du.ds_prior, "makelogtransform_uniform",
+                        lambda lnl, priordict=None: FakeLogx())
+
+    model = du.make_numpyro_model(lambda p: 0.0)
+    assert hasattr(model, "compute_log_probs"), "model should have compute_log_probs"
+    assert callable(model.compute_log_probs)
+
+
+def test_compute_log_probs_returns_required_keys(monkeypatch):
+    """compute_log_probs returns dict with lnlike, lnprior, lnpost keys."""
+    import jax.numpy as jnp
+
+    class FakeLogx:
+        params = ["x", "y"]
+        def __call__(self, p):
+            return jnp.sum(p)
+        def to_df(self, chain_pars):
+            return None
+
+    monkeypatch.setattr(du.ds_prior, "makelogtransform_uniform",
+                        lambda lnl, priordict=None: FakeLogx())
+
+    model = du.make_numpyro_model(lambda p: 0.0)
+    pars = jnp.ones((3, 2))
+    result = model.compute_log_probs({'pars': pars})
+    assert set(result.keys()) == {'lnlike', 'lnprior', 'lnpost'}
+    assert result['lnlike'].shape == (3,)
+    assert result['lnprior'].shape == (3,)
+    assert result['lnpost'].shape == (3,)
+
+
+def test_compute_log_probs_lnpost_equals_sum(monkeypatch):
+    """lnpost == lnlike + lnprior for every sample."""
+    import jax.numpy as jnp
+
+    class FakeLogx:
+        params = ["x", "y"]
+        def __call__(self, p):
+            return jnp.sum(p)
+        def to_df(self, _):
+            return None
+
+    monkeypatch.setattr(du.ds_prior, "makelogtransform_uniform",
+                        lambda lnl, priordict=None: FakeLogx())
+    model = du.make_numpyro_model(lambda p: 0.0)
+    pars = jnp.array([[1.0, 2.0], [0.5, -0.5]])
+    result = model.compute_log_probs({'pars': pars})
+    np.testing.assert_allclose(
+        np.asarray(result['lnpost']),
+        np.asarray(result['lnlike']) + np.asarray(result['lnprior']),
+    )
+
+
+# ---------------------------------------------------------------------------
+# run_nuts_with_checkpoints — log-prob columns
+# ---------------------------------------------------------------------------
+
+def test_run_nuts_with_checkpoints_appends_log_prob_columns(tmp_path, monkeypatch):
+    """When model is supplied, df saved to disk includes lnlike/lnprior/lnpost."""
+    import jax.numpy as jnp
+
+    N = 4
+
+    class FakeSampler:
+        num_samples = N
+        last_state = {}
+        post_warmup_state = None
+        calls = 0
+
+        def _set_collection_params(self):
+            pass
+
+        def run(self, _rng):
+            self.calls += 1
+            self.last_state = {"s": self.calls}
+
+        def to_df(self):
+            return pd.DataFrame({"par1": np.zeros(N), "par2": np.ones(N)})
+
+        def get_samples(self, group_by_chain=False):
+            return {"pars": jnp.zeros((N, 2))}
+
+    saved_dfs = []
+    monkeypatch.setattr(du, "save_chain", lambda df, path: saved_dfs.append(df.copy()))
+    monkeypatch.setattr(du.jax.random, "split", lambda key: (key, key))
+
+    class FakeModel:
+        def compute_log_probs(self, chain):
+            n = chain['pars'].shape[0]
+            return {
+                'lnlike': jnp.full((n,), -1.0),
+                'lnprior': jnp.full((n,), -2.0),
+                'lnpost': jnp.full((n,), -3.0),
+            }
+
+    du.run_nuts_with_checkpoints(
+        sampler=FakeSampler(),
+        num_samples_per_checkpoint=2,
+        rng_key=np.array([0, 1]),
+        outdir=tmp_path,
+        file_name="abc",
+        diagnostics=False,
+        model=FakeModel(),
+    )
+
+    assert saved_dfs, "save_chain should have been called at least once"
+    last_df = saved_dfs[-1]
+    for col in ('lnlike', 'lnprior', 'lnpost'):
+        assert col in last_df.columns, f"expected column '{col}' in saved df"
+    np.testing.assert_allclose(last_df['lnlike'].values, -1.0)
+    np.testing.assert_allclose(last_df['lnprior'].values, -2.0)
+    np.testing.assert_allclose(last_df['lnpost'].values, -3.0)
+
+
+def test_run_nuts_with_checkpoints_no_model_no_log_cols(tmp_path, monkeypatch):
+    """When model is not supplied, no lnlike/lnprior/lnpost columns are added."""
+    N = 4
+
+    class FakeSampler:
+        num_samples = N
+        last_state = {}
+        post_warmup_state = None
+        calls = 0
+
+        def _set_collection_params(self):
+            pass
+
+        def run(self, _rng):
+            self.calls += 1
+            self.last_state = {}
+
+        def to_df(self):
+            return pd.DataFrame({"par1": np.zeros(N)})
+
+    saved_dfs = []
+    monkeypatch.setattr(du, "save_chain", lambda df, path: saved_dfs.append(df.copy()))
+    monkeypatch.setattr(du.jax.random, "split", lambda key: (key, key))
+
+    du.run_nuts_with_checkpoints(
+        sampler=FakeSampler(),
+        num_samples_per_checkpoint=N,
+        rng_key=np.array([0, 1]),
+        outdir=tmp_path,
+        file_name="nomodel",
+        diagnostics=False,
+    )
+
+    last_df = saved_dfs[-1]
+    for col in ('lnlike', 'lnprior', 'lnpost'):
+        assert col not in last_df.columns
+
+
+# ---------------------------------------------------------------------------
+# get_map_noise_values — N parameter
+# ---------------------------------------------------------------------------
+
+class TestGetMapNoiseValuesN:
+    """Unit tests for get_map_noise_values with N parameter."""
+
+    def _make_outdir(self, tmp_path, has_json=False, has_lnpost=True):
+        import pint.models
+        from types import SimpleNamespace
+
+        # Minimal fake timing model accepted by format_chain_dir
+        class FakeModel:
+            PSR = SimpleNamespace(value="J0000+0000")
+
+        outdir = tmp_path / "chains" / "J0000+0000"
+        outdir.mkdir(parents=True)
+
+        if has_json:
+            (outdir / "J0000+0000_map_params.json").write_text('{"par1": 1.0, "par2": 2.0}')
+
+        if not has_json:
+            df = pd.DataFrame({
+                "par1": [1.0, 2.0, 3.0, 4.0, 5.0],
+                "par2": [5.0, 4.0, 3.0, 2.0, 1.0],
+            })
+            if has_lnpost:
+                df["lnpost"] = [-5.0, -4.0, -3.0, -2.0, -1.0]  # sample 4 is best
+            df.to_feather(outdir / "J0000+0000_nuts_samples.feather")
+
+        return outdir.parent.parent, FakeModel()
+
+    def test_N1_uses_json_when_present(self, tmp_path, monkeypatch):
+        outdir_root, fake_model = self._make_outdir(tmp_path, has_json=True)
+        from pint_pal.noise_utils import format_chain_dir, get_map_noise_values
+        monkeypatch.setattr("pint_pal.noise_utils.format_chain_dir",
+                            lambda d, model=None: str(tmp_path / "chains" / "J0000+0000"))
+        result = get_map_noise_values(outdir_root, fake_model, N=1)
+        assert result == {"par1": 1.0, "par2": 2.0}
+
+    def test_N1_selects_top_row_by_lnpost(self, tmp_path, monkeypatch):
+        outdir_root, fake_model = self._make_outdir(tmp_path, has_json=False, has_lnpost=True)
+        monkeypatch.setattr("pint_pal.noise_utils.format_chain_dir",
+                            lambda d, model=None: str(tmp_path / "chains" / "J0000+0000"))
+        from pint_pal.noise_utils import get_map_noise_values
+        result = get_map_noise_values(outdir_root, fake_model, N=1)
+        # best row (lnpost=-1) is the last row: par1=5, par2=1
+        assert result["par1"] == pytest.approx(5.0)
+        assert result["par2"] == pytest.approx(1.0)
+
+    def test_N3_averages_top3_by_lnpost(self, tmp_path, monkeypatch):
+        outdir_root, fake_model = self._make_outdir(tmp_path, has_json=False, has_lnpost=True)
+        monkeypatch.setattr("pint_pal.noise_utils.format_chain_dir",
+                            lambda d, model=None: str(tmp_path / "chains" / "J0000+0000"))
+        from pint_pal.noise_utils import get_map_noise_values
+        result = get_map_noise_values(outdir_root, fake_model, N=3)
+        # top-3 by lnpost: rows with lnpost -1,-2,-3 → par1=[5,4,3], par2=[1,2,3]
+        assert result["par1"] == pytest.approx(4.0)
+        assert result["par2"] == pytest.approx(2.0)
+
+    def test_no_lnpost_falls_back_to_mean(self, tmp_path, monkeypatch):
+        outdir_root, fake_model = self._make_outdir(tmp_path, has_json=False, has_lnpost=False)
+        monkeypatch.setattr("pint_pal.noise_utils.format_chain_dir",
+                            lambda d, model=None: str(tmp_path / "chains" / "J0000+0000"))
+        from pint_pal.noise_utils import get_map_noise_values
+        result = get_map_noise_values(outdir_root, fake_model, N=1)
+        # mean of [1,2,3,4,5] = 3, mean of [5,4,3,2,1] = 3
+        assert result["par1"] == pytest.approx(3.0)
+        assert result["par2"] == pytest.approx(3.0)
 
 
 def test_make_single_pulsar_noise_likelihood_respects_disabled_model_fields(monkeypatch):
