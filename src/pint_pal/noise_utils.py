@@ -987,14 +987,14 @@ def add_noise_to_model(
     ecorr_params = []
     dmefac_params = []
     dmequad_params = []
-    tneq_params = []  # NEW: for TNEQUAD parameters
+    tneq_params = []  # index for TNEQUAD parameters
 
     efac_idx = 1
     equad_idx = 1
     ecorr_idx = 1
     dmefac_idx = 1
     dmequad_idx = 1
-    tneq_idx = 1  # NEW: index for TNEQ parameters
+    tneq_idx = 1  # index for TNEQ parameters
 
     psr_name = list(noise_dict.keys())[0].split("_")[0]
     noise_pars = np.array(list(noise_dict.keys()))
@@ -1215,8 +1215,7 @@ def add_noise_to_model(
             dm_comp = pm.PLDMNoise()
             dm_comp.TNDMAMP.quantity = noise_dict[psr_name + "_dm_gp_log10_A"]
             dm_comp.TNDMGAM.quantity = noise_dict[psr_name + "_dm_gp_gamma"]
-            ##### FIXMEEEEEEE : need to figure out some way to softcode this
-            dm_comp.TNDMC.quantitity = dm_kwargs.get("Nfreqs", 100)
+            dm_comp.TNDMC.quantity = dm_kwargs.get("Nfreqs", 100)
             _apply_pl_component_logfreq_settings(
                 dm_comp,
                 dm_kwargs,
@@ -1255,7 +1254,7 @@ def add_noise_to_model(
             # chrom_keys = np.array([key for key, val in noise_dict.items() if "_chrom_gp_" in key])
             chrom_comp.TNCHROMAMP.quantity = noise_dict[psr_name + "_chrom_gp_log10_A"]
             chrom_comp.TNCHROMGAM.quantity = noise_dict[psr_name + "_chrom_gp_gamma"]
-            chrom_comp.TNCHROMC.quantitity = chrom_kwargs.get("Nfreqs", 100)
+            chrom_comp.TNCHROMC.quantity = chrom_kwargs.get("Nfreqs", 100)
             _apply_pl_component_logfreq_settings(
                 chrom_comp,
                 chrom_kwargs,
