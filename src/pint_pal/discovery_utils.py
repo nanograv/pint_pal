@@ -38,13 +38,13 @@ from numpyro.infer.svi import SVIState
 from IPython.display import display, clear_output
 
 
-warnings.filterwarnings("ignore")
-log.disable("pint")
-log.remove()
-log.add(sys.stderr, colorize=False, enqueue=True)
+#warnings.filterwarnings("ignore")
+#log.disable("pint")
+#log.remove()
+#log.add(sys.stderr, colorize=False, enqueue=True)
 log.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices")
 
-def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type):
+def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, chromatic_idx=None):
     "Convoluted helper function for setting log/lin Fourier bases of different types"
     if nlog > 0:
         if noise_type == 'red_noise':
@@ -58,10 +58,18 @@ def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type):
                 f_min=f_min, nlin=Nfreqs, nlog=nlog,
                 )
         elif noise_type == 'chromatic':
-            return lambda pulsar, comp, T : ds.log_free_chromatic_fourierbasis(
-                psr, T=tspan, logmode=logmode,
-                f_min=f_min, nlin=Nfreqs, nlog=nlog,
-                )
+            if chromatic_idx is not None:
+                # Fixed chromatic index: use log_fixed_chromatic_fourierbasis (returns matrix)
+                return lambda pulsar, comp, T : ds.log_fixed_chromatic_fourierbasis(
+                    psr, chromatic_idx=chromatic_idx, T=tspan, logmode=logmode,
+                    f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                    )
+            else:
+                # Varying chromatic index: use log_free_chromatic_fourierbasis (returns callable)
+                return lambda pulsar, comp, T : ds.log_free_chromatic_fourierbasis(
+                    psr, T=tspan, logmode=logmode,
+                    f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                    )
         elif noise_type == 'solar_wind':
             return lambda pulsar, comp, T : ds_solar.log_solardm_fourierbasis(
                 psr, T=tspan, logmode=logmode,
@@ -73,7 +81,12 @@ def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type):
         elif noise_type == 'dm_noise':
             return ds.dmfourierbasis
         elif noise_type == 'chromatic':
-            return ds.freechromaticfourierbasis
+            if chromatic_idx is not None:
+                # Fixed chromatic index: bind it so freechromaticfourierbasis returns a matrix
+                return partial(ds.freechromaticfourierbasis, chromatic_idx=chromatic_idx)
+            else:
+                # Varying chromatic index: freechromaticfourierbasis returns callable fmat
+                return ds.freechromaticfourierbasis
         elif noise_type == 'solar_wind':
             return ds_solar.fourierbasis_solar_dm
     else:
@@ -111,7 +124,12 @@ def white_noise_block(
         include_ecorr: bool = True,
         gp_ecorr: bool = False,
         tn_equad: bool = True,
+        chromequad: bool = False,
+        chromequad_idx_per_backend: bool = False,
+        fref: Optional[float] = 1400,
         selection: Callable = ds.selection_backend_flags,
+        outliers: bool = False,
+        variable: bool = False,
     ) -> Any:
     """
     Build the white-noise measurement block.
@@ -128,10 +146,20 @@ def white_noise_block(
         Placeholder to keep a shared interface with other block builders.
         This argument is not used in this function. Default is False.
     tn_equad : bool, optional
-        Whether to include EQUAD terms. Default is True.
+        Whether to use the TNEquad convention. Default is True.
+    chromequad : bool, optional
+        Whether to include a per-backend frequency-dependent noise floor term
+        (CHROMEQUAD). The noise variance gains an additive term
+        ``CHROMEQUAD^2 * (fref / freq)^chrom_idx`` per backend. Default is False.
+    chromequad_idx_per_backend : bool, optional
+        If True, a separate chromatic index is floated for each backend.
+        If False (default), a single per-pulsar chromatic index is used, which
+        is better constrained when comparing across backends.
+    fref : float, optional
+        Reference frequency for the CHROMEQUAD term. Default is 1400 MHz.
     selection : Callable, optional
         Backend selection function. Default is discovery.selection_backend_flags.
-        `None` returns white noise with no selections.
+        ``None`` returns white noise with no selections.
 
     Returns
     -------
@@ -148,18 +176,27 @@ def white_noise_block(
             psr,
             tnequad=tn_equad,
             ecorr=include_ecorr,
+            chromequad=chromequad,
+            chromequad_idx_per_backend=chromequad_idx_per_backend,
             selection=selection,
             noisedict=noise_dict,
+            fref=fref,
+            outliers=outliers,
         )
 
 def gp_ecorr_block(
         psr: Any,
         noise_dict: Dict[str, Any] = {},
-        include_ecorr: bool = True, # dummy vars
+        include_ecorr: bool = True,    # dummy vars to match white_noise_block interface
         gp_ecorr: bool = False,
         tn_equad: bool = True,
+        chromequad: bool = False,
+        chromequad_idx_per_backend: bool = False,
+        fref: Optional[float] = 1400,
         selection: Callable = ds.selection_backend_flags,
-        gp_ecorr_name: str = 'ecorrGP'
+        gp_ecorr_name: str = 'ecorrGP',
+        outliers: bool = False,
+        variable: bool = False,
     ) -> Any:
     """
     Build the Gaussian-process ECORR block.
@@ -175,6 +212,12 @@ def gp_ecorr_block(
     gp_ecorr : bool, optional
         Unused placeholder to match ``white_noise_block`` interface.
     tn_equad : bool, optional
+        Unused placeholder to match ``white_noise_block`` interface.
+    chromequad : bool, optional
+        Unused placeholder to match ``white_noise_block`` interface.
+    chromequad_idx_per_backend : bool, optional
+        Unused placeholder to match ``white_noise_block`` interface.
+    fref : float, optional
         Unused placeholder to match ``white_noise_block`` interface.
     selection : Callable, optional
         Backend selection function. Default is discovery.selection_backend_flags.
@@ -196,6 +239,7 @@ def gp_ecorr_block(
             psr,
             noisedict=noise_dict,
             selection=selection,
+            variable=variable,
             #gp_ecorr_name=gp_ecorr_name,
             )
 
@@ -208,6 +252,7 @@ def red_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
+        modes=None,
         name: str = 'red_noise',
         ) -> Any:
     """
@@ -237,6 +282,10 @@ def red_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
+    modes : array-like, optional
+        User-supplied array of Fourier mode frequencies (in Hz). When provided
+        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
+        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is "red_noise".
 
@@ -256,8 +305,6 @@ def red_noise_block(
             prior = ds.broken_powerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
-        elif prior == 'powerlaw_cutoff':
-            prior = ds.powerlaw_cutoff
         elif callable(prior):
             pass # pass a callable prior
         else:
@@ -268,6 +315,7 @@ def red_noise_block(
             prior,
             Nfreqs,
             T=tspan,
+            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
@@ -286,11 +334,15 @@ def dm_noise_block(
         psr: Any,
         tspan: Optional[float] = None,
         basis: str = 'fourier',
+        basis_nodes: Optional[np.ndarray] = None,
+        interp_dt: Optional[float] = 30.0,
+        interp_kind: str = 'linear',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
+        modes=None,
         name: str = 'dm_gp',
         ) -> Any:
     """
@@ -305,10 +357,16 @@ def dm_noise_block(
     basis : str, optional
         Basis type for the GP. Currently only ``"fourier"`` is implemented.
         Default is ``"fourier"``.
+    basis_nodes : np.ndarray, optional
+        Nodes for the basis. Default is None. Only used for interpolation basis.
+    interp_dt : float, optional
+        Time step for interpolation nodes in days. Default is 30. Only used for interpolation basis.
+    interp_kind : str, optional
+        Interpolation kind for the basis. Default is "linear". Only used for interpolation basis.
     prior : str, optional
-        Prior type or callable prior for the GP amplitude. Supported string
-        values are ``"powerlaw"``, ``"powerlaw_cutoff"``,
-        ``"broken_powerlaw"``, and ``"freespectrum"``.
+        Prior type for the GP amplitude. For Fourier basis this is a PSD. For time domain it is a covariance function.
+        Fourier basis supports ["powerlaw", "powerlaw_cutoff", "broken_powerlaw", "freespectrum"].
+        Time-domain interpolation basis supports ["ridge", "square_exponential", "quasi_periodic", "matern"].
         Default is ``"powerlaw"``.
     Nfreqs : int, optional
         Number of Fourier frequencies. Default is 100.
@@ -321,6 +379,10 @@ def dm_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
+    modes : array-like, optional
+        User-supplied array of Fourier mode frequencies (in Hz). When provided
+        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
+        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is "dm_gp".
 
@@ -340,8 +402,6 @@ def dm_noise_block(
             prior = ds.broken_powerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
-        elif prior == 'powerlaw_cutoff':
-            prior = ds.powerlaw_cutoff
         elif callable(prior):
             pass # pass a callable prior
         else:
@@ -352,6 +412,7 @@ def dm_noise_block(
             prior,
             Nfreqs,
             T=tspan,
+            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
@@ -360,7 +421,35 @@ def dm_noise_block(
             name=name
             )
     elif basis == 'interpolation':
-        raise NotImplementedError("Time domain models for dm noise are not yet implemented.")
+        if basis_nodes is None:
+            basis_nodes = np.arange(psr.toas.min()/86400, psr.toas.max()/86400, interp_dt)
+        # else basis nodes are provided by user.
+        td_basis, nodes = ds_signals.custom_blocked_interpolation_basis(
+            psr.toas,
+            nodes=basis_nodes,
+            kind=interp_kind,
+        )
+        if prior == 'ridge':
+            prior_kernel = ds_signals.ridge_kernel()
+        elif prior == 'square_exponential':
+            prior_kernel = ds_signals.square_exponential_kernel()
+        elif prior == 'quasi_periodic':
+            prior_kernel = ds_signals.quasi_periodic_kernel()
+        elif prior == 'matern':
+            prior_kernel = ds_signals.matern_kernel()
+        elif prior == 'powerlaw':
+            raise ValueError("Power-law prior is not supported for time domain DM noise. Must be one of ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
+        else: 
+            raise ValueError("Invalid prior specified for time domain DM noise. Must be one of ['ridge', 'square_exponential', 'quasi_periodic', 'matern'].")
+        dm_gp = ds_signals.makegp_timedomain_dm(
+            psr,
+            covariance=prior_kernel,
+            dt=None,
+            Umat=td_basis,
+            nodes=nodes,
+            common=[],
+            name=name,
+        )
     else:
         raise ValueError("Invalid basis specified for dm noise. Must be 'fourier' or 'interpolation'.")
 
@@ -375,6 +464,7 @@ def chromatic_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
+        modes=None,
         name: str = 'chrom_gp',
         chromatic_idx: str = 'vary',
         ) -> Any:
@@ -405,6 +495,10 @@ def chromatic_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
+    modes : array-like, optional
+        User-supplied array of Fourier mode frequencies (in Hz). When provided
+        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
+        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is ``"chrom_gp"``.
     chromatic_idx : str, optional
@@ -427,22 +521,25 @@ def chromatic_noise_block(
             prior = ds.broken_powerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
-        elif prior == 'powerlaw_cutoff':
-            prior = ds.powerlaw_cutoff
         elif callable(prior):
             pass # pass a callable prior
         else:
             raise ValueError("Invalid *prior* specified for Fourier basis chromatic noise. Try one of: ['powerlaw', 'powerlaw_cutoff', 'broken_powerlaw', 'freespectrum']")
+
+        # Resolve chromatic index: None means 'vary' (callable fmat), else fixed (matrix fmat)
+        chrom_idx_val = None if chromatic_idx == 'vary' else chromatic_idx
 
         chrom_gp = ds.makegp_fourier(
             psr,
             prior,
             Nfreqs,
             T=tspan,
+            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
-                nlog, noise_type='chromatic'
+                nlog, noise_type='chromatic',
+                chromatic_idx=chrom_idx_val,
             ),
             name=name
             )
@@ -462,6 +559,7 @@ def solar_wind_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
+        modes=None,
         name: str = 'sw_gp',
         ) -> Any:
     """
@@ -489,8 +587,12 @@ def solar_wind_noise_block(
         Number of Fourier frequencies. Default is 100. Only used for Fourier basis.
     tspan : float, optional
         Time span for the Fourier basis. Default is None.
+    modes : array-like, optional
+        User-supplied array of Fourier mode frequencies (in Hz). When provided
+        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
+        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
-        Name of the noise component. Default is "red_noise".
+        Name of the noise component. Default is "sw_gp".
 
     Returns
     -------
@@ -510,8 +612,6 @@ def solar_wind_noise_block(
             prior = ds.broken_powerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
-        elif prior == 'powerlaw_cutoff':
-            prior = ds.powerlaw_cutoff
         elif callable(prior):
             pass # pass a callable prior
         else:
@@ -522,6 +622,7 @@ def solar_wind_noise_block(
             prior,
             Nfreqs,
             T=tspan,
+            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
@@ -583,7 +684,13 @@ def make_single_pulsar_noise_likelihood_discovery(
     tspan : float, optional
         Time span for the noise model.
     model_kwargs : dict, optional
-        Dictionary of model keyword arguments.
+        Dictionary of model keyword arguments. Recognised keys are
+        ``timing_model``, ``white_noise``, ``red_noise``, ``dm_noise``,
+        ``chromatic_noise``, ``solar_wind``, and ``extra_signals``.
+        ``extra_signals`` may be a single pre-built signal or a list/tuple of
+        signals; each is appended to the args tuple after all standard noise
+        blocks, allowing the caller to inject custom models that are not
+        covered by the built-in noise blocks.
     return_args : bool, optional
         If True, return the raw argument list instead of the PulsarLikelihood instance.
 
@@ -598,12 +705,12 @@ def make_single_pulsar_noise_likelihood_discovery(
         tspan = ds.getspan([psr])
     # if marg_ne:
     #     psr.Mmat = np.hstack([psr.Mmat, np.array([ds.make_solardm(psr)(1.0)]).T])
-    model_kwargs.update({ky: False for ky in ['timing_model', 'white_noise', 'red_noise', 'dm_noise', 'chromatic_noise', 'solar_wind'] if ky not in model_kwargs.keys()})
+    model_kwargs.update({ky: False for ky in ['timing_model', 'white_noise', 'red_noise', 'dm_noise', 'chromatic_noise', 'solar_wind', 'extra_signals'] if ky not in model_kwargs.keys()})
     # model checks -- update your configs !!
     if not model_kwargs['timing_model']:
         log.error("Timing model must be included in the `noise_run` config block for the likelihood to be properly constructed.")
     if not model_kwargs['white_noise']:
-        log.error("White noise must be included in the `noise_run` config block for the likelihood to be properly constructed.")
+        log.warning("White noise must be included in the `noise_run` config block for the likelihood to be properly constructed.")
     if not model_kwargs['red_noise']:
         log.warning("Red noise is not included in the `noise_run` config block. Proceed with caution.")       
     ## add pulsar's time spans to model for signals where not included
@@ -679,6 +786,12 @@ def make_single_pulsar_noise_likelihood_discovery(
                 **model_kwargs['solar_wind']
             )
         )
+    if model_kwargs['extra_signals']:
+        extra = model_kwargs['extra_signals']
+        if not isinstance(extra, (list, tuple)):
+            extra = [extra]
+        log.info(f"Adding {len(extra)} extra signal(s) to the model.")
+        args.extend(extra)
     if return_args:
         return args
     else:
@@ -724,31 +837,103 @@ def make_sampler_nuts(
 
     return sampler
 
-def make_numpyro_model(input_lnlike: Any, priordict: Dict[str, Any] = {}) -> Callable[[], None]:
+def make_numpyro_model(
+        input_lnlike: Any,
+        priordict: Dict[str, Any] = {},
+        transform: Optional[Callable] = None,
+) -> Callable[[], None]:
     """
-    Wrap a discovery likelihood into a NumPyro model.
+    Wrap a discovery likelihood into a NumPyro model using a tanh parameter
+    transformation.
+
+    The tanh (uniform) transform maps each bounded prior interval
+    ``[a, b]`` to the real line via
+
+    .. math::
+
+        x = \\frac{a + b}{2} + \\frac{b - a}{2} \\tanh(y)
+
+    so NUTS samples the unconstrained ``y`` values from
+    ``Normal(0, 10)`` instead of the bounded physical parameters directly.
+    This improves sampling efficiency near the prior boundaries and allows
+    JAX to compile the likelihood without the parameter-dictionary overhead.
 
     Parameters
     ----------
     input_lnlike : Any
-        Likelihood object that provides a callable interface and a .params list.
+        Likelihood object that provides a callable interface and a ``.params``
+        list.  Must be compatible with
+        ``discovery.prior.makelogtransform_uniform``.
     priordict : dict, optional
-        Dictionary of prior overrides. Default is empty dict.
+        Dictionary of prior overrides merged on top of
+        ``ds.priordict_standard``.  Default is empty dict.
+    transform : callable, optional
+        Transform factory with the signature
+        ``transform(lnlike, priordict) -> logx`` where ``logx`` is callable
+        on a flat JAX array of unconstrained parameters.  Defaults to
+        ``ds_prior.makelogtransform_uniform``.
 
     Returns
     -------
     Callable[[], None]
-        NumPyro model function with attached .to_df convenience method.
+        NumPyro model function with an attached ``.to_df(chain)`` method that
+        converts the raw ``chain['pars']`` samples back to a
+        ``pandas.DataFrame`` of physical parameters.
     """
+    if transform is None:
+        transform = ds_prior.makelogtransform_uniform
+
     priors_dict = ds.priordict_standard.copy()
     priors_dict.update(priordict)
-    def numpyro_model() -> None:
-        """NumPyro model that samples parameters and factors in the log-likelihood."""
-        lnlike = input_lnlike({par: numpyro.sample(par, dist.Uniform(*ds_prior.getprior_uniform(par, priordict)))
-            for par in input_lnlike.params})
 
-        numpyro.factor('logl', lnlike)
-    numpyro_model.to_df = lambda chain: pd.DataFrame(chain)
+    logx = transform(input_lnlike, priordict=priors_dict)
+
+    # Total number of unconstrained scalar dimensions (accounts for
+    # vector-valued parameters encoded as "name(N)" in .params).
+    parlen = sum(
+        int(par[par.index('(') + 1: par.index(')')])
+        if '(' in par else 1
+        for par in logx.params
+    )
+
+    def numpyro_model() -> None:
+        """NumPyro model using tanh-transformed parameters."""
+        pars = numpyro.sample('pars', dist.Normal(0, 10).expand([parlen]))
+        numpyro.factor('logl', logx(pars))
+
+    numpyro_model.to_df = lambda chain: logx.to_df(chain['pars'])
+
+    def _compute_log_probs(chain):
+        """Compute lnlike, lnprior, and lnpost for each sample in *chain*.
+
+        Parameters
+        ----------
+        chain : dict
+            Raw MCMC sample dict as returned by ``sampler.get_samples()``.
+            Must contain key ``'pars'`` with shape ``(N, parlen)``.
+
+        Returns
+        -------
+        dict with keys ``lnlike``, ``lnprior``, ``lnpost`` — each a 1-D
+        JAX array of length N.
+
+        Notes
+        -----
+        ``lnlike`` is ``logx(pars)`` — the tanh-transformed log-likelihood
+        including the change-of-variables Jacobian from the uniform prior
+        interval to the real line.
+        ``lnprior`` is the log-probability of *pars* under the ``Normal(0,10)``
+        proposal distribution used by NUTS in the unconstrained space.
+        ``lnpost = lnlike + lnprior`` is the log-posterior (up to a constant).
+        """
+        pars = jnp.asarray(chain['pars'])          # (N, parlen)
+        lnlike = jax.vmap(logx)(pars)              # (N,)
+        lnprior = jax.vmap(
+            lambda p: jnp.sum(dist.Normal(0, 10).log_prob(p))
+        )(pars)                                     # (N,)
+        return {'lnlike': lnlike, 'lnprior': lnprior, 'lnpost': lnlike + lnprior}
+
+    numpyro_model.compute_log_probs = _compute_log_probs
 
     return numpyro_model
 
@@ -760,6 +945,7 @@ def run_nuts_with_checkpoints(
     file_name="numpyro_samples",
     resume=False,
     diagnostics=True,
+    model=None,
 ):
     """Run NumPyro MCMC and save checkpoints.
     This function performs multiple iterations of MCMC sampling, saving checkpoints
@@ -777,6 +963,11 @@ def run_nuts_with_checkpoints(
         The directory for output files.
     resume : bool
         Whether to look for a state to resume from.
+    model : callable, optional
+        NumPyro model returned by ``make_numpyro_model``.  When supplied and
+        the model exposes a ``compute_log_probs`` method, ``lnlike``,
+        ``lnprior``, and ``lnpost`` columns are appended to every checkpoint
+        DataFrame before it is written to disk.  Default is None.
     Returns
     -------
     None
@@ -833,6 +1024,18 @@ def run_nuts_with_checkpoints(
         sampler.run(rng_key)
 
         df_new = sampler.to_df()
+
+        # --- append log-probability columns if model supports it ---
+        if model is not None and hasattr(model, 'compute_log_probs'):
+            try:
+                raw_samples = sampler.get_samples(group_by_chain=False)
+                lp = model.compute_log_probs(raw_samples)
+                df_new = df_new.copy()
+                df_new['lnlike']  = np.asarray(lp['lnlike'])
+                df_new['lnprior'] = np.asarray(lp['lnprior'])
+                df_new['lnpost']  = np.asarray(lp['lnpost'])
+            except Exception as _lp_err:
+                log.warning(f"Could not compute log-probability columns: {_lp_err}")
 
         df = pd.concat([df, df_new]) if df is not None else df_new
 
