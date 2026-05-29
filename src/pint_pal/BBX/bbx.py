@@ -24,6 +24,7 @@ from pathlib import Path
 from io import StringIO
 
 import numpy as np
+import pandas as pd
 import astropy.units as u
 from astropy import log
 
@@ -60,6 +61,11 @@ from .utils import (
     find_toa_by_dmx,
     format_gap_summary,
     mask_toas_from_gaps,
+    read_f107_flux_file,
+    select_timespan,
+    daily_average_timeseries,
+    prepare_driver_series,
+    combine_repeated_toas,
 ) # utils.py
 
 from .diagnostics import (
@@ -220,7 +226,7 @@ class SolarWindConfig:
           model="SWX" with conjunction_anchor="bb" (default)
     """
     model: Optional[str] = "SWX"          # "SWM0" | "SWM1" | "SWX" | None
-    ne1au: float = 7.9                    # [cm^-3] at 1 AU
+    ne1au: float = 6.67                   # [cm^-3] at 1 AU
     swp: float = 2.0
     ephem: str = "DE440"
     min_theta_deg: float = 0.25
@@ -231,6 +237,18 @@ class SolarWindConfig:
     swx_bin_interval_days: Optional[float] = 365.25 # [days]
     # kwargs for SWX + conjunction_anchor="bb" (passed into SolarWindProxy.build_swx_bb_edges_from_proxy)
     swx_kwargs: Mapping[str, Any] = field(default_factory=dict)
+
+    f107_file: Optional[str] = None
+    use_f107: bool = True
+    f107_use_adjusted: bool = True
+    f107_smooth_days: int = 391
+    
+    proxy_form: str = "multiplicative"   # "multiplicative" | "additive"
+    beta_enhancement_A: float = 5.0      # from Gaussian amp fit of n_{e,\beta}(ea. pulsar) vs \beta
+    beta_enhancement_sigma_deg: float = 15.0  # from Gaussian \sigma_\beta fit of n_{e,\beta}(ea. pulsar) vs \beta
+    
+    solar_cycle_k: Optional[float] = None # for multiplicative form - either value here or use b1/ne1au default
+    solar_cycle_beta1: float = 1/14.10    # for additive form [cm^-3] - from Jeremy's proxy regression
 
     def validate(self) -> None:
         # Normalize for robust validation (runner may also normalize, but config should be stable).
@@ -245,6 +263,8 @@ class SolarWindConfig:
                 raise ValueError("SolarWindConfig.conjunction_anchor invalid for SWX.")
             if a != "bb" and self.swx_bin_interval_days is None:
                 raise ValueError("SWX with non-'bb' anchor requires `swx_bin_interval_days`.")
+            if not isinstance(self.swx_kwargs, Mapping):
+                raise ValueError("SolarWindConfig.swx_kwargs must be a mapping.")
 
         if m in ("SWM0", "SWM1") and a == "bb":
             raise ValueError("SolarWindConfig.conjunction_anchor='bb' only makes sense for SWX.")
@@ -257,6 +277,39 @@ class SolarWindConfig:
             raise ValueError("SolarWindConfig.include_Re must be boolean.")
         if not isinstance(self.ephem, str) or not self.ephem:
             raise ValueError("SolarWindConfig.ephem must be a non-empty string.")
+
+        if not isinstance(self.use_f107, (bool, np.bool_)):
+            raise ValueError("SolarWindConfig.use_f107 must be boolean.")
+        if not isinstance(self.f107_use_adjusted, (bool, np.bool_)):
+            raise ValueError("SolarWindConfig.f107_use_adjusted must be boolean.")
+
+        if self.use_f107:
+            if self.f107_file is None or not isinstance(self.f107_file, str) or not self.f107_file.strip():
+                raise ValueError("SolarWindConfig.f107_file must be a non-empty string when use_f107=True.")
+            if not isinstance(self.f107_smooth_days, (int, np.integer)) or int(self.f107_smooth_days) < 1:
+                raise ValueError("SolarWindConfig.f107_smooth_days must be a positive integer.")
+            if int(self.f107_smooth_days) % 2 == 0:
+                raise ValueError("SolarWindConfig.f107_smooth_days must be odd for centered running median.")
+
+            if self.proxy_form not in ("multiplicative", "additive"):
+                raise ValueError("SolarWindConfig.proxy_form must be 'multiplicative' or 'additive'.")
+
+            if not isinstance(self.beta_enhancement_A, (int, float, np.floating)):
+                raise ValueError("SolarWindConfig.beta_enhancement_A must be numeric.")
+            if float(self.beta_enhancement_A) < 0:
+                raise ValueError("SolarWindConfig.beta_enhancement_A must be non-negative.")
+            if not isinstance(self.beta_enhancement_sigma_deg, (int, float, np.floating)) or float(self.beta_enhancement_sigma_deg) <= 0:
+                raise ValueError("SolarWindConfig.beta_enhancement_sigma_deg must be positive.")
+
+            if self.proxy_form == "multiplicative":
+                if self.solar_cycle_k is not None and not isinstance(self.solar_cycle_k, (int, float, np.floating)):
+                    raise ValueError("SolarWindConfig.solar_cycle_k must be numeric or None.")
+                if self.solar_cycle_k is None:
+                    if not isinstance(self.solar_cycle_beta1, (int, float, np.floating)):
+                        raise ValueError("SolarWindConfig.solar_cycle_beta1 must be numeric.")
+            else:
+                if not isinstance(self.solar_cycle_beta1, (int, float, np.floating)):
+                    raise ValueError("SolarWindConfig.solar_cycle_beta1 must be numeric for additive proxy form.")
 
 @dataclass(frozen=True)
 class BBXConfig:
@@ -1882,6 +1935,300 @@ class SolarWindProxy:
         return dm_sw
 
     # -------------------------------------------------------------------------
+    # SW DM proxy Expansion (incl. by-pulsar beta dep & solar cycle modulation)
+    # -------------------------------------------------------------------------
+
+    # -------------------------
+    # F10.7 flux data computation
+    # -------------------------
+    
+    def _compute_beta_effective_ne1au(
+        self,
+        beta_deg: float,
+        *,
+        ne0: float = 7.9,
+        A: float = 0.5,
+        beta0_deg: float = 12.0,
+    ) -> float:
+        """
+        By-pulsar geometric baseline ne at 1 AU.
+    
+        Parameters
+        ----------
+        beta_deg : float
+            Pulsar ecliptic latitude in degrees.
+        ne0 : float
+            Reference electron density at 1 AU [cm^-3].
+        A : float
+            Peak enhancement at the ecliptic plane.
+        beta0_deg : float
+            Angular width of the ecliptic enhancement.
+    
+        Returns
+        -------
+        float
+            Effective baseline ne1au for this pulsar [cm^-3].
+        """
+        return float(ne0 * (1.0 + A * np.exp(-(abs(beta_deg) / beta0_deg)**2)))
+    
+    def _compute_effective_ne1au_series(
+        self,
+        beta_deg: float,
+        driver_info: dict,
+        *,
+        ne0: float = 7.9,
+        A: float = 0.5,
+        beta0_deg: float = 12.0,
+        k: float = 0.25,
+        clip_min: float = 0.0,  # [cm^-3]
+        clip_max: float = 25.0,
+    ) -> dict:
+        """
+        Combine geometric ne baseline and multiplicative normalized-driver
+        modulation into ne_eff(t, beta).
+    
+        Returns
+        -------
+        dict
+            {
+              "beta_deg",
+              "ne_beta",
+              "driver_norm",
+              "ne_eff",
+            }
+        """
+        ne_beta = self._compute_beta_effective_ne1au(
+            beta_deg,
+            ne0=ne0,
+            A=A,
+            beta0_deg=beta0_deg,
+        )
+    
+        driver_norm = np.asarray(driver_info["driver_norm"], dtype=float)
+        ne_eff = ne_beta * (1.0 + k * driver_norm)
+        ne_eff = np.clip(ne_eff, clip_min, clip_max) # clip to physically sensible values
+    
+        return {
+            "beta_deg": float(beta_deg),
+            "ne_beta": float(ne_beta),
+            "driver_norm": driver_norm,
+            "ne_eff": ne_eff,
+        }
+    
+    def _compute_effective_ne1au_series_additive(
+        self,
+        beta_deg: float,
+        driver_info: dict,
+        *,
+        ne0: float = 7.9,
+        A: float = 0.5,
+        beta0_deg: float = 12.0,
+        beta1: float = 1.0,   # [cm^-3] per unit normalized driver
+        clip_min: float = 0.0,
+        clip_max: float = 25.0,
+        driver_key: str = "driver_norm",
+    ) -> dict:
+        """
+        Combine geometric ne baseline and an additive normalized-driver term:
+    
+            n_e,eff(t,beta) = n_e,beta + beta1 * driver_norm(t)
+    
+        Parameters
+        ----------
+        beta_deg : float
+            Pulsar ecliptic latitude in degrees.
+        driver_info : dict
+            Dictionary containing a normalized driver series.
+        ne0 : float
+            Reference electron density at 1 AU [cm^-3].
+        A : float
+            Peak ecliptic enhancement amplitude.
+        beta0_deg : float
+            Angular width of the ecliptic enhancement.
+        beta1 : float
+            Additive slope in [cm^-3] per unit normalized driver.
+        clip_min, clip_max : float
+            Bounds on the resulting effective density.
+        driver_key : str
+            Key in `driver_info` for the normalized driver array.
+    
+        Returns
+        -------
+        dict
+            {
+              "beta_deg",
+              "ne_beta",
+              "beta1",
+              "driver_norm",
+              "ne_eff",
+            }
+        """
+        ne_beta = self._compute_beta_effective_ne1au(
+            beta_deg,
+            ne0=ne0,
+            A=A,
+            beta0_deg=beta0_deg,
+        )
+    
+        driver_norm = np.asarray(driver_info[driver_key], dtype=float)
+    
+        ne_eff = ne_beta + beta1 * driver_norm
+        ne_eff = np.clip(ne_eff, clip_min, clip_max)
+    
+        return {
+            "beta_deg": float(beta_deg),
+            "ne_beta": float(ne_beta),
+            "beta1": float(beta1),
+            "driver_norm": driver_norm,
+            "ne_eff": ne_eff,
+        }
+
+    # -------------------------
+    # L1 proton density data computation
+    # -------------------------
+
+    # FUTURE: not currently implemented but saved here for later
+
+    def _compute_l1_electron_density(
+        self,
+        df: pd.DataFrame,
+        *,
+        proton_col: str = "proton_density",
+        alpha_ratio_col: str = "alpha_proton_ratio",
+        out_col: str = "electron_density",
+    ) -> pd.DataFrame:
+        """
+        Compute L1 electron density from proton density and alpha/proton ratio:
+    
+            n_e = n_p * [1 + 2(alpha/proton)]
+    
+        Returns a copy with an added electron_density column.
+        """
+        out = df.copy()
+        np_ = np.asarray(out[proton_col], dtype=float)
+        ar = np.asarray(out[alpha_ratio_col], dtype=float)
+    
+        # If alpha ratio missing, fall back to quasi-neutral n_e ~ n_p
+        ar_filled = np.where(np.isfinite(ar), ar, 0.0)
+    
+        out[out_col] = np_ * (1.0 + 2.0 * ar_filled)
+        return out
+    
+    def _prepare_l1_density_series(
+        self,
+        l1_daily: pd.DataFrame,
+        mjd_target: np.ndarray,
+        *,
+        value_col: str = "electron_density",
+        smooth_days: int = 81,
+    ) -> dict:
+        """
+        Smooth daily L1 electron density data and interpolate onto target MJDs.
+    
+        Constructs a normalized L1 density index:
+        
+            I_L1(t) = [n_e,L1,smooth(t) - center] / scale
+    
+        where `center` is the median and `scale` is a robust scale
+        (MAD-based, with std fallback).
+    
+        Parameters
+        ----------
+        l1_daily : pd.DataFrame
+            Must contain columns ['mjd', value_col].
+        mjd_target : np.ndarray
+            MJDs to interpolate the smoothed L1 series onto.
+        value_col : str
+            Name of the L1 electron density column to use.
+        smooth_days : int
+            Running-median window in days. Must be odd.
+    
+        Returns
+        -------
+        dict
+            {
+              "mjd_daily",
+              "ne_daily",
+              "ne_smooth",
+              "ne_interp",
+              "I_L1",
+              "center",
+              "scale",
+            }
+        """
+        prep = prepare_driver_series(
+            l1_daily,
+            mjd_target,
+            value_col=value_col,
+            smooth_days=smooth_days,
+            normalize=False,
+        )
+    
+        ne_interp = np.asarray(prep["value_interp"], dtype=float)
+    
+        center = np.nanmedian(ne_interp)
+        mad = np.nanmedian(np.abs(ne_interp - center))
+        scale = 1.4826 * mad if mad > 0 else np.nanstd(ne_interp)
+    
+        if not np.isfinite(scale) or scale == 0:
+            scale = 1.0
+    
+        I_L1 = (ne_interp - center) / scale
+    
+        return {
+            "mjd_daily": prep["mjd_daily"],
+            "ne_daily": prep["value_daily"],
+            "ne_smooth": prep["value_smooth"],
+            "ne_interp": ne_interp,
+            "I_L1": I_L1,
+            "center": float(center),
+            "scale": float(scale),
+        }
+    
+    def _compute_effective_ne1au_series_l1(
+        self,
+        beta_deg: float,
+        l1_info: dict,
+        *,
+        ne0: float = 7.9,
+        A: float = 0.5,
+        beta0_deg: float = 12.0,
+        k_l1: float = 0.25,
+        clip_min: float = 0.0,
+        clip_max: float = 25.0,
+    ) -> dict:
+        """
+        Combine geometric ne baseline and L1 modulation into ne_eff(t, beta).
+    
+        Returns
+        -------
+        dict
+            {
+              "beta_deg",
+              "ne_beta",
+              "I_L1",
+              "ne_eff",
+            }
+        """
+        ne_beta = self._compute_beta_effective_ne1au(
+            beta_deg,
+            ne0=ne0,
+            A=A,
+            beta0_deg=beta0_deg,
+        )
+    
+        I_L1 = np.asarray(l1_info["I_L1"], dtype=float)
+        ne_eff = ne_beta * (1.0 + k_l1 * I_L1)
+        ne_eff = np.clip(ne_eff, clip_min, clip_max)
+    
+        return {
+            "beta_deg": float(beta_deg),
+            "ne_beta": float(ne_beta),
+            "I_L1": I_L1,
+            "ne_eff": ne_eff,
+        }
+
+    # -------------------------------------------------------------------------
     # Convert DM series to dispersive delay using PINT convention
     # -------------------------------------------------------------------------
 
@@ -2219,17 +2566,98 @@ class SolarWindProxy:
         mjd = toas.get_mjds().value
         pulsar_icrs = model.get_psr_coords()
 
-        # Create SW DM proxy (Sun-Earth-pulsar integral)
+        # Geometric LOS contribution (Sun-Earth-pulsar integral): unit-normalized SW kernel - G(\theta)
         geom = self.solar_wind_dm_proxy(
             mjd,
             pulsar_icrs,
-            ne1au=float(sw_cfg.ne1au),
+            ne1au=1.0,
             ephem=str(sw_cfg.ephem),
             min_theta_deg=float(sw_cfg.min_theta_deg),
             include_Re=bool(sw_cfg.include_Re),
             return_geometry=True,
         )
-        dm_sw = np.asarray(geom["dm_sw"], float)
+
+        geom_kernel = np.asarray(geom["dm_sw"], float)
+
+        # Baseline constant-density proxy - NE_SW=const * G(\theta)
+        dm_sw_const = float(sw_cfg.ne1au) * geom_kernel
+
+        # Initialize
+        f107 = None
+        f107_info = None
+        ne_info = None
+        beta_deg = None
+        
+        # Apply solar cycle modulation with f10.7 cm flux data
+        if sw_cfg.use_f107:
+            # Read in F10.7 cm flux data, and combine to daily values
+            f107_all = read_f107_flux_file(
+                sw_cfg.f107_file,
+                use_adjusted=bool(sw_cfg.f107_use_adjusted),
+            )
+
+            # Select f10.7 data within pulsar MJD span
+            f107_pulsar_span = select_timespan(
+                f107_all, 
+                mjd.min(), 
+                mjd.max()
+            )
+            if len(f107_pulsar_span) == 0:
+                raise ValueError(
+                    f"No F10.7 data found over TOA span for pulsar {pulsar_name or 'PSR'}."
+                )
+
+            # Combine multiple daily readings
+            f107 = daily_average_timeseries(
+                f107_pulsar_span, 
+                value_cols=["flux"]
+            )
+            if len(f107) == 0:
+                raise ValueError(
+                    f"Daily-averaged F10.7 data is empty for pulsar {pulsar_name or 'PSR'}."
+                )
+
+            # Pulsar's barycentered elat - beta
+            pulsar_ecl = pulsar_icrs.barycentrictrueecliptic
+            beta_deg = float(pulsar_ecl.lat.to_value(u.deg))
+
+            f107_info = prepare_driver_series(
+                f107,
+                mjd,
+                smooth_days=int(sw_cfg.f107_smooth_days),
+                value_col="flux",
+            )
+
+            if sw_cfg.proxy_form == "additive":
+                # 
+                ne_info = self._compute_effective_ne1au_series_additive(
+                    beta_deg,
+                    f107_info,
+                    ne0=float(sw_cfg.ne1au),
+                    A=float(sw_cfg.beta_enhancement_A),
+                    beta0_deg=float(sw_cfg.beta_enhancement_sigma_deg),
+                    beta1=float(sw_cfg.solar_cycle_beta1),
+                )
+            else:
+                #
+                k_eff = (
+                    float(sw_cfg.solar_cycle_k)
+                    if sw_cfg.solar_cycle_k is not None
+                    else float(sw_cfg.solar_cycle_beta1) / float(sw_cfg.ne1au)
+                )
+                ne_info = self._compute_effective_ne1au_series(
+                    beta_deg,
+                    f107_info,
+                    ne0=float(sw_cfg.ne1au),
+                    A=float(sw_cfg.beta_enhancement_A),
+                    beta0_deg=float(sw_cfg.beta_enhancement_sigma_deg),
+                    k=k_eff,
+                )
+                
+            # n_e(t, \beta) x G(\theta)
+            dm_sw = ne_info["ne_eff"] * geom_kernel
+        else:
+            dm_sw = dm_sw_const
     
         # timing error -> DM error
         K_sec = 4.148808e3  # s * MHz^2 / (pc cm^-3)
@@ -2250,6 +2678,8 @@ class SolarWindProxy:
             meta=dict(
                 pulsar_name=psr,
                 signal_source="swx",
+                proxy_form=str(sw_cfg.proxy_form),
+                use_f107=bool(sw_cfg.use_f107),
                 ne1au=float(sw_cfg.ne1au),
                 ephem=str(sw_cfg.ephem),
                 min_theta_deg=float(sw_cfg.min_theta_deg),
@@ -2270,6 +2700,12 @@ class SolarWindProxy:
                 theta_rad=geom.get("theta_rad", None),
                 R_earth_AU=geom.get("R_earth_AU", None),
                 geom_factor=geom.get("geom_factor", None),
+                dm_sw_const=dm_sw_const,
+                geom_kernel=geom_kernel,
+                f107_daily_avg=f107,
+                f107_info=f107_info,
+                ne_info=ne_info,
+                beta_deg=beta_deg,
             ),
             meta=dict(title="Solar wind proxy series", pulsar_name=psr),
         )
@@ -2280,6 +2716,12 @@ class SolarWindProxy:
             f_MHz=f_MHz,
             sig_t_s=sig_t_s,
             sw_cfg=sw_cfg,
+            dm_sw_const=dm_sw_const,
+            geom_kernel=geom_kernel,
+            f107=f107,
+            f107_info=f107_info,
+            ne_info=ne_info,
+            beta_deg=beta_deg,
         )
     
         return ProxyBuildResult(series=series, extras=extras, diag=diag)

@@ -10,6 +10,7 @@ from collections import Counter
 from typing import Any, Callable, Iterable, Mapping, Optional, Union, Sequence, Tuple, List
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_pdf import PdfPages
@@ -495,3 +496,296 @@ def format_gap_summary(
         lines.append("{:<5} {:>12.1f} {:>12.1f} {:>14.1f} {:>10}".format(i + 1, start, stop, span, n_toas))
 
     return "\n".join(lines)
+
+# =============================================================================
+# SW DM Proxy utilities
+# =============================================================================
+
+# -------------------------------------------------------------------------
+# File readers for F10.7/L1 
+# -------------------------------------------------------------------------
+
+# F10.7 file ingestion
+def read_f107_flux_file(
+    path: str, 
+    use_adjusted: bool = True
+) -> pd.DataFrame:
+    """
+    Read NOAA F10.7 flux file and return a cleaned dataframe.
+
+    Parameters
+    ----------
+    path : str
+        Path to the F10.7 flux text file. 
+        See https://www.spaceweather.gc.ca/forecast-prevision/solar-solaire/solarflux/sx-3-en.php
+        
+        Important columns:
+         - fluxobsflux: obs flux at telescope modulated w/solar activity & dsun-earth 
+         - fluxadjflux: annual dsun-earth modulation removed; flux from mean distance @1AU 
+         - fluxursi:    adjusted flux multiplied by 0.9, a historical calibration scaling
+    use_adjusted : bool, default True
+        If True, use fluxadjflux (default). Otherwise use fluxobsflux.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns:
+          - datetime_utc
+          - mjd
+          - flux
+          - fluxobsflux
+          - fluxadjflux
+          - fluxursi
+    """
+    # Read fixed-width/whitespace-aligned table
+    df = pd.read_fwf(path, skiprows=0)
+
+    # Drop the dashed separator row
+    if "fluxdate" in df.columns:
+        df = df[df["fluxdate"].astype(str).str.contains(r"\d", regex=True)].copy()
+
+    # Clean columns to strings first
+    for col in ["fluxdate", "fluxtime", "fluxobsflux", "fluxadjflux", "fluxursi"]:
+        df[col] = df[col].astype(str).str.strip()
+
+    # Convert flux columns to a number
+    for col in ["fluxobsflux", "fluxadjflux", "fluxursi"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Parse date + time columns
+    # Example: fluxdate='20041028', fluxtime='170000'
+    dt_str = df["fluxdate"] + df["fluxtime"].str.zfill(6)
+    dt = pd.to_datetime(dt_str, format="%Y%m%d%H%M%S", utc=True)
+
+    # Convert to MJD
+    dt_naive = dt.dt.tz_localize(None) # Remove timezone wrapper for astropy compatibility
+    t = Time(dt_naive.to_numpy(dtype="datetime64[ns]"), format="datetime64", scale="utc")
+    df["datetime_utc"] = dt
+    df["mjd"] = t.mjd
+
+    # Choose the flux column to work with
+    flux_col = "fluxadjflux" if use_adjusted else "fluxobsflux"
+    df["flux"] = df[flux_col]
+
+    # Keep useful columns only
+    df = df[[
+        "datetime_utc",
+        "mjd",
+        "flux",
+        "fluxobsflux",
+        "fluxadjflux",
+        "fluxursi",
+    ]].reset_index(drop=True)
+
+    return df
+
+# L1 file ingestion
+def read_omni2_l1_file(
+    path: str,
+    *,
+    proton_density_col: int,
+    alpha_ratio_col: int,
+    year_col: int = 0,
+    doy_col: int = 1,
+    hour_col: int = 2,
+) -> pd.DataFrame:
+    """
+    Read OMNI2 hourly data from a local whitespace-delimited file.
+
+    Parameters
+    ----------
+    path : str
+        Local path to omni2_all_years.dat
+    proton_density_col : int
+        Column index for proton density n_p [cm^-3]
+    alpha_ratio_col : int
+        Column index for alpha/proton density ratio n_alpha/n_p
+    year_col, doy_col, hour_col : int
+        Column indices for time fields
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns:
+          - datetime_utc
+          - mjd
+          - proton_density
+          - alpha_proton_ratio
+    """
+    df = pd.read_csv(
+        path,
+        sep=r"\s+",
+        header=None,
+        comment="#",
+        engine="python",
+    )
+
+    out = pd.DataFrame({
+        "year": pd.to_numeric(df.iloc[:, year_col], errors="coerce"),
+        "doy": pd.to_numeric(df.iloc[:, doy_col], errors="coerce"),
+        "hour": pd.to_numeric(df.iloc[:, hour_col], errors="coerce"),
+        "proton_density": pd.to_numeric(df.iloc[:, proton_density_col], errors="coerce"),
+        "alpha_proton_ratio": pd.to_numeric(df.iloc[:, alpha_ratio_col], errors="coerce"),
+    })
+
+    # OMNI fill handling: keep only finite, non-fill physical values
+    out.loc[out["proton_density"] >= 999, "proton_density"] = np.nan
+    out.loc[out["alpha_proton_ratio"] >= 9.999, "alpha_proton_ratio"] = np.nan
+
+    # Build UTC datetime from year + day-of-year + hour
+    base = pd.to_datetime(out["year"].astype("Int64").astype(str), format="%Y", errors="coerce", utc=True)
+    dt = base + pd.to_timedelta(out["doy"] - 1, unit="D") + pd.to_timedelta(out["hour"], unit="h")
+
+    dt_naive = dt.dt.tz_localize(None)
+    t = Time(dt_naive.to_numpy(dtype="datetime64[ns]"), format="datetime64", scale="utc")
+
+    out["datetime_utc"] = dt
+    out["mjd"] = t.mjd
+
+    return out[["datetime_utc", "mjd", "proton_density", "alpha_proton_ratio"]]
+
+# -------------------------------------------------------------------------
+# Generic SW DM Proxy expansion helpers
+# -------------------------------------------------------------------------
+
+def select_timespan(
+    df: pd.DataFrame,
+    mjd_min: float,
+    mjd_max: float,
+    mjd_col: str = "mjd",
+) -> pd.DataFrame:
+    """
+    Select rows within a target MJD span.
+    """
+    mask = (df[mjd_col] >= mjd_min) & (df[mjd_col] <= mjd_max)
+    return df.loc[mask].reset_index(drop=True)
+
+def daily_average_timeseries(
+    df: pd.DataFrame,
+    *,
+    datetime_col: str = "datetime_utc",
+    value_cols: list[str],
+) -> pd.DataFrame:
+    """
+    Average one or more value columns to daily cadence.
+    """
+    out = (
+        df.assign(date=df[datetime_col].dt.floor("D"))
+          .groupby("date", as_index=False)[value_cols]
+          .mean()
+    )
+    dt_naive = out["date"].dt.tz_localize(None)
+    t = Time(dt_naive.to_numpy(dtype="datetime64[ns]"), format="datetime64", scale="utc")
+    out["mjd"] = t.mjd
+    return out[["date", "mjd"] + value_cols]
+
+def prepare_driver_series(
+    driver_daily: pd.DataFrame,
+    mjd_target: np.ndarray,
+    *,
+    value_col: str,
+    smooth_days: int = 391,
+    normalize: bool = True,
+) -> dict:
+    """
+    Smooth a daily driver series and interpolate it onto target MJDs.
+
+    Returns
+    -------
+    dict
+        {
+          "mjd_daily",
+          "value_daily",
+          "value_smooth",
+          "value_interp",
+          "driver_norm",
+          "center",
+          "scale",
+        }
+    """
+    mjd_daily = np.asarray(driver_daily["mjd"], dtype=float)
+    value_daily = np.asarray(driver_daily[value_col], dtype=float)
+    mjd_target = np.asarray(mjd_target, dtype=float)
+
+    # Sanity checks
+    if len(mjd_daily) == 0:
+        raise ValueError("driver_daily is empty.")
+
+    if len(mjd_target) == 0:
+        raise ValueError("mjd_target is empty.")
+
+    if smooth_days % 2 == 0:
+        raise ValueError("`smooth_days` must be odd for centered running median.")
+
+    value_smooth = running_median_1d(value_daily, smooth_days)
+
+    value_interp = np.interp(
+        mjd_target,
+        mjd_daily,
+        value_smooth,
+        left=value_smooth[0],
+        right=value_smooth[-1],
+    )
+
+    if normalize:
+        center = np.nanmedian(value_interp)
+        mad = np.nanmedian(np.abs(value_interp - center))
+        scale = 1.4826 * mad if mad > 0 else np.nanstd(value_interp)
+        if not np.isfinite(scale) or scale == 0:
+            scale = 1.0
+        driver_norm = (value_interp - center) / scale
+    else:
+        center = np.nanmedian(value_interp)
+        scale = 1.0
+        driver_norm = value_interp
+
+    return {
+        "mjd_daily": mjd_daily,
+        "value_daily": value_daily,
+        "value_smooth": value_smooth,
+        "value_interp": value_interp,
+        "driver_norm": driver_norm,
+        "center": float(center),
+        "scale": float(scale),
+    }
+
+def running_median_1d(
+    x: np.ndarray, 
+    window: int
+) -> np.ndarray:
+    """
+    Centered `window`-running median for 1D arrays
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Input 1D array.
+    window : int
+        Window size in samples. Should be odd to be centered.
+
+    Returns
+    -------
+    np.ndarray
+        Smoothed array of same length as x.
+    """
+    x = np.asarray(x, dtype=float)
+    if x.ndim != 1:
+        raise ValueError("x must be 1D.")
+    if window < 1:
+        raise ValueError("window must be >= 1.")
+    if window == 1:
+        print("No median taken. This is your data array.")
+        return x.copy()
+    if window % 2 == 0:
+        raise ValueError("Window must be odd for a centered running median.")
+
+    n = len(x)
+    half = window // 2
+    out = np.empty(n, dtype=float)
+
+    for i in range(n):
+        lo = max(0, i - half)
+        hi = min(n, i + half + 1)
+        out[i] = np.nanmedian(x[lo:hi])
+
+    return out

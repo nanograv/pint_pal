@@ -208,7 +208,6 @@ def plot_data_gaps_diagnostics(
 
     return fig
 
-
 def plot_swx_bb_diagnostics(
     segmentation_dict: Mapping[str, Any],
     *,
@@ -348,6 +347,232 @@ def plot_swx_bb_diagnostics(
         fig.suptitle(f"{pulsar_name} — {title}", fontsize=14, y=0.95)
     fig.tight_layout(rect=[0, 0.05, 1, 0.97]) # leave space for legend + title
 
+    return fig
+
+# Diagnostics for expanded SW DM Proxy - compare with old
+def plot_sw_driver_proxy_comparison(
+    *,
+    pulsar_name: str,
+    driver_mjd: np.ndarray,
+    driver_raw: np.ndarray,
+    driver_smooth: np.ndarray,
+    driver_name: str,
+    driver_ylabel: str,
+    mjd_proxy: np.ndarray,
+    dm_sw_old: np.ndarray,
+    dm_sw_new: np.ndarray,
+    old_label: str = r"Old proxy: constant $n_{e,1AU}$",
+    new_label: str = r"New proxy: $n_{e,eff}(t,\beta)$",
+    title: str = "Old vs updated SW proxy",
+    smooth_label: str | None = None,
+    #save: bool = False,
+    #fig_dir: str = ".",
+    #file_tag: str = "driver_proxy_comparison",
+    style: Optional["PlotStyleConfig"] = None,
+):
+    """
+    Plot:
+      1. raw + smoothed external driver
+      2. old vs updated SW proxy
+
+    Parameters
+    ----------
+    driver_mjd : np.ndarray
+        MJD grid of the daily driver series.
+    driver_raw : np.ndarray
+        Raw daily driver values.
+    driver_smooth : np.ndarray
+        Smoothed daily driver values.
+    driver_name : str
+        Name of the driver, e.g. "F10.7" or "L1 electron density".
+    driver_ylabel : str
+        Y-axis label for the driver panel.
+    mjd_proxy : np.ndarray
+        MJD grid of the proxy series.
+    dm_sw_old : np.ndarray
+        Original SW proxy.
+    dm_sw_new : np.ndarray
+        Updated SW proxy.
+    smooth_label : str or None
+        Label for the smoothed driver. If None, uses "{driver_name} smoothed".
+    """
+    driver_mjd = np.asarray(driver_mjd, dtype=float)
+    driver_raw = np.asarray(driver_raw, dtype=float)
+    driver_smooth = np.asarray(driver_smooth, dtype=float)
+    mjd_proxy = np.asarray(mjd_proxy, dtype=float)
+    dm_sw_old = np.asarray(dm_sw_old, dtype=float)
+    dm_sw_new = np.asarray(dm_sw_new, dtype=float)
+
+    if smooth_label is None:
+        smooth_label = f"{driver_name} smoothed"
+
+    fig, axes = plt.subplots(
+        2, 1,
+        figsize=(10, 8),
+        sharex=False
+    )
+
+    # apply style if given
+    _apply_style(fig, style)
+
+    # Top: raw + smoothed driver
+    ax = axes[0]
+    ax.plot(driver_mjd, driver_raw, ".", ms=2, alpha=0.5, label=f"Daily {driver_name}")
+    ax.plot(driver_mjd, driver_smooth, "-", lw=1.5, label=smooth_label)
+    ax.set_xlabel("MJD")
+    ax.set_ylabel(driver_ylabel)
+    ax.set_title(f"{pulsar_name}: {driver_name} over pulsar span")
+    ax.legend(loc="best")
+    ax.grid(True, alpha=0.3)
+
+    # Bottom: old vs updated proxy
+    ax = axes[1]
+    ax.plot(mjd_proxy, dm_sw_old, ".", ms=2, alpha=0.5, label=old_label)
+    ax.plot(mjd_proxy, dm_sw_new, ".", ms=2, alpha=0.7, label=new_label)
+    ax.set_xlabel("MJD")
+    ax.set_ylabel(r"DM$_{SW}$ [pc cm$^{-3}$]")
+    ax.set_title(f"{pulsar_name}: {title}")
+    ax.legend(loc="best")
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+
+    #if save:
+    #    os.makedirs(fig_dir, exist_ok=True)
+    #    fig_path_png = os.path.join(fig_dir, f"{pulsar_name}_{file_tag}.png")
+    #    fig_path_pdf = os.path.join(fig_dir, f"{pulsar_name}_{file_tag}.pdf")
+    #    fig.savefig(fig_path_png, dpi=300, bbox_inches="tight")
+    #    fig.savefig(fig_path_pdf, dpi=300, bbox_inches="tight")
+    #    print(f"Saved figure to:\n  {fig_path_png}\n  {fig_path_pdf}")
+
+    plt.show()
+    return fig
+
+def plot_sw_proxy_segmentation_comparison(
+    *,
+    pulsar_name: str,
+    mjd_old: np.ndarray,
+    dm_old: np.ndarray,
+    edges_old: np.ndarray,
+    gaps_old: list,
+    mjd_new: np.ndarray,
+    dm_new: np.ndarray,
+    edges_new: np.ndarray,
+    gaps_new: list,
+    old_label: str = "Old proxy",
+    new_label: str = "Updated proxy",
+    old_title: str = "Old proxy + old BB segmentation",
+    new_title: str = "Updated proxy + updated BB segmentation",
+    title: str = "SW proxy segmentation comparison",
+    #save: bool = False,
+    #fig_dir: str = ".",
+    #file_tag: str = "SW_proxy_segmentation_comparison",
+    edge_tol_days: float = 1.0,
+    show_old_edges: bool = True,
+    style: Optional["PlotStyleConfig"] = None,
+):
+    """
+    Compare old vs updated SW proxy segmentations.
+
+    Top panel:
+        Old proxy + old BB segmentation
+    Middle panel:
+        Updated proxy + updated BB segmentation
+    Bottom panel:
+        Edge-location comparison, highlighting new/changed edges.
+    """
+    edges_old = np.asarray(edges_old, dtype=float)
+    edges_new = np.asarray(edges_new, dtype=float)
+
+    # Identify updated edges not matched by old edges within tolerance
+    changed_mask = np.ones_like(edges_new, dtype=bool)
+    for i, e_new in enumerate(edges_new):
+        if np.any(np.abs(edges_old - e_new) <= edge_tol_days):
+            changed_mask[i] = False
+    changed_edges = edges_new[changed_mask]
+
+    fig, axes = plt.subplots(
+        3, 1,
+        figsize=(12, 10),
+        sharex=True,
+        gridspec_kw={"height_ratios": [2.0, 2.0, 1.2]}
+    )
+
+    # apply style if given
+    _apply_style(fig, style)
+
+    # Top
+    ax = axes[0]
+    plot_bb_spans(mjd_old, dm_old, edges_old, ax=ax)
+    ax.plot(mjd_old, dm_old, ".", ms=2.5, alpha=0.7, label=old_label)
+    for g0, g1 in gaps_old:
+        ax.axvspan(g0, g1, color="red", alpha=0.12)
+    ax.set_ylabel(r"DM$_{SW}$ [pc cm$^{-3}$]")
+    ax.set_title(old_title)
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+
+    # Middle
+    ax = axes[1]
+    plot_bb_spans(mjd_new, dm_new, edges_new, ax=ax)
+    ax.plot(mjd_new, dm_new, ".", ms=2.5, alpha=0.7, label=new_label)
+    for g0, g1 in gaps_new:
+        ax.axvspan(g0, g1, color="red", alpha=0.12)
+    ax.set_ylabel(r"DM$_{SW}$ [pc cm$^{-3}$]")
+    ax.set_title(new_title)
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+
+    # Bottom
+    ax = axes[2]
+
+    if show_old_edges:
+        y_old = np.full_like(edges_old, 1.0, dtype=float)
+        ax.plot(
+            edges_old, y_old, "|",
+            ms=14, mew=1.5,
+            label=f"Old edges (N={len(edges_old)-1})"
+        )
+
+    y_new = np.full_like(edges_new, 0.0, dtype=float)
+    ax.plot(
+        edges_new, y_new, "|",
+        ms=14, mew=1.5,
+        label=f"Updated edges (N={len(edges_new)-1})"
+    )
+
+    if changed_edges.size > 0:
+        y_changed = np.full_like(changed_edges, 0.5, dtype=float)
+        ax.plot(
+            changed_edges, y_changed, "|",
+            ms=18, mew=2.0, color="crimson",
+            label=f"New/changed updated edges (N={len(changed_edges)})"
+        )
+
+    if show_old_edges:
+        ax.set_yticks([0.0, 0.5, 1.0])
+        ax.set_yticklabels(["Updated", "Changed", "Old"])
+    else:
+        ax.set_yticks([0.0, 0.5])
+        ax.set_yticklabels(["Updated", "Changed"])
+
+    ax.set_xlabel("MJD")
+    ax.set_title(f"BB edge locations (match tol = {edge_tol_days:.1f} d)")
+    ax.grid(True, axis="x", alpha=0.3)
+    ax.legend(loc="best")
+
+    fig.suptitle(f"{pulsar_name} — {title}", fontsize=14)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+
+    #if save:
+    #    os.makedirs(fig_dir, exist_ok=True)
+    #    fig_path_png = os.path.join(fig_dir, f"{pulsar_name}_{file_tag}.png")
+    #    fig_path_pdf = os.path.join(fig_dir, f"{pulsar_name}_{file_tag}.pdf")
+    #    fig.savefig(fig_path_png, dpi=300, bbox_inches="tight")
+    #    fig.savefig(fig_path_pdf, dpi=300, bbox_inches="tight")
+    #    print(f"Saved figure to:\n  {fig_path_png}\n  {fig_path_pdf}")
+
+    plt.show()
     return fig
 
 def extract_swx_params(model: pint.models.timing_model.TimingModel) -> Dict[str, Any]:
@@ -1506,7 +1731,7 @@ def plot_proxy_segmentation_overlay(
             f"Residuals: center={r_c:.3g}, scale={r_s:.3g}. "
             f"Proxy: center={p_c:.3g}, scale={p_s:.3g}."
         )
-        fig.text(0.5, -0.02, footer, ha="center", va="top", fontsize=8, wrap=True)
+        fig.text(0.5, -0.01, footer, ha="center", va="top", fontsize=8, wrap=True)
 
     fig.tight_layout()
     return fig
