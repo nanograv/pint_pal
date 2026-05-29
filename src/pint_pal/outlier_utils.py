@@ -13,6 +13,9 @@ from pint_pal.utils import apply_cut_flag, apply_cut_select
 from pint_pal.lite_utils import write_tim
 from pint_pal.dmx_utils import *
 
+#######################################
+#### Discovery outliers functions ####
+#######################################
 
 def make_outlier_likelihood_discovery(psr, noise_dict=None, tspan=None, model_kwargs=None):
     """
@@ -74,6 +77,175 @@ def make_outlier_likelihood_discovery(psr, noise_dict=None, tspan=None, model_kw
     return make_single_pulsar_noise_likelihood_discovery(
         psr, noise_dict=noise_dict, tspan=tspan, model_kwargs=mk
     )
+
+
+def run_outlier_analysis_nuts(
+    mo,
+    to,
+    outdir,
+    *,
+    model_kwargs=None,
+    sampler_kwargs=None,
+    seed=42,
+    resume=False,
+    return_sampler_without_sampling=False,
+):
+    """Run the Wang & Taylor (2022) HMC-Gibbs outlier analysis for a single pulsar.
+
+    1. Builds the outlier-configured ``PulsarLikelihood`` via
+       :func:`make_outlier_likelihood_discovery` (enforces ``outliers=True``,
+       ``gp_ecorr=True``, ``variable=True``, ``tm_marg=False``).
+    2. Merges the standard pint_pal prior dict with the discovery outlier
+       priors (``nu``, ``theta_m``).
+    3. Builds the numpyro model + Gibbs function from
+       ``discovery.models.nanograv_single_pulsar_outlier``.
+    4. Wraps them in a ``numpyro.infer.HMCGibbs`` kernel and runs with
+       checkpoints via :func:`~pint_pal.discovery_utils.run_nuts_with_checkpoints`.
+
+    The saved feather file contains one column per named numpyro site
+    (``efacs``, ``equads``, ``ecorrs``, ``nu``, any RN hyper names,
+    ``theta``, ``z_i``, ``alpha_i``, ``q``, ``coeffs``, ``loglike``).
+    Vector sites are expanded to ``<name>_0``, ``<name>_1``, … columns.
+
+    Parameters
+    ----------
+    mo : `pint.model.TimingModel` object
+    to : `pint.toa.TOAs` object
+    outdir : str
+        Directory to write checkpoint / feather output files.
+    model_kwargs : dict, optional
+        Model configuration (same schema as ``model_noise``).  The outlier
+        requirements (``tm_marg``, ``gp_ecorr``, ``variable``, ``outliers``)
+        are enforced on top of whatever is passed.
+    sampler_kwargs : dict, optional
+        Sampler configuration.  Recognised keys (with defaults):
+
+        - ``num_warmup`` (500)
+        - ``num_samples`` (2000)
+        - ``num_samples_per_checkpoint`` (500)
+        - ``max_tree_depth`` (6)
+        - ``target_accept_prob`` (0.8)
+        - ``diagnostics`` (True)
+    seed : int, optional
+        Random seed. Default 42.
+    resume : bool, optional
+        Resume from an existing checkpoint. Default False.
+    return_sampler_without_sampling : bool, optional
+        If True, build and return the ``numpyro.infer.MCMC`` object without
+        running it. Default False.
+
+    Returns
+    -------
+    numpyro.infer.MCMC or None
+        The MCMC object when *return_sampler_without_sampling* is True;
+        otherwise None.
+    """
+    import json
+    import numpy as np
+    import pandas as pd
+    import jax
+    import numpyro.infer
+    from jax.random import PRNGKey
+
+    from discovery.models.nanograv_single_pulsar_outlier import (
+        make_outlier_model,
+        make_outlier_gibbs_fn,
+        priordict_outlier_default,
+        _init_values_from_priordict,
+    )
+    from pint_pal import discovery_utils as disco_utils
+    from enterprise.pulsar import Pulsar
+
+    if model_kwargs is None:
+        model_kwargs = {}
+    if sampler_kwargs is None:
+        sampler_kwargs = {}
+
+    # get enterprise_pulsar object
+    e_psr = Pulsar(mo, to)
+    log.info(f"Setting up outlier analysis (discovery HMC-Gibbs) for {e_psr.name}")
+    os.makedirs(outdir, exist_ok=True)
+
+    # Build outlier PulsarLikelihood
+    psrl = make_outlier_likelihood_discovery(
+        psr=e_psr,
+        noise_dict={},
+        tspan=None,
+        model_kwargs=model_kwargs,
+    )
+
+    # Build prior dict: standard pint_pal priors + outlier extras
+    from discovery import priordict_standard as ds_pdict
+    prior_dict = priordict_outlier_default.copy()
+    pint_pal_priors = json.load(
+        open(os.path.join(os.path.dirname(__file__), "discovery_priors.json"))
+    )
+    prior_dict.update(pint_pal_priors)
+    # restore outlier-specific keys that pint_pal_priors may not contain
+    for k, v in priordict_outlier_default.items():
+        prior_dict.setdefault(k, v)
+
+    # Build the numpyro outlier model + Gibbs function
+    model = make_outlier_model(psrl, priordict=prior_dict)
+    gibbs_fn = make_outlier_gibbs_fn(psrl)
+
+    init = _init_values_from_priordict(psrl, prior_dict)
+    init_strategy = numpyro.infer.util.init_to_value(values=init)
+
+    # Build the HMCGibbs sampler
+    nuts_kernel = numpyro.infer.NUTS(
+        model,
+        init_strategy=init_strategy,
+        max_tree_depth=sampler_kwargs.get("max_tree_depth", 6),
+        target_accept_prob=sampler_kwargs.get("target_accept_prob", 0.8),
+    )
+    kernel = numpyro.infer.HMCGibbs(
+        nuts_kernel,
+        gibbs_fn=jax.jit(gibbs_fn),
+        gibbs_sites=["theta", "z_i", "alpha_i", "coeffs", "q"],
+    )
+    mcmc = numpyro.infer.MCMC(
+        kernel,
+        num_warmup=sampler_kwargs.get("num_warmup", 500),
+        num_samples=sampler_kwargs.get("num_samples", 2000),
+    )
+
+    # Attach a to_df method: flatten vector sites to "<name>_i" columns,
+    # drop the nested "params" deterministic (it's a dict-of-arrays).
+    def _outlier_to_df():
+        raw = mcmc.get_samples(group_by_chain=False)
+        rows = {}
+        for key, val in raw.items():
+            if key == "params":  # nested dict — skip
+                continue
+            arr = np.asarray(val)
+            if arr.ndim == 1:          # scalar site
+                rows[key] = arr
+            else:                      # vector site: expand to key_0, key_1, …
+                for i in range(arr.shape[-1]):
+                    rows[f"{key}_{i}"] = arr[:, i]
+        return pd.DataFrame(rows)
+
+    mcmc.to_df = _outlier_to_df
+
+    if return_sampler_without_sampling:
+        return mcmc
+
+    # Run with checkpoints
+    disco_utils.run_nuts_with_checkpoints(
+        sampler=mcmc,
+        num_samples_per_checkpoint=sampler_kwargs.get("num_samples_per_checkpoint", 500),
+        rng_key=PRNGKey(seed),
+        outdir=outdir,
+        file_name=f"{e_psr.name}_outlier_nuts_samples",
+        resume=resume,
+        diagnostics=sampler_kwargs.get("diagnostics", True),
+        model=None,  # loglike already a deterministic in the samples
+    )
+    return None
+
+
+## enterprise outlier analysis below ##
 
 
 def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):

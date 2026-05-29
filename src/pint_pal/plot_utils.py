@@ -5785,7 +5785,7 @@ def plot_gp_realization(
         elif category in ('chrom', 'chrom_gp'):
             units = 'us@1400'
         else:
-            units = 's' if include_tm_values else 'us'
+            units = 'us'
 
     # Compute time-domain realizations
     all_signals = _gp_time_domain(payload, gp_key)  # (n_real, n_toas)
@@ -5809,8 +5809,10 @@ def plot_gp_realization(
         chromatic_idx=chromatic_idx, ref_freq_mhz=ref_freq_mhz,
     )
 
-    # Remove delta symbol from ylabel when showing total values
-    if include_tm_values and include_tm_perturbations and units in ('dm', 'dm_full', 's'):
+    # Update ylabel to reflect which mode we are in:
+    #   mode 2 (pert only): y-label stays as Δ… (no change)
+    #   mode 3 (total):     strip the Δ prefix to indicate total quantity
+    if include_tm_values and include_tm_perturbations and units in ('dm', 'dm_full', 'us'):
         ylabel = ylabel.replace(r'$\Delta$', '').replace(r'$\Delta t$', r'$t$')
 
     # Time axis
@@ -5847,9 +5849,13 @@ def plot_gp_realization(
     # Median
     if show_median:
         lbl = label if label else _GP_LABELS.get(category, gp_key)
-        # Only append TM column names if showing perturbations without reference values
+        # Append a mode suffix to clearly communicate what is being shown:
+        #   mode 2 (pert only): append " + ΔTM" to indicate TM perturbations included
+        #   mode 3 (total):     append " (total)" to indicate reference values included
         if tm_names_used and not include_tm_values:
-            lbl += ' + ' + ','.join(tm_names_used)
+            lbl += r' + $\Delta$TM'
+        elif tm_names_used and include_tm_values:
+            lbl += ' (total)'
         ax.plot(tplot, median, color=color, lw=1.5, label=lbl)
 
     # Individual realizations
@@ -5888,7 +5894,12 @@ def plot_gp_realization(
     
     if title is None:
         pretty_name, _ = _classify_gp(gp_key, psr_name)
-        title = f'{psr_name} — {pretty_name}'
+        if include_tm_perturbations and include_tm_values:
+            title = f'{psr_name} — {pretty_name} (GP + TM total)'
+        elif include_tm_perturbations:
+            title = f'{psr_name} — {pretty_name} (GP + $\\Delta$TM)'
+        else:
+            title = f'{psr_name} — {pretty_name} (GP only)'
     ax.set_title(title, fontsize=_GP_FONTSIZE_TITLE)
     ax.legend(fontsize=_GP_FONTSIZE_LEGEND, loc='lower left')
     ax.grid(axis='y', ls='-', lw=0.4, alpha=0.3)
@@ -6014,6 +6025,7 @@ def plot_gp_realizations_combined(
                 show_median=show_median,
                 show_solar_conjunctions=show_solar_conjunctions,
                 include_tm_components=include_tm_perturbations,
+                include_tm_values=include_tm_values,
                 model=model,
                 ax=axes[i], toa_units=toa_units,
             )
@@ -6033,7 +6045,13 @@ def plot_gp_realizations_combined(
         if i < n - 1:
             axes[i].set_xlabel('')
 
-    fig.suptitle(f'{psr_name} — GP Realizations',
+    if include_tm_perturbations and include_tm_values:
+        _mode_label = 'GP + TM total'
+    elif include_tm_perturbations:
+        _mode_label = r'GP + $\Delta$TM'
+    else:
+        _mode_label = 'GP only'
+    fig.suptitle(f'{psr_name} — GP Realizations ({_mode_label})',
                  fontsize=_GP_FONTSIZE_TITLE + 1, y=1.01)
     if compact:
         fig.subplots_adjust(hspace=0)
@@ -6213,6 +6231,7 @@ def plot_gp_sw_ne(
     show_solar_conjunctions=True,
     show_nodes=True,
     include_tm_components=False,
+    include_tm_values=False,
     model=None,
     ax=None,
     figsize=(10, 4),
@@ -6255,11 +6274,18 @@ def plot_gp_sw_ne(
         Show SW interpolation node positions as tick marks (if available).
         Default True.
     include_tm_components : bool, optional
-        If True, add NE_SW (and other TM SW parameters) so the plot
-        shows total n_E rather than perturbations. Default False.
+        If True, add the fitted TM SW column perturbations (NE_SW, NE1,
+        SWPRBETA1) from the conditional draw to the GP signal, in seconds,
+        before converting to n_E.  This corresponds to mode 2: GP + ΔTM.
+        Default False.
+    include_tm_values : bool, optional
+        If True and ``model`` is provided, also add the reference NE_SW
+        value so the plot shows **total** n_E.  Requires
+        ``include_tm_components=True`` to be meaningful.
+        This corresponds to mode 3: GP + ΔTM + ref.  Default False.
     model : pint.models.TimingModel, optional
-        If provided, ``model.NE_SW.value`` is added so the plot shows
-        the total n_E.  Default None.
+        PINT timing model used to extract NE_SW reference value when
+        ``include_tm_values=True``.  Default None.
     ax : matplotlib Axes, optional
     figsize : tuple, optional
     title : str, optional
@@ -6314,17 +6340,23 @@ def plot_gp_sw_ne(
     safe_shape = np.where(np.abs(shape) > 1e-30, shape, np.nan)
     ne_signal = sw_delay / safe_shape[np.newaxis, :]  # (n_real, n_toas)
 
-    # Add timing-model reference NE_SW for total n_E
-    ref_ne = _extract_ne_sw_reference(model)
-    if ref_ne is not None:
-        ne_signal = ne_signal + ref_ne
-        log.info(f"Added NE_SW={ref_ne} cm^-3 to SW n_E signal.")
+    # Add timing-model reference NE_SW for total n_E (mode 3 only)
+    ref_ne = None
+    if include_tm_values:
+        ref_ne = _extract_ne_sw_reference(model)
+        if ref_ne is not None:
+            ne_signal = ne_signal + ref_ne
+            log.info(f"Added NE_SW={ref_ne} cm^-3 to SW n_E signal.")
 
-    # Decide whether we are showing total or perturbations
-    _showing_total = (
-        (ref_ne is not None)
-        or (include_tm_components and tm_names_used)
-    )
+    # Classify which mode we are in for labelling purposes:
+    #   mode 1: GP only (no TM perturbations, no reference value)
+    #   mode 2: GP + fitted TM perturbations (ΔNE_SW etc.) — still Δn_E
+    #   mode 3: GP + TM perturbations + reference NE_SW — total n_E
+    _mode = 1
+    if include_tm_components and tm_names_used:
+        _mode = 2
+    if ref_ne is not None:
+        _mode = 3
 
     # Time axis
     toas = np.asarray(payload['toas_mjd'])
@@ -6356,10 +6388,12 @@ def plot_gp_sw_ne(
                         label=f'{int(ci*100)}% CI' if ci == ci_levels[0] else None)
 
     if show_median:
-        lbl = 'SWGP [$n_E$]'
-        # Append TM column names if they were included
-        if tm_names_used:
-            lbl += ' + ' + ','.join(tm_names_used)
+        if _mode == 1:
+            lbl = r'SWGP [$\Delta n_E$]'
+        elif _mode == 2:
+            lbl = r'SWGP + $\Delta$TM [$\Delta n_E$]'
+        else:  # mode 3
+            lbl = r'SWGP + TM [$n_E$ total]'
         ax.plot(tplot, median, color=color, lw=1.5, label=lbl)
 
     if show_realizations > 0:
@@ -6388,23 +6422,27 @@ def plot_gp_sw_ne(
                 '|', color='grey', ms=6, alpha=0.4)
 
     ax.set_xlabel(xlabel, fontsize=_GP_FONTSIZE_LABEL)
-    if _showing_total:
+    if _mode == 3:
         ax.set_ylabel(r'$n_E$ (cm$^{-3}$)', fontsize=_GP_FONTSIZE_LABEL)
+    elif _mode == 2:
+        ax.set_ylabel(r'$\Delta n_E$ (cm$^{-3}$)', fontsize=_GP_FONTSIZE_LABEL)
     else:
         ax.set_ylabel(r'$\Delta n_E$ (cm$^{-3}$)', fontsize=_GP_FONTSIZE_LABEL)
     ax.tick_params(axis='both', which='major', labelsize=_GP_FONTSIZE_TICK,
                    length=6, width=1)
     ax.tick_params(axis='both', which='minor', length=3, width=0.8)
-    
+
     # Disable offset notation when showing total values
-    if _showing_total:
+    if _mode == 3:
         ax.ticklabel_format(style='plain', axis='y')
-    
+
     if title is None:
-        if _showing_total:
-            title = f'{psr_name} — Solar Wind $n_E$ (total)'
+        if _mode == 3:
+            title = f'{psr_name} — Solar Wind $n_E$ (GP + TM total)'
+        elif _mode == 2:
+            title = f'{psr_name} — Solar Wind $\\Delta n_E$ (GP + $\\Delta$TM)'
         else:
-            title = f'{psr_name} — Solar Wind $\\Delta n_E$ Perturbations'
+            title = f'{psr_name} — Solar Wind $\\Delta n_E$ (GP only)'
     ax.set_title(title, fontsize=_GP_FONTSIZE_TITLE)
     ax.legend(fontsize=_GP_FONTSIZE_LEGEND, loc='lower left')
     ax.grid(axis='y', ls='-', lw=0.4, alpha=0.3)

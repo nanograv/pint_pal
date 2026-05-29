@@ -748,9 +748,17 @@ def model_noise(
                 outdir=outdir,
                 file_prefix=e_psr.name,
             )
+            # map_params["pars"] lives in the unconstrained tanh space.
+            # Use the model's to_df() to invert the transform back to
+            # physical parameter values before writing to JSON.
+            _pars = np.asarray(map_params["pars"])
+            if _pars.ndim == 1:
+                _pars = _pars[None, :]   # to_df expects shape (N, parlen)
+            _map_df = logL.to_df({"pars": _pars})
+            physical_map_params = {col: float(_map_df[col].iloc[0]) for col in _map_df.columns}
             # write map params to file
             with open(os.path.join(outdir, f"{e_psr.name}_map_params.json"), "w") as f:
-                json.dump({k: float(v) for k, v in map_params.items()}, f, indent=4)
+                json.dump(physical_map_params, f, indent=4)
             try:
                 if sampler_kwargs.get("diagnostics", False):
                     if diagnostics is None:
@@ -1976,7 +1984,7 @@ def generate_gp_realizations(
     # Save as feather
     outfile = outdir / f"{e_psr.name}_gp_realizations.feather"
     log.info(f"Saving GP realizations to {outfile}")
-    df.to_feather(outfile)
+    df.to_feather(outfile, compression='zstd')
 
     # Return payload in original format for backward compatibility
     payload = {
