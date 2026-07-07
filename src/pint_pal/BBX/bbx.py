@@ -12,7 +12,7 @@ import yaml
 import copy
 import glob
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, fields, asdict
 from datetime import datetime
 from typing import (
     Any, Callable, Dict, Iterable, Iterator, List, 
@@ -142,9 +142,19 @@ class PlotStyleConfig:
 @dataclass(frozen=True)
 class InputConfig:
     """
-    Input file pointings (3 ways in notebook to read in)
+    Input timing state.
+
+    Preferred routes, in priority order:
+      1. explicit model + toas
+      2. an already-loaded TimingConfiguration-like object
+      3. par_file + tim_file paths
     """
-    pulsar_name: str
+    pulsar_name: Optional[str] = None
+
+    # Already-curated timing state route.
+    timing_config: Optional[Any] = None
+    model: Optional[TimingModel] = None
+    toas: Optional[pint.toa.TOAs] = None
 
     # TimingConfiguration route (optional)
     config_file: Optional[str] = None
@@ -159,17 +169,34 @@ class InputConfig:
     par_file: Optional[str] = None
     tim_file: Optional[str] = None
 
+    def validate(self) -> None:
+        has_model = self.model is not None
+        has_toas = self.toas is not None
+        if has_model != has_toas:
+            raise ValueError("InputConfig.model and InputConfig.toas must be supplied together.")
+
+        has_files = self.par_file is not None or self.tim_file is not None
+        if has_files and (self.par_file is None or self.tim_file is None):
+            raise ValueError("InputConfig.par_file and InputConfig.tim_file must be supplied together.")
+
+        if not (has_model and has_toas) and self.timing_config is None and not has_files:
+            raise ValueError("InputConfig needs one timing route: (model, toas), timing_config, or (par_file, tim_file).")
+
 @dataclass(frozen=True)
 class OutputConfig:
     """
     Figure output settings
     """
-    diagnostics: str = "off"      # "on" | "off" - toggle display diagnostic plotting
-    root_fig_dir: str = "figs"    # where to save the figures
-    save_figures: bool = True     # toggle to save plots to disk 
+    diagnostics: str = "off"        # "on" | "off" - toggle display diagnostic plotting
+    root_fig_dir: str = "figs"      # where to save the figures
+    save_figures: bool = True       # toggle to save plots to disk 
+    fig_tree: Optional[str] = None  # optional subdirectory tree for figures
     plot: PlotStyleConfig = field(default_factory=PlotStyleConfig)
 
+    # Acceptable values for diagnostics: "on", "off", True, False, or any string that is not "off" (case-insensitive).
     def diag_on(self) -> bool:
+        if isinstance(self.diagnostics, (bool, np.bool_)):
+            return bool(self.diagnostics)
         return isinstance(self.diagnostics, str) and self.diagnostics.lower() != "off"
 
 
@@ -439,18 +466,36 @@ class RunConfig:
 
     # Sanity checks
     def validate(self) -> None:
+        self.inp.validate()
         self.bbx.validate()
         self.proxy.validate()
         self.sw.validate()
         self.basefit.validate()
-        # enforce consistent receiver policy between BaseFits and BBX
+        # Enforce consistent receiver policy between BaseFits and BBX
         if self.basefit.receiver_selection != self.bbx.receiver_selection:
             raise ValueError("ReceiverSelection differs between BaseFitConfig and BBXConfig.")
-        # par's and tim's must exist 
-        if not os.path.exists(self.inp.par_file):
+        if self.inp.par_file is not None and not os.path.exists(self.inp.par_file):
             raise FileNotFoundError(f"[RunConfig.validate] par_file not found: {self.inp.par_file}")
-        if not os.path.exists(self.inp.tim_file):
+        if self.inp.tim_file is not None and not os.path.exists(self.inp.tim_file):
             raise FileNotFoundError(f"[RunConfig.validate] tim_file not found: {self.inp.tim_file}")
+
+    @classmethod
+    def from_timing_config(
+        cls,
+        timing_config: Any,
+        *,
+        model: Optional[TimingModel] = None,
+        toas: Optional[pint.toa.TOAs] = None,
+        bbx_block: Optional[Mapping[str, Any]] = None,
+        **overrides: Any,
+    ) -> "RunConfig":
+        return run_config_from_timing_config(
+            tc=timing_config,
+            model=model,
+            toas=toas,
+            bbx_block=bbx_block,
+            **overrides,
+        )
 
 
 # =============================================================================
@@ -517,19 +562,38 @@ class OutputPaths:
         Example resulting fig_dir:
           figs/J0030+0451/measures_p0_0.14/SWX/NE7.9_SWP2.0_BB/allrcvrs
         """
-        p = cfg.inp.pulsar_name
+        pulsar = pulsar_name_from_input(cfg.inp)
         fit_tag = f"{cfg.bbx.fitness}_p0_{cfg.bbx.p0}"
         config_tag = cls._sw_config_tag(cfg.sw)
         rcvr_tag = cls._rcvr_tag(cfg.bbx.receiver_selection)
 
-        fig_dir = os.path.join(
-            cfg.out.root_fig_dir,
-            p,
-            fit_tag,
-            str(cfg.sw.model),
-            config_tag,
-            rcvr_tag,
-        )
+        tokens = {
+            "root": cfg.out.root_fig_dir,
+            "pulsar": pulsar,
+            "fit_tag": fit_tag,
+            "fitness": cfg.bbx.fitness,
+            "p0": cfg.bbx.p0,
+            "sw_model": str(cfg.sw.model),
+            "config_tag": config_tag,
+            "rcvr_tag": rcvr_tag,
+        }
+
+        if cfg.out.fig_tree:
+            try:
+                fig_dir = cfg.out.fig_tree.format(**tokens)
+            except KeyError as e:
+                raise ValueError(
+                    f"Unknown fig_tree token {e}. Available tokens: {sorted(tokens)}"
+                ) from e
+        else:
+            fig_dir = os.path.join(
+                cfg.out.root_fig_dir,
+                pulsar,
+                fit_tag,
+                str(cfg.sw.model),
+                config_tag,
+                rcvr_tag,
+            )
 
         return cls(fig_dir=fig_dir, fit_tag=fit_tag, config_tag=config_tag, rcvr_tag=rcvr_tag)
 
@@ -580,7 +644,7 @@ class OutputPaths:
         self.ensure_fig_dir(enabled=True)
 
         meta: Dict[str, Any] = {
-            "pulsarName": cfg.inp.pulsar_name,
+            "pulsarName": pulsar_name_from_input(cfg.inp),
             "solarWindModel": str(cfg.sw.model),
             "config_tag": self.config_tag,
             "fitFunc": cfg.bbx.fitness,
@@ -614,6 +678,8 @@ class RunContext:
     pulsar_name: Optional[str] = None
     par_file: Optional[str] = None
     tim_file: Optional[str] = None
+    timing_config: Optional[Any] = None
+    input_source: Optional[str] = None
 
     model: Optional[TimingModel] = None
     toas: Optional[pint.toa.TOAs] = None
@@ -629,6 +695,258 @@ class RunContext:
 
     products: Dict[str, Any] = field(default_factory=dict)
     paths: Dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class ResolvedTimingInputs:
+    pulsar_name: str
+    model: Optional[TimingModel] = None
+    toas: Optional[pint.toa.TOAs] = None
+    par_file: Optional[str] = None
+    tim_file: Optional[str] = None
+    source: str = "unknown"
+
+
+def _safe_model_source(model: Optional[TimingModel]) -> Optional[str]:
+    if model is None:
+        return None
+    return getattr(getattr(model, "PSR", None), "value", None)
+
+
+def _maybe_tc_source(tc: Any) -> Optional[str]:
+    if tc is not None and hasattr(tc, "get_source"):
+        try:
+            return tc.get_source()
+        except Exception:
+            return None
+    return None
+
+
+def _maybe_tc_model_path(tc: Any) -> Optional[str]:
+    if tc is not None and hasattr(tc, "get_model_path"):
+        try:
+            path = tc.get_model_path()
+            return str(path) if path is not None else None
+        except Exception:
+            return None
+    return None
+
+
+def pulsar_name_from_input(inp: "InputConfig", *, fallback: str = "PSR") -> str:
+    # Centralize pulsar name discovery
+    return (
+        inp.pulsar_name
+        or _maybe_tc_source(inp.timing_config)
+        or _safe_model_source(inp.model)
+        or fallback
+    )
+
+
+def resolve_model_toas(
+    *,
+    inp: "InputConfig",
+    load_from_tc: bool = True,
+    tc_kwargs: Optional[Mapping[str, Any]] = None,
+) -> ResolvedTimingInputs:
+    # Enforce priority order: (model, toas) > timing_config > (par_file, tim_file)
+    inp.validate()
+    tc = inp.timing_config
+    tc_kwargs = dict(tc_kwargs or {})
+
+    par_file = inp.par_file or _maybe_tc_model_path(tc)
+    tim_file = inp.tim_file
+
+    if inp.model is not None and inp.toas is not None:
+        pulsar = inp.pulsar_name or _maybe_tc_source(tc) or _safe_model_source(inp.model) or "PSR"
+        return ResolvedTimingInputs(
+            pulsar_name=pulsar,
+            model=inp.model,
+            toas=inp.toas,
+            par_file=par_file,
+            tim_file=tim_file,
+            source="model_toas",
+        )
+
+    if tc is not None:
+        model_obj = None
+        toas_obj = None
+        if load_from_tc:
+            model_obj, toas_obj = tc.get_model_and_toas(**tc_kwargs)
+        pulsar = inp.pulsar_name or _maybe_tc_source(tc) or _safe_model_source(model_obj) or "PSR"
+        return ResolvedTimingInputs(
+            pulsar_name=pulsar,
+            model=model_obj,
+            toas=toas_obj,
+            par_file=par_file,
+            tim_file=tim_file,
+            source="timing_config",
+        )
+
+    if inp.par_file is not None and inp.tim_file is not None:
+        model_obj, toas_obj = pint.models.get_model_and_toas(str(inp.par_file), str(inp.tim_file))
+        pulsar = inp.pulsar_name or _safe_model_source(model_obj) or "PSR"
+        return ResolvedTimingInputs(
+            pulsar_name=pulsar,
+            model=model_obj,
+            toas=toas_obj,
+            par_file=str(inp.par_file),
+            tim_file=str(inp.tim_file),
+            source="files",
+        )
+
+    raise ValueError("Could not resolve timing inputs.")
+
+
+def run_context_from_config(
+    cfg: "RunConfig",
+    *,
+    load_from_tc: bool = True,
+    tc_kwargs: Optional[Mapping[str, Any]] = None,
+) -> RunContext:
+    # Build a RunContext from a RunConfig, resolving timing inputs and other runtime state.
+    resolved = resolve_model_toas(inp=cfg.inp, load_from_tc=load_from_tc, tc_kwargs=tc_kwargs)
+    return RunContext(
+        pulsar_name=resolved.pulsar_name,
+        par_file=resolved.par_file,
+        tim_file=resolved.tim_file,
+        timing_config=cfg.inp.timing_config,
+        input_source=resolved.source,
+        model=resolved.model,
+        toas=resolved.toas,
+    )
+
+
+def _snake_keys(d: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    # Convert config yaml's kabab-case keys to snake_case for dataclass initialization.
+    if d is None:
+        return {}
+    out: Dict[str, Any] = {}
+    for key, value in dict(d).items():
+        key_s = str(key).replace("-", "_")
+        out[key_s] = _snake_keys(value) if isinstance(value, Mapping) else value
+    return out
+
+
+def _dataclass_kwargs(cls: Type[Any], data: Mapping[str, Any]) -> Dict[str, Any]:
+    allowed = {f.name for f in fields(cls)}
+    return {k: v for k, v in dict(data).items() if k in allowed}
+
+
+def _quantity_days(value: Any) -> u.Quantity:
+    if isinstance(value, u.Quantity):
+        return value
+    if value is None:
+        raise ValueError("BBXConfig min_time/max_time cannot be null.")
+    return float(value) * u.day
+
+
+def _bbx_config_from_block(block: Optional[Mapping[str, Any]]) -> BBXConfig:
+    bb_block = _snake_keys(block)
+    rcvr_block = _snake_keys(bb_block.pop("receivers", None))
+    receiver_selection = ReceiverSelection(**_dataclass_kwargs(ReceiverSelection, rcvr_block))
+
+    for qname in ("min_time", "max_time"):
+        if qname in bb_block and bb_block[qname] is None:
+            bb_block.pop(qname)
+        elif qname in bb_block:
+            bb_block[qname] = _quantity_days(bb_block[qname])
+
+    return BBXConfig(
+        receiver_selection=receiver_selection,
+        **_dataclass_kwargs(BBXConfig, bb_block),
+    )
+
+
+def bbx_named_configs_from_yaml_block(block: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    """
+    Build notebook-facing BBX configs from the component-oriented YAML block.
+
+    Expected headings under ``bbx`` are:
+      - output
+      - sw-proxy
+      - sw-segmentation
+      - iism-proxy
+      - iism-segmentation
+
+    Mapping of headings to dataclass configs:
+      - output            -> OutputConfig
+      - sw-proxy          -> SolarWindConfig
+      - sw-segmentation   -> BBXConfig
+      - iism-proxy        -> ProxyConfig
+      - iism-segmentation -> BBXConfig
+
+    Returns both descriptive names and the historical short aliases used in notebooks.
+    """
+    block = _snake_keys(block or {})
+
+    out_cfg = OutputConfig(**_dataclass_kwargs(OutputConfig, _snake_keys(block.get("output"))))
+    sw_cfg = SolarWindConfig(**_dataclass_kwargs(SolarWindConfig, _snake_keys(block.get("sw_proxy"))))
+    bbx_cfg_sw = _bbx_config_from_block(block.get("sw_segmentation"))
+    proxy_cfg = ProxyConfig(**_dataclass_kwargs(ProxyConfig, _snake_keys(block.get("iism_proxy"))))
+    bbx_cfg = _bbx_config_from_block(block.get("iism_segmentation"))
+
+    return dict(
+        out_cfg=out_cfg,
+        sw_cfg=sw_cfg,
+        bbx_cfg_sw=bbx_cfg_sw,
+        proxy_cfg=proxy_cfg,
+        bbx_cfg=bbx_cfg,
+        sw_proxy=sw_cfg,
+        sw_segmentation=bbx_cfg_sw,
+        iism_proxy=proxy_cfg,
+        iism_segmentation=bbx_cfg,
+    )
+
+
+def bbx_configs_from_yaml_block(block: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    # Build RunConfig pieces from the config yaml headings
+    block = _snake_keys(block or {})
+
+    out_block = _snake_keys(block.get("output"))
+    pkl_block = _snake_keys(block.get("pickle"))
+    bb_block = _snake_keys(block.get("iism_segmentation"))
+    proxy_block = _snake_keys(block.get("iism_proxy"))
+    sw_block = _snake_keys(block.get("sw_proxy"))
+    base_block = _snake_keys(block.get("basefit"))
+    noise_block = _snake_keys(block.get("noise"))
+
+    bbx_cfg = _bbx_config_from_block(bb_block)
+
+    return dict(
+        out=OutputConfig(**_dataclass_kwargs(OutputConfig, out_block)),
+        pkl=PickleConfig(**_dataclass_kwargs(PickleConfig, pkl_block)),
+        bbx=bbx_cfg,
+        proxy=ProxyConfig(**_dataclass_kwargs(ProxyConfig, proxy_block)),
+        sw=SolarWindConfig(**_dataclass_kwargs(SolarWindConfig, sw_block)),
+        basefit=BaseFitConfig(receiver_selection=bbx_cfg.receiver_selection, **_dataclass_kwargs(BaseFitConfig, base_block)),
+        noise=NoiseAnalysisConfig(**_dataclass_kwargs(NoiseAnalysisConfig, noise_block)),
+    )
+
+
+def run_config_from_timing_config(
+    *,
+    tc: Any,
+    model: Optional[TimingModel] = None,
+    toas: Optional[pint.toa.TOAs] = None,
+    bbx_block: Optional[Mapping[str, Any]] = None,
+    **overrides: Any,
+) -> "RunConfig":
+    if bbx_block is None:
+        bbx_block = dict(getattr(tc, "config", {}) or {}).get("bbx", {})
+
+    configs = bbx_configs_from_yaml_block(bbx_block)
+    configs.update(overrides)
+    configs.pop("inp", None)
+
+    return RunConfig(
+        inp=InputConfig(
+            timing_config=tc,
+            model=model,
+            toas=toas,
+            pulsar_name=_maybe_tc_source(tc),
+        ),
+        **configs,
+    )
 
 # =============================================================================
 # Pickling Routine
@@ -858,17 +1176,14 @@ class CachePolicy:
         if which not in ("f0", "f1"):
             raise ValueError("basefit_spec.which must be 'f0' or 'f1'.")
 
-        par_file = ctx.par_file
-        tim_file = ctx.tim_file
-        if not par_file or not tim_file:
-            raise ValueError("RunContext must have par_file and tim_file set before building cache specs.")
-
         # NOTE: basefit uses fig_dir/cache as save path
         cache_dir = os.path.join(self.cache_root(), "cache")
         os.makedirs(cache_dir, exist_ok=True)
 
-        par_sha = self.io.sha256_str(open(par_file, "r", encoding="utf-8").read())
-        tim_sha = self.io.sha256_file(tim_file)
+        par_sha = self._model_sha(ctx)
+        tim_sha = self._toas_sha(ctx)
+        if par_sha is None or tim_sha is None:
+            raise ValueError("Need either par/tim files or ctx.model/ctx.toas to build cache specs.")
 
         # Construct unique hash for fits
         key = self.io.make_cache_key(
@@ -891,7 +1206,7 @@ class CachePolicy:
         )
 
         # Unique has tag -> filename for fits
-        tag = f"{self.cfg.inp.pulsar_name}_{self.cfg.sw.model}_{key}"
+        tag = f"{ctx.pulsar_name or pulsar_name_from_input(self.cfg.inp)}_{self.cfg.sw.model}_{key}"
         suffix = "_OGfit" if which == "f0" else "_ConstDM_SWfit"
         prefix = os.path.join(cache_dir, tag + suffix)
 
@@ -907,20 +1222,17 @@ class CachePolicy:
         """
         BBX cache lives under cfg.pkl.cache_dir (or fig_dir/bb_cache).
         """
-        psr = ctx.pulsar_name or self.cfg.inp.pulsar_name
+        psr = ctx.pulsar_name or pulsar_name_from_input(self.cfg.inp)
         if not psr:
             raise ValueError("Need pulsar_name in RunContext or RunConfig to build cache spec.")
             
-        par_file = ctx.par_file
-        tim_file = ctx.tim_file
-        if not par_file or not tim_file:
-            raise ValueError("RunContext must have par_file and tim_file set before building cache specs.")
-        
         cache_dir = os.path.join(self.cache_root(), "bb_cache")
         os.makedirs(cache_dir, exist_ok=True)
 
-        par_sha = self.io.sha256_str(open(par_file, "r", encoding="utf-8").read()) if par_file else None
-        tim_sha = self.io.sha256_file(tim_file) if tim_file else None
+        par_sha = self._model_sha(ctx)
+        tim_sha = self._toas_sha(ctx)
+        if par_sha is None or tim_sha is None:
+            raise ValueError("Need either par/tim files or ctx.model/ctx.toas to build cache specs.")
 
         proxy_cfg = CachePolicy.proxy_cfg_for_cache(self.cfg.proxy)
 
@@ -957,7 +1269,7 @@ class CachePolicy:
     # -------------------------------------------------------------------------
 
     def noise_spec(self, *, base_noise_dir: str, using_wideband: bool) -> PickleSpec:
-        psr = self.cfg.inp.pulsar_name
+        psr = pulsar_name_from_input(self.cfg.inp)
         prefix = os.path.join(base_noise_dir, f"{psr}_noiseFit")
 
         # A key is still useful for logging even if naming is fixed (for now):
@@ -977,6 +1289,25 @@ class CachePolicy:
     # -------------------------------------------------------------------------
     # Helpers
     # -------------------------------------------------------------------------
+
+    def _model_sha(self, ctx: RunContext) -> Optional[str]:
+        if ctx.par_file:
+            with open(ctx.par_file, "r", encoding="utf-8") as f:
+                return self.io.sha256_str(f.read())
+        if ctx.model is not None:
+            return self.io.sha256_str(ctx.model.as_parfile())
+        return None
+
+    def _toas_sha(self, ctx: RunContext) -> Optional[str]:
+        if ctx.tim_file:
+            return self.io.sha256_file(ctx.tim_file)
+        if ctx.toas is not None:
+            mjds = np.asarray(ctx.toas.get_mjds().value, float)
+            payload: Dict[str, Any] = {"mjd": mjds.tolist(), "n": int(len(mjds))}
+            if "freq" in ctx.toas.table.colnames:
+                payload["freq"] = np.asarray(ctx.toas.table["freq"], float).tolist()
+            return self.io.sha256_str(json.dumps(payload, sort_keys=True))
+        return None
 
     @staticmethod
     def _stable_callable_id(fn: Any) -> str:
@@ -1043,7 +1374,7 @@ class BaseFits:
 
     def prepare_par_constant_dm(
         self,
-        par_file: Union[str, Path],
+        par_source: Union[str, Path, TimingModel],
         *,
         zero_params: Sequence[str] = ("DM1", "NE_SW", "NE_SW1"),  # param values to zero out
     ) -> str:
@@ -1054,8 +1385,18 @@ class BaseFits:
         -------
         par text with DMX lines removed, constant DM inserted, and some params zeroed.
         """
-        with open(par_file, "r", encoding="utf-8") as f:
-            par_lines = f.readlines()
+        if isinstance(par_source, TimingModel):
+            par_text = par_source.as_parfile()
+        elif isinstance(par_source, Path):
+            par_text = par_source.read_text(encoding="utf-8")
+        elif isinstance(par_source, str) and Path(par_source).exists():
+            par_text = Path(par_source).read_text(encoding="utf-8")
+        elif isinstance(par_source, str):
+            par_text = par_source
+        else:
+            raise TypeError(f"Unsupported par_source type: {type(par_source)}")
+
+        par_lines = par_text.splitlines(keepends=True)
 
         # Remove all DMX parameters
         cleaned_lines = [line for line in par_lines if not line.lstrip().startswith("DMX")]
@@ -1387,9 +1728,11 @@ class BaseFits:
         self,
         *,
         par_text_or_path: Union[str, Path, TextIO],
-        tim_file: Union[str, Path],
+        tim_file: Optional[Union[str, Path]] = None,
+        toas: Optional[pint.toa.TOAs] = None,
         sw_cfg: "SolarWindConfig",
         bbx_cfg: Optional["BBXConfig"] = None,      # required for SWX+bb
+        pulsar_name: Optional[str] = None,
         return_payload: bool = False,
     ) -> Union[str, Tuple[str, Dict[str, Any]]]:
         """
@@ -1442,8 +1785,13 @@ class BaseFits:
             if anchor == "bb" and (self.sw_proxy is None or bbx_cfg is None):
                 raise ValueError("BaseFits requires sw_proxy=SolarWindProxy and bbx_cfg=BBXConfig when conjunction_anchor='bb'.")
             print(f"[BaseFits] Preparing {sw_model} model segments...  .    .       .")
-            # Temporarily load model and TOAs **before** inserting SWX model
-            _, base_toas = pint.models.get_model_and_toas(StringIO(par_text), str(tim_file))
+            # Use curated TOAs when supplied; fall back to loading from tim_file for legacy calls.
+            if toas is not None:
+                base_toas = toas
+            elif tim_file is not None:
+                _, base_toas = pint.models.get_model_and_toas(StringIO(par_text), str(tim_file))
+            else:
+                raise ValueError("insert_solar_wind needs toas or tim_file for SWX.")
     
             # Now insert SWX blocks
             sw_par_text, payload = self.add_solar_model_par(
@@ -1452,6 +1800,7 @@ class BaseFits:
                 sw_cfg=sw_cfg,
                 bbx_cfg=bbx_cfg,
                 sw_proxy=self.sw_proxy,
+                pulsar_name=pulsar_name,
                 return_payload=True,
             )
     
@@ -1492,8 +1841,9 @@ class BaseFits:
     def fit_model(
         self,
         par_source: Union[str, StringIO, Path],
-        tim_file: Union[str, Path],
+        tim_file: Optional[Union[str, Path]] = None,
         *,
+        toas: Optional[pint.toa.TOAs] = None,
         fitter_cls: Optional[type] = None,
         freeze_DM_other: Optional[Sequence[re.Pattern]] = None,
         maxiter: Optional[int] = None,
@@ -1508,8 +1858,13 @@ class BaseFits:
         -------
         PINT fitter object
         """
-        # Load the final model and toas for fitting
-        model, toas = pint.models.get_model_and_toas(par_source, str(tim_file))
+        # Load the final model; prefer curated TOAs when supplied.
+        if toas is None:
+            if tim_file is None:
+                raise ValueError("fit_model needs either toas or tim_file.")
+            model, toas = pint.models.get_model_and_toas(par_source, str(tim_file))
+        else:
+            model = pint.models.get_model(par_source)
         # Custom check if any TOA in SWX segments
         model.find_empty_masks(toas, freeze=True)
 
@@ -1565,14 +1920,22 @@ class BaseFits:
         if self.pickler is None:
             raise ValueError("BaseFits.run_or_load_basefit requires pickler=PicklerBundle.")
 
-        # validate ctx inputs
-        psr = ctx.pulsar_name or cfg.inp.pulsar_name
+        # Resolve timing inputs once so curated notebook state is authoritative.
+        if ctx.model is None or ctx.toas is None:
+            resolved = resolve_model_toas(inp=cfg.inp)
+            ctx.model = ctx.model or resolved.model
+            ctx.toas = ctx.toas or resolved.toas
+            ctx.par_file = ctx.par_file or resolved.par_file
+            ctx.tim_file = ctx.tim_file or resolved.tim_file
+            ctx.pulsar_name = ctx.pulsar_name or resolved.pulsar_name
+            ctx.input_source = ctx.input_source or resolved.source
+            ctx.timing_config = ctx.timing_config or cfg.inp.timing_config
+
+        psr = ctx.pulsar_name or pulsar_name_from_input(cfg.inp)
         par_file = ctx.par_file or cfg.inp.par_file
         tim_file = ctx.tim_file or cfg.inp.tim_file
-        if not psr:
-            raise ValueError("Need pulsar_name in RunContext (or RunConfig as fallback).")
-        if not par_file or not tim_file:
-            raise ValueError("Need par_file and tim_file in RunContext (or RunConfig as fallback).")
+        if ctx.model is None or ctx.toas is None:
+            raise ValueError("Need ctx.model and ctx.toas after resolving timing inputs.")
 
         # unpack configs 
         sw_cfg = cfg.sw
@@ -1615,8 +1978,9 @@ class BaseFits:
                     except Exception as e:
                         print(f"[BaseFits:cache] f0 load failed ({type(e).__name__}): {e}. Recomputing.")
 
-            print("[BaseFits] Refitting f0 (OG par fit)...  .    .       .")
-            base_model, base_toas = pint.models.get_model_and_toas(str(par_file), str(tim_file))
+            print("[BaseFits] Refitting f0 (OG curated-state fit)...  .    .       .")
+            base_model = copy.deepcopy(ctx.model)
+            base_toas = ctx.toas
             base_model.find_empty_masks(base_toas, freeze=True)
 
             FitterClass = base_cfg.fitter_cls or pint.fitter.WLSFitter
@@ -1707,14 +2071,16 @@ class BaseFits:
             print(f"[BaseFits] Refitting f1 (Const DM + {sw_cfg.model})...  .    .       .")
         
             # Step 1: remove DM params
-            const_par_text = self.prepare_par_constant_dm(str(par_file))
+            const_par_text = self.prepare_par_constant_dm(ctx.model if ctx.model is not None else str(par_file))
         
             # Step 2: insert solar wind into par text
             sw_par_text, sw_payload = self.insert_solar_wind(
                 par_text_or_path=StringIO(const_par_text),
-                tim_file=str(tim_file),
+                tim_file=str(tim_file) if tim_file is not None else None,
+                toas=ctx.toas,
                 sw_cfg=sw_cfg,
                 bbx_cfg=cfg.bbx if (str(sw_cfg.model).upper() == "SWX" and str(sw_cfg.conjunction_anchor).lower() == "bb") else None,
+                pulsar_name=psr,
                 return_payload=True,
             )
         
@@ -1775,7 +2141,8 @@ class BaseFits:
         
             f1_local = self.fit_model(
                 StringIO(sw_par_text),
-                str(tim_file),
+                str(tim_file) if tim_file is not None else None,
+                toas=ctx.toas,
                 fitter_cls=base_cfg.fitter_cls,
                 freeze_DM_other=dm_freezes,
                 maxiter=base_cfg.maxiter_f1,
@@ -1820,8 +2187,8 @@ class BaseFits:
 
         # Keep ctx coherent
         ctx.pulsar_name = psr
-        ctx.par_file = str(par_file)
-        ctx.tim_file = str(tim_file)
+        ctx.par_file = str(par_file) if par_file is not None else None
+        ctx.tim_file = str(tim_file) if tim_file is not None else None
 
         return f0, f1, cache_paths
 
@@ -5029,6 +5396,7 @@ class BBX:
         receiver_sel: ReceiverSelection,
         out_cfg: OutputConfig,
         pickle_cfg: PickleConfig,
+        paths: Optional[OutputPaths] = None,
         par_file: Optional[str] = None,
         tim_file: Optional[str] = None,
         cache: bool = True,
@@ -5057,6 +5425,7 @@ class BBX:
         # Sanity Checks
         if self.pickler is None:
             raise ValueError("BBX.fit_BB_pipeline requires pickler=PicklerBundle.")
+        paths = paths or OutputPaths.from_config(self.pickler.policy.cfg)
         if self.dm_proxy is None:
             raise ValueError("BBX.fit_BB_pipeline requires dm_proxy=DispersionMeasureProxy.")
         
@@ -5332,7 +5701,7 @@ class BBX:
             self.run_proxy_diagnostics(
                 diag=proxy_result.diag,
                 out=out_cfg,
-                paths=OutputPaths.from_config(policy.cfg),
+                paths=paths or OutputPaths.from_config(policy.cfg),
                 style=out_cfg.plot,
                 stem_prefix=f"{psr}_bbx",
             )
@@ -5386,7 +5755,7 @@ class BBX:
                         b_chrom=b_chrom,
                         fitter=fitter,
                         out=out_cfg,
-                        paths=OutputPaths.from_config(policy.cfg) if getattr(policy, "cfg", None) is not None else OutputPaths.from_config(policy.cfg),
+                        paths=paths or OutputPaths.from_config(policy.cfg),
                         stem_prefix=f"{psr}_bbx",
                     )
             except Exception as e:
