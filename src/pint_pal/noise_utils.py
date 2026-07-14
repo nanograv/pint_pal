@@ -1616,6 +1616,25 @@ def get_map_noise_values(outdir, model, N=1):
         return {k: float(v) for k, v in numeric_df.mean(axis=0).to_dict().items()}
 
 
+def core_from_feather(feather_file, label=None, burn=0.0):
+    """Build a la_forge Core from a discovery save_chain feather."""
+    df = pd.read_feather(feather_file)
+    if df.empty:
+        raise ValueError(f"Empty chain: {feather_file}")
+
+    # keep only numeric columns (param columns + lnlike/lnprior/lnpost, which
+    # la_forge recognizes by name); drop any stray object/string columns
+    df = df.select_dtypes(include=[np.number])
+
+    core = co.Core(
+        label=label or str(feather_file),
+        chain=df.to_numpy(dtype=float),
+        params=list(df.columns),
+        burn=burn,
+    )
+    return core
+
+
 def get_model_and_sampler_default_settings():
     model_defaults = {
         # white noise
