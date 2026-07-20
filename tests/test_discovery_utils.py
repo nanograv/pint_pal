@@ -167,7 +167,7 @@ def test_select_fourier_basis_nlog_positive_calls_expected_builder(monkeypatch):
     called = {}
     monkeypatch.setattr(
         du.ds,
-        "log_dm_fourierbasis",
+        "log_fourierbasis_dm",
         lambda psr, T, logmode, f_min, nlin, nlog: called.update(
             dict(psr=psr, T=T, logmode=logmode, f_min=f_min, nlin=nlin, nlog=nlog)
         )
@@ -767,12 +767,12 @@ class TestChromaticBasisSelection:
     # --- _select_fourier_basis, nlog>0 ---
 
     def test_nlog_positive_vary_calls_log_free(self, monkeypatch):
-        """nlog>0 + chromatic_idx=None → lambda calling log_free_chromatic_fourierbasis."""
+        """nlog>0 + chromatic_idx=None → lambda calling log_fourierbasis_chrom."""
         calls = {}
         def fake_log_free(psr, T, logmode, f_min, nlin, nlog):
             calls['log_free'] = True
             return 'f', 'df', lambda alpha: 'FMAT'
-        monkeypatch.setattr(du.ds, 'log_free_chromatic_fourierbasis', fake_log_free)
+        monkeypatch.setattr(du.ds, 'log_fourierbasis_chrom', fake_log_free)
 
         psr = object()
         result = du._select_fourier_basis(
@@ -786,12 +786,12 @@ class TestChromaticBasisSelection:
         assert 'log_free' in calls
 
     def test_nlog_positive_fixed_calls_log_fixed(self, monkeypatch):
-        """nlog>0 + chromatic_idx=4.0 → lambda calling log_fixed_chromatic_fourierbasis."""
+        """nlog>0 + chromatic_idx=4.0 → lambda calling log_fourierbasis_chrom_fixed."""
         calls = {}
-        def fake_log_fixed(psr, chromatic_idx, T, logmode, f_min, nlin, nlog):
-            calls['chromatic_idx'] = chromatic_idx
+        def fake_log_fixed(psr, alpha, T, logmode, f_min, nlin, nlog):
+            calls['alpha'] = alpha
             return 'f', 'df', 'FMAT'
-        monkeypatch.setattr(du.ds, 'log_fixed_chromatic_fourierbasis', fake_log_fixed)
+        monkeypatch.setattr(du.ds, 'log_fourierbasis_chrom_fixed', fake_log_fixed)
 
         psr = object()
         result = du._select_fourier_basis(
@@ -801,7 +801,7 @@ class TestChromaticBasisSelection:
         )
         assert callable(result)
         result(psr, 10, 100.0)
-        assert calls['chromatic_idx'] == 4.0
+        assert calls['alpha'] == 4.0
 
     # --- chromatic_noise_block wiring ---
 
