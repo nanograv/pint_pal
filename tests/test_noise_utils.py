@@ -281,9 +281,9 @@ def test_model_noise_optimizer_uses_config_inference_controls(monkeypatch, tmp_p
     monkeypatch.setattr(nu.os, "makedirs", lambda path, exist_ok=True: Path(path).mkdir(parents=True, exist_ok=exist_ok))
     monkeypatch.setattr(nu, "Pulsar", lambda *a, **k: SimpleNamespace(name="J1"))
     monkeypatch.setattr(nu.disco_utils, "make_single_pulsar_noise_likelihood_discovery", lambda **k: SimpleNamespace(logL=SimpleNamespace(params=[])))
-    monkeypatch.setattr(nu.disco_utils, "make_numpyro_model", lambda *a, **k: "logL")
+    monkeypatch.setattr(nu.disco_utils, "make_numpyro_model", lambda *a, **k: SimpleNamespace(to_df=lambda chain: pd.DataFrame({"MAP_param": [0.0]})))
     monkeypatch.setattr(nu.numpyro.handlers, "reparam", lambda logL, config=None: logL)
-    monkeypatch.setattr(nu.numpyro.infer.autoguide, "AutoDelta", lambda logL: "guide")
+    monkeypatch.setattr(nu.numpyro.infer.autoguide, "AutoDelta", lambda logL, init_loc_fn=None: "guide")
 
     def fake_setup_svi(model, guide, loss, num_warmup_steps, max_epochs, peak_learning_rate, gradient_clipping_val):
         calls["setup_svi"] = {
@@ -302,7 +302,7 @@ def test_model_noise_optimizer_uses_config_inference_controls(monkeypatch, tmp_p
             "difference_threshold": difference_threshold,
             "max_num_batches": max_num_batches,
         }
-        return ({"a": 1.0}, None)
+        return ({"pars": np.zeros(1)}, None)
 
     monkeypatch.setattr(nu.disco_utils, "run_svi_early_stopping", fake_run_svi_early_stopping)
 

@@ -10,6 +10,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pint.models as models
 import pytest
 
@@ -429,8 +430,21 @@ def test_model_noise_setup_supports_optimizer_sampler_kwargs_combinations(
                 }
             }
         )
-        or ({"a": 1.0}, None),
+        or ({"pars": np.zeros(1)}, None),
     )
+
+    # model_noise inverts the optimizer's MAP `pars` vector back to physical
+    # parameters via the numpyro model's `to_df`; that transform needs the exact
+    # parameter count, which this plumbing-focused test doesn't reconstruct. Stub
+    # `to_df` (leaving the rest of the model real for the AutoDelta guide).
+    _real_make_numpyro_model = du.make_numpyro_model
+
+    def _make_numpyro_model_stub_todf(*args, **kwargs):
+        model_fn = _real_make_numpyro_model(*args, **kwargs)
+        model_fn.to_df = lambda chain: pd.DataFrame({"MAP_param": [0.0]})
+        return model_fn
+
+    monkeypatch.setattr(du, "make_numpyro_model", _make_numpyro_model_stub_todf)
 
     result = nu.model_noise(
         mo,
@@ -589,17 +603,11 @@ def test_add_noise_to_model_adds_chromatic_gp_powerlaw(real_pint_model):
     noise_dict = _base_noise_dict(psr)
     noise_dict.update({f"{psr}_chrom_gp_log10_A": -13.9, f"{psr}_chrom_gp_gamma": 3.0})
 
-    if hasattr(nu.pm, "PLCMNoise"):
-        out = nu.add_noise_to_model(
-            model, noise_dict, model_kwargs={"chromatic_noise": {"Nfreqs": 15}}
-        )
-        assert out is model
-        assert "PLCMNoise" in model.components
-    else:
-        with pytest.raises(AttributeError, match="PLCMNoise"):
-            nu.add_noise_to_model(
-                model, noise_dict, model_kwargs={"chromatic_noise": {"Nfreqs": 15}}
-            )
+    out = nu.add_noise_to_model(
+        model, noise_dict, model_kwargs={"chromatic_noise": {"Nfreqs": 15}}
+    )
+    assert out is model
+    assert "PLChromNoise" in model.components
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
