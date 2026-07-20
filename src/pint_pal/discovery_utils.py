@@ -79,14 +79,14 @@ def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, 
         if noise_type == 'red_noise':
             return ds.fourierbasis
         elif noise_type == 'dm_noise':
-            return ds.dmfourierbasis
+            return ds.fourierbasis_dm
         elif noise_type == 'chromatic':
             if chromatic_idx is not None:
-                # Fixed chromatic index: bind it so freechromaticfourierbasis returns a matrix
-                return partial(ds.freechromaticfourierbasis, chromatic_idx=chromatic_idx)
+                # Fixed chromatic index: make_fourierbasis_chrom returns a basis giving a matrix
+                return ds.make_fourierbasis_chrom(alpha=chromatic_idx)
             else:
-                # Varying chromatic index: freechromaticfourierbasis returns callable fmat
-                return ds.freechromaticfourierbasis
+                # Varying chromatic index: fourierbasis_chrom returns callable fmat
+                return ds.fourierbasis_chrom
         elif noise_type == 'solar_wind':
             return ds_solar.fourierbasis_solar_dm
     else:
