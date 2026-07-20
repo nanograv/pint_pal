@@ -1243,7 +1243,13 @@ def add_noise_to_model(
                 0.0,
                 False,
                 frozen=True,
-                TNCHROMIDX=noise_dict.get(f"{psr_name}_chrom_idx", 4.0),
+                # prefer the sampled chromatic index (discovery names it
+                # `<psr>_chrom_gp_alpha`); fall back to a fixed `<psr>_chrom_idx`
+                # and finally to the standard alpha=4 scattering index.
+                TNCHROMIDX=noise_dict.get(
+                    f"{psr_name}_chrom_gp_alpha",
+                    noise_dict.get(f"{psr_name}_chrom_idx", 4.0),
+                ),
             )
         ###### POWERLAW CHROMATIC NOISE ######
         if f"{psr_name}_chrom_gp_log10_A" in chrom_pars:
