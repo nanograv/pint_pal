@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 import numpy as np
 import astropy.units as u
@@ -9,7 +11,6 @@ import time
 import warnings
 from datetime import datetime
 from datetime import date
-from typing import Union
 import yaml
 import os
 import pint_pal.par_checker as pc
@@ -17,12 +18,17 @@ from ipywidgets import widgets
 import pypulse
 import glob
 
+from collections.abc import Mapping, Sequence
+from numbers import Real
+from typing import Optional, Union
+
 # Read tim/par files
 import pint.toa as toa
 import pint.models as models
 import pint.residuals
 from pint.modelutils import model_equatorial_to_ecliptic
 
+from pint.models import TimingModel
 from pint.models.parameter import floatParameter, maskParameter, prefixParameter
 from pint.models.timing_model import Component
 from pint import DMconst
@@ -863,6 +869,383 @@ def add_DM1_DM2_and_unfreeze_DM(
         log.warning('DM2 is not fittable after setup; forcing DM2 frozen=True.')
 
     return
+
+# Input types for add_DMn_and_unfreeze_DM()
+DMOrderInput = Union[int, Sequence[int]]
+DMValueInput = Optional[
+    Union[
+        float,
+        Sequence[Optional[float]],
+        Mapping[int, Optional[float]],
+    ]
+]
+
+def add_DMn_and_unfreeze_DM(
+    model: TimingModel,
+    DMn: DMOrderInput,
+    DMn_value: DMValueInput = None,
+    *,
+    frozen: bool = False,
+) -> None:
+    """
+    Add one or more time derivatives of dispersion measure to a model. 
+    A generalized version of add_DM1_DM2_and_unfreeze_DM().
+
+    Parameters
+    ----------
+    model
+        PINT timing model containing a DispersionDM component.
+    DMn
+        DM derivative order or orders.
+
+        An integer is interpreted as the maximum derivative order and ensures
+        that every derivative from DM1 through DMn exists. For example,
+        ``DMn=3`` ensures that DM1, DM2, and DM3 exist.
+
+        A sequence specifies individual orders. For example, ``DMn=[3]``
+        adds or updates DM3 only. The resulting DM prefix sequence must remain
+        contiguous.
+    DMn_value
+        Initial or replacement value specification.
+
+        - ``None``: newly added parameters receive 0.0, while existing values
+          are preserved.
+        - scalar: apply the same value to every requested derivative.
+        - sequence: one value per requested order.
+        - mapping: values keyed by derivative order.
+
+        A ``None`` entry in a sequence or mapping has the same preserve/new-zero
+        behavior as the top-level ``None`` default.
+    frozen
+        Frozen state assigned to DM and the requested DM derivatives.
+
+    Returns
+    -------
+    None
+        Updates the model in-place.
+    """
+    if "DispersionDM" not in model.components:
+        raise ValueError(
+            "DispersionDM is required before adding DM derivatives."
+        )
+    
+    if not hasattr(model, "DM"):
+        raise ValueError(
+            "DispersionDM exists, but the model does not contain DM."
+        )
+
+    disp_dm = model.components["DispersionDM"]
+
+    # ------------------------------------------------------------------
+    # Normalize requested derivative orders
+    # ------------------------------------------------------------------
+    if isinstance(DMn, (int, np.integer)) and not isinstance(DMn, (bool, np.bool_),):
+        max_order = int(DMn)
+
+        if max_order < 1:
+            raise ValueError("DMn must be >= 1.")
+
+        # Integer input means all derivatives through the requested order be added.
+        orders = list(range(1, max_order + 1))
+
+    else:
+        if isinstance(DMn, (str, bytes)) or not isinstance(DMn, Sequence):
+            raise TypeError(
+                "DMn must be an integer or a sequence of integers."
+            )
+
+        orders = []
+
+        for order in DMn:
+            # Check if bool first
+            if isinstance(order, (bool, np.bool_)) or not isinstance(order, (int, np.integer),):
+                raise TypeError(
+                    "Every DM derivative order must be an integer."
+                )
+            
+            order = int(order)
+
+            if order < 1:
+                raise ValueError("DM derivative orders must be >= 1.")
+
+            orders.append(order)
+
+        orders = sorted(set(orders))
+
+        if not orders:
+            raise ValueError("DMn must contain at least one derivative order.")
+
+    # ------------------------------------------------------------------
+    # Normalize requested values based on input
+    # ------------------------------------------------------------------
+    if DMn_value is None:
+        value_by_order = {
+            order: None
+            for order in orders
+        }
+
+    elif isinstance(DMn_value, Mapping):
+        # Validate that the mapping only contains requested orders
+        unknown_orders = set(DMn_value) - set(orders)
+
+        if unknown_orders:
+            raise ValueError(
+                "DMn_value contains orders not requested through DMn: "
+                f"{sorted(unknown_orders)}"
+            )
+
+        value_by_order = {
+            order: DMn_value.get(order, None)
+            for order in orders
+        }
+
+    elif isinstance(DMn_value, Real) and not isinstance(DMn_value, (bool, np.bool_),):
+        value_by_order = {
+            order: float(DMn_value)
+            for order in orders
+        }
+
+    else:
+        if isinstance(DMn_value, (str, bytes)) or not isinstance(DMn_value, Sequence,):
+            raise TypeError(
+                "DMn_value must be None, a scalar, a sequence, or a mapping."
+            )
+
+        values = list(DMn_value)
+
+        if len(values) != len(orders):
+            raise ValueError(
+                "A sequence passed as DMn_value must contain exactly one "
+                "entry per requested derivative order."
+            )
+
+        value_by_order = dict(zip(orders, values))
+
+    for order, value in value_by_order.items():
+        if value is not None:
+            # Validate the value
+            if isinstance(value, (bool, np.bool_)) or not isinstance(value,Real,):
+                raise TypeError(
+                    f"Value for DM{order} must be numeric or None."
+                )
+
+            value_by_order[order] = float(value)
+
+    # ------------------------------------------------------------------
+    # Verify that the resulting prefix family will remain contiguous
+    # ------------------------------------------------------------------
+    existing_orders = {
+        int(name[2:])
+        for name in disp_dm.params
+        if name.startswith("DM") and name[2:].isdigit()
+    }
+
+    resulting_orders = existing_orders | set(orders)
+
+    highest_order = max(resulting_orders)
+    missing_orders = (
+        set(range(1, highest_order + 1))
+        - resulting_orders
+    )
+
+    if missing_orders:
+        raise ValueError(
+            "PINT DM derivative parameters must form a contiguous prefix "
+            f"sequence. Adding {orders} would leave missing orders "
+            f"{sorted(missing_orders)}. Pass DMn={highest_order} to create "
+            "all derivatives through that order."
+        )
+
+    # ------------------------------------------------------------------
+    # Find an existing DM prefix template if one exists
+    # ------------------------------------------------------------------
+    template = None
+
+    for name in disp_dm.params:
+        if not (
+            name.startswith("DM")
+            and name[2:].isdigit()
+        ):
+            continue
+
+        candidate = getattr(disp_dm, name)
+
+        if getattr(candidate, "is_prefix", False):
+            template = candidate
+            break
+
+    # ------------------------------------------------------------------
+    # Add, replace, or update the requested parameters!
+    # ------------------------------------------------------------------
+    for order in orders:
+        param_name = f"DM{order}"
+        requested_value = value_by_order[order]
+
+        if hasattr(model, param_name):
+            existing_param = getattr(model, param_name)
+
+            if getattr(existing_param, "is_prefix", False):
+                if requested_value is None:
+                    log.info(
+                        f"{param_name} already exists as a prefixParameter; "
+                        f"preserving value {existing_param.value}."
+                    )
+                else:
+                    log.info(
+                        f"{param_name} already exists as a prefixParameter; "
+                        f"setting {param_name}={requested_value}."
+                    )
+                    existing_param.value = requested_value
+
+                continue
+
+            # Preserve the old numeric value unless the caller explicitly
+            # supplied a replacement value.
+            old_value = getattr(existing_param, "value", None)
+            replacement_value = (
+                requested_value
+                if requested_value is not None
+                else old_value
+            )
+
+            if replacement_value is None:
+                replacement_value = 0.0
+
+            log.warning(
+                f"{param_name} exists but is not a prefixParameter. "
+                "Replacing it with a DM prefixParameter."
+            )
+
+            disp_dm.remove_param(param_name)
+
+        else:
+            # If the parameter doesn't exist, use the requested value or default to 0.0.
+            replacement_value = (
+                0.0
+                if requested_value is None
+                else requested_value
+            )
+
+            log.info(
+                f"Adding {param_name} to DispersionDM as a prefixParameter "
+                f"with initial value {replacement_value}."
+            )
+
+        if template is not None:
+            new_param = template.new_param(order)
+        else:
+            # Fallback match add_DM1_DM2_and_unfreeze_DM() implementation.
+            new_param = prefixParameter(
+                parameter_type="float",
+                name=param_name,
+                units=f"pc cm^-3/yr^{order}",
+                description=(
+                    f"{order}th order time derivative of the "
+                    "dispersion measure"
+                ),
+                long_double=True,
+                tcb2tdb_scale_factor=DMconst,
+            )
+
+            # The newly created DM1 can serve as the template for later
+            # derivatives in this same call.
+            if order == 1:
+                template = new_param
+
+        new_param.value = float(replacement_value)
+        new_param.frozen = bool(frozen)
+
+        disp_dm.add_param(
+            new_param,
+            setup=False,
+        )
+
+    # Perform model bookkeeping once after every structural change.
+    model.setup()
+    model.validate()
+
+    # ------------------------------------------------------------------
+    # Apply requested frozen state
+    # ------------------------------------------------------------------
+    state_word = "Freezing" if frozen else "Unfreezing"
+
+    log.info(
+        f"{state_word} DM and requested derivatives: "
+        f"{', '.join(f'DM{n}' for n in orders)}."
+    )
+
+    model.DM.frozen = bool(frozen)
+
+    for order in orders:
+        param_name = f"DM{order}"
+        parameter = getattr(model, param_name)
+        parameter.frozen = bool(frozen)
+
+    # ------------------------------------------------------------------
+    # Sanity check: Verify requested unfrozen parameters are actually fittable
+    # ------------------------------------------------------------------
+    if not frozen:
+        for order in orders:
+            param_name = f"DM{order}"
+            parameter = getattr(model, param_name)
+
+            if param_name not in model.fittable_params:
+                parameter.frozen = True
+                log.warning(
+                    f"{param_name} is not fittable after model setup; "
+                    f"forcing {param_name}.frozen=True."
+                )
+
+def remove_DMn_above(
+    model: TimingModel,
+    *,
+    maximum_order: int,
+) -> None:
+    """
+    Remove DM derivatives with order greater than maximum_order, ensures
+    that the model is fully sanitized and contains only DM derivatives up to 
+    the specified order.
+    
+    Parameters
+    ---------
+    model : pint.models.TimingModel
+        PINT timing model object from which the DM derivatives will be removed.
+    maximum_order : int
+        The maximum order of DM derivatives to keep in the model.
+
+    Returns
+    -------
+    None
+        Updates the model in-place.
+    """
+    if "DispersionDM" not in model.components:
+        return
+
+    disp_dm = model.components["DispersionDM"]
+
+    higher_parameters = []
+
+    for name in list(disp_dm.params):
+        if name.startswith("DM") and name[2:].isdigit():
+            order = int(name[2:])
+
+            if order > maximum_order:
+                higher_parameters.append((order, name))
+
+    # Remove highest order first to preserve a valid prefix sequence during
+    # the operation.
+    for order, name in sorted(
+        higher_parameters,
+        reverse=True,
+    ):
+        log.info(
+            f"Removing {name} while sanitizing the model to DM"
+            f"{maximum_order}."
+        )
+        disp_dm.remove_param(name)
+
+    model.setup()
+    model.validate()
 
 def add_chromatic_model_to_model(
         model: models.TimingModel,

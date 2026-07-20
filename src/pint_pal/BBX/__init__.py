@@ -106,6 +106,17 @@ from .diagnostics import (
     summarize_fitter,
 )
 
+from .gp_seedlings import (
+    GridStrategy,
+    FourierGPConfig,
+    BBSamplingSeries,
+    BBFrequencySupport,
+    PeriodogramResult,
+    FourierBasisResult,
+    FourierGridResult,
+    build_fourier_gp_seed,
+)
+
 __all__ = [
     # Config/containers
     "ReceiverSelection",
@@ -141,6 +152,13 @@ __all__ = [
     "ProxyBuildResult",
     "DMXGapSliceDiagnostics",
     "DMXGapAdjustDiagnostics",
+    "ACFResult",
+    "CalibrationProposal",
+    "empirical_acf",
+    "integrated_autocorrelation_time",
+    "estimate_effective_sample_size",
+    "first_crossing",
+    "propose_bbx_calibration",
     # Pipeline runners
     "BaseFits",
     "SolarWindProxy",

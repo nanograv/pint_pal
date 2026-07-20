@@ -48,6 +48,13 @@ import pint_pal.noise_utils as nu
 
 from astropy.stats import bayesian_blocks
 
+from .calibration import (
+    ACFResult,
+    CalibrationProposal,
+    empirical_acf,
+    propose_bbx_calibration,
+)
+
 # Personal modules
 from .utils import (
     handle_diagnostics,
@@ -3291,7 +3298,6 @@ class DMXGapAdjustDiagnostics:
 # =============================================================================
 # DispersionMeasureProxy
 # =============================================================================
-
 class DispersionMeasureProxy:
     def __init__(self, pickler: Optional[PicklerBundle] = None) -> None:
         self.pickler = pickler
@@ -4169,6 +4175,7 @@ class DispersionMeasureProxy:
             )
         )
         return dmx_dict
+
     
 
 # =============================================================================
@@ -4184,6 +4191,30 @@ class BBX:
     ) -> None:
         self.pickler = pickler
         self.dm_proxy = dm_proxy
+
+    def calibrate_proxy_series(
+        self,
+        series: "ProxySeries",
+        *,
+        alpha_total: float = 0.05,
+        n_lags: int = 64,
+        max_lag: Optional[float] = None,
+    ) -> Tuple[ACFResult, CalibrationProposal]:
+        """Compute an ACF summary and a BB/GP calibration proposal for a proxy series."""
+        series.validate()
+        acf_result = empirical_acf(
+            series.t,
+            series.y,
+            series.yerr,
+            n_lags=n_lags,
+            max_lag=max_lag,
+        )
+        proposal = propose_bbx_calibration(
+            acf_result,
+            alpha_total=alpha_total,
+            n_proxy=int(np.asarray(series.t).size),
+        )
+        return acf_result, proposal
 
     # -------------------------------------------------------------------------
     # Diagnostics runners
@@ -5386,6 +5417,57 @@ class BBX:
             pipeline_dict["gap_adjust_diag"] = gap_diag
         
         return pipeline_dict
+
+    # -------------------------------------------------------------------------
+    # GP seeding: build Fourier GP modes from BB segmentation 
+    # -------------------------------------------------------------------------
+
+    def build_fourier_gp_seed(
+        self,
+        *,
+        pipe: Mapping[str, Any],
+        toas: pint.toa.TOAs,
+        config: "FourierGPConfig",
+        compute_periodogram: bool = True,
+        chromatic_scale: Optional[np.ndarray] = None,
+    ) -> "FourierGridResult":
+        """Construct a Fourier GP seed from a completed BB segmentation."""
+        from .gp_seedlings import (
+            build_fourier_gp_seed as _build_fourier_gp_seed,
+        )
+
+        edges = np.asarray(pipe["tBB_final"], dtype=float)
+
+        gaps_raw = pipe.get("gaps", None)
+        gaps = [] if gaps_raw is None else list(gaps_raw)
+
+        mjds = np.asarray(toas.get_mjds().value, dtype=float)
+        valid_mjds = mjds[np.isfinite(mjds)]
+
+        if valid_mjds.size < 2:
+            raise ValueError(
+                "At least two finite TOA epochs are required to construct "
+                "a Fourier-GP frequency grid."
+            )
+
+        data_span_seconds = (
+            float(np.max(valid_mjds) - np.min(valid_mjds))
+            * 86400.0
+        )
+
+        return _build_fourier_gp_seed(
+            edges=edges,
+            gaps=gaps,
+            data_span_seconds=data_span_seconds,
+            config=config,
+            toas=toas,
+            compute_periodogram=compute_periodogram,
+            chromatic_scale=chromatic_scale,
+        )
+
+    # -------------------------------------------------------------------------
+    # Stage 2 orchestrator: BBX -> DMX replacement -> refit 
+    # -------------------------------------------------------------------------
 
     def fit_BB_pipeline(
         self,
