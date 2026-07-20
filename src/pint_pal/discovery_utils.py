@@ -53,20 +53,20 @@ def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, 
                 f_min=f_min, nlin=Nfreqs, nlog=nlog,
                 )
         elif noise_type == 'dm_noise':
-            return lambda pulsar, comp, T : ds.log_dm_fourierbasis(
+            return lambda pulsar, comp, T : ds.log_fourierbasis_dm(
                 psr, T=tspan, logmode=logmode,
                 f_min=f_min, nlin=Nfreqs, nlog=nlog,
                 )
         elif noise_type == 'chromatic':
             if chromatic_idx is not None:
-                # Fixed chromatic index: use log_fixed_chromatic_fourierbasis (returns matrix)
-                return lambda pulsar, comp, T : ds.log_fixed_chromatic_fourierbasis(
-                    psr, chromatic_idx=chromatic_idx, T=tspan, logmode=logmode,
+                # Fixed chromatic index: use log_fourierbasis_chrom_fixed (returns matrix)
+                return lambda pulsar, comp, T : ds.log_fourierbasis_chrom_fixed(
+                    psr, alpha=chromatic_idx, T=tspan, logmode=logmode,
                     f_min=f_min, nlin=Nfreqs, nlog=nlog,
                     )
             else:
-                # Varying chromatic index: use log_free_chromatic_fourierbasis (returns callable)
-                return lambda pulsar, comp, T : ds.log_free_chromatic_fourierbasis(
+                # Varying chromatic index: use log_fourierbasis_chrom (returns callable)
+                return lambda pulsar, comp, T : ds.log_fourierbasis_chrom(
                     psr, T=tspan, logmode=logmode,
                     f_min=f_min, nlin=Nfreqs, nlog=nlog,
                     )
