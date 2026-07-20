@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 import numpy as np
 import astropy.units as u
@@ -16,14 +18,20 @@ from ipywidgets import widgets
 import pypulse
 import glob
 
+from collections.abc import Mapping, Sequence
+from numbers import Real
+from typing import Optional, Union
+
 # Read tim/par files
 import pint.toa as toa
 import pint.models as models
 import pint.residuals
 from pint.modelutils import model_equatorial_to_ecliptic
 
-from pint.models.parameter import maskParameter
+from pint.models import TimingModel
+from pint.models.parameter import floatParameter, maskParameter, prefixParameter
 from pint.models.timing_model import Component
+from pint import DMconst
 
 import pint_pal.logger
 
@@ -725,6 +733,644 @@ def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
         if component in model.components:
             log.info(f"Removing {component} from model.")
             model.remove_component(component)
+    return
+
+def add_DM1_DM2_and_unfreeze_DM(
+        model: models.TimingModel,
+        DM1: Union[float, bool] = True,
+        DM2: Union[float, bool] = True,
+        frozen: bool = False
+    ) -> None:
+    """
+    Add DM1 and/or DM2 dispersion measure derivatives to the timing model.
+
+    This function adds higher-order dispersion measure time derivatives (DM1 for
+    first-order, DM2 for second-order) as prefixParameters to the DispersionDM component.
+    Pass False to skip adding a parameter.
+
+    Parameters
+    ==========
+    model : pint.models.TimingModel
+        PINT timing model object to which DM1 and/or DM2 will be added.
+    DM1 : float or True or False, optional
+        First-order DM time derivative. Pass True to add with default value 0.0,
+        a float value to add with that initialized value, or False to skip.
+        Default is True (add and initialize to 0.0).
+    DM2 : float or True or False, optional
+        Second-order DM time derivative. Pass True to add with default value 0.0,
+        a float value to add with that initialized value, or False to skip.
+        Default is True (add and initialize to 0.0).
+    frozen : bool, optional
+        Whether to freeze the DM, DM1, and DM2 parameters. Default is False.
+
+    Returns
+    =======
+    None
+    """
+    if 'DispersionDM' not in model.components:
+        raise ValueError("DispersionDM component is required before adding DM1/DM2.")
+
+    disp_dm = model.components['DispersionDM']
+
+    # Determine DM1 value to initialize to (0.0 if True, otherwise use the provided float)
+    dm1_value = 0.0 if DM1 is True else DM1
+
+    if DM1 is not False:
+        if hasattr(model, 'DM1'):
+            if getattr(model.DM1, 'is_prefix', False):
+                log.info(f'DM1 already exists as prefix; setting DM1={dm1_value}')
+                model.DM1.value = dm1_value
+            else:
+                log.warning('DM1 exists but is not a prefixParameter. Replacing with prefixParameter.')
+                disp_dm.remove_param('DM1')
+                disp_dm.add_param(
+                    prefixParameter(
+                        parameter_type='float',
+                        name='DM1',
+                        units='pc cm^-3/yr^1',
+                        description='1st order time derivative of the dispersion measure',
+                        long_double=True,
+                        tcb2tdb_scale_factor=DMconst,
+                    )
+                )
+                model.DM1.value = dm1_value
+        else:
+            log.info('Adding DM1 to the model as prefixParameter...')
+            disp_dm.add_param(
+                prefixParameter(
+                    parameter_type='float',
+                    name='DM1',
+                    units='pc cm^-3/yr^1',
+                    description='1st order time derivative of the dispersion measure',
+                    long_double=True,
+                    tcb2tdb_scale_factor=DMconst,
+                )
+            )
+            model.DM1.value = dm1_value
+
+    # Determine DM2 value to initialize to (0.0 if True, otherwise use the provided float)
+    dm2_value = 0.0 if DM2 is True else DM2
+
+    if DM2 is not False:
+        if hasattr(model, 'DM2'):
+            if getattr(model.DM2, 'is_prefix', False):
+                log.info(f'DM2 already exists as prefix; setting DM2={dm2_value}')
+                model.DM2.value = dm2_value
+            else:
+                log.warning('DM2 exists but is not a prefixParameter. Replacing with prefixParameter.')
+                disp_dm.remove_param('DM2')
+                disp_dm.add_param(
+                    prefixParameter(
+                        parameter_type='float',
+                        name='DM2',
+                        units='pc cm^-3/yr^2',
+                        description='2nd order time derivative of the dispersion measure',
+                        long_double=True,
+                        tcb2tdb_scale_factor=DMconst,
+                    )
+                )
+                model.DM2.value = dm2_value
+        else:
+            log.info('Adding DM2 to the model as prefixParameter...')
+            disp_dm.add_param(
+                prefixParameter(
+                    parameter_type='float',
+                    name='DM2',
+                    units='pc cm^-3/yr^2',
+                    description='2nd order time derivative of the dispersion measure',
+                    long_double=True,
+                    tcb2tdb_scale_factor=DMconst,
+                )
+            )
+            model.DM2.value = dm2_value
+
+    model.setup()
+    model.validate()
+    if frozen:
+        log.info('Freezing DM, DM1, and DM2...')
+        model.DM.frozen = True
+        if DM1 is not False:
+            model.DM1.frozen = True
+        if DM2 is not False:
+            model.DM2.frozen = True
+    else:
+        log.info('Unfreezing DM, DM1, and DM2...')
+        model.DM.frozen = False
+        if DM1 is not False:
+            model.DM1.frozen = False
+        if DM2 is not False:
+            model.DM2.frozen = False
+
+    if DM1 is not False and not model.DM1.frozen and 'DM1' not in model.fittable_params:
+        model.DM1.frozen = True
+        log.warning('DM1 is not fittable after setup; forcing DM1 frozen=True.')
+    if DM2 is not False and not model.DM2.frozen and 'DM2' not in model.fittable_params:
+        model.DM2.frozen = True
+        log.warning('DM2 is not fittable after setup; forcing DM2 frozen=True.')
+
+    return
+
+# Input types for add_DMn_and_unfreeze_DM()
+DMOrderInput = Union[int, Sequence[int]]
+DMValueInput = Optional[
+    Union[
+        float,
+        Sequence[Optional[float]],
+        Mapping[int, Optional[float]],
+    ]
+]
+
+def add_DMn_and_unfreeze_DM(
+    model: TimingModel,
+    DMn: DMOrderInput,
+    DMn_value: DMValueInput = None,
+    *,
+    frozen: bool = False,
+) -> None:
+    """
+    Add one or more time derivatives of dispersion measure to a model. 
+    A generalized version of add_DM1_DM2_and_unfreeze_DM().
+
+    Parameters
+    ----------
+    model
+        PINT timing model containing a DispersionDM component.
+    DMn
+        DM derivative order or orders.
+
+        An integer is interpreted as the maximum derivative order and ensures
+        that every derivative from DM1 through DMn exists. For example,
+        ``DMn=3`` ensures that DM1, DM2, and DM3 exist.
+
+        A sequence specifies individual orders. For example, ``DMn=[3]``
+        adds or updates DM3 only. The resulting DM prefix sequence must remain
+        contiguous.
+    DMn_value
+        Initial or replacement value specification.
+
+        - ``None``: newly added parameters receive 0.0, while existing values
+          are preserved.
+        - scalar: apply the same value to every requested derivative.
+        - sequence: one value per requested order.
+        - mapping: values keyed by derivative order.
+
+        A ``None`` entry in a sequence or mapping has the same preserve/new-zero
+        behavior as the top-level ``None`` default.
+    frozen
+        Frozen state assigned to DM and the requested DM derivatives.
+
+    Returns
+    -------
+    None
+        Updates the model in-place.
+    """
+    if "DispersionDM" not in model.components:
+        raise ValueError(
+            "DispersionDM is required before adding DM derivatives."
+        )
+    
+    if not hasattr(model, "DM"):
+        raise ValueError(
+            "DispersionDM exists, but the model does not contain DM."
+        )
+
+    disp_dm = model.components["DispersionDM"]
+
+    # ------------------------------------------------------------------
+    # Normalize requested derivative orders
+    # ------------------------------------------------------------------
+    if isinstance(DMn, (int, np.integer)) and not isinstance(DMn, (bool, np.bool_),):
+        max_order = int(DMn)
+
+        if max_order < 1:
+            raise ValueError("DMn must be >= 1.")
+
+        # Integer input means all derivatives through the requested order be added.
+        orders = list(range(1, max_order + 1))
+
+    else:
+        if isinstance(DMn, (str, bytes)) or not isinstance(DMn, Sequence):
+            raise TypeError(
+                "DMn must be an integer or a sequence of integers."
+            )
+
+        orders = []
+
+        for order in DMn:
+            # Check if bool first
+            if isinstance(order, (bool, np.bool_)) or not isinstance(order, (int, np.integer),):
+                raise TypeError(
+                    "Every DM derivative order must be an integer."
+                )
+            
+            order = int(order)
+
+            if order < 1:
+                raise ValueError("DM derivative orders must be >= 1.")
+
+            orders.append(order)
+
+        orders = sorted(set(orders))
+
+        if not orders:
+            raise ValueError("DMn must contain at least one derivative order.")
+
+    # ------------------------------------------------------------------
+    # Normalize requested values based on input
+    # ------------------------------------------------------------------
+    if DMn_value is None:
+        value_by_order = {
+            order: None
+            for order in orders
+        }
+
+    elif isinstance(DMn_value, Mapping):
+        # Validate that the mapping only contains requested orders
+        unknown_orders = set(DMn_value) - set(orders)
+
+        if unknown_orders:
+            raise ValueError(
+                "DMn_value contains orders not requested through DMn: "
+                f"{sorted(unknown_orders)}"
+            )
+
+        value_by_order = {
+            order: DMn_value.get(order, None)
+            for order in orders
+        }
+
+    elif isinstance(DMn_value, Real) and not isinstance(DMn_value, (bool, np.bool_),):
+        value_by_order = {
+            order: float(DMn_value)
+            for order in orders
+        }
+
+    else:
+        if isinstance(DMn_value, (str, bytes)) or not isinstance(DMn_value, Sequence,):
+            raise TypeError(
+                "DMn_value must be None, a scalar, a sequence, or a mapping."
+            )
+
+        values = list(DMn_value)
+
+        if len(values) != len(orders):
+            raise ValueError(
+                "A sequence passed as DMn_value must contain exactly one "
+                "entry per requested derivative order."
+            )
+
+        value_by_order = dict(zip(orders, values))
+
+    for order, value in value_by_order.items():
+        if value is not None:
+            # Validate the value
+            if isinstance(value, (bool, np.bool_)) or not isinstance(value,Real,):
+                raise TypeError(
+                    f"Value for DM{order} must be numeric or None."
+                )
+
+            value_by_order[order] = float(value)
+
+    # ------------------------------------------------------------------
+    # Verify that the resulting prefix family will remain contiguous
+    # ------------------------------------------------------------------
+    existing_orders = {
+        int(name[2:])
+        for name in disp_dm.params
+        if name.startswith("DM") and name[2:].isdigit()
+    }
+
+    resulting_orders = existing_orders | set(orders)
+
+    highest_order = max(resulting_orders)
+    missing_orders = (
+        set(range(1, highest_order + 1))
+        - resulting_orders
+    )
+
+    if missing_orders:
+        raise ValueError(
+            "PINT DM derivative parameters must form a contiguous prefix "
+            f"sequence. Adding {orders} would leave missing orders "
+            f"{sorted(missing_orders)}. Pass DMn={highest_order} to create "
+            "all derivatives through that order."
+        )
+
+    # ------------------------------------------------------------------
+    # Find an existing DM prefix template if one exists
+    # ------------------------------------------------------------------
+    template = None
+
+    for name in disp_dm.params:
+        if not (
+            name.startswith("DM")
+            and name[2:].isdigit()
+        ):
+            continue
+
+        candidate = getattr(disp_dm, name)
+
+        if getattr(candidate, "is_prefix", False):
+            template = candidate
+            break
+
+    # ------------------------------------------------------------------
+    # Add, replace, or update the requested parameters!
+    # ------------------------------------------------------------------
+    for order in orders:
+        param_name = f"DM{order}"
+        requested_value = value_by_order[order]
+
+        if hasattr(model, param_name):
+            existing_param = getattr(model, param_name)
+
+            if getattr(existing_param, "is_prefix", False):
+                if requested_value is None:
+                    log.info(
+                        f"{param_name} already exists as a prefixParameter; "
+                        f"preserving value {existing_param.value}."
+                    )
+                else:
+                    log.info(
+                        f"{param_name} already exists as a prefixParameter; "
+                        f"setting {param_name}={requested_value}."
+                    )
+                    existing_param.value = requested_value
+
+                continue
+
+            # Preserve the old numeric value unless the caller explicitly
+            # supplied a replacement value.
+            old_value = getattr(existing_param, "value", None)
+            replacement_value = (
+                requested_value
+                if requested_value is not None
+                else old_value
+            )
+
+            if replacement_value is None:
+                replacement_value = 0.0
+
+            log.warning(
+                f"{param_name} exists but is not a prefixParameter. "
+                "Replacing it with a DM prefixParameter."
+            )
+
+            disp_dm.remove_param(param_name)
+
+        else:
+            # If the parameter doesn't exist, use the requested value or default to 0.0.
+            replacement_value = (
+                0.0
+                if requested_value is None
+                else requested_value
+            )
+
+            log.info(
+                f"Adding {param_name} to DispersionDM as a prefixParameter "
+                f"with initial value {replacement_value}."
+            )
+
+        if template is not None:
+            new_param = template.new_param(order)
+        else:
+            # Fallback match add_DM1_DM2_and_unfreeze_DM() implementation.
+            new_param = prefixParameter(
+                parameter_type="float",
+                name=param_name,
+                units=f"pc cm^-3/yr^{order}",
+                description=(
+                    f"{order}th order time derivative of the "
+                    "dispersion measure"
+                ),
+                long_double=True,
+                tcb2tdb_scale_factor=DMconst,
+            )
+
+            # The newly created DM1 can serve as the template for later
+            # derivatives in this same call.
+            if order == 1:
+                template = new_param
+
+        new_param.value = float(replacement_value)
+        new_param.frozen = bool(frozen)
+
+        disp_dm.add_param(
+            new_param,
+            setup=False,
+        )
+
+    # Perform model bookkeeping once after every structural change.
+    model.setup()
+    model.validate()
+
+    # ------------------------------------------------------------------
+    # Apply requested frozen state
+    # ------------------------------------------------------------------
+    state_word = "Freezing" if frozen else "Unfreezing"
+
+    log.info(
+        f"{state_word} DM and requested derivatives: "
+        f"{', '.join(f'DM{n}' for n in orders)}."
+    )
+
+    model.DM.frozen = bool(frozen)
+
+    for order in orders:
+        param_name = f"DM{order}"
+        parameter = getattr(model, param_name)
+        parameter.frozen = bool(frozen)
+
+    # ------------------------------------------------------------------
+    # Sanity check: Verify requested unfrozen parameters are actually fittable
+    # ------------------------------------------------------------------
+    if not frozen:
+        for order in orders:
+            param_name = f"DM{order}"
+            parameter = getattr(model, param_name)
+
+            if param_name not in model.fittable_params:
+                parameter.frozen = True
+                log.warning(
+                    f"{param_name} is not fittable after model setup; "
+                    f"forcing {param_name}.frozen=True."
+                )
+
+def remove_DMn_above(
+    model: TimingModel,
+    *,
+    maximum_order: int,
+) -> None:
+    """
+    Remove DM derivatives with order greater than maximum_order, ensures
+    that the model is fully sanitized and contains only DM derivatives up to 
+    the specified order.
+    
+    Parameters
+    ---------
+    model : pint.models.TimingModel
+        PINT timing model object from which the DM derivatives will be removed.
+    maximum_order : int
+        The maximum order of DM derivatives to keep in the model.
+
+    Returns
+    -------
+    None
+        Updates the model in-place.
+    """
+    if "DispersionDM" not in model.components:
+        return
+
+    disp_dm = model.components["DispersionDM"]
+
+    higher_parameters = []
+
+    for name in list(disp_dm.params):
+        if name.startswith("DM") and name[2:].isdigit():
+            order = int(name[2:])
+
+            if order > maximum_order:
+                higher_parameters.append((order, name))
+
+    # Remove highest order first to preserve a valid prefix sequence during
+    # the operation.
+    for order, name in sorted(
+        higher_parameters,
+        reverse=True,
+    ):
+        log.info(
+            f"Removing {name} while sanitizing the model to DM"
+            f"{maximum_order}."
+        )
+        disp_dm.remove_param(name)
+
+    model.setup()
+    model.validate()
+
+def add_chromatic_model_to_model(
+        model: models.TimingModel,
+        CM: Union[float, bool] = 0.0,
+        CM1: Union[float, bool] = 0.0,
+        CM2: Union[float, bool] = 0.0,
+        TNCHROMIDX: float = 4.0,
+        frozen: bool = False,
+        set_CMEPOCH_to_DMEPOCH: bool = True
+    ) -> None:
+    """
+    Add a deterministic chromatic measure (CM) model to the timing model.
+
+    Parameters
+    ==========
+    model : pint.models.TimingModel
+        PINT timing model object to which the ChromaticCM component will be added.
+    CM : float or False, optional
+        Value for the chromatic measure. Pass False to skip setting this parameter.
+        Default is 0.0.
+    CM1 : float or False, optional
+        Value for the first time derivative of chromatic measure. Pass False to skip.
+        Default is 0.0.
+    CM2 : float or False, optional
+        Value for the second time derivative of chromatic measure. Pass False to skip.
+        Default is 0.0.
+    TNCHROMIDX : float, optional
+        Chromatic index to use in model. Default is 4.0.
+    frozen : bool, optional
+        If True, ChromaticCM parameters will be frozen in fits; if False, they will be
+        free to vary. Default is False.
+    set_CMEPOCH_to_DMEPOCH : bool, optional
+        If True, sets CMEPOCH to DMEPOCH; if False, leaves CMEPOCH unchanged.
+        Default is True.
+
+    Returns
+    =======
+    None
+        Updates the ChromaticCM component in the model in-place.
+    """
+    log.info('Adding ChromaticCM model to par file')
+    all_components = Component.component_types
+    noise_class = all_components["ChromaticCM"]
+    noise = noise_class()  # Make the noise instance.
+    model.add_component(noise, validate=False, force=True)
+    # add parameters
+    if CM is not False:
+        model['CM'].value = CM
+    if CM1 is not False:
+        model['CM1'].value = CM1
+    if frozen:
+        if CM is not False:
+            model['CM'].frozen = True
+        if CM1 is not False:
+            model['CM1'].frozen = True
+    elif not frozen:
+        if CM is not False:
+            model['CM'].frozen = False
+        if CM1 is not False:
+            model['CM1'].frozen = False
+    if CM2 is not False:
+        cm_comp = model.components['ChromaticCM']
+        cm_comp.add_param(
+            prefixParameter(
+                parameter_type='float',
+                name='CM2',
+                units='pc cm^-3/yr^2/MHz^2',
+                description='2nd order time derivative of the chromatic measure',
+                long_double=True,
+                convert_tcb2tdb=False,
+            )
+        )
+        model['CM2'].value = CM2
+        model['CM2'].frozen = True if frozen else False
+    if set_CMEPOCH_to_DMEPOCH:
+        if model.DMEPOCH.value is not None:
+            model.CMEPOCH.quantity = model.DMEPOCH.quantity
+        else:
+            log.warning("DMEPOCH is not set; SWEPOCH will not be set to DMEPOCH.")
+    model['TNCHROMIDX'].value = TNCHROMIDX
+    model.setup()
+    return
+
+def add_deteriministic_solar_wind_to_model(
+        model,
+        NE_SW=6.67,
+        frozen=False,
+        SWM = 0,
+        set_SWEPOCH_to_DMEPOCH = True
+    ):
+    """
+     Adds a deterministic solar wind model to the input timing model.
+     Parameters
+     ==========
+     model: PINT model object
+     NE_SW: float, optional
+         Solar wind density at 1 AU in electrons per cubic centimeter; default is 6.67, which is the mean in the NANOGrav 15yr-year chromatic noise paper.
+    frozen: bool, optional
+        If True, NE_SW will be frozen in the fit; if False, it will be free to vary. Default is False.
+    SWM: int, optional
+        Solar wind model to use; default is 0, which is the simple 1/r^2 model. The only other option currently implemented is 1, which is the more complex model from You et al. (2007).
+    set_SWEPOCH_to_DMEPOCH: bool, optional
+        If True, sets SWEPOCH to DMEPOCH; if False, leaves SWEPOCH unchanged.
+    Returns
+    =======
+    No return.
+        But updates the solar wind dispersion component in the model.
+    """
+    log.info('Adding Solar Wind Dispersion to par file')
+    all_components = Component.component_types
+    noise_class = all_components["SolarWindDispersion"]
+    noise = noise_class()  # Make the dispersion instance.
+    model.add_component(noise, validate=False, force=True)
+    # add parameters
+    model['NE_SW'].quantity = NE_SW 
+    if frozen:
+        model['NE_SW'].frozen = True
+    elif not frozen:
+        model['NE_SW'].frozen = False
+    model['SWM'].value = SWM
+    if set_SWEPOCH_to_DMEPOCH:
+        if model.DMEPOCH.value is not None:
+            model.SWEPOCH.quantity = model.DMEPOCH.quantity
+        else:
+            log.warning("DMEPOCH is not set; SWEPOCH will not be set to DMEPOCH.")
     return
 
 def get_receivers(toas):

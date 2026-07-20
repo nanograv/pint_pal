@@ -5171,3 +5171,1360 @@ def rn_sub(testing, rn_subtract, fo_nb, fo_wb):
         rn_nb = 0.0
         rn_wb = 0.0
     return rn_nb, rn_wb
+
+
+# ---------------------------------------------------------------------------
+# GP realization plotting helpers
+# ---------------------------------------------------------------------------
+
+# DM constant: 1 / (2.41e-16) in the conventional DMconst = 4.148808e3
+# to convert DM (pc cm^-3) to time delay (s) at freq MHz:
+#   dt = DM * DMconst / freq_MHz^2   [seconds]
+_DMCONST_MHZ2_S = 4.148808e3  # MHz^2 s pc^-1 cm^3
+_DM_K = 2.41e-16  # s MHz^2 pc^-1 cm^3  (Discovery convention)
+
+# Pretty-print labels for known GP components
+_GP_LABELS = {
+    'red_noise': 'Red Noise',
+    'rn': 'Red Noise',
+    'dm_gp': 'DM GP',
+    'dm': 'DM GP',
+    'chrom': 'Free Chromatic GP',
+    'chrom_gp': 'Free Chromatic GP',
+    'sw': 'Solar Wind GP',
+    'solar_wind': 'Solar Wind GP',
+    'timing_model': 'Timing Model Perturbations',
+    'tm': 'Timing Model Perturbations',
+    'ecorr': 'ECORR (GP)',
+    'gp_ecorr': 'ECORR (GP)',
+}
+
+# Color palette for GP components
+_GP_COLORS = {
+    'red_noise': '#D62728',
+    'rn': '#D62728',
+    'dm_gp': '#FF7F0E',
+    'dm': '#FF7F0E',
+    'chrom': '#2CA02C',
+    'chrom_gp': '#2CA02C',
+    'sw': '#9467BD',
+    'solar_wind': '#9467BD',
+    'timing_model': '#7F7F7F',
+    'tm': '#7F7F7F',
+    'ecorr': '#1F77B4',
+    'gp_ecorr': '#1F77B4',
+}
+
+# Font sizes for GP plots
+_GP_FONTSIZE_TICK = 13
+_GP_FONTSIZE_LABEL = 14
+_GP_FONTSIZE_TITLE = 15
+_GP_FONTSIZE_LEGEND = 11
+
+
+def load_gp_realizations(filepath):
+    """
+    Load a GP realizations feather file produced by
+    ``noise_utils.generate_gp_realizations``.
+
+    Parameters
+    ----------
+    filepath : str or Path
+        Path to the ``*_gp_realizations.feather`` file.
+
+    Returns
+    -------
+    dict
+        The payload dictionary with numpy arrays restored for ``F_columns``
+        and ``realizations``.
+    """
+    import pandas as pd
+    import json
+    from pathlib import Path
+
+    # Load feather file
+    df = pd.read_feather(Path(filepath))
+    
+    # Extract metadata from first row
+    metadata = json.loads(df['metadata_json'].iloc[0])
+    
+    # Reconstruct realizations and F_columns dictionaries
+    realizations = {}
+    F_columns = {}
+    
+    # Detect which serialization format was used:
+    # New format: rows have 'shape0', 'shape1', 'values' columns
+    # Old format: rows have 'index1', 'index2', 'value' columns
+    new_format = 'shape0' in df.columns
+
+    if new_format:
+        for _, row in df.iterrows():
+            gp_key = row['gp_key']
+            s0, s1 = int(row['shape0']), int(row['shape1'])
+            arr = np.array(row['values']).reshape(s0, s1)
+            if row['data_type'] == 'realization':
+                realizations[gp_key] = arr
+            elif row['data_type'] == 'F_column':
+                F_columns[gp_key] = arr
+    else:
+        # Legacy per-element format
+        for gp_key in metadata['gp_keys']:
+            real_data = df[(df['gp_key'] == gp_key) & (df['data_type'] == 'realization')]
+            if len(real_data) > 0:
+                max_idx1 = int(real_data['index1'].max()) + 1
+                max_idx2 = int(real_data['index2'].max()) + 1
+                real_array = np.zeros((max_idx1, max_idx2))
+                for _, row in real_data.iterrows():
+                    real_array[int(row['index1']), int(row['index2'])] = row['value']
+                realizations[gp_key] = real_array
+            f_data = df[(df['gp_key'] == gp_key) & (df['data_type'] == 'F_column')]
+            if len(f_data) > 0:
+                max_idx1 = int(f_data['index1'].max()) + 1
+                max_idx2 = int(f_data['index2'].max()) + 1
+                f_array = np.zeros((max_idx1, max_idx2))
+                for _, row in f_data.iterrows():
+                    f_array[int(row['index1']), int(row['index2'])] = row['value']
+                F_columns[gp_key] = f_array
+    
+    # Combine metadata with reconstructed arrays
+    payload = {
+        **metadata,
+        'realizations': realizations,
+        'F_columns': F_columns,
+    }
+    
+    # Convert lists back to numpy arrays for convenience
+    payload['toas_mjd'] = np.array(payload['toas_mjd'])
+    payload['freqs_mhz'] = np.array(payload['freqs_mhz'])
+    
+    return payload
+
+
+def _classify_gp(gp_key, psr_name=None):
+    """Return (short_name, category) for a GP key string.
+
+    ``gp_key`` typically looks like ``'{psr}_{gpname}_coefficients({N})'``.
+    ``category`` is one of ``'red_noise'``, ``'dm_gp'``, ``'chrom'``,
+    ``'sw'``, ``'timing_model'``, ``'ecorr'``, or ``'unknown'``.
+    """
+    key = gp_key.lower()
+    if psr_name:
+        key = key.replace(psr_name.lower() + '_', '', 1)
+
+    if 'timing' in key or key.startswith('tm'):
+        return 'Timing Model', 'timing_model'
+    elif 'ecorr' in key or 'jitter' in key:
+        return 'ECORR (GP)', 'ecorr'
+    elif 'solar' in key or key.startswith('sw') or 'n_earth' in key:
+        return 'Solar Wind GP', 'sw'
+    elif 'chrom' in key:
+        return 'Chromatic GP', 'chrom'
+    elif key.startswith('dm') or 'dm_gp' in key:
+        return 'DM GP', 'dm_gp'
+    elif 'red' in key or key.startswith('rn'):
+        return 'Red Noise', 'red_noise'
+    else:
+        return gp_key, 'unknown'
+
+
+def _gp_time_domain(payload, gp_key, realization_idx=None):
+    """Compute time-domain GP realization(s) from saved coefficients and F.
+
+    Parameters
+    ----------
+    payload : dict
+        Loaded GP realizations payload.
+    gp_key : str
+        The GP key (must be in ``payload['gp_keys']``).
+    realization_idx : int or None
+        If int, return a single realization. If None, return all.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_toas,)`` if single, ``(n_realizations, n_toas)`` if all.
+    """
+    F = payload['F_columns'].get(gp_key)
+    coeffs = payload['realizations'][gp_key]
+    if F is None:
+        raise ValueError(
+            f"No F_columns for {gp_key}; cannot compute time-domain realization."
+        )
+    F = np.asarray(F)
+    coeffs = np.asarray(coeffs)
+
+    if realization_idx is not None:
+        return F @ coeffs[realization_idx]
+    else:
+        # (n_realizations, n_toas) = (n_real, n_coeff) @ (n_coeff, n_toas)
+        return coeffs @ F.T
+
+
+# Timing model parameter names that are relevant for specific GP categories.
+# These are used by _get_tm_component_signal() to know which TM columns to
+# fold into a GP realization (e.g. add NE_SW to the SW GP).
+_TM_PARAMS_FOR_CATEGORY = {
+    'red_noise': ['F0', 'F1', 'F2'],
+    'dm_gp':     ['DM', 'DM1', 'DM2', 'DM3'],
+    'sw':        ['NE_SW', 'NE1', 'SWPRBETA1', 'sw_proxy_beta'],
+    'chrom':     ['CM', 'CM1', 'CM2'],        # we don't often use these but they could be included in principle
+}
+
+
+def _get_tm_gp_key(payload, psr_name=None):
+    """Return the timing-model GP key from the payload, or None."""
+    for gk in payload.get('gp_keys', []):
+        _, cat = _classify_gp(gk, psr_name)
+        if cat == 'timing_model':
+            return gk
+    return None
+
+
+def _extract_tm_reference_values(model, gp_category):
+    """Extract reference values from timing model for a given GP category.
+
+    Extracts the mean/reference value (e.g., F0.value, DM.value) for each
+    timing model parameter relevant to the category.
+
+    Parameters
+    ----------
+    model : pint.models.TimingModel or None
+        PINT timing model.
+    gp_category : str
+        One of ``'red_noise'``, ``'dm_gp'``, ``'chrom'``, ``'sw'``.
+
+    Returns
+    -------
+    dict
+        ``{param_name: value}`` for parameters found in the model.
+        Empty dict if model is None or no parameters found.
+    """
+    if model is None:
+        return {}
+    
+    param_names = _TM_PARAMS_FOR_CATEGORY.get(gp_category, [])
+    ref_vals = {}
+    
+    for pname in param_names:
+        try:
+            if hasattr(model, pname):
+                ref_vals[pname] = float(getattr(model, pname).value)
+        except Exception:
+            pass
+    
+    return ref_vals
+
+
+def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, include_reference_values=False):
+    """Compute the timing-model contribution for a given GP category.
+
+    For each realization, the timing-model coefficient draw is multiplied by
+    the corresponding TM design-matrix column.  Only the columns relevant to
+    ``gp_category`` (according to ``_TM_PARAMS_FOR_CATEGORY``) are included.
+
+    If ``model`` is provided and ``include_reference_values=True``, the
+    reference values for each parameter are converted to time delays and added
+    to the fitted perturbations.  The conversion is done via multiplication by
+    the design matrix column:
+        ref_delay = ref_value * F[toa, column]
+                  = ref_value * d(delay)/d(param)
+    This gives the time-delay contribution of the reference value at each TOA,
+    which is then broadcasted across all realizations.
+
+    Parameters
+    ----------
+    payload : dict
+        Loaded GP realizations payload.
+    gp_category : str
+        One of ``'red_noise'``, ``'dm_gp'``, ``'chrom'``, ``'sw'``.
+    psr_name : str, optional
+        Pulsar name to help classify GP keys.
+    model : pint.models.TimingModel, optional
+        PINT timing model to extract reference parameter values. Default None.
+    include_reference_values : bool, optional
+        If True and model is provided, add reference parameter values
+        (converted to time delays) to the fitted perturbations. Default False.
+        Reference values are never added for the 'sw' category (handled
+        separately in plot_gp_sw_ne).
+
+    Returns
+    -------
+    np.ndarray or None
+        Shape ``(n_realizations, n_toas)`` — the timing-model contribution
+        for the requested category summed over relevant TM columns, in seconds.
+        Includes fitted perturbations, and reference contributions if both
+        model and include_reference_values are provided. Returns *None* if the
+        TM key is missing or no relevant column found.
+    list of str
+        Names of the TM columns that were included.
+    """
+    tm_key = _get_tm_gp_key(payload, psr_name)
+    if tm_key is None:
+        return None, []
+
+    fitpars = payload.get('tm_fitpars')
+    if fitpars is None:
+        log.warning("No tm_fitpars in payload; cannot identify TM columns.")
+        return None, []
+
+    F_tm = payload['F_columns'].get(tm_key)
+    coeffs_tm = payload['realizations'].get(tm_key)
+    if F_tm is None or coeffs_tm is None:
+        return None, []
+
+    F_tm = np.asarray(F_tm)        # (n_toas, n_tm_cols)
+    coeffs_tm = np.asarray(coeffs_tm)  # (n_real, n_tm_cols)
+
+    # Map fitpars to column indices.  The TM design matrix has the same
+    # number of columns as len(fitpars) (when svd=False).
+    n_cols = min(F_tm.shape[1], len(fitpars))
+
+    wanted = _TM_PARAMS_FOR_CATEGORY.get(gp_category, [])
+    col_idx = []
+    used_names = []
+    for i in range(n_cols):
+        if fitpars[i] in wanted:
+            col_idx.append(i)
+            used_names.append(fitpars[i])
+
+    if not col_idx:
+        return None, []
+
+    # sum_k F[:, k] * c[:, k]  for every realization
+    # This gives fitted perturbations in seconds.
+    F_sub = F_tm[:, col_idx]            # (n_toas, n_sel)
+    c_sub = coeffs_tm[:, col_idx]       # (n_real, n_sel)
+    tm_signal = c_sub @ F_sub.T         # (n_real, n_toas)
+
+    # Add reference contributions if requested, model provided, and category is not 'sw'.
+    # Each parameter's reference value is converted to a time delay by multiplying
+    # by the corresponding design matrix column:
+    #   ref_delay[toa] = ref_value * F_tm[toa, col]
+    #                  = ref_value * d(delay)/d(param)  (units: seconds)
+    # This works for all categories:
+    #   - red_noise (F0, F1, F2): delay = dfreq * d(delay)/d(freq)
+    #   - dm_gp (DM, DM1, DM2): delay = DM * d(delay)/d(DM)
+    #   - chrom (CM, CM1, CM2): delay = CM * d(delay)/d(CM)
+    #   (SW handled separately in plot_gp_sw_ne, not here)
+    if include_reference_values and model is not None and gp_category != 'sw':
+        ref_vals = _extract_tm_reference_values(model, gp_category)
+        if ref_vals:
+            for pname, col_i in zip(used_names, col_idx):
+                if pname in ref_vals:
+                    # Design matrix column: d(delay)/d(param) at each TOA
+                    # Multiply by reference value to get reference delay contribution
+                    ref_delay = ref_vals[pname] * F_tm[:, col_i]  # (n_toas,)
+                    # Broadcast to all realizations and add
+                    tm_signal = tm_signal + ref_delay[np.newaxis, :]
+
+    return tm_signal, used_names
+
+
+def get_tm_delays(payload, psr_name=None):
+    """Return the timing-model delay (seconds) for each marginalized parameter.
+
+    For every timing-model fit parameter, this computes
+    ``F_tm[:, i] * coefficients[:, i]`` — the time-domain delay contribution
+    of that single parameter across all realizations.
+
+    Parameters
+    ----------
+    payload : dict
+        Loaded GP realizations payload (from ``load_gp_realizations`` or
+        ``generate_gp_realizations``).
+    psr_name : str, optional
+        Pulsar name to help classify GP keys.
+
+    Returns
+    -------
+    dict
+        ``{param_name: np.ndarray}`` where each array has shape
+        ``(n_realizations, n_toas)`` and is in **seconds**.
+        Returns an empty dict if the TM key or fitpars are unavailable.
+    """
+    psr_name = psr_name or payload.get('pulsar_name', '')
+    tm_key = _get_tm_gp_key(payload, psr_name)
+    if tm_key is None:
+        log.warning("No timing-model GP key found in payload.")
+        return {}
+
+    fitpars = payload.get('tm_fitpars')
+    if fitpars is None:
+        log.warning("No tm_fitpars in payload.")
+        return {}
+
+    F_tm = payload['F_columns'].get(tm_key)
+    coeffs_tm = payload['realizations'].get(tm_key)
+    if F_tm is None or coeffs_tm is None:
+        return {}
+
+    F_tm = np.asarray(F_tm)            # (n_toas, n_cols)
+    coeffs_tm = np.asarray(coeffs_tm)  # (n_real, n_cols)
+    n_cols = min(F_tm.shape[1], len(fitpars))
+
+    out = {}
+    for i in range(n_cols):
+        # (n_real, n_toas) = outer product of coeff column × basis column
+        out[fitpars[i]] = coeffs_tm[:, i:i+1] * F_tm[:, i:i+1].T
+    return out, F_tm, coeffs_tm
+
+
+def _extract_ne_sw_reference(model):
+    """Extract the reference NE_SW value from a PINT timing model.
+
+    Parameters
+    ----------
+    model : pint.models.TimingModel or None
+        PINT timing model.
+
+    Returns
+    -------
+    float or None
+        NE_SW in cm\ :sup:`-3`, or None.
+    """
+    if model is None:
+        return None
+    try:
+        if hasattr(model, 'NE_SW'):
+            return float(model.NE_SW.value)
+    except Exception:
+        pass
+    return None
+
+
+def _convert_units(
+    signal,
+    freqs_mhz,
+    gp_category,
+    target_units='us',
+    chromatic_idx=None,
+    ref_freq_mhz=1400.0,
+):
+    """
+    Convert a time-domain GP signal to the requested units.
+
+    The design matrices stored by Discovery already embed the frequency-
+    dependent scaling for DM and chromatic GPs (they contain
+    ``F * DMconst * freq^{-2}`` or ``F * (freq/ref)^{-idx}``), so the
+    raw ``F @ coefficients`` product is **already in seconds**.
+
+    Parameters
+    ----------
+    signal : np.ndarray
+        Time-domain realizations, shape ``(n_toas,)`` or ``(n_real, n_toas)``.
+    freqs_mhz : np.ndarray
+        Observing frequencies in MHz, shape ``(n_toas,)``.
+    gp_category : str
+        One of ``'red_noise'``, ``'dm_gp'``, ``'chrom'``, ``'sw'``,
+        ``'timing_model'``, ``'ecorr'``.
+    target_units : str
+        ``'us'`` for microseconds, ``'s'`` for seconds,
+        ``'dm'`` for DM in 10^-3 pc cm^-3, ``'dm_full'`` for DM in pc cm^-3,
+        ``'ne'`` for solar wind electron density n_E [cm^-3] (SW only),
+        ``'us@1400'`` for chromatic GP normalised to 800 MHz.
+    chromatic_idx : float or None
+        Chromatic index (needed for ``'us@1400'`` or ``'dm'`` for chrom GP).
+    ref_freq_mhz : float
+        Reference frequency for chromatic GP. Default 1400 MHz.
+
+    Returns
+    -------
+    np.ndarray
+        Signal in the requested units.
+    str
+        Label string for the y-axis.
+    """
+    if target_units == 'us':
+        return signal * 1e6, r'$\Delta t$ ($\mu$s)'
+    elif target_units == 's':
+        return signal, r'$\Delta t$ (s)'
+    elif target_units == 'us@1400':
+        # Normalise chromatic GP delay to 800 MHz reference.
+        # The design matrix encodes timing delay *at the TOA frequencies*:
+        #   dt(f) = dt_ref * (f / f_ref)^{-idx}
+        # We want dt(800), so multiply by (f_toa / 800)^idx to "undo" the
+        # per-TOA chromatic scaling and re-evaluate at 800 MHz.
+        if chromatic_idx is None:
+            chromatic_idx = 4.0  # default chromatic index
+        ratio = (freqs_mhz / 1400.0) ** chromatic_idx  # (n_toas,)
+        return signal * ratio * 1e6, r'$\Delta t$ ($\mu$s @1400MHz)'
+    elif target_units == 'dm':
+        # dt = DM * DMconst / freq^2  =>  DM = dt * freq^2 / DMconst
+        if gp_category in ('dm_gp', 'dm', 'sw', 'solar_wind'):
+            dm_signal = signal * freqs_mhz**2 / _DMCONST_MHZ2_S * 1e3
+            return dm_signal, r'$\Delta$DM ($10^{-3}$ pc cm$^{-3}$)'
+        elif gp_category in ('chrom', 'chrom_gp') and chromatic_idx is not None:
+            log.warning(
+                "DM units not well-defined for chromatic GP (idx != 2). "
+                "Returning microseconds."
+            )
+            return signal * 1e6, r'$\Delta t$ ($\mu$s)'
+        else:
+            return signal * 1e6, r'$\Delta t$ ($\mu$s)'
+    elif target_units == 'dm_full':
+        # Convert to pc cm^-3 (without the 1e3 scaling factor)
+        if gp_category in ('dm_gp', 'dm', 'sw', 'solar_wind'):
+            dm_signal = signal * freqs_mhz**2 / _DMCONST_MHZ2_S
+            return dm_signal, r'$\Delta$DM (pc cm$^{-3}$)'
+        elif gp_category in ('chrom', 'chrom_gp') and chromatic_idx is not None:
+            log.warning(
+                "DM units not well-defined for chromatic GP (idx != 2). "
+                "Returning microseconds."
+            )
+            return signal * 1e6, r'$\Delta t$ ($\mu$s)'
+        else:
+            return signal * 1e6, r'$\Delta t$ ($\mu$s)'
+    elif target_units == 'ne':
+        # Convert SW timing delay to n_E [cm^-3].  The SW design matrix
+        # already contains the geometric factor S(t) * DMconst / f^2, so:
+        #   dt = n_E * S(t) * DMconst / f^2
+        # => n_E = dt * f^2 / (DMconst * S(t))
+        # Without solar geometry(t) we cannot do the exact conversion here; this is
+        # handled by plot_gp_sw_ne for interpolation bases.  For Fourier
+        # bases just return DM.
+        dm_signal = signal * freqs_mhz**2 / _DMCONST_MHZ2_S * 1e3
+        return dm_signal, r'$\Delta$DM$_{\rm SW}$ ($10^{-3}$ pc cm$^{-3}$)'
+    else:
+        raise ValueError(f"Unknown target_units: {target_units!r}")
+
+
+def plot_gp_realization(
+    payload,
+    gp_key,
+    units='auto',
+    ci_levels=(0.68, 0.95),
+    show_median=True,
+    show_realizations=0,
+    show_solar_conjunctions=True,
+    show_sw_nodes=False,
+    include_tm_perturbations=False,
+    include_tm_values=False,
+    model=None,
+    ax=None,
+    figsize=(10, 4),
+    title=None,
+    color=None,
+    alpha_ci=0.15,
+    alpha_real=0.08,
+    chromatic_idx=None,
+    ref_freq_mhz=1400.0,
+    label=None,
+    toa_units='mjd',
+):
+    """
+    Plot GP realizations for a single GP component.
+
+    Parameters
+    ----------
+    payload : dict
+        Loaded GP realizations payload from ``load_gp_realizations``.
+    gp_key : str
+        The GP key to plot (must be in ``payload['gp_keys']``).
+    units : str, optional
+        ``'us'`` (µs), ``'s'`` (s), ``'dm'`` (pc cm^-3), ``'ne'``
+        (n_E for SW), ``'us@1400'`` (µs normalised to 800 MHz for
+        chromatic GP), or ``'auto'`` (DM GPs use 'dm', chromatic GPs
+        use 'us@1400', others use 'us'). Default ``'auto'``.
+    ci_levels : tuple of float, optional
+        Credible interval levels. Default ``(0.68, 0.95)``.
+    show_median : bool, optional
+        Whether to plot the median. Default True.
+    show_realizations : int, optional
+        Number of individual realizations to overplot. Default 0.
+    show_solar_conjunctions : bool, optional
+        Draw vertical lines at solar conjunctions. Default True.
+    show_sw_nodes : bool, optional
+        Mark SW interpolation node positions. Default False.
+    include_tm_perturbations : bool, optional
+        If True, add the fitted timing-model column perturbations
+        (e.g. F0/F1 for red noise, DM/DM1/DM2 for DM GP, NE_SW for SW GP)
+        to the GP realizations before plotting. Shows deviations from the
+        reference values. Default False.
+    include_tm_values : bool, optional
+        If True and model is provided, also add the reference parameter values
+        (converted to time delays) so the plot shows total quantities instead
+        of just perturbations. Requires include_tm_perturbations=True.
+        Default False.
+    model : pint.models.TimingModel, optional
+        PINT timing model to extract reference values (e.g. F0.value, DM.value).
+        Only used if include_tm_values=True. Default None.
+    ax : matplotlib Axes, optional
+        If None, a new figure is created.
+    figsize : tuple, optional
+        Figure size. Default (10, 4).
+    title : str, optional
+        Plot title. If None, auto-generated.
+    color : str, optional
+        Colour for the GP. If None, auto-selected from category.
+    alpha_ci : float, optional
+        Alpha for CI fill. Default 0.15.
+    alpha_real : float, optional
+        Alpha for individual realizations. Default 0.08.
+    chromatic_idx : float, optional
+        Chromatic index for unit conversion (used for chrom GP with
+        ``'dm'`` or ``'us@1400'`` units).
+    ref_freq_mhz : float, optional
+        Reference frequency. Default 1400 MHz.
+    label : str, optional
+        Legend label override.
+    toa_units : str, optional
+        ``'mjd'`` or ``'yr'``. Default ``'mjd'``.
+
+    Returns
+    -------
+    fig, ax
+        The matplotlib Figure and Axes.
+    """
+    psr_name = payload.get('pulsar_name', '')
+    _, category = _classify_gp(gp_key, psr_name)
+
+    # Auto-detect units based on GP category
+    if units == 'auto':
+        if category == 'dm_gp':
+            units = 'dm_full' if include_tm_values else 'dm'
+        elif category in ('chrom', 'chrom_gp'):
+            units = 'us@1400'
+        else:
+            units = 'us'
+
+    # Compute time-domain realizations
+    all_signals = _gp_time_domain(payload, gp_key)  # (n_real, n_toas)
+
+    # Optionally add timing-model component contributions
+    tm_names_used = []
+    if include_tm_perturbations and category in _TM_PARAMS_FOR_CATEGORY:
+        tm_signal, tm_names_used = _get_tm_component_signal(
+            payload, category, psr_name, model=model, include_reference_values=include_tm_values
+        )
+        if tm_signal is not None:
+            all_signals = all_signals + tm_signal
+            log.info(f"Added TM columns {tm_names_used} to {category} GP realizations.")
+
+    toas = np.asarray(payload['toas_mjd'])
+    freqs = np.asarray(payload['freqs_mhz'])
+
+    # Convert units
+    all_signals, ylabel = _convert_units(
+        all_signals, freqs, category, target_units=units,
+        chromatic_idx=chromatic_idx, ref_freq_mhz=ref_freq_mhz,
+    )
+
+    # Update ylabel to reflect which mode we are in:
+    #   mode 2 (pert only): y-label stays as Δ… (no change)
+    #   mode 3 (total):     strip the Δ prefix to indicate total quantity
+    if include_tm_values and include_tm_perturbations and units in ('dm', 'dm_full', 'us'):
+        ylabel = ylabel.replace(r'$\Delta$', '').replace(r'$\Delta t$', r'$t$')
+
+    # Time axis
+    if toa_units == 'yr':
+        tplot = (toas - 51544.0) / 365.25 + 2000.0
+        xlabel = 'Year'
+    else:
+        tplot = toas
+        xlabel = 'MJD'
+
+    # Sort by time for clean band plotting
+    sort_idx = np.argsort(tplot)
+    tplot = tplot[sort_idx]
+    all_signals = all_signals[:, sort_idx]
+
+    # Color
+    if color is None:
+        color = _GP_COLORS.get(category, '#333333')
+
+    # Figure
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+    else:
+        fig = ax.get_figure()
+
+    # CI bands
+    median = np.median(all_signals, axis=0)
+    for ci in sorted(ci_levels, reverse=True):
+        lo = np.percentile(all_signals, 50 - 50 * ci, axis=0)
+        hi = np.percentile(all_signals, 50 + 50 * ci, axis=0)
+        ax.fill_between(tplot, lo, hi, color=color, alpha=alpha_ci,
+                        label=f'{int(ci*100)}% CI' if ci == ci_levels[0] else None)
+
+    # Median
+    if show_median:
+        lbl = label if label else _GP_LABELS.get(category, gp_key)
+        # Append a mode suffix to clearly communicate what is being shown:
+        #   mode 2 (pert only): append " + ΔTM" to indicate TM perturbations included
+        #   mode 3 (total):     append " (total)" to indicate reference values included
+        if tm_names_used and not include_tm_values:
+            lbl += r' + $\Delta$TM'
+        elif tm_names_used and include_tm_values:
+            lbl += ' (total)'
+        ax.plot(tplot, median, color=color, lw=1.5, label=lbl)
+
+    # Individual realizations
+    if show_realizations > 0:
+        n_show = min(show_realizations, all_signals.shape[0])
+        for i in range(n_show):
+            ax.plot(tplot, all_signals[i], color=color, alpha=alpha_real, lw=0.5)
+
+    # Solar conjunctions
+    if show_solar_conjunctions and payload.get('solar_conjunctions_mjd'):
+        conj = payload['solar_conjunctions_mjd']
+        for tc in conj:
+            tc = float(tc)  # Ensure tc is a Python float, not numpy scalar
+            tc_plot = tc if toa_units == 'mjd' else (tc - 51544.0) / 365.25 + 2000.0
+            if tplot.min() <= tc_plot <= tplot.max():
+                ax.axvline(tc_plot, color='grey', ls='-', lw=0.8, alpha=0.4,
+                           zorder=0)
+
+    # SW interpolation nodes
+    if show_sw_nodes and category in ('sw', 'solar_wind') and payload.get('sw_nodes_mjd'):
+        nodes = payload['sw_nodes_mjd']
+        for nd in nodes:
+            nd_plot = nd if toa_units == 'mjd' else (nd - 51544.0) / 365.25 + 2000.0
+            ax.axvline(nd_plot, color='grey', ls=':', lw=0.5, alpha=0.4)
+
+    # Labels
+    ax.set_xlabel(xlabel, fontsize=_GP_FONTSIZE_LABEL)
+    ax.set_ylabel(ylabel, fontsize=_GP_FONTSIZE_LABEL)
+    ax.tick_params(axis='both', which='major', labelsize=_GP_FONTSIZE_TICK,
+                   length=6, width=1)
+    ax.tick_params(axis='both', which='minor', length=3, width=0.8)
+    
+    # Disable offset notation for DM when showing reference values (total quantities)
+    if include_tm_values and units in ('dm', 'dm_full'):
+        ax.ticklabel_format(style='plain', axis='y')
+    
+    if title is None:
+        pretty_name, _ = _classify_gp(gp_key, psr_name)
+        if include_tm_perturbations and include_tm_values:
+            title = f'{psr_name} — {pretty_name} (GP + TM total)'
+        elif include_tm_perturbations:
+            title = f'{psr_name} — {pretty_name} (GP + $\\Delta$TM)'
+        else:
+            title = f'{psr_name} — {pretty_name} (GP only)'
+    ax.set_title(title, fontsize=_GP_FONTSIZE_TITLE)
+    ax.legend(fontsize=_GP_FONTSIZE_LEGEND, loc='lower left')
+    ax.grid(axis='y', ls='-', lw=0.4, alpha=0.3)
+
+    fig.tight_layout()
+    return fig, ax
+
+
+def plot_gp_realizations_combined(
+    payload,
+    gp_keys=None,
+    units='auto',
+    ci_levels=(0.68, 0.95),
+    show_median=True,
+    show_solar_conjunctions=True,
+    include_tm_perturbations=False,
+    include_tm_values=False,
+    model=None,
+    figsize=(10, 3),
+    toa_units='mjd',
+    exclude=None,
+    chromatic_idx=None,
+    compact=False,
+):
+    """
+    Plot all (or selected) GP components as subplots stacked vertically.
+
+    Parameters
+    ----------
+    payload : dict
+        Loaded GP realizations payload.
+    gp_keys : list of str, optional
+        Which GP keys to plot. Can be full GP key names from ``payload['gp_keys']``
+        or category names like ``'dm_gp'``, ``'red_noise'``, ``'chrom'``, ``'sw'``,
+        ``'timing_model'``, ``'ecorr'``. If None, plots all GP components.
+    units : str, optional
+        ``'us'``, ``'s'``, ``'dm'``, ``'us@1400'``, or ``'auto'``.
+        Default ``'auto'``.
+    ci_levels : tuple, optional
+        CI levels. Default ``(0.68, 0.95)``.
+    show_median : bool, optional
+        Plot median. Default True.
+    show_solar_conjunctions : bool, optional
+        Draw solar conjunction lines. Default True.
+    include_tm_perturbations : bool, optional
+        If True, add fitted timing-model column perturbations to each GP.
+        Shows deviations from reference values. Default False.
+    include_tm_values : bool, optional
+        If True and model is provided, also add reference parameter values
+        (converted to time delays) so panels show total quantities instead
+        of just perturbations. Requires include_tm_perturbations=True.
+        Default False.
+    model : pint.models.TimingModel, optional
+        PINT timing model to extract reference parameter values (DM, etc.).
+        Only used if include_tm_values=True. Default None.
+    figsize : tuple, optional
+        ``(width, height_per_panel)``. Default ``(10, 3)``.
+    toa_units : str, optional
+        ``'mjd'`` or ``'yr'``. Default ``'mjd'``.
+    exclude : list of str, optional
+        GP categories to exclude, e.g. ``['timing_model', 'ecorr']``.
+    chromatic_idx : float, optional
+        Chromatic index (passed through for ``'us@1400'`` unit conversion).
+    compact : bool, optional
+        If True, remove vertical space between subplots and hide per-panel
+        titles. If False (default), each subplot has its own title with
+        spacing between panels.
+
+    Returns
+    -------
+    fig, axes
+        The matplotlib Figure and list of Axes.
+    """
+    psr_name = payload.get('pulsar_name', '')
+
+    if gp_keys is None:
+        gp_keys = payload['gp_keys']
+    else:
+        categories = {'red_noise', 'dm_gp', 'chrom', 'sw', 'timing_model', 'ecorr', 'unknown'}
+        expanded_keys = []
+        all_payload_keys = payload['gp_keys']
+        for key in gp_keys:
+            if key in categories:
+                for gp_key in all_payload_keys:
+                    _, cat = _classify_gp(gp_key, psr_name)
+                    if cat == key:
+                        expanded_keys.append(gp_key)
+            elif key in all_payload_keys:
+                expanded_keys.append(key)
+            else:
+                expanded_keys.append(key)
+        gp_keys = expanded_keys
+
+    # Apply exclusions
+    if exclude:
+        filtered = []
+        for gk in gp_keys:
+            _, cat = _classify_gp(gk, psr_name)
+            if cat not in exclude:
+                filtered.append(gk)
+        gp_keys = filtered
+
+    n = len(gp_keys)
+    if n == 0:
+        log.warning("No GP components to plot after filtering.")
+        return None, None
+
+    fig, axes = plt.subplots(n, 1, figsize=(figsize[0], figsize[1] * n), sharex=True)
+    if n == 1:
+        axes = [axes]
+
+    for i, gp_key in enumerate(gp_keys):
+        _, cat = _classify_gp(gp_key, psr_name)
+        # Use n_E units for SW panels in the combined plot
+        panel_units = units
+        if panel_units == 'auto' and cat in ('sw', 'solar_wind'):
+            panel_units = 'ne'
+
+        # For SW n_e we use the dedicated plotter; otherwise generic.
+        if panel_units == 'ne':
+            plot_gp_sw_ne(
+                payload, gp_key=gp_key, ci_levels=ci_levels,
+                show_median=show_median,
+                show_solar_conjunctions=show_solar_conjunctions,
+                include_tm_components=include_tm_perturbations,
+                include_tm_values=include_tm_values,
+                model=model,
+                ax=axes[i], toa_units=toa_units,
+            )
+        else:
+            plot_gp_realization(
+                payload, gp_key, units=panel_units, ci_levels=ci_levels,
+                show_median=show_median,
+                show_solar_conjunctions=show_solar_conjunctions,
+                include_tm_perturbations=include_tm_perturbations,
+                include_tm_values=include_tm_values,
+                model=model,
+                ax=axes[i], toa_units=toa_units, chromatic_idx=chromatic_idx,
+            )
+
+        if compact:
+            axes[i].set_title('')
+        if i < n - 1:
+            axes[i].set_xlabel('')
+
+    if include_tm_perturbations and include_tm_values:
+        _mode_label = 'GP + TM total'
+    elif include_tm_perturbations:
+        _mode_label = r'GP + $\Delta$TM'
+    else:
+        _mode_label = 'GP only'
+    fig.suptitle(f'{psr_name} — GP Realizations ({_mode_label})',
+                 fontsize=_GP_FONTSIZE_TITLE + 1, y=1.01)
+    if compact:
+        fig.subplots_adjust(hspace=0)
+    else:
+        fig.tight_layout()
+    return fig, axes
+
+
+def plot_gp_total_signal(
+    payload,
+    gp_keys=None,
+    units='auto',
+    ci_levels=(0.68, 0.95),
+    show_individual=True,
+    show_solar_conjunctions=True,
+    include_tm_components=False,
+    exclude=None,
+    figsize=(10, 4),
+    toa_units='mjd',
+    title=None,
+):
+    """
+    Plot the total GP signal (sum of selected components) with CI bands.
+
+    Parameters
+    ----------
+    payload : dict
+        Loaded GP realizations payload.
+    gp_keys : list of str, optional
+        GP keys to include in total. Can be full GP key names or category names
+        like ``'dm_gp'``, ``'red_noise'``, etc. If None, includes all.
+    units : str, optional
+        ``'us'``, ``'s'``, ``'dm'``, or ``'auto'``. Default ``'auto'``.
+    ci_levels : tuple, optional
+        CI levels. Default ``(0.68, 0.95)``.
+    show_individual : bool, optional
+        Also plot individual GP medians. Default True.
+    show_solar_conjunctions : bool, optional
+        Draw conjunction lines. Default True.
+    include_tm_components : bool, optional
+        Add relevant timing-model column realizations to each GP before
+        summing. Default False.
+    exclude : list of str, optional
+        GP categories to exclude (e.g. ``['timing_model', 'ecorr']``).
+    figsize : tuple, optional
+        Figure size. Default ``(10, 4)``.
+    toa_units : str, optional
+        ``'mjd'`` or ``'yr'``. Default ``'mjd'``.
+    title : str, optional
+        Plot title.
+
+    Returns
+    -------
+    fig, ax
+        The matplotlib Figure and Axes.
+    """
+    psr_name = payload.get('pulsar_name', '')
+    toas = np.asarray(payload['toas_mjd'])
+    freqs = np.asarray(payload['freqs_mhz'])
+
+    if gp_keys is None:
+        gp_keys = list(payload['gp_keys'])
+    else:
+        categories = {'red_noise', 'dm_gp', 'chrom', 'sw', 'timing_model', 'ecorr', 'unknown'}
+        expanded_keys = []
+        all_payload_keys = payload['gp_keys']
+        for key in gp_keys:
+            if key in categories:
+                for gp_key in all_payload_keys:
+                    _, cat = _classify_gp(gp_key, psr_name)
+                    if cat == key:
+                        expanded_keys.append(gp_key)
+            elif key in all_payload_keys:
+                expanded_keys.append(key)
+            else:
+                expanded_keys.append(key)
+        gp_keys = expanded_keys
+
+    # Apply exclusions
+    if exclude:
+        filtered = []
+        for gk in gp_keys:
+            _, cat = _classify_gp(gk, psr_name)
+            if cat not in exclude:
+                filtered.append(gk)
+        gp_keys = filtered
+
+    if not gp_keys:
+        log.warning("No GP components to plot after filtering.")
+        return None, None
+
+    # For total signal plots, 'auto' defaults to 'us'
+    if units == 'auto':
+        units = 'us'
+
+    # Time axis
+    if toa_units == 'yr':
+        tplot = (toas - 51544.0) / 365.25 + 2000.0
+        xlabel = 'Year'
+    else:
+        tplot = toas
+        xlabel = 'MJD'
+
+    sort_idx = np.argsort(tplot)
+    tplot = tplot[sort_idx]
+
+    # Accumulate total signal
+    total_signals = None
+    individual = {}
+
+    for gp_key in gp_keys:
+        _, category = _classify_gp(gp_key, psr_name)
+        sig = _gp_time_domain(payload, gp_key)  # (n_real, n_toas)
+
+        # Optionally add TM components
+        if include_tm_components and category in _TM_PARAMS_FOR_CATEGORY:
+            tm_signal, _ = _get_tm_component_signal(payload, category, psr_name, model=model)
+            if tm_signal is not None:
+                sig = sig + tm_signal
+
+        sig, ylabel = _convert_units(sig, freqs, category, target_units=units)
+        sig = sig[:, sort_idx]
+        individual[gp_key] = sig
+        if total_signals is None:
+            total_signals = sig.copy()
+        else:
+            total_signals += sig
+
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+
+    # Total CI bands
+    median_total = np.median(total_signals, axis=0)
+    for ci in sorted(ci_levels, reverse=True):
+        lo = np.percentile(total_signals, 50 - 50 * ci, axis=0)
+        hi = np.percentile(total_signals, 50 + 50 * ci, axis=0)
+        ax.fill_between(tplot, lo, hi, color='0.3', alpha=0.12)
+
+    ax.plot(tplot, median_total, color='k', lw=2, label='Total')
+
+    # Individual medians
+    if show_individual:
+        for gp_key in gp_keys:
+            _, category = _classify_gp(gp_key, psr_name)
+            c = _GP_COLORS.get(category, '#555555')
+            lbl = _GP_LABELS.get(category, gp_key)
+            med = np.median(individual[gp_key], axis=0)
+            ax.plot(tplot, med, color=c, lw=1, ls='--', alpha=0.8, label=lbl)
+
+    # Solar conjunctions
+    if show_solar_conjunctions and payload.get('solar_conjunctions_mjd'):
+        for tc in payload['solar_conjunctions_mjd']:
+            tc_plot = tc if toa_units == 'mjd' else (tc - 51544.0) / 365.25 + 2000.0
+            if tplot.min() <= tc_plot <= tplot.max():
+                ax.axvline(tc_plot, color='grey', ls='-', lw=0.8, alpha=0.4,
+                           zorder=0)
+
+    ax.set_xlabel(xlabel, fontsize=_GP_FONTSIZE_LABEL)
+    ax.set_ylabel(ylabel, fontsize=_GP_FONTSIZE_LABEL)
+    ax.tick_params(axis='both', which='major', labelsize=_GP_FONTSIZE_TICK,
+                   length=6, width=1)
+    ax.tick_params(axis='both', which='minor', length=3, width=0.8)
+    if title is None:
+        title = f'{psr_name} — Total GP Signal'
+    ax.set_title(title, fontsize=_GP_FONTSIZE_TITLE)
+    ax.legend(fontsize=_GP_FONTSIZE_LEGEND, loc='lower left')
+    ax.grid(axis='y', ls='-', lw=0.4, alpha=0.3)
+    fig.tight_layout()
+    return fig, ax
+
+
+def plot_gp_sw_ne(
+    payload,
+    gp_key=None,
+    ci_levels=(0.68, 0.95),
+    show_median=True,
+    show_realizations=0,
+    show_solar_conjunctions=True,
+    show_nodes=True,
+    include_tm_components=False,
+    include_tm_values=False,
+    model=None,
+    ax=None,
+    figsize=(10, 4),
+    title=None,
+    color=None,
+    alpha_ci=0.15,
+    toa_units='mjd',
+):
+    """
+    Plot solar wind GP realizations in electron density (n_E) units.
+
+    Computes the SW timing delay via ``F @ coefficients`` (seconds at each
+    TOA), then divides by the stored ``sw_shape_at_toas`` (the delay
+    produced by 1 cm⁻³ of n_E) to recover n_E at every TOA.  This is
+    robust to any choice of GP basis (interpolation, Fourier, etc.).
+
+    When ``include_tm_components=True``, the timing-model SW columns
+    (NE_SW, NE1, …) are added **in seconds** before dividing by the shape
+    factor, so the plot shows the total n_E.
+
+    When ``model`` is provided, the reference ``NE_SW`` value from the
+    timing model is added so the plot shows the **total** electron
+    density rather than perturbations.
+
+    Parameters
+    ----------
+    payload : dict
+        Loaded GP realizations payload.
+    gp_key : str, optional
+        The SW GP key. If None, auto-detected.
+    ci_levels : tuple, optional
+        CI levels. Default ``(0.68, 0.95)``.
+    show_median : bool, optional
+        Plot median. Default True.
+    show_realizations : int, optional
+        Number of realizations to overplot. Default 0.
+    show_solar_conjunctions : bool, optional
+        Draw conjunction lines. Default True.
+    show_nodes : bool, optional
+        Show SW interpolation node positions as tick marks (if available).
+        Default True.
+    include_tm_components : bool, optional
+        If True, add the fitted TM SW column perturbations (NE_SW, NE1,
+        SWPRBETA1) from the conditional draw to the GP signal, in seconds,
+        before converting to n_E.  This corresponds to mode 2: GP + ΔTM.
+        Default False.
+    include_tm_values : bool, optional
+        If True and ``model`` is provided, also add the reference NE_SW
+        value so the plot shows **total** n_E.  Requires
+        ``include_tm_components=True`` to be meaningful.
+        This corresponds to mode 3: GP + ΔTM + ref.  Default False.
+    model : pint.models.TimingModel, optional
+        PINT timing model used to extract NE_SW reference value when
+        ``include_tm_values=True``.  Default None.
+    ax : matplotlib Axes, optional
+    figsize : tuple, optional
+    title : str, optional
+    color : str, optional
+    alpha_ci : float, optional
+    toa_units : str, optional
+
+    Returns
+    -------
+    fig, ax
+    """
+    psr_name = payload.get('pulsar_name', '')
+
+    # Auto-detect SW key
+    if gp_key is None:
+        for gk in payload['gp_keys']:
+            _, cat = _classify_gp(gk, psr_name)
+            if cat in ('sw', 'solar_wind'):
+                gp_key = gk
+                break
+        if gp_key is None:
+            log.warning("No solar wind GP key found in payload.")
+            return None, None
+
+    # Need the shape factor to convert seconds → n_E
+    shape = payload.get('sw_shape_at_toas')
+    if shape is None:
+        log.warning(
+            "No sw_shape_at_toas in payload; cannot convert to n_E. "
+            "Re-run generate_gp_realizations with current pint_pal."
+        )
+        return None, None
+
+    shape = np.asarray(shape)  # (n_toas,)
+
+    # Compute F @ coefficients → seconds at each TOA
+    sw_delay = _gp_time_domain(payload, gp_key)  # (n_real, n_toas)
+
+    # Optionally add TM SW contribution (also in seconds)
+    tm_names_used = []
+    if include_tm_components:
+        tm_signal, tm_names_used = _get_tm_component_signal(
+            payload, 'sw', psr_name
+        )
+        if tm_signal is not None:
+            sw_delay = sw_delay + tm_signal
+            log.info(
+                f"Added TM columns {tm_names_used} to SW signal (seconds)."
+            )
+
+    # Convert seconds → n_E: n_E(t) = delay(t) / shape(t)
+    safe_shape = np.where(np.abs(shape) > 1e-30, shape, np.nan)
+    ne_signal = sw_delay / safe_shape[np.newaxis, :]  # (n_real, n_toas)
+
+    # Add timing-model reference NE_SW for total n_E (mode 3 only)
+    ref_ne = None
+    if include_tm_values:
+        ref_ne = _extract_ne_sw_reference(model)
+        if ref_ne is not None:
+            ne_signal = ne_signal + ref_ne
+            log.info(f"Added NE_SW={ref_ne} cm^-3 to SW n_E signal.")
+
+    # Classify which mode we are in for labelling purposes:
+    #   mode 1: GP only (no TM perturbations, no reference value)
+    #   mode 2: GP + fitted TM perturbations (ΔNE_SW etc.) — still Δn_E
+    #   mode 3: GP + TM perturbations + reference NE_SW — total n_E
+    _mode = 1
+    if include_tm_components and tm_names_used:
+        _mode = 2
+    if ref_ne is not None:
+        _mode = 3
+
+    # Time axis
+    toas = np.asarray(payload['toas_mjd'])
+    if toa_units == 'yr':
+        tplot = (toas - 51544.0) / 365.25 + 2000.0
+        xlabel = 'Year'
+    else:
+        tplot = toas
+        xlabel = 'MJD'
+
+    sort_idx = np.argsort(tplot)
+    tplot = tplot[sort_idx]
+    ne_signal = ne_signal[:, sort_idx]
+
+    if color is None:
+        color = _GP_COLORS.get('sw', '#9467BD')
+
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+    else:
+        fig = ax.get_figure()
+
+    # CI bands
+    median = np.median(ne_signal, axis=0)
+    for ci in sorted(ci_levels, reverse=True):
+        lo = np.percentile(ne_signal, 50 - 50 * ci, axis=0)
+        hi = np.percentile(ne_signal, 50 + 50 * ci, axis=0)
+        ax.fill_between(tplot, lo, hi, color=color, alpha=alpha_ci,
+                        label=f'{int(ci*100)}% CI' if ci == ci_levels[0] else None)
+
+    if show_median:
+        if _mode == 1:
+            lbl = r'SWGP [$\Delta n_E$]'
+        elif _mode == 2:
+            lbl = r'SWGP + $\Delta$TM [$\Delta n_E$]'
+        else:  # mode 3
+            lbl = r'SWGP + TM [$n_E$ total]'
+        ax.plot(tplot, median, color=color, lw=1.5, label=lbl)
+
+    if show_realizations > 0:
+        n_show = min(show_realizations, ne_signal.shape[0])
+        for i in range(n_show):
+            ax.plot(tplot, ne_signal[i], color=color, alpha=0.08, lw=0.5)
+
+    # Solar conjunctions
+    if show_solar_conjunctions and payload.get('solar_conjunctions_mjd'):
+        for tc in payload['solar_conjunctions_mjd']:
+            tc = float(tc)  # Ensure tc is a Python float, not numpy scalar
+            tc_plot = tc if toa_units == 'mjd' else (tc - 51544.0) / 365.25 + 2000.0
+            if tplot.min() <= tc_plot <= tplot.max():
+                ax.axvline(tc_plot, color='grey', ls='-', lw=0.8, alpha=0.4,
+                           zorder=0)
+
+    # SW interpolation node tick marks (if available)
+    nodes_mjd = payload.get('sw_nodes_mjd')
+    if show_nodes and nodes_mjd is not None:
+        nodes_mjd = np.array(nodes_mjd)
+        if toa_units == 'yr':
+            nodes_plot = (nodes_mjd - 51544.0) / 365.25 + 2000.0
+        else:
+            nodes_plot = nodes_mjd
+        ax.plot(nodes_plot, np.full_like(nodes_plot, ax.get_ylim()[0]),
+                '|', color='grey', ms=6, alpha=0.4)
+
+    ax.set_xlabel(xlabel, fontsize=_GP_FONTSIZE_LABEL)
+    if _mode == 3:
+        ax.set_ylabel(r'$n_E$ (cm$^{-3}$)', fontsize=_GP_FONTSIZE_LABEL)
+    elif _mode == 2:
+        ax.set_ylabel(r'$\Delta n_E$ (cm$^{-3}$)', fontsize=_GP_FONTSIZE_LABEL)
+    else:
+        ax.set_ylabel(r'$\Delta n_E$ (cm$^{-3}$)', fontsize=_GP_FONTSIZE_LABEL)
+    ax.tick_params(axis='both', which='major', labelsize=_GP_FONTSIZE_TICK,
+                   length=6, width=1)
+    ax.tick_params(axis='both', which='minor', length=3, width=0.8)
+
+    # Disable offset notation when showing total values
+    if _mode == 3:
+        ax.ticklabel_format(style='plain', axis='y')
+
+    if title is None:
+        if _mode == 3:
+            title = f'{psr_name} — Solar Wind $n_E$ (GP + TM total)'
+        elif _mode == 2:
+            title = f'{psr_name} — Solar Wind $\\Delta n_E$ (GP + $\\Delta$TM)'
+        else:
+            title = f'{psr_name} — Solar Wind $\\Delta n_E$ (GP only)'
+    ax.set_title(title, fontsize=_GP_FONTSIZE_TITLE)
+    ax.legend(fontsize=_GP_FONTSIZE_LEGEND, loc='lower left')
+    ax.grid(axis='y', ls='-', lw=0.4, alpha=0.3)
+    fig.tight_layout()
+    return fig, ax
+
+
+def plot_gp_sw_dm(
+    payload,
+    gp_key=None,
+    ci_levels=(0.68, 0.95),
+    show_median=True,
+    show_realizations=0,
+    show_solar_conjunctions=True,
+    include_tm_components=False,
+    ax=None,
+    figsize=(10, 4),
+    title=None,
+    color=None,
+    alpha_ci=0.15,
+    alpha_real=0.08,
+    toa_units='mjd',
+):
+    """
+    Plot solar wind GP realizations in DM units (pc cm^-3).
+
+    Parameters
+    ----------
+    payload : dict
+        Loaded GP realizations payload.
+    gp_key : str, optional
+        The SW GP key. If None, auto-detected.
+    ci_levels : tuple, optional
+        CI levels. Default ``(0.68, 0.95)``.
+    show_median : bool, optional
+        Plot median. Default True.
+    show_realizations : int, optional
+        Number of realizations to overplot. Default 0.
+    show_solar_conjunctions : bool, optional
+        Draw conjunction lines. Default True.
+    include_tm_components : bool, optional
+        Add NE_SW (and related TM columns) to the SW GP realizations.
+        Default False.
+    ax : matplotlib Axes, optional
+    figsize : tuple, optional
+    title : str, optional
+    color : str, optional
+    alpha_ci : float, optional
+    alpha_real : float, optional
+    toa_units : str, optional
+
+    Returns
+    -------
+    fig, ax
+    """
+    psr_name = payload.get('pulsar_name', '')
+
+    # Auto-detect SW key
+    if gp_key is None:
+        for gk in payload['gp_keys']:
+            _, cat = _classify_gp(gk, psr_name)
+            if cat in ('sw', 'solar_wind'):
+                gp_key = gk
+                break
+        if gp_key is None:
+            log.warning("No solar wind GP key found in payload.")
+            return None, None
+
+    return plot_gp_realization(
+        payload,
+        gp_key,
+        units='dm',
+        ci_levels=ci_levels,
+        show_median=show_median,
+        show_realizations=show_realizations,
+        show_solar_conjunctions=show_solar_conjunctions,
+        include_tm_components=include_tm_components,
+        ax=ax,
+        figsize=figsize,
+        title=title if title else f'{psr_name} — Solar Wind DM',
+        color=color,
+        alpha_ci=alpha_ci,
+        alpha_real=alpha_real,
+        toa_units=toa_units,
+    )
