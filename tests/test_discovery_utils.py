@@ -153,13 +153,13 @@ def test_basic_noise_blocks_delegate(monkeypatch):
 
 def test_select_fourier_basis_nlog_zero_returns_expected_objects(monkeypatch):
     monkeypatch.setattr(du.ds, "fourierbasis", object())
-    monkeypatch.setattr(du.ds, "dmfourierbasis", object())
-    monkeypatch.setattr(du.ds, "freechromaticfourierbasis", object())
+    monkeypatch.setattr(du.ds, "fourierbasis_dm", object())
+    monkeypatch.setattr(du.ds, "fourierbasis_chrom", object())
     monkeypatch.setattr(du.ds_solar, "fourierbasis_solar_dm", object(), raising=False)
 
     assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "red_noise") is du.ds.fourierbasis
-    assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "dm_noise") is du.ds.dmfourierbasis
-    assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "chromatic") is du.ds.freechromaticfourierbasis
+    assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "dm_noise") is du.ds.fourierbasis_dm
+    assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "chromatic") is du.ds.fourierbasis_chrom
     assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "solar_wind") is du.ds_solar.fourierbasis_solar_dm
 
 
@@ -739,26 +739,30 @@ class TestChromaticBasisSelection:
 
     # --- _select_fourier_basis, nlog==0 ---
 
-    def test_nlog0_vary_returns_freechromaticfourierbasis(self):
-        """chromatic_idx=None → bare ds.freechromaticfourierbasis (callable fmat)."""
+    def test_nlog0_vary_returns_fourierbasis_chrom(self):
+        """chromatic_idx=None → bare ds.fourierbasis_chrom (callable fmat)."""
         result = du._select_fourier_basis(
             psr=object(), Nfreqs=10, tspan=100.0,
             logmode=2, f_min=1e-3, nlog=0,
             noise_type='chromatic', chromatic_idx=None,
         )
-        assert result is du.ds.freechromaticfourierbasis
+        assert result is du.ds.fourierbasis_chrom
 
-    def test_nlog0_fixed_returns_partial(self):
-        """chromatic_idx=4.0 → partial(..., chromatic_idx=4.0)."""
-        from functools import partial
+    def test_nlog0_fixed_calls_make_fourierbasis_chrom(self, monkeypatch):
+        """chromatic_idx=4.0 → ds.make_fourierbasis_chrom(alpha=4.0) (fixed-index matrix)."""
+        captured = {}
+        def fake_make(alpha):
+            captured['alpha'] = alpha
+            return 'FIXED_BASIS'
+        monkeypatch.setattr(du.ds, 'make_fourierbasis_chrom', fake_make)
+
         result = du._select_fourier_basis(
             psr=object(), Nfreqs=10, tspan=100.0,
             logmode=2, f_min=1e-3, nlog=0,
             noise_type='chromatic', chromatic_idx=4.0,
         )
-        assert isinstance(result, partial)
-        assert result.func is du.ds.freechromaticfourierbasis
-        assert result.keywords == {'chromatic_idx': 4.0}
+        assert captured['alpha'] == 4.0
+        assert result == 'FIXED_BASIS'
 
     # --- _select_fourier_basis, nlog>0 ---
 
