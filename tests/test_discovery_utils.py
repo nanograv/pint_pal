@@ -53,7 +53,7 @@ def test_red_noise_block_scales_fmin_and_uses_getspan(monkeypatch):
         }
         return "BASIS"
 
-    def fake_makegp_fourier(_psr, prior, nfreqs, T, modes=None, fourierbasis=None, name=None):
+    def fake_makegp_fourier(_psr, prior, nfreqs, T, modes=None, fourierbasis=None, name=None, noisedict=None):
         calls["makegp"] = {
             "prior": prior,
             "Nfreqs": nfreqs,
@@ -61,6 +61,7 @@ def test_red_noise_block_scales_fmin_and_uses_getspan(monkeypatch):
             "modes": modes,
             "fourierbasis": fourierbasis,
             "name": name,
+            "noisedict": noisedict,
         }
         return "RN_BLOCK"
 
@@ -84,6 +85,8 @@ def test_red_noise_block_scales_fmin_and_uses_getspan(monkeypatch):
     assert calls["makegp"]["prior"] is sentinel_prior
     assert calls["makegp"]["T"] == 100.0
     assert calls["makegp"]["fourierbasis"] == "BASIS"
+    # no noise_dict supplied -> forwarded as the empty default (variable GP)
+    assert calls["makegp"]["noisedict"] == {}
 
 
 def test_dm_noise_block_invalid_basis_raises():
@@ -203,7 +206,7 @@ def test_solar_wind_interpolation_supported_prior(monkeypatch):
     monkeypatch.setattr(
         du.ds_solar,
         "makegp_timedomain_solar_dm",
-        lambda psr, covariance, dt, Umat, nodes, common, name: {
+        lambda psr, covariance, dt, Umat, nodes, common, name, noisedict={}: {
             "psr": psr,
             "covariance": covariance,
             "Umat": Umat,
@@ -1257,3 +1260,132 @@ def test_make_single_pulsar_noise_likelihood_respects_disabled_model_fields(monk
     }
     args = du.make_single_pulsar_noise_likelihood_discovery(psr, noise_dict={}, tspan=None, model_kwargs=model_kwargs, return_args=True)
     assert args == ["res", "tm", "wn"]
+
+
+# ---------------------------------------------------------------------------
+# per-signal noise_dict forwarding (fixed-point / ConstantGP switch)
+# ---------------------------------------------------------------------------
+
+class TestNoiseDictForwarding:
+    """Each GP block forwards its own ``noise_dict`` to the underlying discovery
+    factory as ``noisedict``. This is what lets discovery switch a signal from a
+    VariableGP to a cached ConstantGP when all of that signal's hyperparameters
+    are supplied — done per-signal, never via one shared global dict."""
+
+    def _patch_fourier(self, monkeypatch, calls):
+        monkeypatch.setattr(du.ds, "getspan", lambda _psr: 500.0)
+        monkeypatch.setattr(du, "_select_fourier_basis", lambda *a, **k: "BASIS")
+        monkeypatch.setattr(du.ds, "powerlaw", "powerlaw")
+
+        def fake(psr, prior, nfreqs, T=None, modes=None, fourierbasis=None,
+                 name=None, noisedict=None, **kwargs):
+            calls["noisedict"] = noisedict
+            return "BLOCK"
+        monkeypatch.setattr(du.ds, "makegp_fourier", fake)
+
+    def test_red_noise_block_forwards_noise_dict(self, monkeypatch):
+        calls = {}
+        self._patch_fourier(monkeypatch, calls)
+        nd = {"J0000+0000_red_noise_log10_A": -14.0, "J0000+0000_red_noise_gamma": 3.0}
+        du.red_noise_block(object(), noise_dict=nd, tspan=500.0)
+        assert calls["noisedict"] is nd
+
+    def test_dm_noise_block_forwards_noise_dict(self, monkeypatch):
+        calls = {}
+        self._patch_fourier(monkeypatch, calls)
+        nd = {"J0000+0000_dm_gp_log10_A": -13.0, "J0000+0000_dm_gp_gamma": 2.0}
+        du.dm_noise_block(object(), noise_dict=nd, tspan=500.0)
+        assert calls["noisedict"] is nd
+
+    def test_chromatic_noise_block_forwards_noise_dict(self, monkeypatch):
+        calls = {}
+        self._patch_fourier(monkeypatch, calls)
+        nd = {"J0000+0000_chrom_gp_log10_A": -13.0}
+        du.chromatic_noise_block(object(), noise_dict=nd, tspan=500.0)
+        assert calls["noisedict"] is nd
+
+    def test_solar_wind_block_forwards_noise_dict_fourier(self, monkeypatch):
+        calls = {}
+        self._patch_fourier(monkeypatch, calls)
+        nd = {"J0000+0000_sw_gp_log10_A": -6.0}
+        du.solar_wind_noise_block(object(), noise_dict=nd, tspan=500.0, basis="fourier")
+        assert calls["noisedict"] is nd
+
+    def test_dm_noise_block_forwards_noise_dict_interpolation(self, monkeypatch):
+        calls = {}
+        monkeypatch.setattr(du.ds_signals, "custom_blocked_interpolation_basis",
+                            lambda *a, **k: ("U", "N"), raising=False)
+        monkeypatch.setattr(du.ds_signals, "matern_kernel", lambda: "K", raising=False)
+
+        def fake_td(psr, covariance, dt=None, Umat=None, nodes=None, common=None,
+                    name=None, noisedict=None, **kwargs):
+            calls["noisedict"] = noisedict
+            return "DM_TD"
+        monkeypatch.setattr(du.ds_signals, "makegp_timedomain_dm", fake_td, raising=False)
+
+        nd = {"J0000+0000_dm_gp_log10_sigma": -6.0}
+        result = du.dm_noise_block(_solar_psr([0.0, 1.0]), noise_dict=nd,
+                                   basis="interpolation", prior="matern",
+                                   basis_nodes=np.array([1.0]))
+        assert result == "DM_TD"
+        assert calls["noisedict"] is nd
+
+    def test_solar_wind_block_forwards_noise_dict_interpolation(self, monkeypatch):
+        calls = {}
+        monkeypatch.setattr(du.ds_signals, "custom_blocked_interpolation_basis",
+                            lambda *a, **k: ("U", "N"), raising=False)
+        monkeypatch.setattr(du.ds_signals, "matern_kernel", lambda: "K", raising=False)
+
+        def fake_td(psr, covariance, dt=None, Umat=None, nodes=None, common=None,
+                    name=None, noisedict=None, **kwargs):
+            calls["noisedict"] = noisedict
+            return "SW_TD"
+        monkeypatch.setattr(du.ds_solar, "makegp_timedomain_solar_dm", fake_td, raising=False)
+
+        nd = {"J0000+0000_sw_gp_log10_sigma": -6.0}
+        result = du.solar_wind_noise_block(_solar_psr([0.0, 1.0]), noise_dict=nd,
+                                           basis="interpolation", prior="matern",
+                                           basis_nodes=np.array([1.0]))
+        assert result == "SW_TD"
+        assert calls["noisedict"] is nd
+
+    def test_default_noise_dict_is_empty(self, monkeypatch):
+        """With no noise_dict the block forwards {}, keeping the GP variable."""
+        calls = {}
+        self._patch_fourier(monkeypatch, calls)
+        du.red_noise_block(object(), tspan=500.0)
+        assert calls["noisedict"] == {}
+
+    def test_global_noise_dict_not_injected_into_gp_blocks(self, monkeypatch):
+        """The likelihood builder must route the global noise_dict only to white
+        noise / gp_ecorr; GP blocks get their noise_dict per-signal from
+        model_kwargs, so signals can be fixed or free independently."""
+        psr = SimpleNamespace(residuals="res", toas=np.array([0.0, 1.0]))
+        seen = {}
+        monkeypatch.setattr(du.ds, "getspan", lambda _x: 123.0)
+        monkeypatch.setattr(du, "timing_model_block", lambda *a, **k: "tm")
+        monkeypatch.setattr(du, "white_noise_block",
+                            lambda *a, noise_dict=None, **k: seen.update(white=noise_dict) or "wn")
+        monkeypatch.setattr(du, "red_noise_block",
+                            lambda *a, noise_dict={}, **k: seen.update(red=noise_dict) or "rn")
+        monkeypatch.setattr(du, "dm_noise_block",
+                            lambda *a, noise_dict={}, **k: seen.update(dm=noise_dict) or "dm")
+        monkeypatch.setattr(du.ds, "PulsarLikelihood", lambda args: ("PL", args))
+
+        global_nd = {"global": 1.0}
+        red_nd = {"J0000+0000_red_noise_log10_A": -14.0}
+        model_kwargs = {
+            "timing_model": {"svd": True, "tm_marg": False},
+            "white_noise": {"gp_ecorr": False, "include_ecorr": True, "tn_equad": True},
+            "red_noise": {"basis": "fourier", "noise_dict": red_nd},
+            "dm_noise": {"basis": "fourier"},
+            "chromatic_noise": False,
+            "solar_wind": False,
+        }
+        du.make_single_pulsar_noise_likelihood_discovery(
+            psr, noise_dict=global_nd, tspan=None, model_kwargs=model_kwargs)
+
+        assert seen["white"] == global_nd          # global dict -> white noise
+        assert seen["red"] is red_nd               # per-signal dict -> red noise
+        assert seen["dm"] == {}                     # no per-signal dict -> stays free
+        assert "global" not in seen["red"]          # global never leaks into a GP block
