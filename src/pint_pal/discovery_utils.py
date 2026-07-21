@@ -245,6 +245,7 @@ def gp_ecorr_block(
 
 def red_noise_block(
         psr: Any,
+        noise_dict: Dict[str, Any] = {},
         tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
@@ -321,7 +322,8 @@ def red_noise_block(
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
                 nlog, noise_type='red_noise'
             ),
-            name=name
+            name=name,
+            noisedict=noise_dict,
             )
     elif basis == 'interpolation':
         raise NotImplementedError("Interpolation basis for red noise is not yet implemented.")
@@ -332,6 +334,7 @@ def red_noise_block(
 
 def dm_noise_block(
         psr: Any,
+        noise_dict: Dict[str, Any] = {},
         tspan: Optional[float] = None,
         basis: str = 'fourier',
         basis_nodes: Optional[np.ndarray] = None,
@@ -418,7 +421,8 @@ def dm_noise_block(
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
                 nlog, noise_type='dm_noise'
             ),
-            name=name
+            name=name,
+            noisedict=noise_dict,
             )
     elif basis == 'interpolation':
         if basis_nodes is None:
@@ -449,6 +453,7 @@ def dm_noise_block(
             nodes=nodes,
             common=[],
             name=name,
+            noisedict=noise_dict,
         )
     else:
         raise ValueError("Invalid basis specified for dm noise. Must be 'fourier' or 'interpolation'.")
@@ -457,6 +462,7 @@ def dm_noise_block(
 
 def chromatic_noise_block(
         psr: Any,
+        noise_dict: Dict[str, Any] = {},
         tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
@@ -541,7 +547,8 @@ def chromatic_noise_block(
                 nlog, noise_type='chromatic',
                 chromatic_idx=chrom_idx_val,
             ),
-            name=name
+            name=name,
+            noisedict=noise_dict,
             )
     else:
         raise ValueError("Invalid *basis* specified for chromatic noise. Supported basis types: ['fourier']")
@@ -549,6 +556,7 @@ def chromatic_noise_block(
 
 def solar_wind_noise_block(
         psr: Any,
+        noise_dict: Dict[str, Any] = {},
         tspan: Optional[float] = None,
         basis: str = 'fourier',
         basis_nodes: Optional[np.ndarray] = None,
@@ -628,7 +636,8 @@ def solar_wind_noise_block(
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
                 nlog, noise_type='solar_wind'
             ),
-            name=name
+            name=name,
+            noisedict=noise_dict,
             )
     elif basis == 'interpolation':
         if basis_nodes is None:
@@ -659,6 +668,7 @@ def solar_wind_noise_block(
             nodes=nodes,
             common=[],
             name=name,
+            noisedict=noise_dict,
         )
     else:
         raise ValueError("Invalid basis specified for solar wind noise. Must be 'fourier' or 'interpolation'.")
