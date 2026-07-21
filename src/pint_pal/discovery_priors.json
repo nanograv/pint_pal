@@ -15,6 +15,7 @@
   "(.*_)?chrom_gp_gamma.*": [-3, 7],
   "(.*_)?chrom_gp_Nfreq_cutoff.*": [30, 200],
   "(.*_)?chrom_gp_idx.*": [3, 15],
+  "(.*_)?chrom_gp_alpha.*": [3, 15],
   "(.*_)?sw_gp_log10_A.*": [-12, -1],
   "(.*_)?sw_gp_gamma.*": [-7, 7],
   "(.*_)?sw_gp_Nfreq_cutoff.*": [30, 200],
