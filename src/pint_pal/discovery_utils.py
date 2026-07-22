@@ -253,7 +253,6 @@ def red_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
-        modes=None,
         name: str = 'red_noise',
         ) -> Any:
     """
@@ -283,10 +282,6 @@ def red_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
-    modes : array-like, optional
-        User-supplied array of Fourier mode frequencies (in Hz). When provided
-        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
-        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is "red_noise".
 
@@ -316,7 +311,6 @@ def red_noise_block(
             prior,
             Nfreqs,
             T=tspan,
-            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
@@ -345,7 +339,6 @@ def dm_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
-        modes=None,
         name: str = 'dm_gp',
         ) -> Any:
     """
@@ -382,10 +375,6 @@ def dm_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
-    modes : array-like, optional
-        User-supplied array of Fourier mode frequencies (in Hz). When provided
-        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
-        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is "dm_gp".
 
@@ -415,7 +404,6 @@ def dm_noise_block(
             prior,
             Nfreqs,
             T=tspan,
-            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
@@ -470,7 +458,6 @@ def chromatic_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
-        modes=None,
         name: str = 'chrom_gp',
         chromatic_idx: str = 'vary',
         ) -> Any:
@@ -501,10 +488,6 @@ def chromatic_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
-    modes : array-like, optional
-        User-supplied array of Fourier mode frequencies (in Hz). When provided
-        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
-        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is ``"chrom_gp"``.
     chromatic_idx : str, optional
@@ -540,7 +523,6 @@ def chromatic_noise_block(
             prior,
             Nfreqs,
             T=tspan,
-            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
@@ -567,7 +549,6 @@ def solar_wind_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
-        modes=None,
         name: str = 'sw_gp',
         ) -> Any:
     """
@@ -595,10 +576,6 @@ def solar_wind_noise_block(
         Number of Fourier frequencies. Default is 100. Only used for Fourier basis.
     tspan : float, optional
         Time span for the Fourier basis. Default is None.
-    modes : array-like, optional
-        User-supplied array of Fourier mode frequencies (in Hz). When provided
-        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
-        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is "sw_gp".
 
@@ -630,7 +607,6 @@ def solar_wind_noise_block(
             prior,
             Nfreqs,
             T=tspan,
-            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
