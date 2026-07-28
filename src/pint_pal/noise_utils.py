@@ -652,13 +652,14 @@ def model_noise(
         )
         # make outdir here to expose directory issues before sampling
         os.makedirs(outdir, exist_ok=True)
-        psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
-            psr=e_psr,
-            noise_dict={},
-            tspan=None,
-            model_kwargs=model_kwargs,
-            return_args=False,
-        )
+        with jax.default_device("cpu"):
+            psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
+                psr=e_psr,
+                noise_dict={},
+                tspan=None,
+                model_kwargs=model_kwargs,
+                return_args=False,
+            )
         prior_dict = ds_pdict.copy()
         pint_pal_priors = json.load(
             open(os.path.join(os.path.dirname(__file__), "discovery_priors.json"))
@@ -687,13 +688,14 @@ def model_noise(
         log.info(
             f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}"
         )
-        psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
-            psr=e_psr,
-            noise_dict={},
-            tspan=None,
-            model_kwargs=model_kwargs,
-            return_args=False,
-        )
+        with jax.default_device("cpu"):
+            psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
+                psr=e_psr,
+                noise_dict={},
+                tspan=None,
+                model_kwargs=model_kwargs,
+                return_args=False,
+            )
         prior_dict = ds_pdict.copy()
         pint_pal_priors = json.load(
             open(os.path.join(os.path.dirname(__file__), "discovery_priors.json"))
@@ -1789,13 +1791,14 @@ def generate_gp_realizations(
 
     # Build likelihood
     log.info(f"Building Discovery likelihood for {e_psr.name}...")
-    psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
-        psr=e_psr,
-        noise_dict={},
-        tspan=tspan,
-        model_kwargs=mk,
-        return_args=False,
-    )
+    with jax.default_device("cpu"):
+        psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
+            psr=e_psr,
+            noise_dict={},
+            tspan=tspan,
+            model_kwargs=mk,
+            return_args=False,
+        )
     if return_psl_likelihood_for_debug:
         return psl
 

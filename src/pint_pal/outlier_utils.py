@@ -167,12 +167,13 @@ def run_outlier_analysis_nuts(
     os.makedirs(outdir, exist_ok=True)
 
     # Build outlier PulsarLikelihood
-    psrl = make_outlier_likelihood_discovery(
-        psr=e_psr,
-        noise_dict={},
-        tspan=None,
-        model_kwargs=model_kwargs,
-    )
+    with jax.default_device("cpu"):
+        psrl = make_outlier_likelihood_discovery(
+            psr=e_psr,
+            noise_dict={},
+            tspan=None,
+            model_kwargs=model_kwargs,
+        )
 
     # Build prior dict: standard pint_pal priors + outlier extras
     from discovery import priordict_standard as ds_pdict
