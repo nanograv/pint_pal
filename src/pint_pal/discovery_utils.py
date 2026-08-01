@@ -759,7 +759,6 @@ def make_single_pulsar_noise_likelihood_discovery(
         args.append(
             chromatic_noise_block(
                 psr,
-                name='chrom_gp',
                 **model_kwargs['chromatic_noise']
             )
         )
