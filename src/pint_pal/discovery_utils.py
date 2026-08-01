@@ -1285,6 +1285,9 @@ def run_svi_early_stopping(
         Minimum relative improvement in loss required to reset the patience counter.
         Computed as ``(best_loss - current_loss) / |best_loss|``, so a value of
         1e-3 means the loss must improve by at least 0.1% to count. Default is 1e-3.
+        This controls *when to stop*, not which parameters come back: the best
+        state is tracked by loss alone, so raising the threshold shortens the
+        run but can never return a worse point than the optimiser reached.
     diagnostics : bool, optional
         If True, collect gradient norms and intermediate states at each step.
         This adds computational overhead. Default is False.
@@ -1298,14 +1301,20 @@ def run_svi_early_stopping(
     -------
     dict
         Dictionary of optimized parameter values from the best SVI state
-        (lowest validation loss).
+        (lowest validation loss seen over the whole run).
 
     Notes
     -----
-    The early stopping criterion uses a scale-invariant relative improvement
-    measure: ``(best_loss - current_loss) / |best_loss|``. This makes the
-    threshold independent of the number of TOAs, parameters, or overall
-    likelihood scale.
+    The early stopping criterion uses a relative improvement measure,
+    ``(best_loss - current_loss) / |best_loss|``, evaluated once per batch.
+    Note the normalisation is the loss magnitude, which is dominated by the
+    constant part of the log-likelihood and so grows with the number of TOAs:
+    a given threshold corresponds to a larger absolute improvement for a
+    longer dataset.
+
+    Two separate decisions are made from each batch. The best state is kept
+    whenever the loss decreases at all; the threshold only decides whether the
+    batch counted as progress for the purposes of the patience counter.
 
     Examples
     --------
@@ -1328,7 +1337,6 @@ def run_svi_early_stopping(
 
     log.info(f"Starting training with batches of {batch_size} steps.")
 
-    final_params = None
     diagnostics_plot_dir = None
     diagnostics_plot_path = None
     if diagnostics and outdir is not None:
@@ -1457,13 +1465,21 @@ def run_svi_early_stopping(
             rel_improvement = (best_val_loss - current_val_loss) / max(abs(best_val_loss), 1e-30)
         print(f"relative_improvement = {rel_improvement:.6g}  (threshold = {difference_threshold:.6g})")
         log.info(f"{rel_improvement=:.6g}")
-        if rel_improvement > difference_threshold:
+
+        # Keep the best state on loss alone.  An improvement too small to reset
+        # the patience counter is still an improvement, and the returned
+        # parameters should never be worse than the best point visited: tying
+        # this to `difference_threshold` meant a large threshold discarded every
+        # state after the first batch.
+        if current_val_loss < best_val_loss:
             log.info(
-                f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f} "
-                f"(relative_improvement={rel_improvement:.6g}). Saving state.",
+                f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f}. Saving state.",
             )
             best_val_loss = current_val_loss
             best_svi_state = svi_state
+
+        # `difference_threshold` governs early stopping only.
+        if rel_improvement > difference_threshold:
             patience_counter = 0
         else:
             patience_counter += 1
@@ -1477,16 +1493,14 @@ def run_svi_early_stopping(
                 break
 
             log.info(f"Best loss achieved: {best_val_loss:.4f}")
-
-            final_params = svi.get_params(best_svi_state)
     if diagnostics:
         # close the fig
         plt.close(fig)
     log.info("Optimization complete.")
-    # This conditional is entered if we exhaust the max training batches
-    # without early stopping
-    if final_params is None:
-        final_params = svi.get_params(best_svi_state)
+    # Always return the best state visited, however the loop ended (early
+    # stopping, or exhausting max_num_batches).
+    final_params = svi.get_params(best_svi_state)
+    log.info(f"Returning parameters at best loss {best_val_loss:.4f}.")
 
     cleaned_final_params = {}
     for name, value in final_params.items():
