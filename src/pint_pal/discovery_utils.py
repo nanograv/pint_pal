@@ -884,11 +884,17 @@ def make_numpyro_model(
     def numpyro_model() -> None:
         """NumPyro model using tanh-transformed parameters."""
         pars = numpyro.sample('pars', dist.Normal(0, 10).expand([parlen]))
-        numpyro.factor('logl', logx(pars))
+        logl = numpyro.deterministic('lnlike', logx(pars))
+        numpyro.factor('logl', logl)
 
-    numpyro_model.to_df = lambda chain: logx.to_df(chain['pars'])
+    def _to_df(chain):
+        df = logx.to_df(chain['pars'])
+        df['lnlike'] = jnp.asarray(chain['lnlike'])
+        return df
 
-    def _compute_log_probs(chain):
+    numpyro_model.to_df = _to_df
+
+    def _compute_log_probs(chain, batch_size: Optional[int] = None):
         """Compute lnlike, lnprior, and lnpost for each sample in *chain*.
 
         Parameters
@@ -904,6 +910,9 @@ def make_numpyro_model(
 
         Notes
         -----
+        This was previously being used to compute log-probabilities but now 
+        the likelihood is stored at compute time. This can still be used to 
+        compute the prior and posterior for chains.
         ``lnlike`` is ``logx(pars)`` — the tanh-transformed log-likelihood
         including the change-of-variables Jacobian from the uniform prior
         interval to the real line.
@@ -912,7 +921,8 @@ def make_numpyro_model(
         ``lnpost = lnlike + lnprior`` is the log-posterior (up to a constant).
         """
         pars = jnp.asarray(chain['pars'])          # (N, parlen)
-        lnlike = jax.vmap(logx)(pars)              # (N,)
+        #lnlike = jax.vmap(logx)(pars)              # (N,)
+        lnlike = jax.lax.map(logx, pars, batch_size=batch_size)              # (N,)
         lnprior = jax.vmap(
             lambda p: jnp.sum(dist.Normal(0, 10).log_prob(p))
         )(pars)                                     # (N,)
@@ -1009,18 +1019,6 @@ def run_nuts_with_checkpoints(
         sampler.run(rng_key)
 
         df_new = sampler.to_df()
-
-        # --- append log-probability columns if model supports it ---
-        if model is not None and hasattr(model, 'compute_log_probs'):
-            try:
-                raw_samples = sampler.get_samples(group_by_chain=False)
-                lp = model.compute_log_probs(raw_samples)
-                df_new = df_new.copy()
-                df_new['lnlike']  = np.asarray(lp['lnlike'])
-                df_new['lnprior'] = np.asarray(lp['lnprior'])
-                df_new['lnpost']  = np.asarray(lp['lnpost'])
-            except Exception as _lp_err:
-                log.warning(f"Could not compute log-probability columns: {_lp_err}")
 
         df = pd.concat([df, df_new]) if df is not None else df_new
 
