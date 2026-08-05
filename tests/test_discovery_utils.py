@@ -53,12 +53,11 @@ def test_red_noise_block_scales_fmin_and_uses_getspan(monkeypatch):
         }
         return "BASIS"
 
-    def fake_makegp_fourier(_psr, prior, nfreqs, T, modes=None, fourierbasis=None, name=None, noisedict=None):
+    def fake_makegp_fourier(_psr, prior, nfreqs, T, fourierbasis=None, name=None, noisedict=None):
         calls["makegp"] = {
             "prior": prior,
             "Nfreqs": nfreqs,
             "T": T,
-            "modes": modes,
             "fourierbasis": fourierbasis,
             "name": name,
             "noisedict": noisedict,
@@ -318,8 +317,8 @@ def test_make_numpyro_model_uses_tanh_transform(monkeypatch):
     assert factored["logl"] == pytest.approx(1.0)
 
 
-def test_make_numpyro_model_to_df_uses_logx_to_df(monkeypatch):
-    """to_df on the model should delegate to logx.to_df."""
+def _fake_logx_model(monkeypatch):
+    """Build a numpyro model whose logx.to_df yields a single 'x' column."""
     import jax.numpy as jnp
     import pandas as pd
 
@@ -335,10 +334,38 @@ def test_make_numpyro_model_to_df_uses_logx_to_df(monkeypatch):
 
     monkeypatch.setattr(du.ds_prior, "makelogtransform_uniform",
                         lambda lnlike, priordict: FakeLogx())
-    model = du.make_numpyro_model(LnLike(), {})
+    return du.make_numpyro_model(LnLike(), {})
+
+
+def test_make_numpyro_model_to_df_uses_logx_to_df(monkeypatch):
+    """to_df delegates parameter columns to logx.to_df and adds lnlike."""
+    model = _fake_logx_model(monkeypatch)
     df = model.to_df({"pars": np.array([[1.5], [2.5]])})
-    assert list(df.columns) == ["x"]
+    assert list(df.columns) == ["x", "lnlike"]
     assert np.allclose(df["x"].values, [1.5, 2.5])
+
+
+def test_make_numpyro_model_to_df_reuses_runtime_lnlike(monkeypatch):
+    """lnlike recorded at sample time is carried through, not recomputed.
+
+    The model records lnlike via ``numpyro.deterministic`` while sampling, so a
+    chain that already carries the column must be used verbatim.
+    """
+    model = _fake_logx_model(monkeypatch)
+    df = model.to_df({
+        "pars": np.array([[1.5], [2.5]]),
+        "lnlike": np.array([-10.0, -20.0]),
+    })
+    assert list(df.columns) == ["x", "lnlike"]
+    assert np.allclose(df["lnlike"].values, [-10.0, -20.0])
+
+
+def test_make_numpyro_model_to_df_computes_lnlike_when_absent(monkeypatch):
+    """Chains predating the runtime lnlike site fall back to evaluating logx."""
+    model = _fake_logx_model(monkeypatch)
+    df = model.to_df({"pars": np.array([[1.5], [2.5]])})
+    # FakeLogx sums its parameter vector
+    assert np.allclose(df["lnlike"].values, [1.5, 2.5])
 
 
 def test_make_numpyro_model_custom_transform(monkeypatch):
@@ -904,14 +931,22 @@ def test_solar_wind_interpolation_invalid_prior_raises(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# modes forwarding tests
+# Nfreqs forwarding tests
+#
+# discovery's makegp_fourier takes `components`, which may be an int number of
+# frequencies or an explicit array of Fourier modes (this replaced the old
+# `modes` argument). The blocks forward Nfreqs into that slot unchanged.
 # ---------------------------------------------------------------------------
 
+FOURIER_BLOCKS = ["red_noise_block", "dm_noise_block",
+                  "chromatic_noise_block", "solar_wind_noise_block"]
+
+
 def _make_fake_makegp(calls, sentinel="BLOCK"):
-    """Return a fake ds.makegp_fourier that records its keyword arguments."""
-    def fake(psr, prior, nfreqs, T=None, modes=None, fourierbasis=None, name=None, **kwargs):
-        calls.update(dict(prior=prior, Nfreqs=nfreqs, T=T, modes=modes,
-                         fourierbasis=fourierbasis, name=name))
+    """Return a fake ds.makegp_fourier that records its arguments."""
+    def fake(psr, prior, components, T=None, fourierbasis=None, name=None, **kwargs):
+        calls.update(dict(prior=prior, components=components, T=T,
+                          fourierbasis=fourierbasis, name=name))
         return sentinel
     return fake
 
@@ -922,88 +957,38 @@ def _patch_block(monkeypatch, tspan=500.0):
     monkeypatch.setattr(du.ds, "powerlaw", "powerlaw")
 
 
-def test_red_noise_block_forwards_modes(monkeypatch):
+@pytest.mark.parametrize("block_name", FOURIER_BLOCKS)
+def test_block_forwards_mode_array_as_components(monkeypatch, block_name):
+    """An explicit array of Fourier modes passes through as `components`, unmodified."""
     calls = {}
     _patch_block(monkeypatch)
     monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    modes = np.array([1e-9, 3e-9, 1e-8])
-    result = du.red_noise_block(object(), tspan=500.0, modes=modes)
-    assert result == "BLOCK"
-    assert calls["modes"] is modes
 
-
-def test_red_noise_block_modes_none_by_default(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    du.red_noise_block(object(), tspan=500.0)
-    assert calls["modes"] is None
-
-
-def test_dm_noise_block_forwards_modes(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    modes = np.array([2e-9, 4e-9, 6e-9, 8e-9])
-    result = du.dm_noise_block(object(), tspan=500.0, modes=modes)
-    assert result == "BLOCK"
-    assert calls["modes"] is modes
-
-
-def test_dm_noise_block_modes_none_by_default(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    du.dm_noise_block(object(), tspan=500.0)
-    assert calls["modes"] is None
-
-
-def test_chromatic_noise_block_forwards_modes(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    modes = np.linspace(1e-9, 1e-8, 5)
-    result = du.chromatic_noise_block(object(), tspan=500.0, modes=modes)
-    assert result == "BLOCK"
-    assert calls["modes"] is modes
-
-
-def test_chromatic_noise_block_modes_none_by_default(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    du.chromatic_noise_block(object(), tspan=500.0)
-    assert calls["modes"] is None
-
-
-def test_solar_wind_noise_block_forwards_modes(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    modes = np.array([5e-9, 1e-8, 2e-8])
-    result = du.solar_wind_noise_block(object(), tspan=500.0, modes=modes)
-    assert result == "BLOCK"
-    assert calls["modes"] is modes
-
-
-def test_solar_wind_noise_block_modes_none_by_default(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    du.solar_wind_noise_block(object(), tspan=500.0)
-    assert calls["modes"] is None
-
-
-def test_all_block_modes_are_passed_as_exact_array(monkeypatch):
-    """Each block must pass the modes array through without copying or modifying it."""
-    _patch_block(monkeypatch)
     modes = np.array([1e-9, 2e-9, 3e-9, 4e-9, 5e-9])
-    for block_fn in (du.red_noise_block, du.dm_noise_block,
-                     du.chromatic_noise_block, du.solar_wind_noise_block):
-        calls = {}
-        monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-        block_fn(object(), tspan=500.0, modes=modes)
-        assert calls["modes"] is modes, f"{block_fn.__name__} did not forward modes unchanged"
+    result = getattr(du, block_name)(object(), tspan=500.0, Nfreqs=modes)
+
+    assert result == "BLOCK"
+    assert calls["components"] is modes
+
+
+@pytest.mark.parametrize("block_name", FOURIER_BLOCKS)
+def test_block_forwards_integer_nfreqs_as_components(monkeypatch, block_name):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+
+    assert getattr(du, block_name)(object(), tspan=500.0, Nfreqs=7) == "BLOCK"
+    assert calls["components"] == 7
+
+
+@pytest.mark.parametrize("block_name", FOURIER_BLOCKS)
+def test_block_default_nfreqs_is_integer_components(monkeypatch, block_name):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+
+    getattr(du, block_name)(object(), tspan=500.0)
+    assert calls["components"] == 100
 
 
 # ---------------------------------------------------------------------------
@@ -1074,17 +1059,17 @@ def test_compute_log_probs_lnpost_equals_sum(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# run_nuts_with_checkpoints — log-prob columns
+# run_nuts_with_checkpoints — saved chain columns
+#
+# lnlike is now recorded at sample time (a numpyro.deterministic site picked up
+# by the sampler's to_df), so checkpoints simply persist what the sampler
+# returns; they no longer recompute log-probabilities per checkpoint.
 # ---------------------------------------------------------------------------
 
-def test_run_nuts_with_checkpoints_appends_log_prob_columns(tmp_path, monkeypatch):
-    """When model is supplied, df saved to disk includes lnlike/lnprior/lnpost."""
-    import jax.numpy as jnp
-
-    N = 4
-
+def _fake_checkpoint_sampler(n_samples, columns):
+    """Sampler stub whose to_df returns the given columns."""
     class FakeSampler:
-        num_samples = N
+        num_samples = n_samples
         last_state = {}
         post_warmup_state = None
         calls = 0
@@ -1097,78 +1082,60 @@ def test_run_nuts_with_checkpoints_appends_log_prob_columns(tmp_path, monkeypatc
             self.last_state = {"s": self.calls}
 
         def to_df(self):
-            return pd.DataFrame({"par1": np.zeros(N), "par2": np.ones(N)})
+            return pd.DataFrame({k: np.asarray(v) for k, v in columns.items()})
 
-        def get_samples(self, group_by_chain=False):
-            return {"pars": jnp.zeros((N, 2))}
+    return FakeSampler()
 
+
+def test_run_nuts_with_checkpoints_saves_sampler_columns(tmp_path, monkeypatch):
+    """Saved checkpoints carry exactly the sampler's columns, lnlike included."""
+    N = 4
     saved_dfs = []
     monkeypatch.setattr(du, "save_chain", lambda df, path: saved_dfs.append(df.copy()))
     monkeypatch.setattr(du.jax.random, "split", lambda key: (key, key))
 
-    class FakeModel:
-        def compute_log_probs(self, chain):
-            n = chain['pars'].shape[0]
-            return {
-                'lnlike': jnp.full((n,), -1.0),
-                'lnprior': jnp.full((n,), -2.0),
-                'lnpost': jnp.full((n,), -3.0),
-            }
-
     du.run_nuts_with_checkpoints(
-        sampler=FakeSampler(),
+        sampler=_fake_checkpoint_sampler(
+            N,
+            {"par1": np.zeros(N), "par2": np.ones(N), "lnlike": np.full(N, -1.0)},
+        ),
         num_samples_per_checkpoint=2,
         rng_key=np.array([0, 1]),
         outdir=tmp_path,
         file_name="abc",
         diagnostics=False,
-        model=FakeModel(),
     )
 
     assert saved_dfs, "save_chain should have been called at least once"
     last_df = saved_dfs[-1]
-    for col in ('lnlike', 'lnprior', 'lnpost'):
-        assert col in last_df.columns, f"expected column '{col}' in saved df"
-    np.testing.assert_allclose(last_df['lnlike'].values, -1.0)
-    np.testing.assert_allclose(last_df['lnprior'].values, -2.0)
-    np.testing.assert_allclose(last_df['lnpost'].values, -3.0)
+    assert list(last_df.columns) == ["par1", "par2", "lnlike"]
+    np.testing.assert_allclose(last_df["lnlike"].values, -1.0)
 
 
-def test_run_nuts_with_checkpoints_no_model_no_log_cols(tmp_path, monkeypatch):
-    """When model is not supplied, no lnlike/lnprior/lnpost columns are added."""
+def test_run_nuts_with_checkpoints_does_not_recompute_log_probs(tmp_path, monkeypatch):
+    """Passing a model must not trigger per-checkpoint log-prob computation."""
     N = 4
-
-    class FakeSampler:
-        num_samples = N
-        last_state = {}
-        post_warmup_state = None
-        calls = 0
-
-        def _set_collection_params(self):
-            pass
-
-        def run(self, _rng):
-            self.calls += 1
-            self.last_state = {}
-
-        def to_df(self):
-            return pd.DataFrame({"par1": np.zeros(N)})
-
     saved_dfs = []
     monkeypatch.setattr(du, "save_chain", lambda df, path: saved_dfs.append(df.copy()))
     monkeypatch.setattr(du.jax.random, "split", lambda key: (key, key))
 
+    class FakeModel:
+        def compute_log_probs(self, chain, batch_size=None):
+            raise AssertionError("compute_log_probs should not run at checkpoint time")
+
     du.run_nuts_with_checkpoints(
-        sampler=FakeSampler(),
+        sampler=_fake_checkpoint_sampler(N, {"par1": np.zeros(N)}),
         num_samples_per_checkpoint=N,
         rng_key=np.array([0, 1]),
         outdir=tmp_path,
         file_name="nomodel",
         diagnostics=False,
+        model=FakeModel(),
     )
 
     last_df = saved_dfs[-1]
-    for col in ('lnlike', 'lnprior', 'lnpost'):
+    assert list(last_df.columns) == ["par1"]
+    for col in ("lnprior", "lnpost"):
         assert col not in last_df.columns
 
 
@@ -1277,7 +1244,7 @@ class TestNoiseDictForwarding:
         monkeypatch.setattr(du, "_select_fourier_basis", lambda *a, **k: "BASIS")
         monkeypatch.setattr(du.ds, "powerlaw", "powerlaw")
 
-        def fake(psr, prior, nfreqs, T=None, modes=None, fourierbasis=None,
+        def fake(psr, prior, nfreqs, T=None, fourierbasis=None,
                  name=None, noisedict=None, **kwargs):
             calls["noisedict"] = noisedict
             return "BLOCK"

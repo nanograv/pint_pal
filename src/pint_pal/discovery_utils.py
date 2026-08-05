@@ -963,10 +963,11 @@ def run_nuts_with_checkpoints(
     resume : bool
         Whether to look for a state to resume from.
     model : callable, optional
-        NumPyro model returned by ``make_numpyro_model``.  When supplied and
-        the model exposes a ``compute_log_probs`` method, ``lnlike``,
-        ``lnprior``, and ``lnpost`` columns are appended to every checkpoint
-        DataFrame before it is written to disk.  Default is None.
+        NumPyro model returned by ``make_numpyro_model``.  Accepted for
+        backward compatibility but no longer used: ``lnlike`` is now recorded
+        at sample time as a ``numpyro.deterministic`` site and comes through
+        ``sampler.to_df()``, so checkpoints no longer recompute
+        log-probabilities.  Default is None.
     Returns
     -------
     None
