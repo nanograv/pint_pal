@@ -889,7 +889,11 @@ def make_numpyro_model(
 
     def _to_df(chain):
         df = logx.to_df(chain['pars'])
-        df['lnlike'] = jnp.asarray(chain['lnlike'])
+        if 'lnlike' in chain:
+            df['lnlike'] = jnp.asarray(chain['lnlike'])
+        else:
+            pars = jnp.asarray(chain['pars'])
+            df['lnlike'] = jax.lax.map(logx, pars)
         return df
 
     numpyro_model.to_df = _to_df
