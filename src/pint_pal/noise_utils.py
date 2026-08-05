@@ -1690,6 +1690,79 @@ def get_model_and_sampler_default_settings():
     return model_defaults, sampler_defaults
 
 
+def _extract_gp_design_matrix(N_gp, noise_params):
+    """Pull the compound GP design matrix and per-GP column slices off a kernel.
+
+    Parameters
+    ----------
+    N_gp : discovery kernel
+        The Woodbury kernel holding the compound GP (``psl.N``).  Its ``.index``
+        maps each GP coefficient name to its slice of the compound basis, and
+        its ``.F`` is the compound basis itself.
+    noise_params : dict
+        Noise parameter values used for the conditional draws.  Needed only when
+        ``F`` is parameter-dependent.
+
+    Returns
+    -------
+    index_map : dict
+        ``{gp_name: [start, stop]}`` column slices into the compound F.
+    F_columns : dict
+        ``{gp_name: nested list}`` design matrix columns for each GP.
+    F_params : list
+        Names of the parameters ``F`` depends on; empty when ``F`` is a fixed
+        matrix.
+
+    Notes
+    -----
+    The compound ``F`` is a plain array only when every GP basis is fixed.  If
+    any GP has a parameter-dependent basis — e.g. a chromatic GP with a varying
+    chromatic index, whose Fourier basis carries a ``(fref / freq) ** idx``
+    factor — Discovery builds ``F`` as a closure ``F(params) -> matrix`` (see
+    ``discovery.matrix`` GP concatenation and ``fourierbasis_chrom``).  It is
+    then evaluated at ``noise_params``, i.e. at the same parameter values used
+    to draw the coefficients, so that ``F @ coefficients`` reproduces the
+    realization.
+    """
+    index_map = {}
+    if getattr(N_gp, "index", None) is not None:
+        for gp_name, sli in N_gp.index.items():
+            index_map[gp_name] = [sli.start, sli.stop]
+
+    F_columns = {}
+    F_params = []
+    F_obj = getattr(N_gp, "F", None)
+    if F_obj is None:
+        return index_map, F_columns, F_params
+
+    if callable(F_obj):
+        F_params = list(getattr(F_obj, "params", []))
+        missing_F = sorted(set(F_params) - set(noise_params))
+        if missing_F:
+            raise ValueError(
+                "The compound GP design matrix is parameter-dependent but "
+                f"noise_params is missing the required parameter(s) {missing_F}. "
+                "These must be supplied (e.g. from the noise dictionary or "
+                "posterior medians) in order to evaluate F."
+            )
+        log.info(
+            f"Compound GP F matrix is parameter-dependent (params: {F_params}); "
+            "evaluating it at the supplied noise_params."
+        )
+        with jax.default_device("cpu"):
+            F_full = np.asarray(F_obj(noise_params))
+    else:
+        F_full = np.asarray(F_obj)
+
+    log.info(
+        f"Compound GP F matrix shape: {F_full.shape}, index_map keys: {list(index_map.keys())}"
+    )
+    for gp_name, (start, stop) in index_map.items():
+        F_columns[gp_name] = F_full[:, start:stop].tolist()
+
+    return index_map, F_columns, F_params
+
+
 def generate_gp_realizations(
     mo,
     to,
@@ -1834,30 +1907,12 @@ def generate_gp_realizations(
         for gp_name in gp_keys:
             realizations[gp_name].append(np.asarray(draw[gp_name]).tolist())
 
-    # Build the design matrix index map: for each GP key, record the
-    # slice into the compound F matrix so downstream plotting can
-    # reconstruct time-domain realizations as F[:, sli] @ coefficients
-    index_map = {}
-
+    # Build the design matrix index map and the per-GP design matrix columns.
+    #
     # Because we only fix efac/equad (not ecorr), Discovery puts ALL
     # VariableGPs (ecorr, TM, RN, DM, SW, …) into one compound
     # WoodburyKernel_varP.  Its .F and .index are on psl.N directly.
-    N_gp = psl.N
-
-    # Extract index map from the GP block
-    if hasattr(N_gp, "index") and N_gp.index is not None:
-        for gp_name, sli in N_gp.index.items():
-            index_map[gp_name] = [sli.start, sli.stop]
-
-    # Extract the compound F matrix columns per GP
-    F_columns = {}
-    if hasattr(N_gp, "F"):
-        F_full = np.asarray(N_gp.F)
-        log.info(
-            f"Compound GP F matrix shape: {F_full.shape}, index_map keys: {list(index_map.keys())}"
-        )
-        for gp_name, (start, stop) in index_map.items():
-            F_columns[gp_name] = F_full[:, start:stop].tolist()
+    index_map, F_columns, F_params = _extract_gp_design_matrix(psl.N, noise_params)
 
     # Solar wind: save node positions if interpolation basis
     sw_nodes = None
@@ -1949,6 +2004,10 @@ def generate_gp_realizations(
         "model_kwargs": _serialize_model_kwargs(mk),
         "gp_keys": gp_keys,
         "index_map": index_map,
+        # Non-empty when the saved F was evaluated from a parameter-dependent
+        # basis (e.g. variable chromatic index); the values used are in
+        # noise_params.
+        "F_variable_params": F_params,
         "toas_mjd": (e_psr.toas / 86400).tolist(),
         "freqs_mhz": (
             e_psr.freqs.tolist()

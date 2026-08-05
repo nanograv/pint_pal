@@ -9,6 +9,7 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 
+import jax
 import numpy as np
 import pandas as pd
 import pint.models as models
@@ -98,41 +99,45 @@ def _assert_discovery_likelihood_builds(psr, model_kwargs):
     return pulsar_likelihood
 
 
+def _midpoint_from_prior(par_name):
+    """Return a representative value for a discovery parameter."""
+    try:
+        low, high = du.ds_prior.getprior_uniform(par_name, du.ds.priordict_standard)
+        return 0.5 * (float(low) + float(high))
+    except (RuntimeError, KeyError, ValueError):
+        alias = par_name.replace("_dm_gp_", "_dmgp_")
+        if alias != par_name:
+            low, high = du.ds_prior.getprior_uniform(alias, du.ds.priordict_standard)
+            return 0.5 * (float(low) + float(high))
+
+        if par_name.endswith("_alpha"):
+            return 2.0
+        if par_name.endswith("_log10_A"):
+            return -15.5
+        if par_name.endswith("_gamma"):
+            return 3.5
+        if par_name.endswith("_efac") or par_name.endswith("_dmefac"):
+            return 1.0
+        if (
+            par_name.endswith("_log10_ecorr")
+            or par_name.endswith("_ecorr")
+            or par_name.endswith("_dmequad")
+        ):
+            return -6.5
+
+        raise AssertionError(
+            f"No prior midpoint mapping available for discovery parameter: {par_name}"
+        )
+
+
+def _params_from_prior_midpoints(pulsar_likelihood):
+    """Fill every likelihood parameter with its prior midpoint."""
+    return {p: _midpoint_from_prior(p) for p in pulsar_likelihood.logL.params}
+
+
 def _assert_discovery_likelihood_evaluates(pulsar_likelihood):
     """Evaluate discovery likelihood and assert finite logL across API variants."""
-
-    def _midpoint_from_prior(par_name):
-        try:
-            low, high = du.ds_prior.getprior_uniform(par_name, du.ds.priordict_standard)
-            return 0.5 * (float(low) + float(high))
-        except (RuntimeError, KeyError, ValueError):
-            alias = par_name.replace("_dm_gp_", "_dmgp_")
-            if alias != par_name:
-                low, high = du.ds_prior.getprior_uniform(
-                    alias, du.ds.priordict_standard
-                )
-                return 0.5 * (float(low) + float(high))
-
-            if par_name.endswith("_alpha"):
-                return 2.0
-            if par_name.endswith("_log10_A"):
-                return -15.5
-            if par_name.endswith("_gamma"):
-                return 3.5
-            if par_name.endswith("_efac") or par_name.endswith("_dmefac"):
-                return 1.0
-            if (
-                par_name.endswith("_log10_ecorr")
-                or par_name.endswith("_ecorr")
-                or par_name.endswith("_dmequad")
-            ):
-                return -6.5
-
-            raise AssertionError(
-                f"No prior midpoint mapping available for discovery parameter: {par_name}"
-            )
-
-    sampled_params = {}
+    sampled_params = _params_from_prior_midpoints(pulsar_likelihood)
 
     for _ in range(128):
         try:
@@ -685,6 +690,101 @@ def test_add_noise_to_model_adds_time_domain_solar_wind_variants(
     assert "SolarWindDispersion" in model.components
     assert "TimeDomainSWNoise" in model.components
     assert model.components["TimeDomainSWNoise"].TDSWKERNEL.value == expected_kernel
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+@pytest.mark.parametrize("chromatic_idx", ["vary", 4.0])
+def test_gp_design_matrix_extraction_with_chromatic_gp(
+    real_tc, real_model_toas, chromatic_idx
+):
+    """GP realization bookkeeping must work for fixed and varying chromatic index.
+
+    With ``chromatic_idx='vary'`` discovery builds the compound design matrix as
+    a closure ``F(params)`` rather than a matrix, so the extraction has to
+    evaluate it at the sampled noise parameters.  Both cases must yield F
+    columns that line up with the drawn coefficients.
+    """
+    e_psr = _enterprise_pulsar_from_real_data(real_model_toas)
+
+    model_kwargs = _variant_model_kwargs(
+        real_tc,
+        timing_model={"svd": False, "tm_marg": False},
+        white_noise={"gp_ecorr": True, "tn_equad": True, "include_ecorr": False},
+        red_noise={"basis": "fourier", "Nfreqs": 5, "prior": "powerlaw"},
+        dm_noise=False,
+        chromatic_noise={
+            "basis": "fourier",
+            "Nfreqs": 5,
+            "prior": "powerlaw",
+            "chromatic_idx": chromatic_idx,
+        },
+        solar_wind=False,
+    )
+
+    psl = _assert_discovery_likelihood_builds(e_psr, model_kwargs)
+    params = _params_from_prior_midpoints(psl)
+
+    assert callable(psl.N.F) is (chromatic_idx == "vary")
+
+    _, draw = psl.sample_conditional(jax.random.PRNGKey(0), params)
+    index_map, F_columns, F_params = nu._extract_gp_design_matrix(psl.N, params)
+
+    expected_F_params = [f"{e_psr.name}_chrom_gp_alpha"] if chromatic_idx == "vary" else []
+    assert F_params == expected_F_params
+
+    assert any("chrom_gp" in key_name for key_name in index_map)
+    assert set(draw) == set(index_map) == set(F_columns)
+
+    for gp_key, coeffs in draw.items():
+        coeffs = np.asarray(coeffs)
+        F = np.asarray(F_columns[gp_key])
+        start, stop = index_map[gp_key]
+        assert F.shape == (len(e_psr.toas), coeffs.shape[0])
+        assert stop - start == coeffs.shape[0]
+        # F @ c is the time-domain realization used downstream for plotting
+        assert np.all(np.isfinite(F @ coeffs))
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_gp_design_matrix_varying_index_matches_fixed_index(real_tc, real_model_toas):
+    """A varying chromatic index evaluated at alpha reproduces the fixed-alpha basis."""
+    e_psr = _enterprise_pulsar_from_real_data(real_model_toas)
+    alpha = 4.0
+
+    def _build(chromatic_idx):
+        model_kwargs = _variant_model_kwargs(
+            real_tc,
+            timing_model={"svd": False, "tm_marg": False},
+            white_noise={"gp_ecorr": False, "tn_equad": True, "include_ecorr": True},
+            red_noise=False,
+            dm_noise=False,
+            chromatic_noise={
+                "basis": "fourier",
+                "Nfreqs": 5,
+                "prior": "powerlaw",
+                "chromatic_idx": chromatic_idx,
+            },
+            solar_wind=False,
+        )
+        return _assert_discovery_likelihood_builds(e_psr, model_kwargs)
+
+    psl_vary, psl_fixed = _build("vary"), _build(alpha)
+    params = _params_from_prior_midpoints(psl_vary)
+    params[f"{e_psr.name}_chrom_gp_alpha"] = alpha
+
+    _, F_vary, _ = nu._extract_gp_design_matrix(psl_vary.N, params)
+    _, F_fixed, _ = nu._extract_gp_design_matrix(psl_fixed.N, params)
+
+    chrom_keys = [k for k in F_vary if "chrom_gp" in k]
+    assert chrom_keys
+    for gp_key in chrom_keys:
+        assert np.allclose(np.asarray(F_vary[gp_key]), np.asarray(F_fixed[gp_key]))
+
+    # and the basis really does depend on alpha, so evaluating it matters
+    params_other = dict(params, **{f"{e_psr.name}_chrom_gp_alpha": 2.0})
+    _, F_other, _ = nu._extract_gp_design_matrix(psl_vary.N, params_other)
+    for gp_key in chrom_keys:
+        assert not np.allclose(np.asarray(F_vary[gp_key]), np.asarray(F_other[gp_key]))
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
