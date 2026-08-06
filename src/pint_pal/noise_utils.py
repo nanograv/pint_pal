@@ -1005,6 +1005,18 @@ def add_noise_to_model(
         for key, val in noise_dict.items()
         if "efac" in key or "equad" in key or "ecorr" in key or "tnequad" in key
     }
+    # Test EQUAD convention and decide whether to convert
+    if test_equad_convention(wn_dict.keys()) == "tnequad":
+        log.info(
+            "WN paramaters use temponest convention; EQUAD values are being converted"
+        )
+        # converts tn_equads --> t2_equads which is the standard for PINT
+        wn_dict = lu.convert_equad_convention(wn_dict)
+        if np.any(["_equad" in p for p in wn_dict.keys()]):
+            log.info("WN parameters generated using enterprise pre-v3.3.0")
+    elif test_equad_convention(wn_dict.keys()) == "t2equad":
+        log.info("WN parameters use T2 convention; no conversion necessary")
+
     for key, val in wn_dict.items():
 
         if "_efac" in key:
@@ -1132,18 +1144,6 @@ def add_noise_to_model(
             )
             dmequad_params.append(tp)
             dmequad_idx += 1
-
-    # Test EQUAD convention and decide whether to convert
-    convert_equad_to_t2 = False
-    if test_equad_convention(noise_dict.keys()) == "tnequad":
-        log.info(
-            "WN paramaters use temponest convention; EQUAD values will be converted once added to model"
-        )
-        convert_equad_to_t2 = True
-        if np.any(["_equad" in p for p in noise_dict.keys()]):
-            log.info("WN parameters generated using enterprise pre-v3.3.0")
-    elif test_equad_convention(noise_dict.keys()) == "t2equad":
-        log.info("WN parameters use T2 convention; no conversion necessary")
 
     # Create white noise components and add them to the model
     ef_eq_comp = pm.ScaleToaError()
@@ -1386,11 +1386,6 @@ def add_noise_to_model(
     model.validate()
     # mtime = Time(os.path.getmtime(chainfile), format="unix")
     # model.meta['noise_mtime'] = mtime.isot
-
-    if convert_equad_to_t2:
-        from pint_pal.lite_utils import convert_enterprise_equads
-
-        model = convert_enterprise_equads(model)
 
     return model
 
