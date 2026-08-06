@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from enterprise.pulsar import Pulsar
 
 import pint_pal.discovery_utils as du
+import pint_pal.lite_utils as lu
 import pint_pal.noise_utils as nu
 from pint_pal.timingconfiguration import TimingConfiguration
 
@@ -525,6 +526,64 @@ def test_add_noise_to_model_with_real_model_and_synthetic_noise(real_pint_model)
         noise_dict[f"{psr}_red_noise_gamma"]
     )
     assert int(rn.TNREDC.value) == 12
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_add_noise_to_model_converts_tnequad_to_t2equad(real_pint_model):
+    """Regression: temponest-convention EQUADs are converted and applied as EQUADs.
+
+    A noise dictionary written with the ``tn_equad`` convention (enterprise
+    ``log10_tnequad``) must be converted to the PINT/tempo2 convention
+    (``EQUAD(t2) = EQUAD(tn) / EFAC``, i.e. ``log10`` values shifted by
+    ``log10(EFAC)``) and end up as EQUAD maskParameters on ScaleToaError --
+    not dropped, and not left as TNEQ parameters.
+    """
+    model = deepcopy(real_pint_model)
+    psr = model.PSR.value
+
+    efacs = {"Rcvr1_2_GUPPI": 1.12, "Rcvr_800_GUPPI": 0.97}
+    log10_tnequads = {"Rcvr1_2_GUPPI": -6.5, "Rcvr_800_GUPPI": -6.9}
+    noise_dict = {}
+    for backend in efacs:
+        noise_dict[f"{psr}_{backend}_efac"] = efacs[backend]
+        noise_dict[f"{psr}_{backend}_log10_tnequad"] = log10_tnequads[backend]
+
+    assert nu.test_equad_convention(noise_dict.keys()) == "tnequad"
+
+    # the dictionary conversion itself: tn keys become t2 keys, values divided by EFAC
+    converted = lu.convert_equad_convention(deepcopy(noise_dict))
+    for backend in efacs:
+        assert f"{psr}_{backend}_log10_tnequad" not in converted
+        assert 10 ** converted[f"{psr}_{backend}_log10_t2equad"] == pytest.approx(
+            10 ** log10_tnequads[backend] / efacs[backend]
+        )
+
+    out = nu.add_noise_to_model(
+        model=model,
+        noise_dict=noise_dict,
+        model_kwargs={},
+        using_wideband=False,
+    )
+
+    assert out is model
+    assert "ScaleToaError" in model.components
+    wn = model.components["ScaleToaError"]
+
+    # converted EQUADs are applied; no TNEQ parameters are left behind
+    assert not [p for p in wn.params if p.startswith("TNEQ")]
+    equad_params = [getattr(model, p) for p in wn.params if p.startswith("EQUAD")]
+    assert len(equad_params) == len(log10_tnequads)
+
+    applied = {p.key_value[0]: float(p.value) for p in equad_params}
+    for backend in efacs:
+        # PINT EQUADs are in microseconds
+        expected_us = 10 ** log10_tnequads[backend] / efacs[backend] / 1e-6
+        assert applied[backend] == pytest.approx(expected_us)
+
+    # EFACs are untouched by the conversion
+    efac_params = [getattr(model, p) for p in wn.params if p.startswith("EFAC")]
+    applied_efacs = {p.key_value[0]: float(p.value) for p in efac_params}
+    assert applied_efacs == pytest.approx(efacs)
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")

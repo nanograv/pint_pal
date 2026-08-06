@@ -1881,3 +1881,37 @@ def convert_enterprise_equads(model):
             model[eq].value = new_eq
             log.info(f"{eq} has been converted from {old_eq} to {new_eq}.")
         return model
+
+def convert_equad_convention(noise_dict):
+    """ EQUADS from enterprise v3.3.0 and earlier follow temponest convention, rather than
+    that in Tempo/Tempo2/PINT; this function applies a simple conversion.
+    For example, with a given EFAC/EQUAD pair:
+
+    EQUAD (t2) = EQUAD (tn) / EFAC
+    or
+    EQUAD (tn) = EQUAD (t2) * EFAC
+
+
+    For more information, see https://github.com/nanograv/enterprise/releases/tag/v3.3.0
+    """
+    converted_dict = noise_dict.copy()
+    _ = [converted_dict.pop(i) for i in list(noise_dict.keys()) if '_equad' in i]
+    efacs = [x for x in noise_dict.keys() if 'efac' in x]
+    original_equads = [x for x in noise_dict.keys() if '_equad' in x]
+    if not len(original_equads):
+        log.warning('There are no equad parameters in this dictionary.')
+        return converted_dict
+    else:
+        # EQUADs in a noise dictionary are log10 values
+        # so dividing/multiplying by EFAC is a +/- log10(EFAC).
+        if '_tn' in original_equads[0]:
+            converted_keys = [par_name.replace('_tn','_t2') for par_name in original_equads]
+            converted_vals = [noise_dict[tneq] - np.log10(noise_dict[ef]) for tneq, ef in zip(original_equads, efacs)]
+        elif '_t2' in original_equads[0]:
+            converted_keys = [par_name.replace('_t2','_tn') for par_name in original_equads]
+            converted_vals = [noise_dict[t2eq] + np.log10(noise_dict[ef]) for t2eq, ef in zip(original_equads, efacs)]
+
+        for ky,val in zip(converted_keys, converted_vals):
+            converted_dict[ky] = val
+        assert len(converted_dict) == len(noise_dict), "Length of converted dict does not match original dict"
+        return converted_dict
