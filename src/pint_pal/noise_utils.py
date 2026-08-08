@@ -1815,7 +1815,7 @@ def generate_gp_realizations(
     """
     import discovery as ds
     from discovery import solar as ds_solar
-    import pyarrow  # noqa: F401 — ensure feather backend available
+    import pyarrow
 
     outdir = pathlib.Path(format_chain_dir(outdir, mo, using_wideband=using_wideband))
     outdir.mkdir(parents=True, exist_ok=True)
@@ -1839,6 +1839,22 @@ def generate_gp_realizations(
     # don't use the timing model svd because this will scramble the design matrix columns and make it hard to reconstruct realizations in the time domain.
     mk["timing_model"]["svd"] = False
 
+    # Force the timing model to be a *variable* GP.  timing_model_block passes
+    # variable=(not tm_marg) to makegp_timing, and makegp_improper only assigns
+    # gp.index in the variable branch — a marginalized (ConstantGP) timing model
+    # has no index entry, so _extract_gp_design_matrix never sees it and the
+    # payload comes out with no timing-model coefficients or design matrix at
+    # all.  Downstream plotting then silently drops every TM contribution
+    # (reference DM, F0/F1, NE_SW), which is never what you want from a
+    # realization payload.  The marginal posterior of the other GPs is
+    # unchanged by sampling the TM instead of marginalizing it analytically.
+    if mk["timing_model"].get("tm_marg", True):
+        log.info(
+            "Forcing timing_model.tm_marg=False so timing-model coefficients "
+            "are drawn and saved (marginalized TM produces no TM realizations)."
+        )
+    mk["timing_model"]["tm_marg"] = False
+
     # Build enterprise pulsar
     log.info(f"Creating enterprise.Pulsar object for GP realizations...")
     e_psr = Pulsar(mo, to, pint=True, t2=None)
@@ -1852,7 +1868,7 @@ def generate_gp_realizations(
     # make_kernelsolve_simple and therefore sample_conditional.
     # All VariableGPs — including ecorr — are concatenated into one
     # compound design matrix, so sample_conditional draws coefficients
-    # for every GP simultaneously (TM, ecorr, RN, DM, SW, …).
+    # for every GP simultaneously (TM, ecorr, RN, DM, SW, ...).
     # The actual noise parameter values are passed to the conditional
     # at draw time via noise_params.
     log.info("Building likelihood with all WN params variable (varNP mode).")
@@ -1905,7 +1921,7 @@ def generate_gp_realizations(
     # Build the design matrix index map and the per-GP design matrix columns.
     #
     # Because we only fix efac/equad (not ecorr), Discovery puts ALL
-    # VariableGPs (ecorr, TM, RN, DM, SW, …) into one compound
+    # VariableGPs (ecorr, TM, RN, DM, SW, ...) into one compound
     # WoodburyKernel_varP.  Its .F and .index are on psl.N directly.
     index_map, F_columns, F_params = _extract_gp_design_matrix(psl.N, noise_params)
 
@@ -1990,6 +2006,21 @@ def generate_gp_realizations(
         f"Timing model fitpars ({len(tm_fitpars) if tm_fitpars else 0} cols): {tm_fitpars}"
     )
 
+    # L2 norm of each raw design-matrix column.  Discovery's makegp_timing
+    # stores the *normalized* basis, fmat[:, k] = Mmat[:, k] / ||Mmat[:, k]||
+    # (svd=False branch, which we force above), so the saved F_columns are not
+    # d(delay)/d(param).  The realizations themselves are unaffected — the
+    # coefficients live in the same normalized basis, so F @ c is still in
+    # seconds — but anything that wants to multiply a design-matrix column by a
+    # parameter *value* (e.g. adding the reference DM to a DM GP realization)
+    # needs the norm to undo the scaling.  This is the same e_psr handed to
+    # timing_model_block, so these are exactly the norms that were divided out.
+    tm_column_norms = None
+    if getattr(e_psr, "Mmat", None) is not None:
+        tm_column_norms = np.sqrt(
+            (np.asarray(e_psr.Mmat, dtype=np.float64) ** 2).sum(axis=0)
+        ).tolist()
+
     # Assemble output payload for feather format
     # Create main metadata dictionary
     metadata = {
@@ -2017,6 +2048,7 @@ def generate_gp_realizations(
         "sw_nodes_mjd": sw_nodes,
         "sw_shape_at_toas": sw_shape_at_toas,
         "tm_fitpars": tm_fitpars,
+        "tm_column_norms": tm_column_norms,
     }
 
     # --- Efficient feather serialization ---

@@ -43,9 +43,15 @@ _ecorr_c    = _rng.standard_normal((N_REAL, 2))
 
 # Design-matrix columns: shape (n_toas, n_coeffs)
 _rn_F  = _rng.standard_normal((N_TOAS, N_RN)) * 1e-7   # seconds scale
-_tm_F  = _rng.standard_normal((N_TOAS, N_TM)) * 1e-6   # d(delay)/d(param)
 _sw_F  = _rng.standard_normal((N_TOAS, 6))    * 1e-7
 _ecorr_F = _rng.standard_normal((N_TOAS, 2))  * 1e-7
+
+# Timing-model design matrix.  Discovery's makegp_timing stores a
+# column-normalized basis, so the payload holds Mmat / ||Mmat|| and the norms
+# are saved alongside it; mirror that here so the fixture matches reality.
+_tm_Mmat = _rng.standard_normal((N_TOAS, N_TM)) * 1e-6   # d(delay)/d(param)
+_tm_norms = np.sqrt((_tm_Mmat ** 2).sum(axis=0))
+_tm_F = _tm_Mmat / _tm_norms
 
 # SW shape factor (seconds per cm^-3)
 _sw_shape = np.abs(_rng.standard_normal(N_TOAS)) * 1e-7 + 1e-8
@@ -55,7 +61,7 @@ _freqs = _rng.uniform(800, 2000, N_TOAS)
 _toas  = np.linspace(55000, 57000, N_TOAS)
 
 
-def _make_payload(include_sw=False, include_ecorr=False):
+def _make_payload(include_sw=False, include_ecorr=False, include_tm_norms=True):
     """Build a minimal synthetic payload for use in tests."""
     gp_keys = [
         f"{PSR}_timing_model_coefficients({N_TM})",
@@ -93,6 +99,7 @@ def _make_payload(include_sw=False, include_ecorr=False):
         "realizations": realizations,
         "F_columns": F_columns,
         "tm_fitpars": ["F0", "F1", "DM"],  # 3 columns matching N_TM
+        "tm_column_norms": _tm_norms.tolist() if include_tm_norms else None,
         "sw_shape_at_toas": _sw_shape.tolist() if include_sw else None,
         "solar_conjunctions_mjd": None,
         "sw_nodes_mjd": None,
@@ -197,6 +204,50 @@ class TestGetTmComponentSignal:
         )
         # Mode 3 adds a non-zero offset; the arrays should differ
         assert not np.allclose(sig_no_ref, sig_ref)
+
+    def test_reference_delay_uses_unnormalized_column(self):
+        """The reference delay must be DM * Mmat[:, DM], not DM * F[:, DM].
+
+        The payload stores the column-normalized basis, so forgetting the norm
+        factor inflates the reference contribution by 1 / ||Mmat[:, DM]||.
+        """
+        payload = _make_payload()
+        model = _dummy_model(dm=15.0)
+        sig_no_ref, names = pu._get_tm_component_signal(
+            payload, "dm_gp", PSR, model=model, include_reference_values=False
+        )
+        sig_ref, _ = pu._get_tm_component_signal(
+            payload, "dm_gp", PSR, model=model, include_reference_values=True
+        )
+        # DM1/DM2 are 0.0 in the dummy model and absent from fitpars anyway,
+        # so the only reference contribution is DM (column 2).
+        assert names == ["DM"]
+        expected = np.broadcast_to(15.0 * _tm_Mmat[:, 2], (N_REAL, N_TOAS))
+        np.testing.assert_allclose(sig_ref - sig_no_ref, expected)
+
+    def test_reference_skipped_without_column_norms(self):
+        """Legacy payloads lack tm_column_norms; reference values are dropped."""
+        payload = _make_payload(include_tm_norms=False)
+        model = _dummy_model(dm=15.0)
+        sig_no_ref, _ = pu._get_tm_component_signal(
+            payload, "dm_gp", PSR, model=model, include_reference_values=False
+        )
+        sig_ref, _ = pu._get_tm_component_signal(
+            payload, "dm_gp", PSR, model=model, include_reference_values=True
+        )
+        np.testing.assert_array_equal(sig_no_ref, sig_ref)
+
+    def test_reference_skipped_on_norm_length_mismatch(self):
+        payload = _make_payload()
+        payload["tm_column_norms"] = _tm_norms[:-1].tolist()
+        model = _dummy_model(dm=15.0)
+        sig_no_ref, _ = pu._get_tm_component_signal(
+            payload, "dm_gp", PSR, model=model, include_reference_values=False
+        )
+        sig_ref, _ = pu._get_tm_component_signal(
+            payload, "dm_gp", PSR, model=model, include_reference_values=True
+        )
+        np.testing.assert_array_equal(sig_no_ref, sig_ref)
 
     def test_sw_reference_not_added_by_this_function(self):
         """SW reference values must NOT be added here (handled by plot_gp_sw_ne)."""
@@ -631,3 +682,151 @@ class TestPlotGpRealizationsCombined:
             f"SW mode 2 panel should not say 'total', got: {title_mode2}"
         assert "total" in title_mode3.lower(), \
             f"SW mode 3 panel should say 'total', got: {title_mode3}"
+
+
+# ---------------------------------------------------------------------------
+# Tests: zero_mean toggle
+# ---------------------------------------------------------------------------
+
+class TestZeroMean:
+    """Each realization should have its own offset removed, in plotted units."""
+
+    def test_helper_removes_per_row_mean(self):
+        sig = _rng.standard_normal((4, 10)) + np.array([[1.0], [-5.0], [0.0], [3.0]])
+        out = pu._zero_mean_realizations(sig)
+        np.testing.assert_allclose(out.mean(axis=1), 0.0, atol=1e-12)
+        # Shape is preserved: differences within a realization are untouched
+        np.testing.assert_allclose(np.diff(out, axis=1), np.diff(sig, axis=1))
+
+    def test_helper_ignores_nans(self):
+        """plot_gp_sw_ne masks near-zero shape factors with NaN."""
+        sig = _rng.standard_normal((3, 10))
+        sig[:, 4] = np.nan
+        out = pu._zero_mean_realizations(sig)
+        assert np.isnan(out[:, 4]).all()
+        np.testing.assert_allclose(np.nanmean(out, axis=1), 0.0, atol=1e-12)
+
+    def test_plotted_realizations_are_zero_mean(self):
+        """End-to-end: every curve actually drawn has zero mean."""
+        payload = _make_payload()
+        dm_key = [k for k in payload["gp_keys"] if "dm_gp" in k][0]
+        fig, ax = pu.plot_gp_realization(
+            payload, dm_key, zero_mean=True, show_realizations=5, show_median=False,
+        )
+        drawn = np.array([ln.get_ydata() for ln in ax.lines])
+        assert drawn.shape[0] == 5
+        np.testing.assert_allclose(drawn.mean(axis=1), 0.0, atol=1e-12)
+
+        # Without the toggle they are not zero-mean.
+        fig2, ax2 = pu.plot_gp_realization(
+            payload, dm_key, zero_mean=False, show_realizations=5, show_median=False,
+        )
+        drawn2 = np.array([ln.get_ydata() for ln in ax2.lines])
+        assert np.abs(drawn2.mean(axis=1)).max() > 1e-12
+
+    def test_zero_mean_keeps_delta_in_mode3_ylabel(self):
+        """Mode 3 normally strips the Δ; zero-mean is a deviation, so it stays."""
+        payload = _make_payload()
+        model = _dummy_model(dm=15.0)
+        dm_key = [k for k in payload["gp_keys"] if "dm_gp" in k][0]
+        _, ax_total = pu.plot_gp_realization(
+            payload, dm_key, include_tm_perturbations=True,
+            include_tm_values=True, model=model, zero_mean=False,
+        )
+        _, ax_zm = pu.plot_gp_realization(
+            payload, dm_key, include_tm_perturbations=True,
+            include_tm_values=True, model=model, zero_mean=True,
+        )
+        assert r"\Delta" not in ax_total.get_ylabel()
+        assert r"\Delta" in ax_zm.get_ylabel()
+
+    def test_zero_mean_marked_in_title(self):
+        payload = _make_payload()
+        dm_key = [k for k in payload["gp_keys"] if "dm_gp" in k][0]
+        _, ax = pu.plot_gp_realization(payload, dm_key, zero_mean=True)
+        assert "zero-mean" in ax.get_title().lower()
+
+    def test_zero_mean_sw_ne_panel(self):
+        payload = _make_payload(include_sw=True)
+        fig, ax = pu.plot_gp_sw_ne(payload, zero_mean=True)
+        assert ax is not None
+        assert r"\Delta" in ax.get_ylabel()
+
+    def test_zero_mean_total_signal_is_zero_mean(self):
+        """Mean is linear, so per-component subtraction zeroes the total."""
+        payload = _make_payload()
+        fig, ax = pu.plot_gp_total_signal(payload, zero_mean=True)
+        total = np.asarray(ax.lines[0].get_ydata())  # 'Total' median line
+        assert abs(total.mean()) < abs(
+            np.asarray(pu.plot_gp_total_signal(payload)[1].lines[0].get_ydata()).mean()
+        ) or abs(total.mean()) < 1e-12
+
+    def test_zero_mean_forwarded_by_combined(self):
+        payload = _make_payload()
+        fig, axes = pu.plot_gp_realizations_combined(payload, zero_mean=True)
+        assert "zero-mean" in fig._suptitle.get_text().lower()
+
+
+class TestPlotGpSwDm:
+    def test_sw_dm_runs(self):
+        """Regression: forwarded include_tm_components under the wrong name."""
+        payload = _make_payload(include_sw=True)
+        fig, ax = pu.plot_gp_sw_dm(payload, include_tm_components=True)
+        assert ax is not None
+
+    def test_sw_dm_zero_mean(self):
+        payload = _make_payload(include_sw=True)
+        fig, ax = pu.plot_gp_sw_dm(payload, zero_mean=True)
+        assert ax is not None
+
+
+class TestMissingTimingModelGp:
+    """Payloads made with tm_marg=True have no timing-model GP at all.
+
+    Discovery's makegp_improper only assigns gp.index in the variable branch,
+    so a marginalized timing model never reaches the payload. Plots must not
+    claim to show totals in that case.
+    """
+
+    @staticmethod
+    def _payload_without_tm():
+        payload = _make_payload()
+        tm_key = [k for k in payload["gp_keys"] if "timing" in k][0]
+        payload["gp_keys"] = [k for k in payload["gp_keys"] if k != tm_key]
+        del payload["realizations"][tm_key]
+        del payload["F_columns"][tm_key]
+        return payload
+
+    def test_title_does_not_claim_total(self):
+        payload = self._payload_without_tm()
+        dm_key = [k for k in payload["gp_keys"] if "dm_gp" in k][0]
+        _, ax = pu.plot_gp_realization(
+            payload, dm_key, include_tm_perturbations=True,
+            include_tm_values=True, model=_dummy_model(dm=15.0),
+        )
+        assert "total" not in ax.get_title().lower(), \
+            f"No TM GP available, but title claims a total: {ax.get_title()}"
+
+    def test_ylabel_keeps_delta(self):
+        payload = self._payload_without_tm()
+        dm_key = [k for k in payload["gp_keys"] if "dm_gp" in k][0]
+        _, ax = pu.plot_gp_realization(
+            payload, dm_key, units="dm", include_tm_perturbations=True,
+            include_tm_values=True, model=_dummy_model(dm=15.0),
+        )
+        assert r"\Delta" in ax.get_ylabel(), \
+            f"No TM GP available, so this is still a deviation: {ax.get_ylabel()}"
+
+    def test_warns_about_tm_marg(self):
+        """pint_pal logs via loguru, so attach a sink rather than use caplog."""
+        payload = self._payload_without_tm()
+        records = []
+        sink_id = pu.log.add(records.append, level="WARNING")
+        try:
+            pu._get_tm_component_signal(payload, "dm_gp", PSR)
+        finally:
+            pu.log.remove(sink_id)
+        text = "".join(records)
+        assert "tm_marg" in text
+        assert "dm_gp" in text   # category interpolated, not a literal %s
+        assert "%s" not in text
