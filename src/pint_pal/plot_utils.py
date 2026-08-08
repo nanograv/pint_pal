@@ -5425,11 +5425,18 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
     If ``model`` is provided and ``include_reference_values=True``, the
     reference values for each parameter are converted to time delays and added
     to the fitted perturbations.  The conversion is done via multiplication by
-    the design matrix column:
-        ref_delay = ref_value * F[toa, column]
+    the raw design matrix column:
+        ref_delay = ref_value * Mmat[toa, column]
                   = ref_value * d(delay)/d(param)
     This gives the time-delay contribution of the reference value at each TOA,
     which is then broadcasted across all realizations.
+
+    Note that the saved ``F_columns`` are *not* ``Mmat``: Discovery's
+    ``makegp_timing`` stores a column-normalized basis,
+    ``F[:, k] = Mmat[:, k] / ||Mmat[:, k]||``, so the raw column is recovered as
+    ``F[:, k] * tm_column_norms[k]``.  Payloads generated before
+    ``tm_column_norms`` was recorded cannot do this conversion, and reference
+    values are skipped (with a warning) for those.
 
     Parameters
     ----------
@@ -5460,6 +5467,15 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
     """
     tm_key = _get_tm_gp_key(payload, psr_name)
     if tm_key is None:
+        log.warning(
+            f"No timing-model GP in this payload, so no TM contribution can be "
+            f"added (requested for category '{gp_category}'). This happens when "
+            f"the realizations were generated with timing_model.tm_marg=True: "
+            f"the marginalized timing model is a ConstantGP with no index "
+            f"entry, so its coefficients are never drawn. Re-run "
+            f"generate_gp_realizations with current pint_pal, which forces "
+            f"tm_marg=False."
+        )
         return None, []
 
     fitpars = payload.get('tm_fitpars')
@@ -5498,22 +5514,42 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
 
     # Add reference contributions if requested, model provided, and category is not 'sw'.
     # Each parameter's reference value is converted to a time delay by multiplying
-    # by the corresponding design matrix column:
-    #   ref_delay[toa] = ref_value * F_tm[toa, col]
+    # by the corresponding *raw* design matrix column:
+    #   ref_delay[toa] = ref_value * F_tm[toa, col] * norm[col]
+    #                  = ref_value * Mmat[toa, col]
     #                  = ref_value * d(delay)/d(param)  (units: seconds)
+    # The norm factor undoes the column normalization applied by makegp_timing;
+    # without it the reference contribution is too large by 1 / ||Mmat[:, col]||,
+    # which scales as 1 / sqrt(n_toas) and so varies with the dataset.
     # This works for all categories:
     #   - red_noise (F0, F1, F2): delay = dfreq * d(delay)/d(freq)
     #   - dm_gp (DM, DM1, DM2): delay = DM * d(delay)/d(DM)
     #   - chrom (CM, CM1, CM2): delay = CM * d(delay)/d(CM)
     #   (SW handled separately in plot_gp_sw_ne, not here)
     if include_reference_values and model is not None and gp_category != 'sw':
-        ref_vals = _extract_tm_reference_values(model, gp_category)
-        if ref_vals:
+        norms = payload.get('tm_column_norms')
+        if norms is None:
+            log.warning(
+                "No tm_column_norms in payload; the saved timing-model design "
+                "matrix is column-normalized, so reference parameter values "
+                "cannot be converted to time delays. Skipping them (showing "
+                "fitted perturbations only). Re-run generate_gp_realizations "
+                "with current pint_pal to enable this."
+            )
+        elif len(norms) != F_tm.shape[1]:
+            log.warning(
+                f"tm_column_norms has {len(norms)} entries but the timing-model "
+                f"design matrix has {F_tm.shape[1]} columns; cannot map norms to "
+                "columns. Skipping reference parameter values."
+            )
+        else:
+            norms = np.asarray(norms)
+            ref_vals = _extract_tm_reference_values(model, gp_category)
             for pname, col_i in zip(used_names, col_idx):
                 if pname in ref_vals:
-                    # Design matrix column: d(delay)/d(param) at each TOA
+                    # Raw design matrix column: d(delay)/d(param) at each TOA
                     # Multiply by reference value to get reference delay contribution
-                    ref_delay = ref_vals[pname] * F_tm[:, col_i]  # (n_toas,)
+                    ref_delay = ref_vals[pname] * F_tm[:, col_i] * norms[col_i]
                     # Broadcast to all realizations and add
                     tm_signal = tm_signal + ref_delay[np.newaxis, :]
 
@@ -5688,6 +5724,37 @@ def _convert_units(
         raise ValueError(f"Unknown target_units: {target_units!r}")
 
 
+def _zero_mean_realizations(signals):
+    """Subtract each realization's own mean over TOAs.
+
+    Removes the constant offset of every realization independently, so the
+    plotted band shows only the *shape* of the process.  This is useful when
+    the absolute level is covariant with other timing-model parameters — e.g.
+    the total DM is partly degenerate with the FD parameters, so the offset of
+    a DM GP realization carries little information while inflating the
+    credible band.
+
+    Parameters
+    ----------
+    signals : np.ndarray
+        Shape ``(n_realizations, n_toas)``.
+
+    Returns
+    -------
+    np.ndarray
+        Same shape, with each row's mean removed.
+
+    Notes
+    -----
+    The mean is the unweighted arithmetic mean over TOAs, so densely sampled
+    epochs carry proportionally more weight in setting the offset.  ``nanmean``
+    is used because some callers deliberately introduce NaNs (e.g. the solar
+    wind n_E conversion masks near-zero shape factors).
+    """
+    signals = np.asarray(signals)
+    return signals - np.nanmean(signals, axis=1, keepdims=True)
+
+
 def plot_gp_realization(
     payload,
     gp_key,
@@ -5699,6 +5766,7 @@ def plot_gp_realization(
     show_sw_nodes=False,
     include_tm_perturbations=False,
     include_tm_values=False,
+    zero_mean=False,
     model=None,
     ax=None,
     figsize=(10, 4),
@@ -5745,6 +5813,13 @@ def plot_gp_realization(
         (converted to time delays) so the plot shows total quantities instead
         of just perturbations. Requires include_tm_perturbations=True.
         Default False.
+    zero_mean : bool, optional
+        If True, subtract each realization's own mean over TOAs before
+        plotting, so only the shape of the process is shown. Useful when the
+        absolute level is covariant with other timing-model parameters (e.g.
+        the total DM against the FD parameters). The subtraction happens
+        *after* unit conversion, so the mean is removed in the units being
+        plotted. Default False.
     model : pint.models.TimingModel, optional
         PINT timing model to extract reference values (e.g. F0.value, DM.value).
         Only used if include_tm_values=True. Default None.
@@ -5809,10 +5884,20 @@ def plot_gp_realization(
         chromatic_idx=chromatic_idx, ref_freq_mhz=ref_freq_mhz,
     )
 
+    # Remove each realization's own offset, in the plotted units.
+    if zero_mean:
+        all_signals = _zero_mean_realizations(all_signals)
+
+    # Whether a total quantity is actually being shown.  Asking for reference
+    # values is not enough — the TM contribution has to have been found (it is
+    # absent from tm_marg=True payloads), and a zero-mean plot is a deviation
+    # regardless of mode.
+    _showing_total = bool(tm_names_used) and include_tm_values and not zero_mean
+
     # Update ylabel to reflect which mode we are in:
     #   mode 2 (pert only): y-label stays as Δ… (no change)
     #   mode 3 (total):     strip the Δ prefix to indicate total quantity
-    if include_tm_values and include_tm_perturbations and units in ('dm', 'dm_full', 'us'):
+    if _showing_total and units in ('dm', 'dm_full', 'us'):
         ylabel = ylabel.replace(r'$\Delta$', '').replace(r'$\Delta t$', r'$t$')
 
     # Time axis
@@ -5889,17 +5974,20 @@ def plot_gp_realization(
     ax.tick_params(axis='both', which='minor', length=3, width=0.8)
     
     # Disable offset notation for DM when showing reference values (total quantities)
-    if include_tm_values and units in ('dm', 'dm_full'):
+    if _showing_total and units in ('dm', 'dm_full'):
         ax.ticklabel_format(style='plain', axis='y')
-    
+
     if title is None:
         pretty_name, _ = _classify_gp(gp_key, psr_name)
-        if include_tm_perturbations and include_tm_values:
-            title = f'{psr_name} — {pretty_name} (GP + TM total)'
-        elif include_tm_perturbations:
-            title = f'{psr_name} — {pretty_name} (GP + $\\Delta$TM)'
+        if tm_names_used and include_tm_values:
+            _mode_str = 'GP + TM total'
+        elif tm_names_used:
+            _mode_str = 'GP + $\\Delta$TM'
         else:
-            title = f'{psr_name} — {pretty_name} (GP only)'
+            _mode_str = 'GP only'
+        if zero_mean:
+            _mode_str += ', zero-mean'
+        title = f'{psr_name} — {pretty_name} ({_mode_str})'
     ax.set_title(title, fontsize=_GP_FONTSIZE_TITLE)
     ax.legend(fontsize=_GP_FONTSIZE_LEGEND, loc='lower left')
     ax.grid(axis='y', ls='-', lw=0.4, alpha=0.3)
@@ -5917,6 +6005,7 @@ def plot_gp_realizations_combined(
     show_solar_conjunctions=True,
     include_tm_perturbations=False,
     include_tm_values=False,
+    zero_mean=False,
     model=None,
     figsize=(10, 3),
     toa_units='mjd',
@@ -5951,6 +6040,11 @@ def plot_gp_realizations_combined(
         If True and model is provided, also add reference parameter values
         (converted to time delays) so panels show total quantities instead
         of just perturbations. Requires include_tm_perturbations=True.
+        Default False.
+    zero_mean : bool, optional
+        If True, subtract each realization's own mean over TOAs in every
+        panel, so each panel shows only the shape of that process. Applied
+        per panel and per realization, in each panel's own units.
         Default False.
     model : pint.models.TimingModel, optional
         PINT timing model to extract reference parameter values (DM, etc.).
@@ -6026,6 +6120,7 @@ def plot_gp_realizations_combined(
                 show_solar_conjunctions=show_solar_conjunctions,
                 include_tm_components=include_tm_perturbations,
                 include_tm_values=include_tm_values,
+                zero_mean=zero_mean,
                 model=model,
                 ax=axes[i], toa_units=toa_units,
             )
@@ -6036,6 +6131,7 @@ def plot_gp_realizations_combined(
                 show_solar_conjunctions=show_solar_conjunctions,
                 include_tm_perturbations=include_tm_perturbations,
                 include_tm_values=include_tm_values,
+                zero_mean=zero_mean,
                 model=model,
                 ax=axes[i], toa_units=toa_units, chromatic_idx=chromatic_idx,
             )
@@ -6051,6 +6147,8 @@ def plot_gp_realizations_combined(
         _mode_label = r'GP + $\Delta$TM'
     else:
         _mode_label = 'GP only'
+    if zero_mean:
+        _mode_label += ', zero-mean'
     fig.suptitle(f'{psr_name} — GP Realizations ({_mode_label})',
                  fontsize=_GP_FONTSIZE_TITLE + 1, y=1.01)
     if compact:
@@ -6068,6 +6166,7 @@ def plot_gp_total_signal(
     show_individual=True,
     show_solar_conjunctions=True,
     include_tm_components=False,
+    zero_mean=False,
     exclude=None,
     figsize=(10, 4),
     toa_units='mjd',
@@ -6094,6 +6193,10 @@ def plot_gp_total_signal(
     include_tm_components : bool, optional
         Add relevant timing-model column realizations to each GP before
         summing. Default False.
+    zero_mean : bool, optional
+        If True, subtract each realization's own mean over TOAs from every
+        component before summing. Since the mean is linear this also makes
+        the plotted total zero-mean. Default False.
     exclude : list of str, optional
         GP categories to exclude (e.g. ``['timing_model', 'ecorr']``).
     figsize : tuple, optional
@@ -6173,6 +6276,10 @@ def plot_gp_total_signal(
                 sig = sig + tm_signal
 
         sig, ylabel = _convert_units(sig, freqs, category, target_units=units)
+        # Subtract per-component so the individual medians stay comparable;
+        # the mean is linear, so the summed total comes out zero-mean too.
+        if zero_mean:
+            sig = _zero_mean_realizations(sig)
         sig = sig[:, sort_idx]
         individual[gp_key] = sig
         if total_signals is None:
@@ -6215,6 +6322,8 @@ def plot_gp_total_signal(
     ax.tick_params(axis='both', which='minor', length=3, width=0.8)
     if title is None:
         title = f'{psr_name} — Total GP Signal'
+        if zero_mean:
+            title += ' (zero-mean)'
     ax.set_title(title, fontsize=_GP_FONTSIZE_TITLE)
     ax.legend(fontsize=_GP_FONTSIZE_LEGEND, loc='lower left')
     ax.grid(axis='y', ls='-', lw=0.4, alpha=0.3)
@@ -6232,6 +6341,7 @@ def plot_gp_sw_ne(
     show_nodes=True,
     include_tm_components=False,
     include_tm_values=False,
+    zero_mean=False,
     model=None,
     ax=None,
     figsize=(10, 4),
@@ -6283,6 +6393,10 @@ def plot_gp_sw_ne(
         value so the plot shows **total** n_E.  Requires
         ``include_tm_components=True`` to be meaningful.
         This corresponds to mode 3: GP + ΔTM + ref.  Default False.
+    zero_mean : bool, optional
+        If True, subtract each realization's own mean over TOAs (in n_E
+        units, after the shape-factor division) so only the shape of the
+        process is shown.  Default False.
     model : pint.models.TimingModel, optional
         PINT timing model used to extract NE_SW reference value when
         ``include_tm_values=True``.  Default None.
@@ -6348,6 +6462,10 @@ def plot_gp_sw_ne(
             ne_signal = ne_signal + ref_ne
             log.info(f"Added NE_SW={ref_ne} cm^-3 to SW n_E signal.")
 
+    # Remove each realization's own offset, in n_E units.
+    if zero_mean:
+        ne_signal = _zero_mean_realizations(ne_signal)
+
     # Classify which mode we are in for labelling purposes:
     #   mode 1: GP only (no TM perturbations, no reference value)
     #   mode 2: GP + fitted TM perturbations (ΔNE_SW etc.) — still Δn_E
@@ -6392,6 +6510,8 @@ def plot_gp_sw_ne(
             lbl = r'SWGP [$\Delta n_E$]'
         elif _mode == 2:
             lbl = r'SWGP + $\Delta$TM [$\Delta n_E$]'
+        elif zero_mean:  # mode 3, but mean-subtracted so no longer a total
+            lbl = r'SWGP + TM [$\Delta n_E$]'
         else:  # mode 3
             lbl = r'SWGP + TM [$n_E$ total]'
         ax.plot(tplot, median, color=color, lw=1.5, label=lbl)
@@ -6422,10 +6542,9 @@ def plot_gp_sw_ne(
                 '|', color='grey', ms=6, alpha=0.4)
 
     ax.set_xlabel(xlabel, fontsize=_GP_FONTSIZE_LABEL)
-    if _mode == 3:
+    # A zero-mean plot is a deviation regardless of mode, so keep the Δ there.
+    if _mode == 3 and not zero_mean:
         ax.set_ylabel(r'$n_E$ (cm$^{-3}$)', fontsize=_GP_FONTSIZE_LABEL)
-    elif _mode == 2:
-        ax.set_ylabel(r'$\Delta n_E$ (cm$^{-3}$)', fontsize=_GP_FONTSIZE_LABEL)
     else:
         ax.set_ylabel(r'$\Delta n_E$ (cm$^{-3}$)', fontsize=_GP_FONTSIZE_LABEL)
     ax.tick_params(axis='both', which='major', labelsize=_GP_FONTSIZE_TICK,
@@ -6433,16 +6552,20 @@ def plot_gp_sw_ne(
     ax.tick_params(axis='both', which='minor', length=3, width=0.8)
 
     # Disable offset notation when showing total values
-    if _mode == 3:
+    if _mode == 3 and not zero_mean:
         ax.ticklabel_format(style='plain', axis='y')
 
     if title is None:
-        if _mode == 3:
+        if _mode == 3 and not zero_mean:
             title = f'{psr_name} — Solar Wind $n_E$ (GP + TM total)'
+        elif _mode == 3:
+            title = f'{psr_name} — Solar Wind $\\Delta n_E$ (GP + TM, zero-mean)'
         elif _mode == 2:
             title = f'{psr_name} — Solar Wind $\\Delta n_E$ (GP + $\\Delta$TM)'
         else:
             title = f'{psr_name} — Solar Wind $\\Delta n_E$ (GP only)'
+        if zero_mean and _mode != 3:
+            title += ' [zero-mean]'
     ax.set_title(title, fontsize=_GP_FONTSIZE_TITLE)
     ax.legend(fontsize=_GP_FONTSIZE_LEGEND, loc='lower left')
     ax.grid(axis='y', ls='-', lw=0.4, alpha=0.3)
@@ -6458,6 +6581,7 @@ def plot_gp_sw_dm(
     show_realizations=0,
     show_solar_conjunctions=True,
     include_tm_components=False,
+    zero_mean=False,
     ax=None,
     figsize=(10, 4),
     title=None,
@@ -6492,6 +6616,9 @@ def plot_gp_sw_dm(
     color : str, optional
     alpha_ci : float, optional
     alpha_real : float, optional
+    zero_mean : bool, optional
+        If True, subtract each realization's own mean over TOAs (in DM
+        units) so only the shape of the process is shown. Default False.
     toa_units : str, optional
 
     Returns
@@ -6519,7 +6646,8 @@ def plot_gp_sw_dm(
         show_median=show_median,
         show_realizations=show_realizations,
         show_solar_conjunctions=show_solar_conjunctions,
-        include_tm_components=include_tm_components,
+        include_tm_perturbations=include_tm_components,
+        zero_mean=zero_mean,
         ax=ax,
         figsize=figsize,
         title=title if title else f'{psr_name} — Solar Wind DM',
