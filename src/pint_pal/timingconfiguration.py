@@ -938,24 +938,25 @@ class TimingConfiguration:
                     bt_match = np.where((names==name) & (subints==subint))[0]
                 if len(bt_match): btinds.append(bt_match[0])
                 else: log.warning(f"Listed bad TOA not matched: [{name}, {chan}, {subint}]")
-            btinds = np.array(btinds)
+            btinds = np.array(btinds, dtype=int)
 
             # Check for pre-existing cut flags if there are bad toas matched:
-            cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
-            remaining = np.array([not cut for cut in cuts[btinds]])
-            alreadycut = np.invert(remaining)
+            if btinds.size:
+                cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
+                remaining = np.array([not cut for cut in cuts[btinds]])
+                alreadycut = np.invert(remaining)
 
-            if np.any(alreadycut):
-                log.info(f"{np.sum(alreadycut)} bad-toa entries already cut: {set(cuts[btinds][alreadycut])}")
-                log.info(f"bad-toa list can be reduced to {np.sum(remaining)} entries...")
-                for i in btinds[remaining]:
-                    if self.get_toa_type() == 'NB': print(f"  - [{names[i]},{chans[i]},{subints[i]}]")
-                    else: print(f"  - [{names[i]},None,{subints[i]}]")
+                if np.any(alreadycut):
+                    log.info(f"{np.sum(alreadycut)} bad-toa entries already cut: {set(cuts[btinds][alreadycut])}")
+                    log.info(f"bad-toa list can be reduced to {np.sum(remaining)} entries...")
+                    for i in btinds[remaining]:
+                        if self.get_toa_type() == 'NB': print(f"  - [{names[i]},{chans[i]},{subints[i]}]")
+                        else: print(f"  - [{names[i]},None,{subints[i]}]")
 
             if logwarntoa:
                 log.warning(f'One or more bad-toa entries lack reasons for excision; please add them.')
 
-            apply_cut_flag(toas,np.array(btinds),'badtoa',warn=warn)
+            apply_cut_flag(toas,btinds,'badtoa',warn=warn)
         
         if 'bad-toa-averaged' in valid_valued:
             logwarntoa = False
@@ -966,23 +967,24 @@ class TimingConfiguration:
                 bt_match = np.where((names==name))[0]
                 if len(bt_match): btinds.append(bt_match[0])
                 else: log.warning(f"Listed bad TOA not matched: [{name}]")
-            btinds = np.array(btinds)
+            btinds = np.array(btinds, dtype=int)
 
             # Check for pre-existing cut flags if there are bad toas matched:
-            cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
-            remaining = np.array([not cut for cut in cuts[btinds]])
-            alreadycut = np.invert(remaining)
+            if btinds.size:
+                cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
+                remaining = np.array([not cut for cut in cuts[btinds]])
+                alreadycut = np.invert(remaining)
 
-            if np.any(alreadycut):
-                log.info(f"{np.sum(alreadycut)} bad-toa entries already cut: {set(cuts[btinds][alreadycut])}")
-                log.info(f"bad-toa-averaged list can be reduced to {np.sum(remaining)} entries...")
-                for i in btinds[remaining]:
-                    print(f"  - [{names[i]},None,None]")
+                if np.any(alreadycut):
+                    log.info(f"{np.sum(alreadycut)} bad-toa entries already cut: {set(cuts[btinds][alreadycut])}")
+                    log.info(f"bad-toa-averaged list can be reduced to {np.sum(remaining)} entries...")
+                    for i in btinds[remaining]:
+                        print(f"  - [{names[i]},None,None]")
 
             if logwarntoa:
                 log.warning(f'One or more bad-toa entries lack reasons for excision; please add them.')
 
-            apply_cut_flag(toas,np.array(btinds),'badtoa-averaged',warn=warn)
+            apply_cut_flag(toas,btinds,'badtoa-averaged',warn=warn)
 
         return toas
 

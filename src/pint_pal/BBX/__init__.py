@@ -1,7 +1,7 @@
 # BBX/__init__.py
 
 """
-BBX package: Bayesian-Blocks DMX/SWX pipeline + diagnostics + utilities.
+BBX package: Bayesian Blocks DMX/SWX pipeline + diagnostics + utilities.
 """
 
 from __future__ import annotations
@@ -20,47 +20,77 @@ from .bbx import (
     NoiseAnalysisConfig, 
     ReceiverSelection, 
     PlotStyleConfig,
+    SignalSource,
     # Filepaths/state Objects
     RunContext,
     OutputPaths,
+    ResolvedTimingInputs,
+    resolve_model_toas,
+    run_context_from_config,
+    bbx_configs_from_yaml_block,
+    bbx_named_configs_from_yaml_block,
+    run_config_from_timing_config,
+    pulsar_name_from_input,
     # Pickler
     PicklerIO,
     CachePolicy,
     PicklerBundle,
+    PickleSpec,
+    SidecarSpec,
     # Pipeline runners
     BaseFits,
     SolarWindProxy,
     DispersionMeasureProxy,
     BBX,
     NoiseAnalysis,
+    # Proxy/diagnostics
+    ProxySeries,
+    DiagnosticsPayload,
+    ProxyBuildResult,
+    DMXGapSliceDiagnostics,
+    DMXGapAdjustDiagnostics,
 )
 
-# Utilities (commonly used in notebooks)
+# Utilities (notebooks utilities)
 from .utils import (
     handle_diagnostics,
     handle_diagnostics_multi,
+    mask_toas_from_gaps,
     combine_repeated_toas,
+    remove_gap_nodes,
+    days_in_year,
     mjd_to_year,
     year_to_mjd,
     pulsar_name_to_elat,
+    find_recent_file,
     find_toa_by_mjd,
     by_mjd_table,
     find_toa_by_dmx,
     format_gap_summary,
 )
 
-# Diagnostics / plotting 
+# Diagnostics/plotting 
 from .diagnostics import (
+    plot_bb_spans,
+    select_peak_indices,
+    DoublePatchHandler,
+    plot_data_gaps_diagnostics,
+    plot_swx_bb_diagnostics,
+    extract_swx_params,
+    plot_swx_amplitudes,
+    plot_swx_dm_series,
     plot_epoch_gap_histogram,
     plot_all_epoch_fit_overlay,
+    plot_epoch_fit_examples,
     plot_points_per_epoch_arrays,
     plot_b_snr_vs_time,
     plot_a_vs_b_correlation,
     plot_a_b_time_scatter,
+    plot_proxy_segmentation_overlay,
+    plot_failed_epochs_by_reason,
     plot_wls_epoch_summaries,
-    plot_data_gaps_diagnostics,
-    plot_swx_bb_diagnostics,
     plot_dmx_segmentation_by_slice_diagnostics,
+    plot_epoch_fit_status_timeline,
     plot_bchrom_vs_dmx,
     plot_all_prefix_ellipses,
     summarize_swx_dmx_correlations,
@@ -77,7 +107,7 @@ from .diagnostics import (
 )
 
 __all__ = [
-    # configs
+    # Config/containers
     "ReceiverSelection",
     "PlotStyleConfig",
     "InputConfig",
@@ -89,14 +119,29 @@ __all__ = [
     "ProxyConfig",
     "NoiseAnalysisConfig",
     "RunConfig",
-    # runtime/pathing
     "OutputPaths",
     "RunContext",
-    # caching/pickling
+    "ResolvedTimingInputs",
+    "resolve_model_toas",
+    "run_context_from_config",
+    "bbx_configs_from_yaml_block",
+    "bbx_named_configs_from_yaml_block",
+    "run_config_from_timing_config",
+    "pulsar_name_from_input",
+    # Caching
+    "SidecarSpec",
+    "PickleSpec",
     "PicklerIO",
     "CachePolicy",
     "PicklerBundle",
-    # runners
+    # Proxy/diagnostics
+    "SignalSource",
+    "ProxySeries",
+    "DiagnosticsPayload",
+    "ProxyBuildResult",
+    "DMXGapSliceDiagnostics",
+    "DMXGapAdjustDiagnostics",
+    # Pipeline runners
     "BaseFits",
     "SolarWindProxy",
     "DispersionMeasureProxy",
@@ -105,25 +150,39 @@ __all__ = [
     # utils
     "handle_diagnostics",
     "handle_diagnostics_multi",
+    "mask_toas_from_gaps",
     "combine_repeated_toas",
+    "remove_gap_nodes",
+    "days_in_year",
     "mjd_to_year",
     "year_to_mjd",
     "pulsar_name_to_elat",
+    "find_recent_file",
     "find_toa_by_mjd",
     "by_mjd_table",
     "find_toa_by_dmx",
     "format_gap_summary",
     # diagnostics
+    "plot_bb_spans",
+    "select_peak_indices",
+    "DoublePatchHandler",
+    "plot_data_gaps_diagnostics",
+    "plot_swx_bb_diagnostics",
+    "extract_swx_params",
+    "plot_swx_amplitudes",
+    "plot_swx_dm_series",
     "plot_epoch_gap_histogram",
     "plot_all_epoch_fit_overlay",
+    "plot_epoch_fit_examples",
     "plot_points_per_epoch_arrays",
     "plot_b_snr_vs_time",
     "plot_a_vs_b_correlation",
     "plot_a_b_time_scatter",
+    "plot_proxy_segmentation_overlay",
+    "plot_failed_epochs_by_reason",
     "plot_wls_epoch_summaries",
-    "plot_data_gaps_diagnostics",
-    "plot_swx_bb_diagnostics",
     "plot_dmx_segmentation_by_slice_diagnostics",
+    "plot_epoch_fit_status_timeline",
     "plot_bchrom_vs_dmx",
     "plot_all_prefix_ellipses",
     "summarize_swx_dmx_correlations",

@@ -1,4 +1,4 @@
-# BBX.py 
+# bbx.py 
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import yaml
 import copy
 import glob
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, fields, asdict
 from datetime import datetime
 from typing import (
     Any, Callable, Dict, Iterable, Iterator, List, 
@@ -24,6 +24,7 @@ from pathlib import Path
 from io import StringIO
 
 import numpy as np
+import pandas as pd
 import astropy.units as u
 from astropy import log
 
@@ -59,6 +60,12 @@ from .utils import (
     by_mjd_table,
     find_toa_by_dmx,
     format_gap_summary,
+    mask_toas_from_gaps,
+    read_f107_flux_file,
+    select_timespan,
+    daily_average_timeseries,
+    prepare_driver_series,
+    combine_repeated_toas,
 ) # utils.py
 
 from .diagnostics import (
@@ -68,10 +75,13 @@ from .diagnostics import (
     plot_b_snr_vs_time,
     plot_a_vs_b_correlation,
     plot_a_b_time_scatter,
+    plot_proxy_segmentation_overlay,
+    plot_failed_epochs_by_reason,
     plot_wls_epoch_summaries,
     plot_data_gaps_diagnostics,
     plot_swx_bb_diagnostics,
     plot_dmx_segmentation_by_slice_diagnostics,
+    plot_epoch_fit_status_timeline,
     plot_bchrom_vs_dmx,
 ) # diagnostics.py
 
@@ -132,9 +142,19 @@ class PlotStyleConfig:
 @dataclass(frozen=True)
 class InputConfig:
     """
-    Input file pointings (3 ways in notebook to read in)
+    Input timing state.
+
+    Preferred routes, in priority order:
+      1. explicit model + toas
+      2. an already-loaded TimingConfiguration-like object
+      3. par_file + tim_file paths
     """
-    pulsar_name: str
+    pulsar_name: Optional[str] = None
+
+    # Already-curated timing state route.
+    timing_config: Optional[Any] = None
+    model: Optional[TimingModel] = None
+    toas: Optional[pint.toa.TOAs] = None
 
     # TimingConfiguration route (optional)
     config_file: Optional[str] = None
@@ -149,17 +169,34 @@ class InputConfig:
     par_file: Optional[str] = None
     tim_file: Optional[str] = None
 
+    def validate(self) -> None:
+        has_model = self.model is not None
+        has_toas = self.toas is not None
+        if has_model != has_toas:
+            raise ValueError("InputConfig.model and InputConfig.toas must be supplied together.")
+
+        has_files = self.par_file is not None or self.tim_file is not None
+        if has_files and (self.par_file is None or self.tim_file is None):
+            raise ValueError("InputConfig.par_file and InputConfig.tim_file must be supplied together.")
+
+        if not (has_model and has_toas) and self.timing_config is None and not has_files:
+            raise ValueError("InputConfig needs one timing route: (model, toas), timing_config, or (par_file, tim_file).")
+
 @dataclass(frozen=True)
 class OutputConfig:
     """
     Figure output settings
     """
-    diagnostics: str = "off"      # "on" | "off" - toggle display diagnostic plotting
-    root_fig_dir: str = "figs"    # where to save the figures
-    save_figures: bool = True     # toggle to save plots to disk 
+    diagnostics: str = "off"        # "on" | "off" - toggle display diagnostic plotting
+    root_fig_dir: str = "figs"      # where to save the figures
+    save_figures: bool = True       # toggle to save plots to disk 
+    fig_tree: Optional[str] = None  # optional subdirectory tree for figures
     plot: PlotStyleConfig = field(default_factory=PlotStyleConfig)
 
+    # Acceptable values for diagnostics: "on", "off", True, False, or any string that is not "off" (case-insensitive).
     def diag_on(self) -> bool:
+        if isinstance(self.diagnostics, (bool, np.bool_)):
+            return bool(self.diagnostics)
         return isinstance(self.diagnostics, str) and self.diagnostics.lower() != "off"
 
 
@@ -179,7 +216,7 @@ class PickleConfig:
 """
 The pipeline largely works in 4 phases:
 Stage 0: Initial parameter inputs - set pointings/global variables, etc.. (Config containers)
-Stage 1: Base fits (BaseFitConfig and SolarWindConfig): fit a constant DM value and choice of Solar Wind model. 
+Stage 1: Base fits (BaseFitConfig and SolarWindConfig): fit a constant DM value and choice of solar wind model. 
    If model: "SWX" and conjunction_anchor - "bb" a bayesian block subpipeline is ran
    for the SWX fits with the SW DM proxy = Sun-Earth-pulsar integral. The fits are pickled with a
    unique hash tag.
@@ -210,19 +247,35 @@ class BaseFitConfig:
 @dataclass(frozen=True)
 class SolarWindConfig:
     """
-    Solar Wind parameters and SWX proxy settings when selected.
+    Solar wind fit and proxy parameters, including SWX proxy settings when selected.
 
     NOTE: for SWX fitting with BB segmentation run:
           model="SWX" with conjunction_anchor="bb" (default)
     """
     model: Optional[str] = "SWX"          # "SWM0" | "SWM1" | "SWX" | None
-    ne1au: float = 7.9                    # cm^-3 at 1 AU
+    ne1au: float = 6.67                   # [cm^-3] at 1 AU
     swp: float = 2.0
+    ephem: str = "DE440"
+    min_theta_deg: float = 0.25
+    include_Re: bool = True
     conjunction_anchor: str = "bb"       # "center" | "start" | "end" | "bb"
+    
     # Bin lengths when conjunction_anchor in {"center","start","end"} selected
-    swx_bin_interval_days: Optional[float] = 365.25
+    swx_bin_interval_days: Optional[float] = 365.25 # [days]
     # kwargs for SWX + conjunction_anchor="bb" (passed into SolarWindProxy.build_swx_bb_edges_from_proxy)
     swx_kwargs: Mapping[str, Any] = field(default_factory=dict)
+
+    f107_file: Optional[str] = None
+    use_f107: bool = True
+    f107_use_adjusted: bool = True
+    f107_smooth_days: int = 391
+    
+    proxy_form: str = "multiplicative"   # "multiplicative" | "additive"
+    beta_enhancement_A: float = 5.0      # from Gaussian amp fit of n_{e,\beta}(ea. pulsar) vs \beta
+    beta_enhancement_sigma_deg: float = 15.0  # from Gaussian \sigma_\beta fit of n_{e,\beta}(ea. pulsar) vs \beta
+    
+    solar_cycle_k: Optional[float] = None # for multiplicative form - either value here or use b1/ne1au default
+    solar_cycle_beta1: float = 1/14.10    # for additive form [cm^-3] - from Jeremy's proxy regression
 
     def validate(self) -> None:
         # Normalize for robust validation (runner may also normalize, but config should be stable).
@@ -236,10 +289,54 @@ class SolarWindConfig:
             if a not in ("center", "start", "end", "bb"):
                 raise ValueError("SolarWindConfig.conjunction_anchor invalid for SWX.")
             if a != "bb" and self.swx_bin_interval_days is None:
-                raise ValueError("SWX with non-'bb' anchor requires swx_bin_interval_days.")
+                raise ValueError("SWX with non-'bb' anchor requires `swx_bin_interval_days`.")
+            if not isinstance(self.swx_kwargs, Mapping):
+                raise ValueError("SolarWindConfig.swx_kwargs must be a mapping.")
 
         if m in ("SWM0", "SWM1") and a == "bb":
-            raise ValueError("conjunction_anchor='bb' only makes sense for SWX.")
+            raise ValueError("SolarWindConfig.conjunction_anchor='bb' only makes sense for SWX.")
+
+        if not (isinstance(self.ne1au, (int, float)) and float(self.ne1au) > 0):
+            raise ValueError("SolarWindConfig.ne1au must be positive.")
+        if not (isinstance(self.min_theta_deg, (int, float)) and float(self.min_theta_deg) > 0):
+            raise ValueError("SolarWindConfig.min_theta_deg must be a positive number.")
+        if not isinstance(self.include_Re, (bool, np.bool_)):
+            raise ValueError("SolarWindConfig.include_Re must be boolean.")
+        if not isinstance(self.ephem, str) or not self.ephem:
+            raise ValueError("SolarWindConfig.ephem must be a non-empty string.")
+
+        if not isinstance(self.use_f107, (bool, np.bool_)):
+            raise ValueError("SolarWindConfig.use_f107 must be boolean.")
+        if not isinstance(self.f107_use_adjusted, (bool, np.bool_)):
+            raise ValueError("SolarWindConfig.f107_use_adjusted must be boolean.")
+
+        if self.use_f107:
+            if self.f107_file is None or not isinstance(self.f107_file, str) or not self.f107_file.strip():
+                raise ValueError("SolarWindConfig.f107_file must be a non-empty string when use_f107=True.")
+            if not isinstance(self.f107_smooth_days, (int, np.integer)) or int(self.f107_smooth_days) < 1:
+                raise ValueError("SolarWindConfig.f107_smooth_days must be a positive integer.")
+            if int(self.f107_smooth_days) % 2 == 0:
+                raise ValueError("SolarWindConfig.f107_smooth_days must be odd for centered running median.")
+
+            if self.proxy_form not in ("multiplicative", "additive"):
+                raise ValueError("SolarWindConfig.proxy_form must be 'multiplicative' or 'additive'.")
+
+            if not isinstance(self.beta_enhancement_A, (int, float, np.floating)):
+                raise ValueError("SolarWindConfig.beta_enhancement_A must be numeric.")
+            if float(self.beta_enhancement_A) < 0:
+                raise ValueError("SolarWindConfig.beta_enhancement_A must be non-negative.")
+            if not isinstance(self.beta_enhancement_sigma_deg, (int, float, np.floating)) or float(self.beta_enhancement_sigma_deg) <= 0:
+                raise ValueError("SolarWindConfig.beta_enhancement_sigma_deg must be positive.")
+
+            if self.proxy_form == "multiplicative":
+                if self.solar_cycle_k is not None and not isinstance(self.solar_cycle_k, (int, float, np.floating)):
+                    raise ValueError("SolarWindConfig.solar_cycle_k must be numeric or None.")
+                if self.solar_cycle_k is None:
+                    if not isinstance(self.solar_cycle_beta1, (int, float, np.floating)):
+                        raise ValueError("SolarWindConfig.solar_cycle_beta1 must be numeric.")
+            else:
+                if not isinstance(self.solar_cycle_beta1, (int, float, np.floating)):
+                    raise ValueError("SolarWindConfig.solar_cycle_beta1 must be numeric for additive proxy form.")
 
 @dataclass(frozen=True)
 class BBXConfig:
@@ -260,13 +357,13 @@ class BBXConfig:
     receiver_selection: ReceiverSelection = field(default_factory=ReceiverSelection)
 
     # Choose your DM proxy signal source (BB input - fed to `fit_BB_pipeline`) 
-    signal_source: str = "chromatic" # "chromatic" (epochwise WLS) | "dmx" (finely binned) | "residuals" (r/ν²)
+    signal_source: str = "chromatic" # "chromatic" (epochwise WLS) | "dmx" (finely binned) | "residuals" (r/nu^2) | "swx" (for SW BB proxy)
     proxy_kwargs: Mapping[str, Any] = field(default_factory=dict) # proxy specific
 
     # Sanity checks
     def validate(self) -> None:
         self.receiver_selection.validate()
-        if self.signal_source not in ("chromatic", "dmx", "residuals"):
+        if self.signal_source not in ("chromatic", "dmx", "residuals", "swx"):
             raise ValueError(f"BBXConfig.signal_source={self.signal_source!r} invalid.")
         if self.min_toas < 1:
             raise ValueError("BBXConfig.min_toas must be >= 1.")
@@ -283,13 +380,13 @@ SignalSource = Literal["chromatic", "dmx", "residuals"]
 @dataclass(frozen=True)
 class ProxyConfig:
     """
-    DM proxy construction settings. This defines *what* time series is fed to BB,
+    IISM DM proxy construction settings. This defines *what* time series is fed to BB,
     and *how* it is computed.
     """
     signal_source: SignalSource = "chromatic"
 
     # chromatic proxy (epochwise WLS)
-    epoch_tol_days: float = 6.5
+    epoch_tol_days: float = 2.5
     use_inv_nu2: bool = True
     ref_freq: Optional[float] = None
     min_channels: int = 2
@@ -308,8 +405,8 @@ class ProxyConfig:
     freeze_DM: bool = False
     fitter_maxiter: Optional[int] = None
 
-    # residuals proxy (r/\nu²) 
-    # Nothing to build use 1/\nu² weighted residuals as direct input to bayesian_blocks
+    # residuals proxy (r/\nu^2) 
+    # Nothing to build use 1/\nu^2 weighted residuals as direct input to bayesian_blocks
 
     # Escape hatch
     extra: Mapping[str, Any] = field(default_factory=dict)
@@ -369,18 +466,36 @@ class RunConfig:
 
     # Sanity checks
     def validate(self) -> None:
+        self.inp.validate()
         self.bbx.validate()
         self.proxy.validate()
         self.sw.validate()
         self.basefit.validate()
-        # enforce consistent receiver policy between BaseFits and BBX
+        # Enforce consistent receiver policy between BaseFits and BBX
         if self.basefit.receiver_selection != self.bbx.receiver_selection:
             raise ValueError("ReceiverSelection differs between BaseFitConfig and BBXConfig.")
-        # par's and tim's must exist 
-        if not os.path.exists(self.inp.par_file):
+        if self.inp.par_file is not None and not os.path.exists(self.inp.par_file):
             raise FileNotFoundError(f"[RunConfig.validate] par_file not found: {self.inp.par_file}")
-        if not os.path.exists(self.inp.tim_file):
+        if self.inp.tim_file is not None and not os.path.exists(self.inp.tim_file):
             raise FileNotFoundError(f"[RunConfig.validate] tim_file not found: {self.inp.tim_file}")
+
+    @classmethod
+    def from_timing_config(
+        cls,
+        timing_config: Any,
+        *,
+        model: Optional[TimingModel] = None,
+        toas: Optional[pint.toa.TOAs] = None,
+        bbx_block: Optional[Mapping[str, Any]] = None,
+        **overrides: Any,
+    ) -> "RunConfig":
+        return run_config_from_timing_config(
+            tc=timing_config,
+            model=model,
+            toas=toas,
+            bbx_block=bbx_block,
+            **overrides,
+        )
 
 
 # =============================================================================
@@ -422,7 +537,7 @@ class OutputPaths:
 
     @staticmethod
     def _sw_config_tag(sw: "SolarWindConfig") -> str:
-        """Derive solar-wind compact tags."""
+        """Derive solar wind compact tags."""
         if sw.model == "SWM0":
             return f"NE{sw.ne1au}"
         if sw.model == "SWM1":
@@ -447,19 +562,38 @@ class OutputPaths:
         Example resulting fig_dir:
           figs/J0030+0451/measures_p0_0.14/SWX/NE7.9_SWP2.0_BB/allrcvrs
         """
-        p = cfg.inp.pulsar_name
+        pulsar = pulsar_name_from_input(cfg.inp)
         fit_tag = f"{cfg.bbx.fitness}_p0_{cfg.bbx.p0}"
         config_tag = cls._sw_config_tag(cfg.sw)
         rcvr_tag = cls._rcvr_tag(cfg.bbx.receiver_selection)
 
-        fig_dir = os.path.join(
-            cfg.out.root_fig_dir,
-            p,
-            fit_tag,
-            str(cfg.sw.model),
-            config_tag,
-            rcvr_tag,
-        )
+        tokens = {
+            "root": cfg.out.root_fig_dir,
+            "pulsar": pulsar,
+            "fit_tag": fit_tag,
+            "fitness": cfg.bbx.fitness,
+            "p0": cfg.bbx.p0,
+            "sw_model": str(cfg.sw.model),
+            "config_tag": config_tag,
+            "rcvr_tag": rcvr_tag,
+        }
+
+        if cfg.out.fig_tree:
+            try:
+                fig_dir = cfg.out.fig_tree.format(**tokens)
+            except KeyError as e:
+                raise ValueError(
+                    f"Unknown fig_tree token {e}. Available tokens: {sorted(tokens)}"
+                ) from e
+        else:
+            fig_dir = os.path.join(
+                cfg.out.root_fig_dir,
+                pulsar,
+                fit_tag,
+                str(cfg.sw.model),
+                config_tag,
+                rcvr_tag,
+            )
 
         return cls(fig_dir=fig_dir, fit_tag=fit_tag, config_tag=config_tag, rcvr_tag=rcvr_tag)
 
@@ -510,7 +644,7 @@ class OutputPaths:
         self.ensure_fig_dir(enabled=True)
 
         meta: Dict[str, Any] = {
-            "pulsarName": cfg.inp.pulsar_name,
+            "pulsarName": pulsar_name_from_input(cfg.inp),
             "solarWindModel": str(cfg.sw.model),
             "config_tag": self.config_tag,
             "fitFunc": cfg.bbx.fitness,
@@ -544,6 +678,8 @@ class RunContext:
     pulsar_name: Optional[str] = None
     par_file: Optional[str] = None
     tim_file: Optional[str] = None
+    timing_config: Optional[Any] = None
+    input_source: Optional[str] = None
 
     model: Optional[TimingModel] = None
     toas: Optional[pint.toa.TOAs] = None
@@ -559,6 +695,258 @@ class RunContext:
 
     products: Dict[str, Any] = field(default_factory=dict)
     paths: Dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class ResolvedTimingInputs:
+    pulsar_name: str
+    model: Optional[TimingModel] = None
+    toas: Optional[pint.toa.TOAs] = None
+    par_file: Optional[str] = None
+    tim_file: Optional[str] = None
+    source: str = "unknown"
+
+
+def _safe_model_source(model: Optional[TimingModel]) -> Optional[str]:
+    if model is None:
+        return None
+    return getattr(getattr(model, "PSR", None), "value", None)
+
+
+def _maybe_tc_source(tc: Any) -> Optional[str]:
+    if tc is not None and hasattr(tc, "get_source"):
+        try:
+            return tc.get_source()
+        except Exception:
+            return None
+    return None
+
+
+def _maybe_tc_model_path(tc: Any) -> Optional[str]:
+    if tc is not None and hasattr(tc, "get_model_path"):
+        try:
+            path = tc.get_model_path()
+            return str(path) if path is not None else None
+        except Exception:
+            return None
+    return None
+
+
+def pulsar_name_from_input(inp: "InputConfig", *, fallback: str = "PSR") -> str:
+    # Centralize pulsar name discovery
+    return (
+        inp.pulsar_name
+        or _maybe_tc_source(inp.timing_config)
+        or _safe_model_source(inp.model)
+        or fallback
+    )
+
+
+def resolve_model_toas(
+    *,
+    inp: "InputConfig",
+    load_from_tc: bool = True,
+    tc_kwargs: Optional[Mapping[str, Any]] = None,
+) -> ResolvedTimingInputs:
+    # Enforce priority order: (model, toas) > timing_config > (par_file, tim_file)
+    inp.validate()
+    tc = inp.timing_config
+    tc_kwargs = dict(tc_kwargs or {})
+
+    par_file = inp.par_file or _maybe_tc_model_path(tc)
+    tim_file = inp.tim_file
+
+    if inp.model is not None and inp.toas is not None:
+        pulsar = inp.pulsar_name or _maybe_tc_source(tc) or _safe_model_source(inp.model) or "PSR"
+        return ResolvedTimingInputs(
+            pulsar_name=pulsar,
+            model=inp.model,
+            toas=inp.toas,
+            par_file=par_file,
+            tim_file=tim_file,
+            source="model_toas",
+        )
+
+    if tc is not None:
+        model_obj = None
+        toas_obj = None
+        if load_from_tc:
+            model_obj, toas_obj = tc.get_model_and_toas(**tc_kwargs)
+        pulsar = inp.pulsar_name or _maybe_tc_source(tc) or _safe_model_source(model_obj) or "PSR"
+        return ResolvedTimingInputs(
+            pulsar_name=pulsar,
+            model=model_obj,
+            toas=toas_obj,
+            par_file=par_file,
+            tim_file=tim_file,
+            source="timing_config",
+        )
+
+    if inp.par_file is not None and inp.tim_file is not None:
+        model_obj, toas_obj = pint.models.get_model_and_toas(str(inp.par_file), str(inp.tim_file))
+        pulsar = inp.pulsar_name or _safe_model_source(model_obj) or "PSR"
+        return ResolvedTimingInputs(
+            pulsar_name=pulsar,
+            model=model_obj,
+            toas=toas_obj,
+            par_file=str(inp.par_file),
+            tim_file=str(inp.tim_file),
+            source="files",
+        )
+
+    raise ValueError("Could not resolve timing inputs.")
+
+
+def run_context_from_config(
+    cfg: "RunConfig",
+    *,
+    load_from_tc: bool = True,
+    tc_kwargs: Optional[Mapping[str, Any]] = None,
+) -> RunContext:
+    # Build a RunContext from a RunConfig, resolving timing inputs and other runtime state.
+    resolved = resolve_model_toas(inp=cfg.inp, load_from_tc=load_from_tc, tc_kwargs=tc_kwargs)
+    return RunContext(
+        pulsar_name=resolved.pulsar_name,
+        par_file=resolved.par_file,
+        tim_file=resolved.tim_file,
+        timing_config=cfg.inp.timing_config,
+        input_source=resolved.source,
+        model=resolved.model,
+        toas=resolved.toas,
+    )
+
+
+def _snake_keys(d: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    # Convert config yaml's kabab-case keys to snake_case for dataclass initialization.
+    if d is None:
+        return {}
+    out: Dict[str, Any] = {}
+    for key, value in dict(d).items():
+        key_s = str(key).replace("-", "_")
+        out[key_s] = _snake_keys(value) if isinstance(value, Mapping) else value
+    return out
+
+
+def _dataclass_kwargs(cls: Type[Any], data: Mapping[str, Any]) -> Dict[str, Any]:
+    allowed = {f.name for f in fields(cls)}
+    return {k: v for k, v in dict(data).items() if k in allowed}
+
+
+def _quantity_days(value: Any) -> u.Quantity:
+    if isinstance(value, u.Quantity):
+        return value
+    if value is None:
+        raise ValueError("BBXConfig min_time/max_time cannot be null.")
+    return float(value) * u.day
+
+
+def _bbx_config_from_block(block: Optional[Mapping[str, Any]]) -> BBXConfig:
+    bb_block = _snake_keys(block)
+    rcvr_block = _snake_keys(bb_block.pop("receivers", None))
+    receiver_selection = ReceiverSelection(**_dataclass_kwargs(ReceiverSelection, rcvr_block))
+
+    for qname in ("min_time", "max_time"):
+        if qname in bb_block and bb_block[qname] is None:
+            bb_block.pop(qname)
+        elif qname in bb_block:
+            bb_block[qname] = _quantity_days(bb_block[qname])
+
+    return BBXConfig(
+        receiver_selection=receiver_selection,
+        **_dataclass_kwargs(BBXConfig, bb_block),
+    )
+
+
+def bbx_named_configs_from_yaml_block(block: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    """
+    Build notebook-facing BBX configs from the component-oriented YAML block.
+
+    Expected headings under ``bbx`` are:
+      - output
+      - sw-proxy
+      - sw-segmentation
+      - iism-proxy
+      - iism-segmentation
+
+    Mapping of headings to dataclass configs:
+      - output            -> OutputConfig
+      - sw-proxy          -> SolarWindConfig
+      - sw-segmentation   -> BBXConfig
+      - iism-proxy        -> ProxyConfig
+      - iism-segmentation -> BBXConfig
+
+    Returns both descriptive names and the historical short aliases used in notebooks.
+    """
+    block = _snake_keys(block or {})
+
+    out_cfg = OutputConfig(**_dataclass_kwargs(OutputConfig, _snake_keys(block.get("output"))))
+    sw_cfg = SolarWindConfig(**_dataclass_kwargs(SolarWindConfig, _snake_keys(block.get("sw_proxy"))))
+    bbx_cfg_sw = _bbx_config_from_block(block.get("sw_segmentation"))
+    proxy_cfg = ProxyConfig(**_dataclass_kwargs(ProxyConfig, _snake_keys(block.get("iism_proxy"))))
+    bbx_cfg = _bbx_config_from_block(block.get("iism_segmentation"))
+
+    return dict(
+        out_cfg=out_cfg,
+        sw_cfg=sw_cfg,
+        bbx_cfg_sw=bbx_cfg_sw,
+        proxy_cfg=proxy_cfg,
+        bbx_cfg=bbx_cfg,
+        sw_proxy=sw_cfg,
+        sw_segmentation=bbx_cfg_sw,
+        iism_proxy=proxy_cfg,
+        iism_segmentation=bbx_cfg,
+    )
+
+
+def bbx_configs_from_yaml_block(block: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    # Build RunConfig pieces from the config yaml headings
+    block = _snake_keys(block or {})
+
+    out_block = _snake_keys(block.get("output"))
+    pkl_block = _snake_keys(block.get("pickle"))
+    bb_block = _snake_keys(block.get("iism_segmentation"))
+    proxy_block = _snake_keys(block.get("iism_proxy"))
+    sw_block = _snake_keys(block.get("sw_proxy"))
+    base_block = _snake_keys(block.get("basefit"))
+    noise_block = _snake_keys(block.get("noise"))
+
+    bbx_cfg = _bbx_config_from_block(bb_block)
+
+    return dict(
+        out=OutputConfig(**_dataclass_kwargs(OutputConfig, out_block)),
+        pkl=PickleConfig(**_dataclass_kwargs(PickleConfig, pkl_block)),
+        bbx=bbx_cfg,
+        proxy=ProxyConfig(**_dataclass_kwargs(ProxyConfig, proxy_block)),
+        sw=SolarWindConfig(**_dataclass_kwargs(SolarWindConfig, sw_block)),
+        basefit=BaseFitConfig(receiver_selection=bbx_cfg.receiver_selection, **_dataclass_kwargs(BaseFitConfig, base_block)),
+        noise=NoiseAnalysisConfig(**_dataclass_kwargs(NoiseAnalysisConfig, noise_block)),
+    )
+
+
+def run_config_from_timing_config(
+    *,
+    tc: Any,
+    model: Optional[TimingModel] = None,
+    toas: Optional[pint.toa.TOAs] = None,
+    bbx_block: Optional[Mapping[str, Any]] = None,
+    **overrides: Any,
+) -> "RunConfig":
+    if bbx_block is None:
+        bbx_block = dict(getattr(tc, "config", {}) or {}).get("bbx", {})
+
+    configs = bbx_configs_from_yaml_block(bbx_block)
+    configs.update(overrides)
+    configs.pop("inp", None)
+
+    return RunConfig(
+        inp=InputConfig(
+            timing_config=tc,
+            model=model,
+            toas=toas,
+            pulsar_name=_maybe_tc_source(tc),
+        ),
+        **configs,
+    )
 
 # =============================================================================
 # Pickling Routine
@@ -788,17 +1176,14 @@ class CachePolicy:
         if which not in ("f0", "f1"):
             raise ValueError("basefit_spec.which must be 'f0' or 'f1'.")
 
-        par_file = ctx.par_file
-        tim_file = ctx.tim_file
-        if not par_file or not tim_file:
-            raise ValueError("RunContext must have par_file and tim_file set before building cache specs.")
-
         # NOTE: basefit uses fig_dir/cache as save path
         cache_dir = os.path.join(self.cache_root(), "cache")
         os.makedirs(cache_dir, exist_ok=True)
 
-        par_sha = self.io.sha256_str(open(par_file, "r", encoding="utf-8").read())
-        tim_sha = self.io.sha256_file(tim_file)
+        par_sha = self._model_sha(ctx)
+        tim_sha = self._toas_sha(ctx)
+        if par_sha is None or tim_sha is None:
+            raise ValueError("Need either par/tim files or ctx.model/ctx.toas to build cache specs.")
 
         # Construct unique hash for fits
         key = self.io.make_cache_key(
@@ -821,7 +1206,7 @@ class CachePolicy:
         )
 
         # Unique has tag -> filename for fits
-        tag = f"{self.cfg.inp.pulsar_name}_{self.cfg.sw.model}_{key}"
+        tag = f"{ctx.pulsar_name or pulsar_name_from_input(self.cfg.inp)}_{self.cfg.sw.model}_{key}"
         suffix = "_OGfit" if which == "f0" else "_ConstDM_SWfit"
         prefix = os.path.join(cache_dir, tag + suffix)
 
@@ -837,20 +1222,17 @@ class CachePolicy:
         """
         BBX cache lives under cfg.pkl.cache_dir (or fig_dir/bb_cache).
         """
-        psr = ctx.pulsar_name or self.cfg.inp.pulsar_name
+        psr = ctx.pulsar_name or pulsar_name_from_input(self.cfg.inp)
         if not psr:
             raise ValueError("Need pulsar_name in RunContext or RunConfig to build cache spec.")
             
-        par_file = ctx.par_file
-        tim_file = ctx.tim_file
-        if not par_file or not tim_file:
-            raise ValueError("RunContext must have par_file and tim_file set before building cache specs.")
-        
         cache_dir = os.path.join(self.cache_root(), "bb_cache")
         os.makedirs(cache_dir, exist_ok=True)
 
-        par_sha = self.io.sha256_str(open(par_file, "r", encoding="utf-8").read()) if par_file else None
-        tim_sha = self.io.sha256_file(tim_file) if tim_file else None
+        par_sha = self._model_sha(ctx)
+        tim_sha = self._toas_sha(ctx)
+        if par_sha is None or tim_sha is None:
+            raise ValueError("Need either par/tim files or ctx.model/ctx.toas to build cache specs.")
 
         proxy_cfg = CachePolicy.proxy_cfg_for_cache(self.cfg.proxy)
 
@@ -887,7 +1269,7 @@ class CachePolicy:
     # -------------------------------------------------------------------------
 
     def noise_spec(self, *, base_noise_dir: str, using_wideband: bool) -> PickleSpec:
-        psr = self.cfg.inp.pulsar_name
+        psr = pulsar_name_from_input(self.cfg.inp)
         prefix = os.path.join(base_noise_dir, f"{psr}_noiseFit")
 
         # A key is still useful for logging even if naming is fixed (for now):
@@ -898,7 +1280,7 @@ class CachePolicy:
             base_noise_dir=base_noise_dir,
         )
 
-        # Noise: fitter is required; chains are *not a single file*, so
+        # Noise: fitter is required; chains are **not a single file**, so
         # treat them as “external prerequisites” rather than SidecarSpec.
         # e.g. other internal routines will require them from noise_utils
         sidecars: Tuple[SidecarSpec, ...] = ()
@@ -907,6 +1289,25 @@ class CachePolicy:
     # -------------------------------------------------------------------------
     # Helpers
     # -------------------------------------------------------------------------
+
+    def _model_sha(self, ctx: RunContext) -> Optional[str]:
+        if ctx.par_file:
+            with open(ctx.par_file, "r", encoding="utf-8") as f:
+                return self.io.sha256_str(f.read())
+        if ctx.model is not None:
+            return self.io.sha256_str(ctx.model.as_parfile())
+        return None
+
+    def _toas_sha(self, ctx: RunContext) -> Optional[str]:
+        if ctx.tim_file:
+            return self.io.sha256_file(ctx.tim_file)
+        if ctx.toas is not None:
+            mjds = np.asarray(ctx.toas.get_mjds().value, float)
+            payload: Dict[str, Any] = {"mjd": mjds.tolist(), "n": int(len(mjds))}
+            if "freq" in ctx.toas.table.colnames:
+                payload["freq"] = np.asarray(ctx.toas.table["freq"], float).tolist()
+            return self.io.sha256_str(json.dumps(payload, sort_keys=True))
+        return None
 
     @staticmethod
     def _stable_callable_id(fn: Any) -> str:
@@ -968,12 +1369,12 @@ class BaseFits:
         self.sw_proxy = sw_proxy
 
     # -------------------------------------------------------------------------
-    # Stage 1a: par preprocessing: remove DMX, make DM constant-fit, zero absorbers
+    # Stage 1a: par preprocessing - remove DMX, make DM constant-fit, zero absorbers
     # -------------------------------------------------------------------------
 
     def prepare_par_constant_dm(
         self,
-        par_file: Union[str, Path],
+        par_source: Union[str, Path, TimingModel],
         *,
         zero_params: Sequence[str] = ("DM1", "NE_SW", "NE_SW1"),  # param values to zero out
     ) -> str:
@@ -984,8 +1385,18 @@ class BaseFits:
         -------
         par text with DMX lines removed, constant DM inserted, and some params zeroed.
         """
-        with open(par_file, "r", encoding="utf-8") as f:
-            par_lines = f.readlines()
+        if isinstance(par_source, TimingModel):
+            par_text = par_source.as_parfile()
+        elif isinstance(par_source, Path):
+            par_text = par_source.read_text(encoding="utf-8")
+        elif isinstance(par_source, str) and Path(par_source).exists():
+            par_text = Path(par_source).read_text(encoding="utf-8")
+        elif isinstance(par_source, str):
+            par_text = par_source
+        else:
+            raise TypeError(f"Unsupported par_source type: {type(par_source)}")
+
+        par_lines = par_text.splitlines(keepends=True)
 
         # Remove all DMX parameters
         cleaned_lines = [line for line in par_lines if not line.lstrip().startswith("DMX")]
@@ -1016,13 +1427,10 @@ class BaseFits:
         *,
         par_text: str,                               # raw text from par file
         toas: Optional[pint.toa.TOAs],               # used to get the MJD range
-        model_type: str = "SWM0",                    # "SWM0" | "SWM1" | "SWX"
-        ne1au: float = 7.9,                          # electron density at 1 AU (SWM0/SWM1)
-        swp: float = 2.0,                            # power-law index (SWM1/SWX)
-        swx_bin_interval_days: Optional[float] = 365.25, # Bin width for SWX model
-        conjunction_anchor: str = "center",          # "center" | "start" | "end" | "bb"
-        bb_kwargs: Optional[Dict[str, Any]] = None,  # proxy inputs - build_swx_bb_edges_from_proxy
+        sw_cfg: "SolarWindConfig",
+        bbx_cfg: Optional["BBXConfig"] = None,     # only required for SWX + bb
         sw_proxy: Optional["SolarWindProxy"] = None,
+        pulsar_name: Optional[str] = None,
         return_payload: bool = False,
     ) -> Union[str, Tuple[str, Dict[str, Any]]]:
         """
@@ -1034,19 +1442,10 @@ class BaseFits:
             Contents of the original .par file (as a single string).
         toas : pint.toa.TOAs
             PINT TOAs object for the pulsar (used to define MJD span).
-        model_type : str
-            One of 'SWM0', 'SWM1', or 'SWX', specifying the desired model.
-        ne1au : float
-            Electron density at 1 AU (used in SWM0 and SWM1).
-        swp : float
-            Power-law index for r^{-swp} falloff (used in SWM1 and SWX).
-        conjunction_anchor : {'start','center','end','bb'}
-            If 'bb', segment edges are built from the DM proxy via Bayesian Blocks.
-            For 'start'/'center'/'end', segments are regular intervals of swx_bin_interval_days days.
-        bb_kwargs : dict, optional
-            Passed to SolarWindProxy.build_swx_bb_edges_from_proxy(...).
-            Example keys: ne1au, ephem, min_theta_deg, include_Re,
-                          gap_threshold_days, trim_days, p0, mindata, mintime, maxtime
+        sw_cfg : SolarWindConfig
+            controls model type + anchor + ne1au/swp/ephem/min_theta/include_Re + swx_kwargs.
+        bbx_cfg : BBXConfig
+            required if sw_cfg.model == "SWX" and sw_cfg.conjunction_anchor == "bb"
     
         Returns
         -------
@@ -1086,8 +1485,12 @@ class BaseFits:
     
         # Step 2: Define new solar wind model block
         block: List[str] = []
-        mt = str(model_type).upper()
         payload: Dict[str, Any] = {}
+        
+        sw_cfg.validate()
+        mt = None if sw_cfg.model is None else str(sw_cfg.model).upper()
+        ne1au = float(sw_cfg.ne1au)
+        swp = float(sw_cfg.swp)
     
         # Model type: SWM0 - Simple r^-2 electron density profile
         if mt == "SWM0":
@@ -1135,15 +1538,15 @@ class BaseFits:
             max_dm = base_model.get_max_dm()  # maximum DM due to solar wind at conjunction
     
             # Step 2b: Define the segmentation style for the SWX
-            bb_kwargs = dict(bb_kwargs or {})
-            anchor = conjunction_anchor.lower()
-    
+            anchor = str(sw_cfg.conjunction_anchor).lower()
+            
             if anchor in ("start", "center", "end"):
-                if anchor in ("start", "center", "end") and swx_bin_interval_days is None:
+                if sw_cfg.swx_bin_interval_days is None:
                     raise ValueError("SWX with anchor in ('start','center','end') requires swx_bin_interval_days.")
+                swx_bin_interval_days = float(sw_cfg.swx_bin_interval_days)
 
                 # Get approximate conjunction times at swx_bin_interval_days intervals
-                spacing = np.arange(t_start, t_end, float(swx_bin_interval_days))
+                spacing = np.arange(t_start, t_end, swx_bin_interval_days)
                 conj_times = [
                     pint.utils.get_conjunction(
                         base_model.get_psr_coords(),
@@ -1201,19 +1604,24 @@ class BaseFits:
                         print(f" → {tag}: width = {w:.6f} days")
     
             elif anchor == "bb":
-                # BBX subpipeline for SWM: Build edges from DM proxy -> BB -> gaps -> refined BB
+                # BBX subpipeline for SW: Build edges from SW DM proxy -> BB -> gaps -> refined BB
                 if sw_proxy is None:
                     raise ValueError("SWX conjunction_anchor='bb' requires sw_proxy=SolarWindProxy.")
-                dm_dict, pipeline_dict = sw_proxy.build_swx_bb_edges_from_proxy(
+                if bbx_cfg is None:
+                    raise ValueError("SWX conjunction_anchor='bb' requires bbx_cfg=BBXConfig.")
+                
+                proxy_result, pipe_sw = sw_proxy.build_swx_bb_edges_from_proxy(
                     toas=toas,
                     model=base_model,
-                    **bb_kwargs,
+                    sw_cfg=sw_cfg,
+                    bbx_cfg=bbx_cfg,
+                    pulsar_name=pulsar_name,
                 )
                 
-                payload["swx_bb_pipeline"] = pipeline_dict
-                payload["swx_dm_dict"] = dm_dict
+                payload["swx_proxy_result"] = proxy_result
+                payload["swx_pipe"] = pipe_sw
                 
-                edges = np.asarray(pipeline_dict["SW_BB_refined"], dtype=float)
+                edges = np.asarray(pipe_sw["SW_BB_refined"], dtype=float)
     
                 # Ensure coverage of [t_start, t_end] and pad if necessary
                 if edges.size == 0:
@@ -1282,7 +1690,7 @@ class BaseFits:
                 )
     
         else:
-            raise ValueError(f"Unknown model_type: '{model_type}'")
+            raise ValueError(f"Unknown `sw_cfg.model`: {mt}. Must be either 'SWM0', 'SWM1', or 'SWX'")
     
         # Sanity Check: Confirm key parameters were added
         par_result = "\n".join(cleaned_lines + [""] + block)
@@ -1300,11 +1708,11 @@ class BaseFits:
             if any("SWXR2_" in line for line in block): confirmed.append("SWXR2_i")
     
         if confirmed:
-            print(f"Successfully added solar wind model '{model_type}' with parameters:")
+            print(f"Successfully added solar wind model '{mt}' with parameters:")
             for p in confirmed:
                 print(f"  - {p}")
         else:
-            print(f"Warning: no solar wind parameters were added for model_type '{model_type}'.")
+            print(f"Warning: no solar wind parameters were added for model_type '{mt}'.")
     
         # Step 4: Return updated par text!!
         par_out = par_result + "\n"
@@ -1320,13 +1728,11 @@ class BaseFits:
         self,
         *,
         par_text_or_path: Union[str, Path, TextIO],
-        tim_file: Union[str, Path],
-        sw_model: Optional[str],
-        ne1au: float,
-        swp: float,
-        conjunction_anchor: str,
-        swx_bin_interval_days: Optional[float],
-        bb_kwargs: Optional[Mapping[str, Any]] = None,
+        tim_file: Optional[Union[str, Path]] = None,
+        toas: Optional[pint.toa.TOAs] = None,
+        sw_cfg: "SolarWindConfig",
+        bbx_cfg: Optional["BBXConfig"] = None,      # required for SWX+bb
+        pulsar_name: Optional[str] = None,
         return_payload: bool = False,
     ) -> Union[str, Tuple[str, Dict[str, Any]]]:
         """
@@ -1365,59 +1771,65 @@ class BaseFits:
                 f"got {type(par_text_or_path)}"
             )
 
+        # Validate SW config inputs
+        sw_cfg.validate()
+        sw_model = None if sw_cfg.model is None else str(sw_cfg.model).upper()
+        anchor = str(sw_cfg.conjunction_anchor).lower()
+
         # Sanity checks
-        if sw_model in (None, "None"):
-            print("No Solar Wind Model type was input. Is this what you meant to do?")
+        if sw_model in (None, "None", "NONE"):
+            print("No solar wind Model type was input. Is this what you meant to do?")
             return (par_text, {}) if return_payload else par_text
     
-        sw_model = str(sw_model).upper()
         if sw_model == "SWX":
-            if str(conjunction_anchor).lower() == "bb" and self.sw_proxy is None:
-                raise ValueError("BaseFits requires sw_proxy=SolarWindProxy when conjunction_anchor='bb'.")
+            if anchor == "bb" and (self.sw_proxy is None or bbx_cfg is None):
+                raise ValueError("BaseFits requires sw_proxy=SolarWindProxy and bbx_cfg=BBXConfig when conjunction_anchor='bb'.")
             print(f"[BaseFits] Preparing {sw_model} model segments...  .    .       .")
-            # Temporarily load model and TOAs *before* inserting SWX model
-            base_model, base_toas = pint.models.get_model_and_toas(StringIO(par_text), str(tim_file))
+            # Use curated TOAs when supplied; fall back to loading from tim_file for legacy calls.
+            if toas is not None:
+                base_toas = toas
+            elif tim_file is not None:
+                _, base_toas = pint.models.get_model_and_toas(StringIO(par_text), str(tim_file))
+            else:
+                raise ValueError("insert_solar_wind needs toas or tim_file for SWX.")
     
             # Now insert SWX blocks
             sw_par_text, payload = self.add_solar_model_par(
                 par_text=par_text,
-                toas=base_toas,  # required for SWX to compute segment edges
-                model_type=sw_model,
-                ne1au=ne1au,
-                swp=swp,
-                conjunction_anchor=conjunction_anchor,
-                swx_bin_interval_days=swx_bin_interval_days,
-                bb_kwargs=bb_kwargs,
+                toas=base_toas,
+                sw_cfg=sw_cfg,
+                bbx_cfg=bbx_cfg,
                 sw_proxy=self.sw_proxy,
+                pulsar_name=pulsar_name,
                 return_payload=True,
             )
     
             # Print status messages for SWX options
-            if str(conjunction_anchor).lower() == "bb":
-                print(f"→ Solar Wind Model: {sw_model} (segmentation = Bayesian Blocks)")
+            if anchor == "bb":
+                print(f"→ Solar wind Model: {sw_model} (segmentation = Bayesian Blocks)")
             else:
                 print(
-                    f"→ Solar Wind Model: {sw_model} (segmentation = '{conjunction_anchor}', "
-                    f"interval = {swx_bin_interval_days} days)"
+                    f"→ Solar wind Model: {sw_model} (segmentation = '{anchor}', "
+                    f"interval = {float(sw_cfg.swx_bin_interval_days)} days)"
                 )
     
             return (sw_par_text, payload) if return_payload else sw_par_text
     
         if sw_model in ("SWM0", "SWM1"):
-            # SWM0/SWM1 don't need TOAs to generate their structure,
+            # SWM0/1 don't need TOAs to generate their structure,
             # but we still run find_empty_masks in case custom segments were added in `fit_model`.
             print(f"[BaseFits] Preparing {sw_model} model...  .    .       .")
             sw_par_text = self.add_solar_model_par(
                 par_text=par_text,
-                toas=None,  # not used internally in this case
-                model_type=sw_model,
-                ne1au=ne1au,
-                swp=swp,
+                toas=None,
+                sw_cfg=sw_cfg,
+                bbx_cfg=None,
+                sw_proxy=None,
                 return_payload=False,
             )
     
             # Status message for SWM0/1 models
-            print(f"→ Solar Wind Model: {sw_model} (static {sw_model} profile, no segmentation)")
+            print(f"→ Solar wind Model: {sw_model} (static {sw_model} profile, no segmentation)")
             return (sw_par_text, {}) if return_payload else sw_par_text
     
         raise ValueError(f"Unknown solarWindModel: {sw_model}")
@@ -1429,8 +1841,9 @@ class BaseFits:
     def fit_model(
         self,
         par_source: Union[str, StringIO, Path],
-        tim_file: Union[str, Path],
+        tim_file: Optional[Union[str, Path]] = None,
         *,
+        toas: Optional[pint.toa.TOAs] = None,
         fitter_cls: Optional[type] = None,
         freeze_DM_other: Optional[Sequence[re.Pattern]] = None,
         maxiter: Optional[int] = None,
@@ -1445,8 +1858,13 @@ class BaseFits:
         -------
         PINT fitter object
         """
-        # Load the final model and toas for fitting
-        model, toas = pint.models.get_model_and_toas(par_source, str(tim_file))
+        # Load the final model; prefer curated TOAs when supplied.
+        if toas is None:
+            if tim_file is None:
+                raise ValueError("fit_model needs either toas or tim_file.")
+            model, toas = pint.models.get_model_and_toas(par_source, str(tim_file))
+        else:
+            model = pint.models.get_model(par_source)
         # Custom check if any TOA in SWX segments
         model.find_empty_masks(toas, freeze=True)
 
@@ -1502,14 +1920,22 @@ class BaseFits:
         if self.pickler is None:
             raise ValueError("BaseFits.run_or_load_basefit requires pickler=PicklerBundle.")
 
-        # validate ctx inputs
-        psr = ctx.pulsar_name or cfg.inp.pulsar_name
+        # Resolve timing inputs once so curated notebook state is authoritative.
+        if ctx.model is None or ctx.toas is None:
+            resolved = resolve_model_toas(inp=cfg.inp)
+            ctx.model = ctx.model or resolved.model
+            ctx.toas = ctx.toas or resolved.toas
+            ctx.par_file = ctx.par_file or resolved.par_file
+            ctx.tim_file = ctx.tim_file or resolved.tim_file
+            ctx.pulsar_name = ctx.pulsar_name or resolved.pulsar_name
+            ctx.input_source = ctx.input_source or resolved.source
+            ctx.timing_config = ctx.timing_config or cfg.inp.timing_config
+
+        psr = ctx.pulsar_name or pulsar_name_from_input(cfg.inp)
         par_file = ctx.par_file or cfg.inp.par_file
         tim_file = ctx.tim_file or cfg.inp.tim_file
-        if not psr:
-            raise ValueError("Need pulsar_name in RunContext (or RunConfig as fallback).")
-        if not par_file or not tim_file:
-            raise ValueError("Need par_file and tim_file in RunContext (or RunConfig as fallback).")
+        if ctx.model is None or ctx.toas is None:
+            raise ValueError("Need ctx.model and ctx.toas after resolving timing inputs.")
 
         # unpack configs 
         sw_cfg = cfg.sw
@@ -1552,8 +1978,9 @@ class BaseFits:
                     except Exception as e:
                         print(f"[BaseFits:cache] f0 load failed ({type(e).__name__}): {e}. Recomputing.")
 
-            print("[BaseFits] Refitting f0 (OG par fit)...  .    .       .")
-            base_model, base_toas = pint.models.get_model_and_toas(str(par_file), str(tim_file))
+            print("[BaseFits] Refitting f0 (OG curated-state fit)...  .    .       .")
+            base_model = copy.deepcopy(ctx.model)
+            base_toas = ctx.toas
             base_model.find_empty_masks(base_toas, freeze=True)
 
             FitterClass = base_cfg.fitter_cls or pint.fitter.WLSFitter
@@ -1644,39 +2071,21 @@ class BaseFits:
             print(f"[BaseFits] Refitting f1 (Const DM + {sw_cfg.model})...  .    .       .")
         
             # Step 1: remove DM params
-            const_par_text = self.prepare_par_constant_dm(str(par_file))
+            const_par_text = self.prepare_par_constant_dm(ctx.model if ctx.model is not None else str(par_file))
         
             # Step 2: insert solar wind into par text
-            # Guard against wrong bb_kwargs keywords being passed
-            allowed = {
-                "ne1au",
-                "ephem",
-                "min_theta_deg",
-                "include_Re",
-                "gap_threshold_days",
-                "trim_days",
-                "p0",
-                "mindata",
-                "mintime",
-                "maxtime",
-            }
-            bb_kwargs = dict(sw_cfg.swx_kwargs or {})
-            bb_kwargs = {k: v for k, v in bb_kwargs.items() if k in allowed}
-        
             sw_par_text, sw_payload = self.insert_solar_wind(
                 par_text_or_path=StringIO(const_par_text),
-                tim_file=str(tim_file),
-                sw_model=sw_cfg.model,
-                ne1au=sw_cfg.ne1au,
-                swp=sw_cfg.swp,
-                conjunction_anchor=sw_cfg.conjunction_anchor,
-                swx_bin_interval_days=sw_cfg.swx_bin_interval_days,
-                bb_kwargs=bb_kwargs,  # IMPORTANT: pass filtered dict
+                tim_file=str(tim_file) if tim_file is not None else None,
+                toas=ctx.toas,
+                sw_cfg=sw_cfg,
+                bbx_cfg=cfg.bbx if (str(sw_cfg.model).upper() == "SWX" and str(sw_cfg.conjunction_anchor).lower() == "bb") else None,
+                pulsar_name=psr,
                 return_payload=True,
             )
         
             # Only present for SWX + bb (write side products/diagnostic plots)
-            pipe = sw_payload.get("swx_bb_pipeline", None)
+            pipe = sw_payload.get("swx_pipe", None)
             if pipe is not None:
                 #  Segmentation fig + edges artifact 
                 stem1 = f"{psr}_swx_bb_segmentation"
@@ -1732,7 +2141,8 @@ class BaseFits:
         
             f1_local = self.fit_model(
                 StringIO(sw_par_text),
-                str(tim_file),
+                str(tim_file) if tim_file is not None else None,
+                toas=ctx.toas,
                 fitter_cls=base_cfg.fitter_cls,
                 freeze_DM_other=dm_freezes,
                 maxiter=base_cfg.maxiter_f1,
@@ -1777,8 +2187,8 @@ class BaseFits:
 
         # Keep ctx coherent
         ctx.pulsar_name = psr
-        ctx.par_file = str(par_file)
-        ctx.tim_file = str(tim_file)
+        ctx.par_file = str(par_file) if par_file is not None else None
+        ctx.tim_file = str(tim_file) if tim_file is not None else None
 
         return f0, f1, cache_paths
 
@@ -1788,7 +2198,7 @@ class BaseFits:
 
 class SolarWindProxy:
     """
-    Solar-wind proxy + SW BBX segmentation utilities.
+    Solar wind proxy + SW BBX segmentation utilities.
     """
     
     def __init__(self, *, bbx: "BBX", pickler: Optional["PicklerBundle"] = None) -> None:
@@ -1811,7 +2221,7 @@ class SolarWindProxy:
         return_geometry: bool = True,  # If False, return just dm_sw; If True, return dict of all params
     ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """
-        Solar-wind DM proxy from the spherical 1/r^2 model.
+        Solar wind DM proxy from the spherical 1/r^2 model.
 
         DM_SW(t) = ne1au * (AU_in_pc [/ R_earth(t)]) * ((pi - theta)/sin(theta)),
           where theta is the Sun–pulsar elongation at time t [radians].
@@ -1890,6 +2300,300 @@ class SolarWindProxy:
                 "geom_factor": geom,
             }
         return dm_sw
+
+    # -------------------------------------------------------------------------
+    # SW DM proxy Expansion (incl. by-pulsar beta dep & solar cycle modulation)
+    # -------------------------------------------------------------------------
+
+    # -------------------------
+    # F10.7 flux data computation
+    # -------------------------
+    
+    def _compute_beta_effective_ne1au(
+        self,
+        beta_deg: float,
+        *,
+        ne0: float = 7.9,
+        A: float = 0.5,
+        beta0_deg: float = 12.0,
+    ) -> float:
+        """
+        By-pulsar geometric baseline ne at 1 AU.
+    
+        Parameters
+        ----------
+        beta_deg : float
+            Pulsar ecliptic latitude in degrees.
+        ne0 : float
+            Reference electron density at 1 AU [cm^-3].
+        A : float
+            Peak enhancement at the ecliptic plane.
+        beta0_deg : float
+            Angular width of the ecliptic enhancement.
+    
+        Returns
+        -------
+        float
+            Effective baseline ne1au for this pulsar [cm^-3].
+        """
+        return float(ne0 * (1.0 + A * np.exp(-(abs(beta_deg) / beta0_deg)**2)))
+    
+    def _compute_effective_ne1au_series(
+        self,
+        beta_deg: float,
+        driver_info: dict,
+        *,
+        ne0: float = 7.9,
+        A: float = 0.5,
+        beta0_deg: float = 12.0,
+        k: float = 0.25,
+        clip_min: float = 0.0,  # [cm^-3]
+        clip_max: float = 25.0,
+    ) -> dict:
+        """
+        Combine geometric ne baseline and multiplicative normalized-driver
+        modulation into ne_eff(t, beta).
+    
+        Returns
+        -------
+        dict
+            {
+              "beta_deg",
+              "ne_beta",
+              "driver_norm",
+              "ne_eff",
+            }
+        """
+        ne_beta = self._compute_beta_effective_ne1au(
+            beta_deg,
+            ne0=ne0,
+            A=A,
+            beta0_deg=beta0_deg,
+        )
+    
+        driver_norm = np.asarray(driver_info["driver_norm"], dtype=float)
+        ne_eff = ne_beta * (1.0 + k * driver_norm)
+        ne_eff = np.clip(ne_eff, clip_min, clip_max) # clip to physically sensible values
+    
+        return {
+            "beta_deg": float(beta_deg),
+            "ne_beta": float(ne_beta),
+            "driver_norm": driver_norm,
+            "ne_eff": ne_eff,
+        }
+    
+    def _compute_effective_ne1au_series_additive(
+        self,
+        beta_deg: float,
+        driver_info: dict,
+        *,
+        ne0: float = 7.9,
+        A: float = 0.5,
+        beta0_deg: float = 12.0,
+        beta1: float = 1.0,   # [cm^-3] per unit normalized driver
+        clip_min: float = 0.0,
+        clip_max: float = 25.0,
+        driver_key: str = "driver_norm",
+    ) -> dict:
+        """
+        Combine geometric ne baseline and an additive normalized-driver term:
+    
+            n_e,eff(t,beta) = n_e,beta + beta1 * driver_norm(t)
+    
+        Parameters
+        ----------
+        beta_deg : float
+            Pulsar ecliptic latitude in degrees.
+        driver_info : dict
+            Dictionary containing a normalized driver series.
+        ne0 : float
+            Reference electron density at 1 AU [cm^-3].
+        A : float
+            Peak ecliptic enhancement amplitude.
+        beta0_deg : float
+            Angular width of the ecliptic enhancement.
+        beta1 : float
+            Additive slope in [cm^-3] per unit normalized driver.
+        clip_min, clip_max : float
+            Bounds on the resulting effective density.
+        driver_key : str
+            Key in `driver_info` for the normalized driver array.
+    
+        Returns
+        -------
+        dict
+            {
+              "beta_deg",
+              "ne_beta",
+              "beta1",
+              "driver_norm",
+              "ne_eff",
+            }
+        """
+        ne_beta = self._compute_beta_effective_ne1au(
+            beta_deg,
+            ne0=ne0,
+            A=A,
+            beta0_deg=beta0_deg,
+        )
+    
+        driver_norm = np.asarray(driver_info[driver_key], dtype=float)
+    
+        ne_eff = ne_beta + beta1 * driver_norm
+        ne_eff = np.clip(ne_eff, clip_min, clip_max)
+    
+        return {
+            "beta_deg": float(beta_deg),
+            "ne_beta": float(ne_beta),
+            "beta1": float(beta1),
+            "driver_norm": driver_norm,
+            "ne_eff": ne_eff,
+        }
+
+    # -------------------------
+    # L1 proton density data computation
+    # -------------------------
+
+    # FUTURE: not currently implemented but saved here for later
+
+    def _compute_l1_electron_density(
+        self,
+        df: pd.DataFrame,
+        *,
+        proton_col: str = "proton_density",
+        alpha_ratio_col: str = "alpha_proton_ratio",
+        out_col: str = "electron_density",
+    ) -> pd.DataFrame:
+        """
+        Compute L1 electron density from proton density and alpha/proton ratio:
+    
+            n_e = n_p * [1 + 2(alpha/proton)]
+    
+        Returns a copy with an added electron_density column.
+        """
+        out = df.copy()
+        np_ = np.asarray(out[proton_col], dtype=float)
+        ar = np.asarray(out[alpha_ratio_col], dtype=float)
+    
+        # If alpha ratio missing, fall back to quasi-neutral n_e ~ n_p
+        ar_filled = np.where(np.isfinite(ar), ar, 0.0)
+    
+        out[out_col] = np_ * (1.0 + 2.0 * ar_filled)
+        return out
+    
+    def _prepare_l1_density_series(
+        self,
+        l1_daily: pd.DataFrame,
+        mjd_target: np.ndarray,
+        *,
+        value_col: str = "electron_density",
+        smooth_days: int = 81,
+    ) -> dict:
+        """
+        Smooth daily L1 electron density data and interpolate onto target MJDs.
+    
+        Constructs a normalized L1 density index:
+        
+            I_L1(t) = [n_e,L1,smooth(t) - center] / scale
+    
+        where `center` is the median and `scale` is a robust scale
+        (MAD-based, with std fallback).
+    
+        Parameters
+        ----------
+        l1_daily : pd.DataFrame
+            Must contain columns ['mjd', value_col].
+        mjd_target : np.ndarray
+            MJDs to interpolate the smoothed L1 series onto.
+        value_col : str
+            Name of the L1 electron density column to use.
+        smooth_days : int
+            Running-median window in days. Must be odd.
+    
+        Returns
+        -------
+        dict
+            {
+              "mjd_daily",
+              "ne_daily",
+              "ne_smooth",
+              "ne_interp",
+              "I_L1",
+              "center",
+              "scale",
+            }
+        """
+        prep = prepare_driver_series(
+            l1_daily,
+            mjd_target,
+            value_col=value_col,
+            smooth_days=smooth_days,
+            normalize=False,
+        )
+    
+        ne_interp = np.asarray(prep["value_interp"], dtype=float)
+    
+        center = np.nanmedian(ne_interp)
+        mad = np.nanmedian(np.abs(ne_interp - center))
+        scale = 1.4826 * mad if mad > 0 else np.nanstd(ne_interp)
+    
+        if not np.isfinite(scale) or scale == 0:
+            scale = 1.0
+    
+        I_L1 = (ne_interp - center) / scale
+    
+        return {
+            "mjd_daily": prep["mjd_daily"],
+            "ne_daily": prep["value_daily"],
+            "ne_smooth": prep["value_smooth"],
+            "ne_interp": ne_interp,
+            "I_L1": I_L1,
+            "center": float(center),
+            "scale": float(scale),
+        }
+    
+    def _compute_effective_ne1au_series_l1(
+        self,
+        beta_deg: float,
+        l1_info: dict,
+        *,
+        ne0: float = 7.9,
+        A: float = 0.5,
+        beta0_deg: float = 12.0,
+        k_l1: float = 0.25,
+        clip_min: float = 0.0,
+        clip_max: float = 25.0,
+    ) -> dict:
+        """
+        Combine geometric ne baseline and L1 modulation into ne_eff(t, beta).
+    
+        Returns
+        -------
+        dict
+            {
+              "beta_deg",
+              "ne_beta",
+              "I_L1",
+              "ne_eff",
+            }
+        """
+        ne_beta = self._compute_beta_effective_ne1au(
+            beta_deg,
+            ne0=ne0,
+            A=A,
+            beta0_deg=beta0_deg,
+        )
+    
+        I_L1 = np.asarray(l1_info["I_L1"], dtype=float)
+        ne_eff = ne_beta * (1.0 + k_l1 * I_L1)
+        ne_eff = np.clip(ne_eff, clip_min, clip_max)
+    
+        return {
+            "beta_deg": float(beta_deg),
+            "ne_beta": float(ne_beta),
+            "I_L1": I_L1,
+            "ne_eff": ne_eff,
+        }
 
     # -------------------------------------------------------------------------
     # Convert DM series to dispersive delay using PINT convention
@@ -2062,7 +2766,7 @@ class SolarWindProxy:
         """
         Refine a set of BB edges by enforcing constraints only within
         each contiguous data slice between gaps, using a generic time series
-        (e.g., solar-wind DM proxy sample times) for counts. Gaps are excluded.
+        (e.g., solar wind DM proxy sample times) for counts. Gaps are excluded.
 
         Parameters
         ----------
@@ -2202,134 +2906,310 @@ class SolarWindProxy:
         return np.asarray(min_years, dtype=int), min_mjds_quantity, min_elongations
 
     # -------------------------------------------------------------------------
-    # SWX BB segmentation from proxy (main computation)
+    # SW Proxy orchestrators
     # -------------------------------------------------------------------------
 
+    def build_proxy(
+        self,
+        *,
+        sw_cfg: "SolarWindConfig",
+        toas: pint.toa.TOAs,
+        model: pint.models.timing_model.TimingModel,
+        pulsar_name: Optional[str] = None,
+    ) -> ProxyBuildResult:
+        """
+        Build the solar wind proxy time series for BB segmentation.
+    
+        Returns
+        -------
+        ProxyBuildResult
+            series: ProxySeries(source="swx", t=mjd_comb, y=dm_comb, yerr=sigdm_comb)
+            extras: dict with raw arrays + geometry terms + config used
+            diag: optional DiagnosticsPayload(kind="swx_proxy") (if you want it)
+        """
+        sw_cfg.validate()
+
+        # Make SW proxy aligned with the TOAs
+        mjd = toas.get_mjds().value
+        pulsar_icrs = model.get_psr_coords()
+
+        # Geometric LOS contribution (Sun-Earth-pulsar integral): unit-normalized SW kernel - G(\theta)
+        geom = self.solar_wind_dm_proxy(
+            mjd,
+            pulsar_icrs,
+            ne1au=1.0,
+            ephem=str(sw_cfg.ephem),
+            min_theta_deg=float(sw_cfg.min_theta_deg),
+            include_Re=bool(sw_cfg.include_Re),
+            return_geometry=True,
+        )
+
+        geom_kernel = np.asarray(geom["dm_sw"], float)
+
+        # Baseline constant-density proxy - NE_SW=const * G(\theta)
+        dm_sw_const = float(sw_cfg.ne1au) * geom_kernel
+
+        # Initialize
+        f107 = None
+        f107_info = None
+        ne_info = None
+        beta_deg = None
+        
+        # Apply solar cycle modulation with f10.7 cm flux data
+        if sw_cfg.use_f107:
+            # Read in F10.7 cm flux data, and combine to daily values
+            f107_all = read_f107_flux_file(
+                sw_cfg.f107_file,
+                use_adjusted=bool(sw_cfg.f107_use_adjusted),
+            )
+
+            # Select f10.7 data within pulsar MJD span
+            f107_pulsar_span = select_timespan(
+                f107_all, 
+                mjd.min(), 
+                mjd.max()
+            )
+            if len(f107_pulsar_span) == 0:
+                raise ValueError(
+                    f"No F10.7 data found over TOA span for pulsar {pulsar_name or 'PSR'}."
+                )
+
+            # Combine multiple daily readings
+            f107 = daily_average_timeseries(
+                f107_pulsar_span, 
+                value_cols=["flux"]
+            )
+            if len(f107) == 0:
+                raise ValueError(
+                    f"Daily-averaged F10.7 data is empty for pulsar {pulsar_name or 'PSR'}."
+                )
+
+            # Pulsar's barycentered elat - beta
+            pulsar_ecl = pulsar_icrs.barycentrictrueecliptic
+            beta_deg = float(pulsar_ecl.lat.to_value(u.deg))
+
+            f107_info = prepare_driver_series(
+                f107,
+                mjd,
+                smooth_days=int(sw_cfg.f107_smooth_days),
+                value_col="flux",
+            )
+
+            if sw_cfg.proxy_form == "additive":
+                # 
+                ne_info = self._compute_effective_ne1au_series_additive(
+                    beta_deg,
+                    f107_info,
+                    ne0=float(sw_cfg.ne1au),
+                    A=float(sw_cfg.beta_enhancement_A),
+                    beta0_deg=float(sw_cfg.beta_enhancement_sigma_deg),
+                    beta1=float(sw_cfg.solar_cycle_beta1),
+                )
+            else:
+                #
+                k_eff = (
+                    float(sw_cfg.solar_cycle_k)
+                    if sw_cfg.solar_cycle_k is not None
+                    else float(sw_cfg.solar_cycle_beta1) / float(sw_cfg.ne1au)
+                )
+                ne_info = self._compute_effective_ne1au_series(
+                    beta_deg,
+                    f107_info,
+                    ne0=float(sw_cfg.ne1au),
+                    A=float(sw_cfg.beta_enhancement_A),
+                    beta0_deg=float(sw_cfg.beta_enhancement_sigma_deg),
+                    k=k_eff,
+                )
+                
+            # n_e(t, \beta) x G(\theta)
+            dm_sw = ne_info["ne_eff"] * geom_kernel
+        else:
+            dm_sw = dm_sw_const
+    
+        # timing error -> DM error
+        K_sec = 4.148808e3  # s * MHz^2 / (pc cm^-3)
+        f_MHz = np.asarray(toas.table["freq"], dtype=float)
+        sig_t_s = np.asarray(toas.table["error"], dtype=float) * 1e-6
+        sigma_dm = (f_MHz**2 / K_sec) * sig_t_s  # pc cm^-3
+    
+        # combine repeats for BB stability
+        mjd_comb, dm_comb, sigdm_comb = combine_repeated_toas(mjd, dm_sw, sigma_dm)
+    
+        psr = pulsar_name or getattr(getattr(model, "PSR", None), "value", None) or "PSR"
+    
+        series = ProxySeries(
+            source="swx",
+            t=np.asarray(mjd_comb, float),
+            y=np.asarray(dm_comb, float),
+            yerr=np.asarray(sigdm_comb, float),
+            meta=dict(
+                pulsar_name=psr,
+                signal_source="swx",
+                proxy_form=str(sw_cfg.proxy_form),
+                use_f107=bool(sw_cfg.use_f107),
+                ne1au=float(sw_cfg.ne1au),
+                ephem=str(sw_cfg.ephem),
+                min_theta_deg=float(sw_cfg.min_theta_deg),
+                include_Re=bool(sw_cfg.include_Re),
+            ),
+        )
+        series.validate()
+    
+        diag = DiagnosticsPayload(
+            kind="swx_proxy",
+            data=dict(
+                mjd=mjd,
+                dm_sw=dm_sw,
+                sigma_dm=sigma_dm,
+                mjd_comb=mjd_comb,
+                dm_comb=dm_comb,
+                sigdm_comb=sigdm_comb,
+                theta_rad=geom.get("theta_rad", None),
+                R_earth_AU=geom.get("R_earth_AU", None),
+                geom_factor=geom.get("geom_factor", None),
+                dm_sw_const=dm_sw_const,
+                geom_kernel=geom_kernel,
+                f107_daily_avg=f107,
+                f107_info=f107_info,
+                ne_info=ne_info,
+                beta_deg=beta_deg,
+            ),
+            meta=dict(title="Solar wind proxy series", pulsar_name=psr),
+        )
+    
+        extras = dict(
+            geom=geom,
+            sigma_dm=sigma_dm,
+            f_MHz=f_MHz,
+            sig_t_s=sig_t_s,
+            sw_cfg=sw_cfg,
+            dm_sw_const=dm_sw_const,
+            geom_kernel=geom_kernel,
+            f107=f107,
+            f107_info=f107_info,
+            ne_info=ne_info,
+            beta_deg=beta_deg,
+        )
+    
+        return ProxyBuildResult(series=series, extras=extras, diag=diag)
+
+    def build_swx_bb_edges_from_series(
+        self,
+        *,
+        series: ProxySeries,  # expects source="swx"
+        bbx_cfg: BBXConfig,   # use for p0, gaps, and constraints
+    ) -> Dict[str, Any]:
+        """
+        Solar wind BB segmentation from a pre-built proxy series (e.g. sw_proxy.build_proxy(..)).
+        Mirrors BBX.build_dm_bb_edges_from_proxy(..), but for SWX proxy.
+    
+        Returns
+        -------
+        pipe_sw : dict with keys similar to DM pipe:
+          - proxy_series, mjds_for_bb, values_for_bb, errs_for_bb
+          - gaps, gap_mask
+          - SW equivalent of tBB_raw, tBB_refined
+          - settings snapshot
+        """
+        if str(series.source).lower() != "swx":
+            raise ValueError(f"Expected series.source='swx', got {series.source!r}.")
+    
+        bbx_cfg.validate()
+    
+        mjd_comb = np.asarray(series.t, float)
+        dm_comb = np.asarray(series.y, float)
+        sigdm_comb = np.asarray(series.yerr, float)
+    
+        # BB initial segmentation on proxy
+        SW_BB_raw = bayesian_blocks(
+            mjd_comb,
+            dm_comb,
+            sigdm_comb,
+            fitness=str(bbx_cfg.fitness),
+            p0=float(bbx_cfg.p0),
+        )
+    
+        # Find obs gaps
+        sw_gaps, gap_mask = self.bbx.find_data_gaps(
+            mjd_comb,
+            dm_comb,
+            gap_threshold=float(bbx_cfg.gap_threshold_days),
+            trim_days=float(bbx_cfg.trim_days),
+        )
+    
+        # Refine the segmentation within slices
+        SW_BB_refined = self.refine_edges_between_gaps_series(
+            series_mjd=mjd_comb,
+            gaps=sw_gaps,
+            tbreak=SW_BB_raw,
+            eps=0.0,
+            mindata=int(bbx_cfg.min_toas), # SW uses min_toas as mindata
+            mintime=bbx_cfg.min_time,
+            maxtime=bbx_cfg.max_time,
+        )
+    
+        return dict(
+            proxy_series=series,
+            mjd_comb=mjd_comb,
+            dm_comb=dm_comb,
+            sigdm_comb=sigdm_comb,
+            SW_BB_raw=np.asarray(SW_BB_raw, float),
+            SW_BB_refined=np.asarray(SW_BB_refined, float),
+            sw_gaps=list(sw_gaps),
+            gap_mask=np.asarray(gap_mask, bool),
+            signal_source="swx",
+            proxy_meta=dict(series.meta or {}),
+            bbx_cfg=bbx_cfg,
+        )
+
+    # Main computation
     def build_swx_bb_edges_from_proxy(
         self,
         *,
         toas: pint.toa.TOAs,
         model: pint.models.timing_model.TimingModel,
-        ne1au: float = 7.9,
-        ephem: str = "DE440",
-        min_theta_deg: float = 0.25,
-        include_Re: bool = True,
-        gap_threshold_days: float = 200.0,
-        trim_days: float = 1.0,
-        p0: float = 0.14,
-        mindata: int = 8,
-        mintime: u.Quantity = 0.1 * u.d,
-        maxtime: u.Quantity = 365.25 * u.d,
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        sw_cfg: SolarWindConfig,
+        bbx_cfg: BBXConfig,
+        pulsar_name: Optional[str] = None,
+    ) -> Tuple[ProxyBuildResult, Dict[str, Any]]:
         """
-        Build SWX BB segmentation from the solar-wind DM proxy and return:
-          - dm_dict: solar-wind proxy dict with 'sigma_dm' added
-          - pipeline_dict: intermediate arrays (incl. SW_BB_refined)
-
+        Build SW proxy (dm_sw) and Bayesian Blocks SWX segmentation in BBX structure.
+    
         Returns
         -------
-        dm_dict : dict
-            Keys include 'dm_sw' plus appended 'sigma_dm'.
-        pipeline_dict : dict
-            Contains MJD arrays, combined series, gaps, BB edges, and settings.
-
+        proxy_result : ProxyBuildResult
+            ProxySeries(source="swx", t, y, yerr) plus extras/diag (diagnostics package).
+        pipe_sw : dict
+            Segmentation pipeline products.
         """
-        # Make SW proxy aligned with the TOAs
-        pulsar_icrs = model.get_psr_coords()
-        mjd = toas.get_mjds().value
-
-        dm_dict = self.solar_wind_dm_proxy(
-            mjd,
-            pulsar_icrs,
-            ne1au=ne1au,
-            ephem=ephem,
-            min_theta_deg=min_theta_deg,
-            include_Re=include_Re,
-            return_geometry=True,
+        sw_cfg.validate()
+        bbx_cfg.validate()
+    
+        proxy_result = self.build_proxy(
+            sw_cfg=sw_cfg,
+            toas=toas,
+            model=model,
+            pulsar_name=pulsar_name,
         )
-        dm_sw = dm_dict["dm_sw"]
-
-        # Timing error -> DM error
-        K_sec = 4.148808e3  # s * MHz^2 / (pc cm^-3)
-        f_MHz = np.asarray(toas.table["freq"], dtype=float)            # MHz
-        sig_t_s = np.asarray(toas.table["error"], dtype=float) * 1e-6  # seconds
-        sigma_dm = (f_MHz**2 / K_sec) * sig_t_s                        # pc cm^-3
-        dm_dict["sigma_dm"] = sigma_dm
-
-        # -------------------------
-        # Execute BBX subpipeline for SWX
-        # -------------------------
-        
-        # Combine duplicates in DM space for BB func
-        mjd_comb, dm_comb, sigdm_comb = combine_repeated_toas(mjd, dm_sw, sigma_dm)
-
-        # Find obs gaps
-        sw_gaps, gap_mask = self.bbx.find_data_gaps(
-            mjd_comb,
-            dm_comb,
-            gap_threshold=gap_threshold_days,
-            trim_days=trim_days,
+    
+        pipe_sw = self.build_swx_bb_edges_from_series(
+            series=proxy_result.series,
+            bbx_cfg=bbx_cfg,
         )
-
-        # Make initial BB segmentation on proxy
-        SW_BB = bayesian_blocks(
-            mjd_comb,
-            dm_comb,
-            sigdm_comb,
-            fitness="measures",
-            p0=p0,
-        )
-
-        # Refine the segmentation within slices
-        SW_BB_refined = self.refine_edges_between_gaps_series(
-            series_mjd=mjd_comb,
-            gaps=sw_gaps,
-            tbreak=SW_BB,
-            eps=0.0,
-            mindata=mindata,
-            mintime=mintime,
-            maxtime=maxtime,
-        )
-
-        # Extract pulsar
-        try:
-            psr_param = getattr(model, "PSR", None)
-            if psr_param is not None and hasattr(psr_param, "value") and psr_param.value:
-                pulsar_name = psr_param.value
-            else:
-                pulsar_name = "Unknown"
-        except Exception:
-            pulsar_name = "Unknown"
-
-        # Collect pipeline arrays for eval
-        pipeline_dict: Dict[str, Any] = {
-            "mjd": mjd,
-            "f_MHz": f_MHz,
-            "sig_t_s": sig_t_s,
-            "sigma_dm": sigma_dm,
-            "dm_sw": dm_sw,
-            "mjd_comb": mjd_comb,
-            "dm_comb": dm_comb,
-            "sigdm_comb": sigdm_comb,
-            "sw_gaps": sw_gaps,
-            "gap_mask": gap_mask,
-            "SW_BB": SW_BB,
-            "SW_BB_refined": SW_BB_refined,
-            "n_refined_bins": int(len(SW_BB_refined) - 1),
-            "gap_threshold_days": float(gap_threshold_days),
-            "trim_days": float(trim_days),
-            "p0": float(p0),
-            "mindata": int(mindata),
-            "mintime": mintime,
-            "maxtime": maxtime,
-            "pulsar_name": pulsar_name,
-        }
-
-        return dm_dict, pipeline_dict
-
+    
+        # Canonical params for parity with DM pipe
+        pipe_sw["proxy_series"] = proxy_result.series
+        pipe_sw["proxy_result"] = proxy_result
+    
+        # Metadata for SW diagnostics
+        pipe_sw["pulsar_name"] = pulsar_name or getattr(getattr(model, "PSR", None), "value", None) or "PSR"
+        pipe_sw["signal_source"] = str(proxy_result.series.source)
+        pipe_sw["proxy_meta"] = dict(proxy_result.series.meta or {})
+    
+        return proxy_result, pipe_sw   
 
 # =============================================================================
-# BBX Proxy/Intermediate Containers
+# Proxy/Intermediate product containers
 # =============================================================================
 
 @dataclass(frozen=True)
@@ -2337,10 +3217,10 @@ class ProxySeries:
     """
     The BB input time series: t, y, yerr (the products of proxy building).
     """
-    name: str                       # "chromatic" | "dmx" | "residuals"
-    t: np.ndarray                   # shape (N,); time axis
-    y: np.ndarray                   # shape (N,); data
-    yerr: np.ndarray                # shape (N,); data err
+    source: str                       # "chromatic" | "dmx" | "residuals" | "swx" | "SWM0" | etc..
+    t: np.ndarray                   # shape (N,): time axis
+    y: np.ndarray                   # shape (N,): data
+    yerr: np.ndarray                # shape (N,): data err
     meta: Mapping[str, Any] = None  # lightweight origin tracking (no huge arrays)
 
     def validate(self) -> None:
@@ -2435,10 +3315,21 @@ class DispersionMeasureProxy:
         pulsar_name: Optional[str] = None,
     ) -> ProxyBuildResult:
         """
-        Proxy builder switch/router: 
-         - Chromatic DM Proxy:
-         - DMX DM Proxy:
-         - Residual DM Proxy: 
+        Build the BB input proxy time series for one of three signal sources.
+    
+        Switch by `cfg.signal_source`:
+          - "chromatic": per-epoch WLS decomposition of residuals vs 1/nu^2 -> proxy = b(t)
+                        (requires arrays mjds, scaled_resid, scaled_err, and freqs).
+          - "residuals": uses the residuals / \nu^2 directly as the proxy
+                        (requires arrays mjds, scaled_resid, scaled_err).
+          - "dmx": fits a finely-binned DMX model and parses a DMX time series from dmxparse_func output
+                  (requires model, toas, dmxparse_func; ignores arrays).
+    
+        Returns
+        -------
+        ProxyBuildResult
+            Contains ProxySeries (t, y, yerr + meta), optional extras, and an optional
+            DiagnosticsPayload for downstream plotting.
         """
         cfg.validate()
 
@@ -2491,7 +3382,7 @@ class DispersionMeasureProxy:
                 pulsar_name=pulsar_name,
             )
 
-        # Residuals DM Proxy: r/\nu² weighted residuals as proxy directly
+        # Residuals DM Proxy: r/nu^2 weighted residuals as proxy directly
         return self._build_proxy_residuals(
             cfg=cfg,
             mjds=mjds,
@@ -2513,11 +3404,18 @@ class DispersionMeasureProxy:
         resid_err: np.ndarray,
         pulsar_name: Optional[str],
     ) -> ProxyBuildResult:
+        """
+        Residuals proxy builder.
+    
+        Treats (mjds, resid, resid_err) as the proxy series (after combining repeated TOAs
+        for stability). The 1/\nu^2 weighting happens upstream. Returns a ProxySeries named 
+        "residuals" plus a minimal diagnostics payload.
+        """
         # Combine repeats for BB safety
         t, y, yerr = combine_repeated_toas(mjds, resid, resid_err)
 
         series = ProxySeries(
-            name="residuals",
+            source="residuals",
             t=t,
             y=y,
             yerr=yerr,
@@ -2549,6 +3447,20 @@ class DispersionMeasureProxy:
         resid_err: np.ndarray,
         pulsar_name: Optional[str],
     ) -> ProxyBuildResult:
+        """
+        Chromatic proxy builder (epochwise WLS).
+    
+        Runs `build_chromatic_achromatic_series` to obtain per-epoch coefficients of
+        a(t) and b(t) from WLS fits of residuals vs x (typically x=1/nu^2). The proxy
+        built is b(t) with uncertainty b_err(t), optionally converted to DM units.
+    
+        Returns
+        -------
+        ProxyBuildResult
+            - series: ProxySeries(source="chromatic", t=epoch_mjd, y=b_chrom, yerr=b_err)
+            - extras: epoch_mjd, b_chrom, b_err (pre-combine)
+            - diag: DiagnosticsPayload(kind="chromatic_suite") with arrays needed for plots
+        """
         out = self.build_chromatic_achromatic_series(
             mjd=mjds,
             freq=freqs,
@@ -2561,7 +3473,7 @@ class DispersionMeasureProxy:
         t, y, yerr = combine_repeated_toas(out["epoch_mjd"], out["b_chrom"], out["b_err"])
 
         series = ProxySeries(
-            name="chromatic",
+            source="chromatic",
             t=t,
             y=y,
             yerr=yerr,
@@ -2596,6 +3508,7 @@ class DispersionMeasureProxy:
                 epoch_tol_days=float(cfg.epoch_tol_days),
                 groups=out["groups"],
                 results=out["results"],
+                failures=out.get("failures", None),
                 epoch_mjd=out["epoch_mjd"],
                 a_achrom=out["a_achrom"],
                 a_err=out["a_err"],
@@ -2604,7 +3517,7 @@ class DispersionMeasureProxy:
                 n_raw=out["n_raw"],
                 n_used=out["n_used"],
                 metrics_all=out["metrics_all"],
-                # also include the BB input series, convenient for wrapper
+                # also include the BB input series
                 bb_t=t,
                 bb_y=y,
                 bb_yerr=yerr,
@@ -2620,6 +3533,7 @@ class DispersionMeasureProxy:
             epoch_mjd=out["epoch_mjd"],
             b_chrom=out["b_chrom"],
             b_err=out["b_err"],
+            failures=out.get("failures", None),
         )
 
         return ProxyBuildResult(series=series, extras=extras, diag=diag)
@@ -2638,6 +3552,19 @@ class DispersionMeasureProxy:
         fitter_cls: Optional[type],
         pulsar_name: Optional[str],
     ) -> ProxyBuildResult:
+        """
+        DMX dmseries proxy builder (fine DMX + dmxparse).
+    
+        Fits a finely-binned DMX model using `build_DMX_dmseries(...)`, then uses the
+        parsed DMX amplitudes/uncertainties as the proxy series.
+    
+        Returns
+        -------
+        ProxyBuildResult
+            series: ProxySeries(source="dmx", t=dmxeps, y=dmxs, yerr=dmx_verrs)
+            extras: includes the full dmx_dict and fitted objects
+            diag: DiagnosticsPayload(kind="dmx_dmseries") with basic arrays for plotting
+        """
         dmx_dict = self.build_DMX_dmseries(
             model=model,
             toas=toas,
@@ -2654,7 +3581,7 @@ class DispersionMeasureProxy:
         yerr = np.asarray(dmx_dict["dmx_verrs"].value, float)
 
         series = ProxySeries(
-            name="dmx",
+            source="dmx",
             t=t,
             y=y,
             yerr=yerr,
@@ -2747,7 +3674,18 @@ class DispersionMeasureProxy:
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def _group_epochs(mjd: np.ndarray, *, epoch_tol_days: float) -> list[np.ndarray]:
+    def _group_epochs(
+        mjd: np.ndarray, 
+        *, 
+        epoch_tol_days: float
+    ) -> list[np.ndarray]:
+        """
+        Group TOAs into time-contiguous epochs.
+    
+        TOAs are sorted by MJD; a new epoch starts whenever the gap between adjacent TOAs
+        exceeds `epoch_tol_days`. Returns a list of index arrays (into the original input)
+        for each epoch.
+        """
         order = np.argsort(mjd)
         mjd_sorted = mjd[order]
         gaps = np.where(np.diff(mjd_sorted) > float(epoch_tol_days))[0] + 1
@@ -2759,8 +3697,31 @@ class DispersionMeasureProxy:
         y: np.ndarray, 
         yerr: Optional[np.ndarray], 
         *, 
-        return_metrics: bool = False):
-        
+        return_metrics: bool = False
+    ):
+        """
+        Weighted least-squares (WLS) fit of a line y = a + b x.
+    
+        If `yerr` is provided, weights are w = 1/yerr^2 (with a robust floor for non-positive
+        errors). If `yerr` is None (or unusable), uniform weights are used. Uncertainties
+        (sa, sb) are estimated from the weighted residual variance with dof = max(1, n-2).
+    
+        Parameters
+        ----------
+        x, y : array_like
+            Data to fit (1D, same length).
+        yerr : array_like or None
+            1-sigma uncertainties on y. If None, uses unit weights.
+        return_metrics : bool
+            If True, also returns a small diagnostics dict (determinant, SNR, span, n).
+    
+        Returns
+        -------
+        a, b, sa, sb : float
+            Intercept, slope, and their 1-sigma uncertainties. NaN if conditions aren't passed.
+        metrics : dict, optional
+            Returned only if `return_metrics=True`.
+        """
         x = np.asarray(x, float)
         y = np.asarray(y, float)
 
@@ -2820,8 +3781,28 @@ class DispersionMeasureProxy:
 
         return a, b, sa, sb
 
+    def _log_fail(
+        self,
+        reason: str,
+        *,
+        mjd: np.ndarray,
+        g_idx: int,
+        g: np.ndarray,
+        fail_log: Dict[str, list],
+        n_used: int = 0,
+        x_span: float = np.nan,
+        snr_b: float = np.nan,
+    ) -> None:
+        fail_log["epoch_idx"].append(int(g_idx))
+        fail_log["reason"].append(str(reason))
+        fail_log["mid_mjd"].append(float(np.mean(mjd[g])) if g.size else np.nan)
+        fail_log["n_raw"].append(int(g.size))
+        fail_log["n_used"].append(int(n_used))
+        fail_log["x_span"].append(float(x_span) if np.isfinite(x_span) else np.nan)
+        fail_log["snr_b"].append(float(snr_b) if np.isfinite(snr_b) else np.nan)
+
     # -------------------------------------------------------------------------
-    # Computational Core
+    # Computation Core
     # -------------------------------------------------------------------------
 
     def build_chromatic_achromatic_series(
@@ -2833,19 +3814,99 @@ class DispersionMeasureProxy:
         resid_err: Optional[np.ndarray],
         cfg: ProxyConfig,
     ) -> Dict[str, Any]:
+        """
+        Construct per-epoch achromatic and chromatic coefficients via weighted least squares (WLS).
+    
+        This routine groups TOAs into "epochs" in time, fits a 2-parameter linear model within each 
+        epoch to decompose the residuals into:
+          - achromatic intercept a(t): broadband (frequency-independent) delay componenet
+          - chromatic slope b(t): frequency-dependent (DM-like) component proportional to 1/nu^2
+    
+        Method
+        ------
+        For TOAs in a given epoch e, define the regressor x_i and observed residuals y_i:
+          y_i = r_i  [microseconds], and
+          x_i = 1 / nu_i^2          if cfg.use_inv_nu2 is True, otherwise
+              = (nu_ref / nu_i)^2   [dimensionless], with nu_ref = cfg.ref_freq | median(nu) if cfg.ref_freq is None.
+    
+        The per-epoch model is:
+          y_i = a_e + b_e * x_i + epsilon_i
+    
+        Weighted least squares uses weights:
+          w_i = 1 / sigma_i^2, where sigma_i is resid_err [us]. If resid_err is None, uniform weights are used.
+    
+        Optional x-normalization
+        ------------------------
+        If cfg.normalize_x is True, x is standardized within each epoch:
+          x_fit = (x - mu_x) / s_x
+        where mu_x is the weighted mean of x, and s_x is either:
+          - span: (max(x) - min(x)) if cfg.normalize_method == "span"
+          - std : weighted standard deviation otherwise
+    
+        WLS is performed on x_fit, returning (a_p, b_p) in the normalized coordinates, then
+        transformed back to the original x coordinate system via:
+          b = b_p / s_x
+          a = a_p - b * mu_x
+    
+        The reported uncertainties (sa, sb) are propagated through this transform. Done to avoid small number round off.
+    
+        Components
+        ----------
+        - a_achrom: achromatic intercept (a) [microseconds]. 
+        - b_chrom : chromatic slope w.r.t. x. For x=1/nu^2, b has units [us MHz^2].
+            If cfg.return_dm_units=True, (b_chrom, b_err) are converted to DM units
+            [pc cm^-3] via b_DM = b_time / K, with K = 4.148808e9 us MHz^2/(pc cm^-3). 
+            NOTE: a_achrom remains in us.
+    
+        Epoch acceptance / quality cuts
+        -------------------------------
+        An epoch is skipped unless it passes:
+          - minimum channels: g.size >= cfg.min_channels
+          - finite data (and positive errors if resid_err provided)
+          - minimum distinct x channels: unique(x) >= cfg.min_unique_channels and >= 2
+          - minimum x span: (max(x) - min(x)) >= cfg.min_x_span
+          - optional MAD-based residual outlier clipping
+          - minimum chromatic significance: |b|/sb >= cfg.min_snr_b
+    
+        Returns
+        -------
+        dict with keys:
+          - x : ndarray
+              Per-TOA x values (global, before epoch filtering).
+          - groups : list[array[int]]
+              TOA indices for each time epoch (pre-filter).
+          - epoch_mjd : ndarray
+              Representative epoch time (mean MJD of TOAs in the epoch).
+          - a_achrom, a_err : ndarray
+              Per-epoch achromatic intercept and uncertainty [us].
+          - b_chrom, b_err : ndarray
+              Per-epoch chromatic slope and uncertainty (either us MHz^2 if
+              return_dm_units=False, or pc cm^-3 if return_dm_units=True).
+          - n_raw, n_used : ndarray
+              TOAs per epoch before/after filtering within the epoch.
+          - results : list[dict]
+              Per-epoch summary (a,b,sa,sb,n_used,x_span,mid_mjd,...).
+          - metrics_all : list[dict]
+              Optional diagnostics from the WLS solver (condition numbers, etc.).
+    
+        """
+        # Standardize inputs
         mjd = np.asarray(mjd, float)
         freq = np.asarray(freq, float)
         resid = np.asarray(resid, float)
         resid_err = None if resid_err is None else np.asarray(resid_err, float)
 
+        # Set regressor
         if cfg.use_inv_nu2:
             x = 1.0 / (freq ** 2)
         else:
             ref = float(cfg.ref_freq) if cfg.ref_freq is not None else float(np.nanmedian(freq))
             x = (ref / freq) ** 2
 
+        # Make epoch groups
         groups = self._group_epochs(mjd, epoch_tol_days=float(cfg.epoch_tol_days))
 
+        # Set up storage
         epoch_mjd: list[float] = []
         a_list: list[float] = []
         b_list: list[float] = []
@@ -2855,9 +3916,13 @@ class DispersionMeasureProxy:
         n_used_list: list[int] = []
         metrics_all: list[Dict[str, Any]] = []
         results: list[Dict[str, Any]] = []
+        fail_log = {k: [] for k in ("epoch_idx","reason","mid_mjd","n_raw","n_used","x_span","snr_b")}
 
+        # For each epoch..
         for epoch_idx, g in enumerate(groups):
+            # Quality checks and log fails
             if g.size < int(cfg.min_channels):
+                self._log_fail("min_channels", mjd=mjd, g_idx=epoch_idx, g=g, fail_log=fail_log)
                 continue
 
             xg = x[g]
@@ -2882,16 +3947,23 @@ class DispersionMeasureProxy:
                         ev = ev[keep]
 
             if xv.size == 0:
+                self._log_fail("no_valid_points", mjd=mjd, g_idx=epoch_idx, g=g, fail_log=fail_log)
                 continue
 
             if np.unique(xv).size < int(cfg.min_unique_channels):
+                self._log_fail("min_unique_channels", mjd=mjd, g_idx=epoch_idx, g=g, n_used=int(xv.size), fail_log=fail_log)
                 continue
+                
             if np.unique(xv).size < 2:
+                self._log_fail("rank_deficient_x", mjd=mjd, g_idx=epoch_idx, g=g, n_used=int(xv.size), fail_log=fail_log)
                 continue
+                
             raw_span = float(np.nanmax(xv) - np.nanmin(xv))
             if raw_span < float(cfg.min_x_span):
+                self._log_fail("min_x_span", mjd=mjd, g_idx=epoch_idx, g=g, n_used=int(xv.size), x_span=raw_span, fail_log=fail_log)
                 continue
 
+            # Weights
             if ev is None:
                 wv = np.ones_like(yv)
             else:
@@ -2899,6 +3971,7 @@ class DispersionMeasureProxy:
                 ev = np.where(ev <= 0, floor, ev)
                 wv = 1.0 / (ev ** 2)
 
+            # Normalize x - small number round off safety
             if cfg.normalize_x:
                 wsum = float(np.sum(wv))
                 mu_x = float(np.sum(wv * xv) / wsum) if wsum > 0 else float(np.mean(xv))
@@ -2916,22 +3989,30 @@ class DispersionMeasureProxy:
 
             n_used = int(x_fit.size)
 
+            # Make WLS fit
             a_p, b_p, sa_p, sb_p, metrics = self._wls_line(
                 x_fit, yv, None if ev is None else ev, return_metrics=True
             )
 
+            # Quality chekck on fit
             if not np.isfinite(b_p) or not np.isfinite(sb_p) or sb_p <= 0:
+                self._log_fail("wls_bad_cov", mjd=mjd, g_idx=epoch_idx, g=g, n_used=int(x_fit.size), fail_log=fail_log)
                 continue
 
+            # Convert back
             b = b_p / sx
             sb = sb_p / sx
             a = a_p - b * mu_x
             sa = np.sqrt(max(0.0, (sa_p if np.isfinite(sa_p) else 0.0) ** 2 + (mu_x * sb) ** 2))
 
+            # Final quality check 
             snr_b = abs(b) / sb if (np.isfinite(sb) and sb > 0) else np.nan
             if np.isfinite(snr_b) and (snr_b < float(cfg.min_snr_b)):
+                self._log_fail("min_snr_b", mjd=mjd, g_idx=epoch_idx, g=g, n_used=int(x_fit.size), x_span=raw_span, snr_b=snr_b, fail_log=fail_log)
                 continue
 
+            # Build returns
+            # Fit parameters
             mid = float(np.mean(mjd[g]))
             epoch_mjd.append(mid)
             a_list.append(float(a)); b_list.append(float(b))
@@ -2964,16 +4045,29 @@ class DispersionMeasureProxy:
         n_raw = np.asarray(n_raw_list, int)
         n_used = np.asarray(n_used_list, int)
 
+        # Convert to DM units
         if bool(cfg.return_dm_units):
-            K_sec = 4.148808e9  # mus * MHz^2 / (pc cm^-3)
+            K_sec = 4.148808e9  # us * MHz^2 / (pc cm^-3)
             b_chrom = b_chrom / K_sec
             b_err = b_err / K_sec
+
+        # Fail log
+        failures = dict(
+            epoch_idx=np.asarray(fail_log["epoch_idx"], int),
+            reason=np.asarray(fail_log["reason"], object),
+            mid_mjd=np.asarray(fail_log["mid_mjd"], float),
+            n_raw=np.asarray(fail_log["n_raw"], int),
+            n_used=np.asarray(fail_log["n_used"], int),
+            x_span=np.asarray(fail_log["x_span"], float),
+            snr_b=np.asarray(fail_log["snr_b"], float),
+        )
 
         return dict(
             x=x,
             groups=groups,
             results=results,
             metrics_all=metrics_all,
+            failures=failures,
             epoch_mjd=epoch_mjd,
             a_achrom=a_achrom,
             a_err=a_err,
@@ -2995,6 +4089,36 @@ class DispersionMeasureProxy:
         keep_DM: bool = True,
         freeze_DM: bool = False,
     ) -> Dict[str, Any]:
+        """
+        Build a DMX time series by fitting a finely-binned DMX model and parsing results.
+    
+        Workflow:
+          1) Create uniform DMX edges spanning the TOAs with width `bin_days`.
+          2) Replace/insert a DMX component using `replace_dmx_model(...)`.
+          3) Fit the model (WLS by default).
+          4) Parse the fitted DMX parameters using `dmxparse_func(fitter)`.
+    
+        Parameters
+        ----------
+        model, toas : PINT model/TOAs
+            Inputs used to construct and fit a fine DMX model.
+        bin_days : float
+            Uniform DMX bin width in days.
+        dmxparse_func : callable
+            Function that extracts a DMX series from a fitted PINT fitter.
+        fitter_cls : type, optional
+            PINT fitter class (default: WLSFitter).
+        fitter_maxiter : int or None
+            Passed to fit_toas(maxiter=...). None uses PINT default.
+        keep_DM, freeze_DM : bool
+            Passed through to `replace_dmx_model(...)`.
+    
+        Returns
+        -------
+        dmx_dict : dict
+            The parsed DMX products plus bookkeeping fields: edges, counts, fitter, model,
+            parser_used, and bin_days. 
+        """
         if not (isinstance(bin_days, (int, float)) and float(bin_days) > 0):
             raise ValueError("bin_days must be a positive number (days).")
         if dmxparse_func is None:
@@ -3031,7 +4155,7 @@ class DispersionMeasureProxy:
         try:
             dmx_dict = dmxparse_func(fitter)
         except Exception:
-            # FUTURE: slot covariance-free fallback parser here (?)
+            # FUTURE EDITION: covariance-free fallback (?)
             raise
 
         dmx_dict.update(
@@ -3189,6 +4313,8 @@ class BBX:
             lambda: plot_a_vs_b_correlation(
                 a_achrom=np.asarray(data["a_achrom"], float),
                 b_chrom=np.asarray(data["b_chrom"], float),
+                a_err=np.asarray(data["a_err"], float),
+                b_err=np.asarray(data["b_err"], float),
                 style=style,
             ),
         ))
@@ -3199,28 +4325,33 @@ class BBX:
                 epoch_mjd=np.asarray(data["epoch_mjd"], float),
                 a_achrom=np.asarray(data["a_achrom"], float),
                 b_chrom=np.asarray(data["b_chrom"], float),
+                a_err=np.asarray(data["a_err"], float),
+                b_err=np.asarray(data["b_err"], float),
                 style=style,
-                y_label=str(data.get("summary_y_label", "Coefficient value")),
-                title=str(data.get("summary_title", "Per-epoch achromatic (a) and chromatic (b) terms")),
+                title=str(data.get("summary_title", "Per-epoch achromatic/chromatic significances")),
                 legend=bool(data.get("summary_legend", True)),
             ),
         ))
 
         if data.get("metrics_all", None):
-            figs.append((
-                f"{stem_prefix}_wls_snr_summary",
-                lambda: plot_wls_epoch_summaries(
+            def _make_wls_snr_fig():
+                fig_snr, fig_cond = plot_wls_epoch_summaries(
                     metrics_list=list(data["metrics_all"]),
                     style=style,
-                )[0],
-            ))
-            figs.append((
-                f"{stem_prefix}_wls_condition_summary",
-                lambda: plot_wls_epoch_summaries(
+                )
+                plt.close(fig_cond)
+                return fig_snr
+        
+            def _make_wls_cond_fig():
+                fig_snr, fig_cond = plot_wls_epoch_summaries(
                     metrics_list=list(data["metrics_all"]),
                     style=style,
-                )[1],
-            ))
+                )
+                plt.close(fig_snr)
+                return fig_cond
+
+            figs.append((f"{stem_prefix}_wls_snr_summary", _make_wls_snr_fig))
+            figs.append((f"{stem_prefix}_wls_condition_summary", _make_wls_cond_fig))
 
         # Main gated save/show/close logic
         return handle_diagnostics_multi(
@@ -3231,6 +4362,258 @@ class BBX:
             close=True,
             savefig_kwargs={"dpi": style.dpi},
         )
+
+    def run_dm_segmentation_diagnostics(
+        self,
+        *,
+        pipe: Dict[str, Any],
+        out: "OutputConfig",
+        paths: "OutputPaths",
+        style: "PlotStyleConfig",
+        stem_prefix: str,
+        y_label: str = "IISM DM Proxy",
+        plot_verbose: bool = False,  # If True, plot extra diagnostics
+        close: bool = True,
+    ) -> bool:
+        """
+        Plot wrapper for minimal notebook diagnostics to evaluate:
+          (a) chromatic per-epoch WLS proxy quality, and
+          (b) gap finding + gap-aware segmentation refinement.
+    
+        Intended input: output dict from
+            BBX.build_dm_bb_edges_from_proxy(..., return_gap_diagnostics=True)
+    
+        Returns
+        -------
+        did_any : bool
+            True if any figure was produced.
+        """
+        from .utils import handle_diagnostics, mask_toas_from_gaps
+
+        did_any = False
+        stem = stem_prefix
+    
+        # Pull proxy diagnostic payload (if present)
+        proxy_result = pipe.get("proxy_result", None)
+        diag = None if proxy_result is None else getattr(proxy_result, "diag", None)
+    
+        data = None
+        if diag is not None and getattr(diag, "kind", None) == "chromatic_suite":
+            data = diag.data
+    
+        # 1) WLS / proxy quality diagnostics (only for chromatic_suite)
+        if data is not None:
+            # (a) epoch gap histogram (epoch_tol_days tuning)
+            from .diagnostics import plot_epoch_gap_histogram
+    
+            handle_diagnostics(
+                out=out,
+                paths=paths,
+                make_fig=lambda: plot_epoch_gap_histogram(
+                    mjd=np.asarray(data["mjd"], float),
+                    epoch_tol_days=float(data["epoch_tol_days"]),
+                    style=style,
+                    title_suffix="  (_group_epochs)",
+                ),
+                save_targets={
+                    "png": paths.fig_path(f"{stem}_epoch_gap_hist", ".png"),
+                    "pdf": paths.fig_path(f"{stem}_epoch_gap_hist", ".pdf"),
+                },
+                close=close,
+            )
+            did_any = True
+    
+            # (b) failed epochs by reason (only if non-empty)
+            failures = data.get("failures", None)
+            if failures is not None:
+                f_idx = np.asarray(failures.get("epoch_idx", []), int)
+                if f_idx.size > 0:
+                    from .diagnostics import plot_failed_epochs_by_reason
+    
+                    handle_diagnostics(
+                        out=out,
+                        paths=paths,
+                        make_fig=lambda: plot_failed_epochs_by_reason(
+                            mjd=np.asarray(data["mjd"], float),
+                            resid=np.asarray(data["resid"], float),
+                            groups=data["groups"],
+                            failures=failures,
+                            style=style,
+                            title="Failed epochs by rejection reason",
+                        ),
+                        save_targets={
+                            "png": paths.fig_path(f"{stem}_failed_epochs_by_reason", ".png"),
+                            "pdf": paths.fig_path(f"{stem}_failed_epochs_by_reason", ".pdf"),
+                        },
+                        close=close,
+                    )
+                    did_any = True
+    
+        # Minimal mode: 1 overlay plot (requires chromatic_suite data)
+        if (not plot_verbose):
+            if data is None:
+                print("[DM diagnostics] chromatic_suite diag missing; minimal overlay skipped.")
+                return did_any
+    
+            edges = np.asarray(pipe["tBB_final"], float)
+            gaps = pipe.get("gaps", None)
+            if gaps is None:
+                print("[DM diagnostics] gaps missing; minimal overlay skipped.")
+                return did_any
+    
+            from .diagnostics import plot_proxy_segmentation_overlay
+    
+            resid_mjd = np.asarray(data["mjd"], float)    # (N,)
+            resid_us  = np.asarray(data["resid"], float)  # (N,)
+    
+            resid_keep_mask = mask_toas_from_gaps(resid_mjd, gaps)  # True=keep
+    
+            proxy_t = np.asarray(pipe["mjds_for_bb"], float)        # (M,)
+            proxy_y = np.asarray(pipe["values_for_bb"], float)      # (M,)
+            proxy_yerr = None
+            if pipe.get("errs_for_bb", None) is not None:
+                proxy_yerr = np.asarray(pipe["errs_for_bb"], float)
+    
+            handle_diagnostics(
+                out=out,
+                paths=paths,
+                make_fig=lambda: plot_proxy_segmentation_overlay(
+                    edges=edges,
+                    gaps=gaps,
+                    resid_mjd=resid_mjd,
+                    resid_us=resid_us,
+                    resid_mask=resid_keep_mask,
+                    proxy_t=proxy_t,
+                    proxy_y=proxy_y,
+                    proxy_yerr=proxy_yerr,
+                    title="IISM DM proxy + BB segmentation + gaps (with residual background)",
+                    resid_ylabel="TOA residuals",
+                    proxy_ylabel=y_label,
+                    normalize=True,
+                    norm_method="robust_z",
+                    normalized_ylabel_suffix=" (σ normalized)",
+                    show_proxy_err=True,
+                ),
+                save_targets={
+                    "png": paths.fig_path(f"{stem}_proxy_segmentation_overlay", ".png"),
+                    "pdf": paths.fig_path(f"{stem}_proxy_segmentation_overlay", ".pdf"),
+                },
+                close=close,
+            )
+            did_any = True
+            return did_any
+    
+        # Verbose mode: additional WLS + segmentation diagnostics
+        if diag is None or getattr(diag, "kind", None) != "chromatic_suite":
+            print("[DM diagnostics] chromatic_suite diag missing; verbose WLS diagnostics skipped.")
+            # Still allow segmentation plots below if available, but without residual background
+            data = None
+    
+        if data is not None:
+            # 1) a-vs-b significance correlation (unit-safe)
+            from .diagnostics import plot_a_vs_b_correlation
+    
+            handle_diagnostics(
+                out=out,
+                paths=paths,
+                make_fig=lambda: plot_a_vs_b_correlation(
+                    a_achrom=np.asarray(data["a_achrom"], float),
+                    b_chrom=np.asarray(data["b_chrom"], float),
+                    a_err=np.asarray(data["a_err"], float),
+                    b_err=np.asarray(data["b_err"], float),
+                    style=style,
+                ),
+                save_targets={
+                    "png": paths.fig_path(f"{stem}_a_vs_b_significance", ".png"),
+                    "pdf": paths.fig_path(f"{stem}_a_vs_b_significance", ".pdf"),
+                },
+                close=close,
+            )
+            did_any = True
+    
+            # 2) PASS/FAIL timeline with |b|/sigma_b overplotted
+            from .diagnostics import plot_epoch_fit_status_timeline
+    
+            results = data.get("results", [])
+            failures = data.get("failures", None)
+    
+            handle_diagnostics(
+                out=out,
+                paths=paths,
+                make_fig=lambda: plot_epoch_fit_status_timeline(
+                    results=results,
+                    failures=failures,
+                    style=style,
+                ),
+                save_targets={
+                    "png": paths.fig_path(f"{stem}_epoch_fit_status_timeline", ".png"),
+                    "pdf": paths.fig_path(f"{stem}_epoch_fit_status_timeline", ".pdf"),
+                },
+                close=close,
+            )
+            did_any = True
+    
+        # 3) proxy-space gap diagnostics
+        gaps = pipe.get("gaps", None)
+        if gaps is not None:
+            from .diagnostics import plot_data_gaps_diagnostics
+    
+            gap_mask = np.asarray(pipe.get("gap_mask", np.ones_like(pipe["mjds_for_bb"], bool)), bool)
+    
+            handle_diagnostics(
+                out=out,
+                paths=paths,
+                make_fig=lambda: plot_data_gaps_diagnostics(
+                    mjds=np.asarray(pipe["mjds_for_bb"], float),
+                    resids=np.asarray(pipe["values_for_bb"], float),
+                    gaps=gaps,
+                    mask=gap_mask,
+                    y_label=y_label,
+                    title="DM proxy gaps and mask",
+                    style=style,
+                ),
+                save_targets={
+                    "png": paths.fig_path(f"{stem}_dmproxy_gaps", ".png"),
+                    "pdf": paths.fig_path(f"{stem}_dmproxy_gaps", ".pdf"),
+                },
+                close=close,
+            )
+            did_any = True
+    
+        # 4) segmentation-by-slice diagnostics (with background, if possible)
+        gap_diag = pipe.get("gap_adjust_diag", None)
+        if gap_diag is not None:
+            from .diagnostics import plot_dmx_segmentation_by_slice_diagnostics
+    
+            bg_mjds = None
+            bg_resids = None
+            bg_mask = None
+    
+            if data is not None:
+                bg_mjds = np.asarray(data["mjd"], float)
+                bg_resids = np.asarray(data["resid"], float)
+                if gaps is not None:
+                    bg_mask = mask_toas_from_gaps(bg_mjds, gaps)
+    
+            handle_diagnostics(
+                out=out,
+                paths=paths,
+                make_fig=lambda: plot_dmx_segmentation_by_slice_diagnostics(
+                    gap_diag,
+                    bg_mjds=bg_mjds,
+                    bg_resids=bg_resids,
+                    bg_mask=bg_mask,
+                    style=style,
+                ),
+                save_targets={
+                    "png": paths.fig_path(f"{stem}_dmx_segmentation_by_slice", ".png"),
+                    "pdf": paths.fig_path(f"{stem}_dmx_segmentation_by_slice", ".pdf"),
+                },
+                close=close,
+            )
+            did_any = True
+    
+        return did_any
     
     def diag_plot_data_gaps(
         self,
@@ -3995,7 +5378,7 @@ class BBX:
             "gap_mask": np.asarray(gap_mask, bool),
             "pulsar_name": psr,
             "signal_source": str(src),
-            "proxy_name": str(series.name),
+            "proxy_name": str(series.source),
             "proxy_meta": dict(series.meta or {}),
             "proxy_extras": dict(proxy_result.extras or {}),
         }
@@ -4013,6 +5396,7 @@ class BBX:
         receiver_sel: ReceiverSelection,
         out_cfg: OutputConfig,
         pickle_cfg: PickleConfig,
+        paths: Optional[OutputPaths] = None,
         par_file: Optional[str] = None,
         tim_file: Optional[str] = None,
         cache: bool = True,
@@ -4041,6 +5425,7 @@ class BBX:
         # Sanity Checks
         if self.pickler is None:
             raise ValueError("BBX.fit_BB_pipeline requires pickler=PicklerBundle.")
+        paths = paths or OutputPaths.from_config(self.pickler.policy.cfg)
         if self.dm_proxy is None:
             raise ValueError("BBX.fit_BB_pipeline requires dm_proxy=DispersionMeasureProxy.")
         
@@ -4316,7 +5701,7 @@ class BBX:
             self.run_proxy_diagnostics(
                 diag=proxy_result.diag,
                 out=out_cfg,
-                paths=OutputPaths.from_config(policy.cfg),
+                paths=paths or OutputPaths.from_config(policy.cfg),
                 style=out_cfg.plot,
                 stem_prefix=f"{psr}_bbx",
             )
@@ -4370,7 +5755,7 @@ class BBX:
                         b_chrom=b_chrom,
                         fitter=fitter,
                         out=out_cfg,
-                        paths=OutputPaths.from_config(policy.cfg) if getattr(policy, "cfg", None) is not None else OutputPaths.from_config(policy.cfg),
+                        paths=paths or OutputPaths.from_config(policy.cfg),
                         stem_prefix=f"{psr}_bbx",
                     )
             except Exception as e:
@@ -4380,7 +5765,7 @@ class BBX:
         # Cache save: fitter + sidecars
         # -------------------------
         proxy_meta = dict(
-            name=str(proxy_series.name),
+            name=str(proxy_series.source),
             t=np.asarray(proxy_series.t, float).tolist(),
             y=np.asarray(proxy_series.y, float).tolist(),
             yerr=np.asarray(proxy_series.yerr, float).tolist(),
