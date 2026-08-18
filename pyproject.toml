@@ -18,7 +18,7 @@ authors = [
 ]
 description = "A long-lived repository for NANOGrav Pulsar Timing analysis work."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "ruamel.yaml",
     "pint_pulsar>=1.1.1",
@@ -28,7 +28,7 @@ dependencies = [
     "nbconvert",
     "ipywidgets>=7.6.3",
     "pypulse>=0.0.1",
-    "numpy<2.0",
+    "numpy",
     "weasyprint",
     "pytest-xdist[psutil]>=2.3.0",
     "notebook",
@@ -37,7 +37,9 @@ dependencies = [
     "la-forge",
     "arviz",
     "fastshermanmorrison-pulsar",
-    "loguru"
+    "loguru",
+    "threadpoolctl",
+    "setuptools<81.0",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
