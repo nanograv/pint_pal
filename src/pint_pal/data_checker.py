@@ -8,7 +8,7 @@ import numpy as np
 from typing import List, Tuple, Optional, Dict, Union
 import pint.models
 import pint.toa
-import pint_pal.config
+import pint_pal
 from loguru import logger as log
 
 # these can be set elsewhere or overridden if needed
@@ -762,12 +762,13 @@ class TOAChecker(DataChecker):
             return False
         for k in badranges.keys():
             mjds = self.t.get_mjds()[self.t["be"] == k].value
-            filtered_mjds = (mjds >= badranges[k][0]) and (mjds <= badranges[k][1])
-            value = np.any(filtered_mjds)
-            if value:
-                self.raise_or_warn(
-                    f"TOAs for backend '{k}' contain {filtered_mjds.sum()} values between MJD {badranges[k][0]} and {badranges[k][1]}",
-                    ValueError if raiseexcept else None,
-                )
-            return False
+            if mjds.size > 0:
+                filtered_mjds = (mjds >= badranges[k][0]) and (mjds <= badranges[k][1])
+                value = np.any(filtered_mjds)
+                if value:
+                    self.raise_or_warn(
+                        f"TOAs for backend '{k}' contain {filtered_mjds.sum()} values between MJD {badranges[k][0]} and {badranges[k][1]}",
+                        ValueError if raiseexcept else None,
+                    )
+                    return False
         return True
