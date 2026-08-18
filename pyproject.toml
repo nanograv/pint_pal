@@ -37,7 +37,7 @@ dependencies = [
     "la-forge",
     "arviz",
     "dill",
-    # "discovery",
+    "discovery",
     "fastshermanmorrison-pulsar",
     "jax",
     "loguru",
