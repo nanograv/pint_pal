@@ -1,3 +1,4 @@
+# a comment
 from setuptools import setup
 import versioneer
 
