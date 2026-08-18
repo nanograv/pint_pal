@@ -892,6 +892,119 @@ class TestChromaticBasisSelection:
         assert 'chromatic_idx' not in makegp_kwargs
 
 
+# ---------------------------------------------------------------------------
+# Chromatic quadratic filter
+# ---------------------------------------------------------------------------
+
+class TestChromaticQuadBlock:
+    """Tests for chromatic_quad_block and the chromatic_noise_block wiring."""
+
+    @staticmethod
+    def _patch_fourier(monkeypatch):
+        monkeypatch.setattr(du, '_select_fourier_basis', lambda *a, **k: 'BASIS')
+        monkeypatch.setattr(du.ds, 'getspan', lambda _: 100.0)
+        monkeypatch.setattr(du.ds, 'powerlaw', object())
+        monkeypatch.setattr(du.ds, 'makegp_fourier', lambda *a, **k: 'GP')
+
+    def test_quad_block_vary_uses_varF_with_alpha(self, monkeypatch):
+        """chromatic_idx='vary' → callable basis + makegp_improper_varF(param_names=['alpha'])."""
+        captured = {}
+        def fake_basis(psr, fref=1400.0, chrom_idx=None):
+            captured['basis'] = {'fref': fref, 'chrom_idx': chrom_idx}
+            return 'CALLABLE_BASIS'
+        def fake_varF(psr, fmat, constant=None, name=None, param_names=None, noisedict=None):
+            captured['varF'] = {'fmat': fmat, 'constant': constant, 'name': name,
+                                'param_names': param_names, 'noisedict': noisedict}
+            return 'QUAD'
+        monkeypatch.setattr(du.ds, 'chromatic_quad_basis', fake_basis)
+        monkeypatch.setattr(du.ds, 'makegp_improper_varF', fake_varF)
+
+        noise_dict = {'B1937+21_efac': 1.0}
+        assert du.chromatic_quad_block(object(), noise_dict=noise_dict) == 'QUAD'
+        assert captured['basis'] == {'fref': 1400.0, 'chrom_idx': None}
+        assert captured['varF']['fmat'] == 'CALLABLE_BASIS'
+        assert captured['varF']['param_names'] == ['alpha']
+        assert captured['varF']['name'] == 'chrom_gp'
+        assert captured['varF']['noisedict'] is noise_dict
+
+    def test_quad_block_fixed_uses_improper_with_matrix(self, monkeypatch):
+        """A numeric chromatic_idx → fixed basis matrix + makegp_improper."""
+        captured = {}
+        def fake_basis(psr, fref=1400.0, chrom_idx=None):
+            captured['basis'] = {'fref': fref, 'chrom_idx': chrom_idx}
+            return 'FIXED_BASIS'
+        def fake_improper(psr, fmat, constant=None, name=None):
+            captured['improper'] = {'fmat': fmat, 'constant': constant, 'name': name}
+            return 'QUAD'
+        monkeypatch.setattr(du.ds, 'chromatic_quad_basis', fake_basis)
+        monkeypatch.setattr(du.ds, 'makegp_improper', fake_improper)
+
+        result = du.chromatic_quad_block(object(), chromatic_idx=4.0, fref=800.0, name='chrom2_gp')
+        assert result == 'QUAD'
+        assert captured['basis'] == {'fref': 800.0, 'chrom_idx': 4.0}
+        assert captured['improper'] == {'fmat': 'FIXED_BASIS', 'constant': 1.0e40, 'name': 'chrom2_gp'}
+
+    def test_noise_block_without_quadratic_returns_single_gp(self, monkeypatch):
+        """quadratic=False (default) keeps the historical single-signal return."""
+        self._patch_fourier(monkeypatch)
+        assert du.chromatic_noise_block(object(), tspan=100.0) == 'GP'
+
+    def test_noise_block_with_quadratic_returns_pair(self, monkeypatch):
+        """quadratic=True → [chrom_gp, quad], with the quad sharing name/index/noise_dict."""
+        self._patch_fourier(monkeypatch)
+        captured = {}
+        def fake_quad(psr, noise_dict=None, name=None, chromatic_idx=None, fref=None):
+            captured.update(noise_dict=noise_dict, name=name,
+                            chromatic_idx=chromatic_idx, fref=fref)
+            return 'QUAD'
+        monkeypatch.setattr(du, 'chromatic_quad_block', fake_quad)
+
+        noise_dict = {'B1937+21_efac': 1.0}
+        result = du.chromatic_noise_block(
+            object(), noise_dict=noise_dict, tspan=100.0, name='chrom_gp',
+            chromatic_idx='vary', include_quadratic=True, quad_fref=800.0,
+        )
+        assert result == ['GP', 'QUAD']
+        assert captured == {'noise_dict': noise_dict, 'name': 'chrom_gp',
+                            'chromatic_idx': 'vary', 'fref': 800.0}
+
+    def test_noise_block_quadratic_forwards_fixed_index(self, monkeypatch):
+        """A fixed chromatic index reaches the quadratic filter unchanged."""
+        self._patch_fourier(monkeypatch)
+        captured = {}
+        monkeypatch.setattr(du, 'chromatic_quad_block',
+                            lambda psr, **k: (captured.update(k), 'QUAD')[1])
+
+        du.chromatic_noise_block(object(), tspan=100.0, chromatic_idx=4.0, include_quadratic=True)
+        assert captured['chromatic_idx'] == 4.0
+
+    def test_flatten_args_expands_multi_signal_blocks(self):
+        """flatten_args keeps single signals and expands sequences."""
+        assert du.flatten_args(['tm', 'GP']) == ['tm', 'GP']
+        assert du.flatten_args(['tm', ['GP', 'QUAD']]) == ['tm', 'GP', 'QUAD']
+        assert du.flatten_args(['tm', ('GP', 'QUAD')]) == ['tm', 'GP', 'QUAD']
+
+    def test_likelihood_args_include_quadratic(self, monkeypatch):
+        """The quadratic filter lands in the likelihood args as its own signal."""
+        monkeypatch.setattr(du.ds, 'getspan', lambda _: 100.0)
+        monkeypatch.setattr(du, 'timing_model_block', lambda *a, **k: 'tm')
+        monkeypatch.setattr(du, 'white_noise_block', lambda *a, **k: 'wn')
+        monkeypatch.setattr(du, 'chromatic_noise_block', lambda *a, **k: ['GP', 'QUAD'])
+
+        psr = SimpleNamespace(residuals=np.zeros(4), name='B1937+21')
+        args = du.make_single_pulsar_noise_likelihood_discovery(
+            psr,
+            noise_dict={},
+            model_kwargs={
+                'timing_model': {'svd': True},
+                'white_noise': {'tn_equad': True},
+                'chromatic_noise': {'Nfreqs': 5, 'include_quadratic': True},
+            },
+            return_args=True,
+        )
+        assert args[-2:] == ['GP', 'QUAD']
+
+
 @pytest.mark.parametrize("prior_name,prior_attr", [("powerlaw", "powerlaw"), ("broken_powerlaw", "broken_powerlaw"), ("freespectrum", "freespectrum")])
 def test_fourier_blocks_accept_supported_prior_values(monkeypatch, prior_name, prior_attr):
     sentinel_prior = object()

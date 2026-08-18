@@ -93,6 +93,20 @@ def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, 
         raise ValueError(f"Invalid nlog value in {noise_type} model. Must be a non-negative integer.")
 
 
+def flatten_args(args: Sequence[Any]) -> List[Any]:
+    """
+    Flatten a likelihood argument list, expanding noise blocks that return
+    several signals (e.g. a chromatic GP plus its quadratic filter) in place.
+    """
+    flat = []
+    for arg in args:
+        if isinstance(arg, (list, tuple)):
+            flat.extend(arg)
+        else:
+            flat.append(arg)
+    return flat
+
+
 def timing_model_block(
         psr: Any,
         svd: bool = True,
@@ -448,6 +462,63 @@ def dm_noise_block(
 
     return dm_gp
 
+def chromatic_quad_block(
+        psr: Any,
+        noise_dict: Dict[str, Any] = {},
+        name: str = 'chrom_gp',
+        chromatic_idx: Union[str, float] = 'vary',
+        fref: float = 1400.0,
+        constant: float = 1.0e40,
+        ) -> Any:
+    """
+    Build a chromatic quadratic filter (the chromatic analogue of the DM, DM1,
+    DM2 timing-model terms) as an improper Gaussian process.
+
+    Sharing *name* with :func:`chromatic_noise_block` makes both signals use the
+    same ``{psr.name}_{name}_alpha`` chromatic-index parameter, so a varying
+    index is fit jointly by the quadratic filter and the chromatic Fourier GP.
+
+    Parameters
+    ----------
+    psr : Any
+        Pulsar object.
+    noise_dict : dict, optional
+        Dictionary of fixed noise parameters. If it contains
+        ``{psr.name}_{name}_alpha`` the basis is evaluated once and a constant
+        GP is returned. Default is empty dict.
+    name : str, optional
+        Name of the noise component. Default is ``"chrom_gp"``.
+    chromatic_idx : str or float, optional
+        ``"vary"`` (default) floats the chromatic index; a numeric value fixes
+        it, giving a constant basis.
+    fref : float, optional
+        Reference frequency in MHz for the chromatic scaling. Default is 1400.0.
+    constant : float, optional
+        Diagonal value of the improper (flat) prior on the basis coefficients.
+        Default is 1.0e40.
+
+    Returns
+    -------
+    Any
+        Discovery improper GP from ``ds.makegp_improper_varF`` (varying index)
+        or ``ds.makegp_improper`` (fixed index).
+    """
+    if chromatic_idx == 'vary':
+        return ds.makegp_improper_varF(
+            psr,
+            ds.chromatic_quad_basis(psr, fref=fref),
+            constant=constant,
+            name=name,
+            param_names=['alpha'],
+            noisedict=noise_dict,
+        )
+    return ds.makegp_improper(
+        psr,
+        ds.chromatic_quad_basis(psr, fref=fref, chrom_idx=chromatic_idx),
+        constant=constant,
+        name=name,
+    )
+
 def chromatic_noise_block(
         psr: Any,
         noise_dict: Dict[str, Any] = {},
@@ -460,6 +531,8 @@ def chromatic_noise_block(
         nlog=0,
         name: str = 'chrom_gp',
         chromatic_idx: str = 'vary',
+        quadratic: bool = False,
+        quad_fref: float = 1400.0,
         ) -> Any:
     """
     Build the chromatic noise Gaussian-process block.
@@ -490,14 +563,22 @@ def chromatic_noise_block(
         Default is 0.
     name : str, optional
         Name of the noise component. Default is ``"chrom_gp"``.
-    chromatic_idx : str, optional
-        Reserved argument for chromatic index handling mode. Currently not used
-        inside this function. Default is ``"vary"``.
+    chromatic_idx : str or float, optional
+        ``"vary"`` (default) floats the chromatic index; a numeric value fixes
+        it, selecting a fixed-index Fourier basis.
+    quadratic : bool, optional
+        If True, also build a chromatic quadratic filter (see
+        :func:`chromatic_quad_block`) sharing *name* — and hence the chromatic
+        index — with the Fourier GP. Default is False.
+    quad_fref : float, optional
+        Reference frequency in MHz for the quadratic filter. Default is 1400.0.
+        Only used when ``quadratic`` is True.
 
     Returns
     -------
-    Any
-        Discovery chromatic-noise block from ``ds.makegp_fourier``.
+    Any or list of Any
+        Discovery chromatic-noise block from ``ds.makegp_fourier``, or, when
+        ``quadratic`` is True, the list ``[chrom_gp, chrom_quad]``.
     """
     if tspan is None:
         tspan = ds.getspan(psr)
@@ -534,6 +615,19 @@ def chromatic_noise_block(
             )
     else:
         raise ValueError("Invalid *basis* specified for chromatic noise. Supported basis types: ['fourier']")
+
+    if quadratic:
+        # shares `{psr.name}_{name}_alpha` with the Fourier GP when the index varies
+        return [
+            chrom_gp,
+            chromatic_quad_block(
+                psr,
+                noise_dict=noise_dict,
+                name=name,
+                chromatic_idx=chromatic_idx,
+                fref=quad_fref,
+            ),
+        ]
     return chrom_gp
 
 def solar_wind_noise_block(
@@ -676,7 +770,9 @@ def make_single_pulsar_noise_likelihood_discovery(
         ``extra_signals`` may be a single pre-built signal or a list/tuple of
         signals; each is appended to the args tuple after all standard noise
         blocks, allowing the caller to inject custom models that are not
-        covered by the built-in noise blocks.
+        covered by the built-in noise blocks. Blocks that return several
+        signals (e.g. ``chromatic_noise`` with ``quadratic=True``) are
+        flattened into the final args list.
     return_args : bool, optional
         If True, return the raw argument list instead of the PulsarLikelihood instance.
 
@@ -777,6 +873,8 @@ def make_single_pulsar_noise_likelihood_discovery(
             extra = [extra]
         log.info(f"Adding {len(extra)} extra signal(s) to the model.")
         args.extend(extra)
+    # blocks may return several signals (e.g. chromatic GP + quadratic filter)
+    args = flatten_args(args)
     if return_args:
         return args
     else:

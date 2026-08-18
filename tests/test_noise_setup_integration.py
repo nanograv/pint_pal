@@ -805,6 +805,68 @@ def test_gp_design_matrix_extraction_with_chromatic_gp(
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+@pytest.mark.parametrize("chromatic_idx", ["vary", 4.0])
+def test_discovery_likelihood_chromatic_quadratic_filter(
+    real_tc, real_model_toas, chromatic_idx
+):
+    """`quadratic=True` adds a 3-column chromatic filter sharing the chromatic index."""
+    e_psr = _enterprise_pulsar_from_real_data(real_model_toas)
+
+    def _build(quadratic):
+        model_kwargs = _variant_model_kwargs(
+            real_tc,
+            timing_model={"svd": False, "tm_marg": False},
+            white_noise={"gp_ecorr": False, "tn_equad": True, "include_ecorr": True},
+            red_noise=False,
+            dm_noise=False,
+            chromatic_noise={
+                "basis": "fourier",
+                "Nfreqs": 5,
+                "prior": "powerlaw",
+                "chromatic_idx": chromatic_idx,
+                "quadratic": quadratic,
+            },
+            solar_wind=False,
+        )
+        return _assert_discovery_likelihood_builds(e_psr, model_kwargs)
+
+    psl_plain, psl_quad = _build(False), _build(True)
+    _assert_discovery_likelihood_evaluates(psl_quad)
+
+    params = _params_from_prior_midpoints(psl_quad)
+    params[f"{e_psr.name}_chrom_gp_alpha"] = 4.0
+
+    # the filter adds no new sampled parameters: a varying index is shared with
+    # the Fourier GP through the common `chrom_gp` name
+    assert sorted(psl_quad.logL.params) == sorted(psl_plain.logL.params)
+    # ... but it does change the likelihood, i.e. it is really in the model
+    assert not np.isclose(
+        float(psl_quad.logL(params)), float(psl_plain.logL(params))
+    )
+
+    index_plain, F_plain, _ = nu._extract_gp_design_matrix(psl_plain.N, params)
+    index_quad, F_quad, F_params = nu._extract_gp_design_matrix(psl_quad.N, params)
+    expected_alpha = [f"{e_psr.name}_chrom_gp_alpha"] if chromatic_idx == "vary" else []
+    assert F_params == expected_alpha
+
+    quad_keys = set(index_quad) - set(index_plain)
+    if chromatic_idx == "vary":
+        # a varying index makes the filter a variable GP: 3 extra design columns
+        quad_key = quad_keys.pop()
+        assert not quad_keys and "chrom_gp" in quad_key
+        start, stop = index_quad[quad_key]
+        assert stop - start == 3
+        assert np.asarray(F_quad[quad_key]).shape == (len(e_psr.toas), 3)
+    else:
+        # a fixed index gives a constant GP, marginalized like the timing model
+        assert not quad_keys
+
+    # the Fourier part of the model is untouched by adding the filter
+    for gp_key, F in F_plain.items():
+        assert np.allclose(np.asarray(F_quad[gp_key]), np.asarray(F))
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_gp_design_matrix_varying_index_matches_fixed_index(real_tc, real_model_toas):
     """A varying chromatic index evaluated at alpha reproduces the fixed-alpha basis."""
     e_psr = _enterprise_pulsar_from_real_data(real_model_toas)
