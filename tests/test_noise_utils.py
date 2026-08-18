@@ -5,6 +5,7 @@ flow, config wiring, and error handling branches.
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -475,3 +476,97 @@ def test_get_model_and_sampler_default_settings_shape():
     model_defaults, sampler_defaults = nu.get_model_and_sampler_default_settings()
     assert "tm_svd" in model_defaults
     assert sampler_defaults["sampler"] in {"PTMCMCSampler", "GibbsSampler", "optimizer", "NUTS"}
+
+
+# ---------------------------------------------------------------------------
+# _extract_gp_design_matrix: fixed vs. parameter-dependent compound F
+#
+# Discovery returns a plain matrix for F only when every GP basis is fixed. A
+# chromatic GP with a varying chromatic index makes F a closure F(params), which
+# must be evaluated rather than passed to np.asarray. See the integration test
+# in test_noise_setup_integration.py for the same behavior on a real likelihood.
+# ---------------------------------------------------------------------------
+
+N_TOAS_FAKE = 12
+ALPHA_PAR = "J1234+5678_chrom_gp_alpha"
+
+
+def _fake_kernel(callable_F=False, with_index=True, has_F=True):
+    """Kernel stub exposing the ``.F``/``.index`` attributes discovery provides."""
+    rng = np.random.default_rng(7)
+    base = rng.standard_normal((N_TOAS_FAKE, 6))
+
+    if callable_F:
+        def F(params):
+            # mimics a chromatic basis scaling with the chromatic index
+            return base * params[ALPHA_PAR]
+
+        F.params = [ALPHA_PAR]
+    else:
+        F = base
+
+    index = None
+    if with_index:
+        index = {
+            "J1234+5678_red_noise_coefficients(4)": slice(0, 4),
+            "J1234+5678_chrom_gp_coefficients(2)": slice(4, 6),
+        }
+
+    kernel = SimpleNamespace(index=index)
+    if has_F:
+        kernel.F = F
+    return kernel
+
+
+def test_extract_gp_design_matrix_fixed_F():
+    index_map, F_columns, F_params = nu._extract_gp_design_matrix(_fake_kernel(callable_F=False), {})
+    assert F_params == []
+    assert index_map["J1234+5678_red_noise_coefficients(4)"] == [0, 4]
+    assert np.asarray(F_columns["J1234+5678_red_noise_coefficients(4)"]).shape == (N_TOAS_FAKE, 4)
+    assert np.asarray(F_columns["J1234+5678_chrom_gp_coefficients(2)"]).shape == (N_TOAS_FAKE, 2)
+
+
+def test_extract_gp_design_matrix_callable_F_is_evaluated():
+    """A callable F must be evaluated at noise_params, not coerced with asarray."""
+    kernel = _fake_kernel(callable_F=True)
+    index_map, F_columns, F_params = nu._extract_gp_design_matrix(kernel, {ALPHA_PAR: 3.0})
+
+    assert F_params == [ALPHA_PAR]
+    assert index_map["J1234+5678_chrom_gp_coefficients(2)"] == [4, 6]
+    for key, width in [
+        ("J1234+5678_red_noise_coefficients(4)", 4),
+        ("J1234+5678_chrom_gp_coefficients(2)", 2),
+    ]:
+        assert np.asarray(F_columns[key]).shape == (N_TOAS_FAKE, width)
+
+    # the returned columns must reflect the parameter value that was passed in
+    _, F_other, _ = nu._extract_gp_design_matrix(kernel, {ALPHA_PAR: 6.0})
+    assert np.allclose(
+        2 * np.asarray(F_columns["J1234+5678_chrom_gp_coefficients(2)"]),
+        np.asarray(F_other["J1234+5678_chrom_gp_coefficients(2)"]),
+    )
+
+
+def test_extract_gp_design_matrix_callable_F_missing_param_raises():
+    with pytest.raises(ValueError, match=re.escape(ALPHA_PAR)):
+        nu._extract_gp_design_matrix(_fake_kernel(callable_F=True), {"J1234+5678_red_noise_log10_A": -14.0})
+
+
+def test_extract_gp_design_matrix_without_F_or_index():
+    index_map, F_columns, F_params = nu._extract_gp_design_matrix(
+        _fake_kernel(callable_F=True, has_F=False), {}
+    )
+    assert (index_map, F_columns, F_params) == (
+        {
+            "J1234+5678_red_noise_coefficients(4)": [0, 4],
+            "J1234+5678_chrom_gp_coefficients(2)": [4, 6],
+        },
+        {},
+        [],
+    )
+
+    index_map, F_columns, _ = nu._extract_gp_design_matrix(
+        _fake_kernel(callable_F=False, with_index=False), {}
+    )
+    assert index_map == {} and F_columns == {}
+

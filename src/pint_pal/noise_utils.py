@@ -652,13 +652,14 @@ def model_noise(
         )
         # make outdir here to expose directory issues before sampling
         os.makedirs(outdir, exist_ok=True)
-        psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
-            psr=e_psr,
-            noise_dict={},
-            tspan=None,
-            model_kwargs=model_kwargs,
-            return_args=False,
-        )
+        with jax.default_device("cpu"):
+            psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
+                psr=e_psr,
+                noise_dict={},
+                tspan=None,
+                model_kwargs=model_kwargs,
+                return_args=False,
+            )
         prior_dict = ds_pdict.copy()
         pint_pal_priors = json.load(
             open(os.path.join(os.path.dirname(__file__), "discovery_priors.json"))
@@ -687,13 +688,14 @@ def model_noise(
         log.info(
             f"Setting up noise analysis with {likelihood} likelihood and {sampler} sampler for {e_psr.name}"
         )
-        psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
-            psr=e_psr,
-            noise_dict={},
-            tspan=None,
-            model_kwargs=model_kwargs,
-            return_args=False,
-        )
+        with jax.default_device("cpu"):
+            psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
+                psr=e_psr,
+                noise_dict={},
+                tspan=None,
+                model_kwargs=model_kwargs,
+                return_args=False,
+            )
         prior_dict = ds_pdict.copy()
         pint_pal_priors = json.load(
             open(os.path.join(os.path.dirname(__file__), "discovery_priors.json"))
@@ -1003,6 +1005,18 @@ def add_noise_to_model(
         for key, val in noise_dict.items()
         if "efac" in key or "equad" in key or "ecorr" in key or "tnequad" in key
     }
+    # Test EQUAD convention and decide whether to convert
+    if test_equad_convention(wn_dict.keys()) == "tnequad":
+        log.info(
+            "WN paramaters use temponest convention; EQUAD values are being converted"
+        )
+        # converts tn_equads --> t2_equads which is the standard for PINT
+        wn_dict = lu.convert_equad_convention(wn_dict)
+        if np.any(["_equad" in p for p in wn_dict.keys()]):
+            log.info("WN parameters generated using enterprise pre-v3.3.0")
+    elif test_equad_convention(wn_dict.keys()) == "t2equad":
+        log.info("WN parameters use T2 convention; no conversion necessary")
+
     for key, val in wn_dict.items():
 
         if "_efac" in key:
@@ -1130,18 +1144,6 @@ def add_noise_to_model(
             )
             dmequad_params.append(tp)
             dmequad_idx += 1
-
-    # Test EQUAD convention and decide whether to convert
-    convert_equad_to_t2 = False
-    if test_equad_convention(noise_dict.keys()) == "tnequad":
-        log.info(
-            "WN paramaters use temponest convention; EQUAD values will be converted once added to model"
-        )
-        convert_equad_to_t2 = True
-        if np.any(["_equad" in p for p in noise_dict.keys()]):
-            log.info("WN parameters generated using enterprise pre-v3.3.0")
-    elif test_equad_convention(noise_dict.keys()) == "t2equad":
-        log.info("WN parameters use T2 convention; no conversion necessary")
 
     # Create white noise components and add them to the model
     ef_eq_comp = pm.ScaleToaError()
@@ -1384,11 +1386,6 @@ def add_noise_to_model(
     model.validate()
     # mtime = Time(os.path.getmtime(chainfile), format="unix")
     # model.meta['noise_mtime'] = mtime.isot
-
-    if convert_equad_to_t2:
-        from pint_pal.lite_utils import convert_enterprise_equads
-
-        model = convert_enterprise_equads(model)
 
     return model
 
@@ -1688,6 +1685,79 @@ def get_model_and_sampler_default_settings():
     return model_defaults, sampler_defaults
 
 
+def _extract_gp_design_matrix(N_gp, noise_params):
+    """Pull the compound GP design matrix and per-GP column slices off a kernel.
+
+    Parameters
+    ----------
+    N_gp : discovery kernel
+        The Woodbury kernel holding the compound GP (``psl.N``).  Its ``.index``
+        maps each GP coefficient name to its slice of the compound basis, and
+        its ``.F`` is the compound basis itself.
+    noise_params : dict
+        Noise parameter values used for the conditional draws.  Needed only when
+        ``F`` is parameter-dependent.
+
+    Returns
+    -------
+    index_map : dict
+        ``{gp_name: [start, stop]}`` column slices into the compound F.
+    F_columns : dict
+        ``{gp_name: nested list}`` design matrix columns for each GP.
+    F_params : list
+        Names of the parameters ``F`` depends on; empty when ``F`` is a fixed
+        matrix.
+
+    Notes
+    -----
+    The compound ``F`` is a plain array only when every GP basis is fixed.  If
+    any GP has a parameter-dependent basis — e.g. a chromatic GP with a varying
+    chromatic index, whose Fourier basis carries a ``(fref / freq) ** idx``
+    factor — Discovery builds ``F`` as a closure ``F(params) -> matrix`` (see
+    ``discovery.matrix`` GP concatenation and ``fourierbasis_chrom``).  It is
+    then evaluated at ``noise_params``, i.e. at the same parameter values used
+    to draw the coefficients, so that ``F @ coefficients`` reproduces the
+    realization.
+    """
+    index_map = {}
+    if getattr(N_gp, "index", None) is not None:
+        for gp_name, sli in N_gp.index.items():
+            index_map[gp_name] = [sli.start, sli.stop]
+
+    F_columns = {}
+    F_params = []
+    F_obj = getattr(N_gp, "F", None)
+    if F_obj is None:
+        return index_map, F_columns, F_params
+
+    if callable(F_obj):
+        F_params = list(getattr(F_obj, "params", []))
+        missing_F = sorted(set(F_params) - set(noise_params))
+        if missing_F:
+            raise ValueError(
+                "The compound GP design matrix is parameter-dependent but "
+                f"noise_params is missing the required parameter(s) {missing_F}. "
+                "These must be supplied (e.g. from the noise dictionary or "
+                "posterior medians) in order to evaluate F."
+            )
+        log.info(
+            f"Compound GP F matrix is parameter-dependent (params: {F_params}); "
+            "evaluating it at the supplied noise_params."
+        )
+        with jax.default_device("cpu"):
+            F_full = np.asarray(F_obj(noise_params))
+    else:
+        F_full = np.asarray(F_obj)
+
+    log.info(
+        f"Compound GP F matrix shape: {F_full.shape}, index_map keys: {list(index_map.keys())}"
+    )
+    for gp_name, (start, stop) in index_map.items():
+        F_columns[gp_name] = F_full[:, start:stop].tolist()
+
+    return index_map, F_columns, F_params
+
+
 def generate_gp_realizations(
     mo,
     to,
@@ -1745,7 +1815,7 @@ def generate_gp_realizations(
     """
     import discovery as ds
     from discovery import solar as ds_solar
-    import pyarrow  # noqa: F401 — ensure feather backend available
+    import pyarrow
 
     outdir = pathlib.Path(format_chain_dir(outdir, mo, using_wideband=using_wideband))
     outdir.mkdir(parents=True, exist_ok=True)
@@ -1769,6 +1839,22 @@ def generate_gp_realizations(
     # don't use the timing model svd because this will scramble the design matrix columns and make it hard to reconstruct realizations in the time domain.
     mk["timing_model"]["svd"] = False
 
+    # Force the timing model to be a *variable* GP.  timing_model_block passes
+    # variable=(not tm_marg) to makegp_timing, and makegp_improper only assigns
+    # gp.index in the variable branch — a marginalized (ConstantGP) timing model
+    # has no index entry, so _extract_gp_design_matrix never sees it and the
+    # payload comes out with no timing-model coefficients or design matrix at
+    # all.  Downstream plotting then silently drops every TM contribution
+    # (reference DM, F0/F1, NE_SW), which is never what you want from a
+    # realization payload.  The marginal posterior of the other GPs is
+    # unchanged by sampling the TM instead of marginalizing it analytically.
+    if mk["timing_model"].get("tm_marg", True):
+        log.info(
+            "Forcing timing_model.tm_marg=False so timing-model coefficients "
+            "are drawn and saved (marginalized TM produces no TM realizations)."
+        )
+    mk["timing_model"]["tm_marg"] = False
+
     # Build enterprise pulsar
     log.info(f"Creating enterprise.Pulsar object for GP realizations...")
     e_psr = Pulsar(mo, to, pint=True, t2=None)
@@ -1782,20 +1868,21 @@ def generate_gp_realizations(
     # make_kernelsolve_simple and therefore sample_conditional.
     # All VariableGPs — including ecorr — are concatenated into one
     # compound design matrix, so sample_conditional draws coefficients
-    # for every GP simultaneously (TM, ecorr, RN, DM, SW, …).
+    # for every GP simultaneously (TM, ecorr, RN, DM, SW, ...).
     # The actual noise parameter values are passed to the conditional
     # at draw time via noise_params.
     log.info("Building likelihood with all WN params variable (varNP mode).")
 
     # Build likelihood
     log.info(f"Building Discovery likelihood for {e_psr.name}...")
-    psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
-        psr=e_psr,
-        noise_dict={},
-        tspan=tspan,
-        model_kwargs=mk,
-        return_args=False,
-    )
+    with jax.default_device("cpu"):
+        psl = disco_utils.make_single_pulsar_noise_likelihood_discovery(
+            psr=e_psr,
+            noise_dict={},
+            tspan=tspan,
+            model_kwargs=mk,
+            return_args=False,
+        )
     if return_psl_likelihood_for_debug:
         return psl
 
@@ -1831,30 +1918,12 @@ def generate_gp_realizations(
         for gp_name in gp_keys:
             realizations[gp_name].append(np.asarray(draw[gp_name]).tolist())
 
-    # Build the design matrix index map: for each GP key, record the
-    # slice into the compound F matrix so downstream plotting can
-    # reconstruct time-domain realizations as F[:, sli] @ coefficients
-    index_map = {}
-
+    # Build the design matrix index map and the per-GP design matrix columns.
+    #
     # Because we only fix efac/equad (not ecorr), Discovery puts ALL
-    # VariableGPs (ecorr, TM, RN, DM, SW, …) into one compound
+    # VariableGPs (ecorr, TM, RN, DM, SW, ...) into one compound
     # WoodburyKernel_varP.  Its .F and .index are on psl.N directly.
-    N_gp = psl.N
-
-    # Extract index map from the GP block
-    if hasattr(N_gp, "index") and N_gp.index is not None:
-        for gp_name, sli in N_gp.index.items():
-            index_map[gp_name] = [sli.start, sli.stop]
-
-    # Extract the compound F matrix columns per GP
-    F_columns = {}
-    if hasattr(N_gp, "F"):
-        F_full = np.asarray(N_gp.F)
-        log.info(
-            f"Compound GP F matrix shape: {F_full.shape}, index_map keys: {list(index_map.keys())}"
-        )
-        for gp_name, (start, stop) in index_map.items():
-            F_columns[gp_name] = F_full[:, start:stop].tolist()
+    index_map, F_columns, F_params = _extract_gp_design_matrix(psl.N, noise_params)
 
     # Solar wind: save node positions if interpolation basis
     sw_nodes = None
@@ -1937,6 +2006,21 @@ def generate_gp_realizations(
         f"Timing model fitpars ({len(tm_fitpars) if tm_fitpars else 0} cols): {tm_fitpars}"
     )
 
+    # L2 norm of each raw design-matrix column.  Discovery's makegp_timing
+    # stores the *normalized* basis, fmat[:, k] = Mmat[:, k] / ||Mmat[:, k]||
+    # (svd=False branch, which we force above), so the saved F_columns are not
+    # d(delay)/d(param).  The realizations themselves are unaffected — the
+    # coefficients live in the same normalized basis, so F @ c is still in
+    # seconds — but anything that wants to multiply a design-matrix column by a
+    # parameter *value* (e.g. adding the reference DM to a DM GP realization)
+    # needs the norm to undo the scaling.  This is the same e_psr handed to
+    # timing_model_block, so these are exactly the norms that were divided out.
+    tm_column_norms = None
+    if getattr(e_psr, "Mmat", None) is not None:
+        tm_column_norms = np.sqrt(
+            (np.asarray(e_psr.Mmat, dtype=np.float64) ** 2).sum(axis=0)
+        ).tolist()
+
     # Assemble output payload for feather format
     # Create main metadata dictionary
     metadata = {
@@ -1946,6 +2030,10 @@ def generate_gp_realizations(
         "model_kwargs": _serialize_model_kwargs(mk),
         "gp_keys": gp_keys,
         "index_map": index_map,
+        # Non-empty when the saved F was evaluated from a parameter-dependent
+        # basis (e.g. variable chromatic index); the values used are in
+        # noise_params.
+        "F_variable_params": F_params,
         "toas_mjd": (e_psr.toas / 86400).tolist(),
         "freqs_mhz": (
             e_psr.freqs.tolist()
@@ -1960,6 +2048,7 @@ def generate_gp_realizations(
         "sw_nodes_mjd": sw_nodes,
         "sw_shape_at_toas": sw_shape_at_toas,
         "tm_fitpars": tm_fitpars,
+        "tm_column_norms": tm_column_norms,
     }
 
     # --- Efficient feather serialization ---
