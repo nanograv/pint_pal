@@ -945,12 +945,12 @@ class TestChromaticQuadBlock:
         assert captured['improper'] == {'fmat': 'FIXED_BASIS', 'constant': 1.0e40, 'name': 'chrom2_gp'}
 
     def test_noise_block_without_quadratic_returns_single_gp(self, monkeypatch):
-        """quadratic=False (default) keeps the historical single-signal return."""
+        """include_quadratic=False (default) keeps the historical single-signal return."""
         self._patch_fourier(monkeypatch)
         assert du.chromatic_noise_block(object(), tspan=100.0) == 'GP'
 
     def test_noise_block_with_quadratic_returns_pair(self, monkeypatch):
-        """quadratic=True → [chrom_gp, quad], with the quad sharing name/index/noise_dict."""
+        """include_quadratic=True → [chrom_gp, quad], sharing name/index/noise_dict."""
         self._patch_fourier(monkeypatch)
         captured = {}
         def fake_quad(psr, noise_dict=None, name=None, chromatic_idx=None, fref=None):

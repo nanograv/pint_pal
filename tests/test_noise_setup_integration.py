@@ -809,10 +809,10 @@ def test_gp_design_matrix_extraction_with_chromatic_gp(
 def test_discovery_likelihood_chromatic_quadratic_filter(
     real_tc, real_model_toas, chromatic_idx
 ):
-    """`quadratic=True` adds a 3-column chromatic filter sharing the chromatic index."""
+    """`include_quadratic=True` adds a 3-column filter sharing the chromatic index."""
     e_psr = _enterprise_pulsar_from_real_data(real_model_toas)
 
-    def _build(quadratic):
+    def _build(include_quadratic):
         model_kwargs = _variant_model_kwargs(
             real_tc,
             timing_model={"svd": False, "tm_marg": False},
@@ -824,7 +824,7 @@ def test_discovery_likelihood_chromatic_quadratic_filter(
                 "Nfreqs": 5,
                 "prior": "powerlaw",
                 "chromatic_idx": chromatic_idx,
-                "quadratic": quadratic,
+                "include_quadratic": include_quadratic,
             },
             solar_wind=False,
         )

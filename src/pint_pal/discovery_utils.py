@@ -531,7 +531,7 @@ def chromatic_noise_block(
         nlog=0,
         name: str = 'chrom_gp',
         chromatic_idx: str = 'vary',
-        quadratic: bool = False,
+        include_quadratic: bool = False,
         quad_fref: float = 1400.0,
         ) -> Any:
     """
@@ -566,19 +566,19 @@ def chromatic_noise_block(
     chromatic_idx : str or float, optional
         ``"vary"`` (default) floats the chromatic index; a numeric value fixes
         it, selecting a fixed-index Fourier basis.
-    quadratic : bool, optional
+    include_quadratic : bool, optional
         If True, also build a chromatic quadratic filter (see
         :func:`chromatic_quad_block`) sharing *name* — and hence the chromatic
         index — with the Fourier GP. Default is False.
     quad_fref : float, optional
         Reference frequency in MHz for the quadratic filter. Default is 1400.0.
-        Only used when ``quadratic`` is True.
+        Only used when ``include_quadratic`` is True.
 
     Returns
     -------
     Any or list of Any
         Discovery chromatic-noise block from ``ds.makegp_fourier``, or, when
-        ``quadratic`` is True, the list ``[chrom_gp, chrom_quad]``.
+        ``include_quadratic`` is True, the list ``[chrom_gp, chrom_quad]``.
     """
     if tspan is None:
         tspan = ds.getspan(psr)
@@ -616,7 +616,7 @@ def chromatic_noise_block(
     else:
         raise ValueError("Invalid *basis* specified for chromatic noise. Supported basis types: ['fourier']")
 
-    if quadratic:
+    if include_quadratic:
         # shares `{psr.name}_{name}_alpha` with the Fourier GP when the index varies
         return [
             chrom_gp,
@@ -771,7 +771,7 @@ def make_single_pulsar_noise_likelihood_discovery(
         signals; each is appended to the args tuple after all standard noise
         blocks, allowing the caller to inject custom models that are not
         covered by the built-in noise blocks. Blocks that return several
-        signals (e.g. ``chromatic_noise`` with ``quadratic=True``) are
+        signals (e.g. ``chromatic_noise`` with ``include_quadratic=True``) are
         flattened into the final args list.
     return_args : bool, optional
         If True, return the raw argument list instead of the PulsarLikelihood instance.
