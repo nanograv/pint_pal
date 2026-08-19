@@ -587,6 +587,56 @@ def test_add_noise_to_model_converts_tnequad_to_t2equad(real_pint_model):
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+@pytest.mark.parametrize(
+    "suffix,converted",
+    [
+        ("log10_t2equad", False),  # already PINT convention: passed through
+        ("log10_tnequad", True),  # temponest: divided by EFAC
+        ("log10_equad", True),  # pre-v3.3.0 temponest naming
+    ],
+)
+def test_add_noise_to_model_writes_one_equad_per_backend(
+    real_pint_model, suffix, converted
+):
+    """Regression: each EQUAD appears exactly once in the par file, in T2 convention.
+
+    EQUADs used to be added as TNEQ parameters when the noise dictionary was in
+    temponest convention; PINT mirrors every TNEQ into an EQUAD on setup, so each
+    EQUAD ended up in the par file twice (and unconverted).
+    """
+    model = deepcopy(real_pint_model)
+    psr = model.PSR.value
+
+    efacs = {"Rcvr1_2_GUPPI": 1.12, "Rcvr_800_GUPPI": 0.97}
+    log10_equads = {"Rcvr1_2_GUPPI": -6.5, "Rcvr_800_GUPPI": -6.9}
+    noise_dict = {}
+    for backend in efacs:
+        noise_dict[f"{psr}_{backend}_efac"] = efacs[backend]
+        noise_dict[f"{psr}_{backend}_{suffix}"] = log10_equads[backend]
+
+    out = nu.add_noise_to_model(model, noise_dict, model_kwargs={}, using_wideband=False)
+    wn = out.components["ScaleToaError"]
+
+    assert not [p for p in wn.params if p.startswith("TNEQ")]
+    applied = {
+        getattr(out, p).key_value[0]: float(getattr(out, p).value)
+        for p in wn.params
+        if p.startswith("EQUAD")
+    }
+    assert len(applied) == len(efacs)
+    for backend in efacs:
+        expected = 10 ** log10_equads[backend] / 1e-6
+        if converted:
+            expected /= efacs[backend]
+        assert applied[backend] == pytest.approx(expected)
+
+    # ... and the par file carries one EQUAD line per backend, with no TNEQ lines
+    par_lines = out.as_parfile().splitlines()
+    assert len([l for l in par_lines if l.startswith("EQUAD")]) == len(efacs)
+    assert not [l for l in par_lines if l.startswith("TNEQ")]
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_add_noise_to_model_maps_log_spaced_fourier_settings(real_pint_model):
     """`model_kwargs` log-frequency knobs should map to PINT `*FLOG*` (and `*TSPAN`) parameters."""
     model = deepcopy(real_pint_model)
