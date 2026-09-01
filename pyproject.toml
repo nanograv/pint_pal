@@ -21,7 +21,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "ruamel.yaml",
-    "pint_pulsar",
+    "pint_pulsar @ git+https://github.com/jeremy-baier/PINT@feat/jgb-td-solar-wind-gp",
     "enterprise-pulsar>=3.3.2",
     "enterprise-extensions>=v2.4.1",
     "pytest",
