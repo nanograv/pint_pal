@@ -37,7 +37,7 @@ dependencies = [
     "la-forge",
     "arviz",
     "dill",
-    "discovery @ git+https://github.com/nanograv/discovery",
+    "discovery @ git+https://github.com/jeremy-baier/discovery@twg-dev",
     "fastshermanmorrison-pulsar",
     "jax",
     "loguru",
