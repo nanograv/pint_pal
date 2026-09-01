@@ -21,7 +21,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "ruamel.yaml",
-    "pint_pulsar>=1.1.1",
+    "pint_pulsar @ git+https://github.com/jeremy-baier/PINT@feat/jgb-td-solar-wind-gp",
     "enterprise-pulsar>=3.3.2",
     "enterprise-extensions>=v2.4.1",
     "pytest",
@@ -36,10 +36,17 @@ dependencies = [
     "gitpython",
     "la-forge",
     "arviz",
+    "dill",
+    "discovery @ git+https://github.com/jeremy-baier/discovery@twg-dev",
     "fastshermanmorrison-pulsar",
+    "jax",
     "loguru",
+    "numpyro",
+    "optax",
+    "pandas",
     "threadpoolctl",
     "setuptools<81.0",
+    "scikit-sparse>=0.5.0", # work around pip issues; only need >=0.4.5 really
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -48,7 +55,7 @@ classifiers = [
 ]
 
 [tool.setuptools.package-data]
-pint_pal = ["defaults.yaml", "plot_settings.yaml"]
+pint_pal = ["defaults.yaml", "plot_settings.yaml", "discovery_priors.json"]
 
 [project.urls]
 "Homepage" = "https://github.com/nanograv/pint_pal"

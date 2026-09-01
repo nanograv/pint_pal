@@ -9,6 +9,7 @@ import time
 import warnings
 from datetime import datetime
 from datetime import date
+from typing import Union
 import yaml
 import os
 import pint_pal.par_checker as pc
@@ -22,8 +23,9 @@ import pint.models as models
 import pint.residuals
 from pint.modelutils import model_equatorial_to_ecliptic
 
-from pint.models.parameter import maskParameter
+from pint.models.parameter import floatParameter, maskParameter, prefixParameter
 from pint.models.timing_model import Component
+from pint import DMconst
 
 import pint_pal.logger
 
@@ -725,6 +727,267 @@ def remove_noise(model, noise_components=['ScaleToaError','ScaleDmError',
         if component in model.components:
             log.info(f"Removing {component} from model.")
             model.remove_component(component)
+    return
+
+def add_DM1_DM2_and_unfreeze_DM(
+        model: models.TimingModel,
+        DM1: Union[float, bool] = True,
+        DM2: Union[float, bool] = True,
+        frozen: bool = False
+    ) -> None:
+    """
+    Add DM1 and/or DM2 dispersion measure derivatives to the timing model.
+
+    This function adds higher-order dispersion measure time derivatives (DM1 for
+    first-order, DM2 for second-order) as prefixParameters to the DispersionDM component.
+    Pass False to skip adding a parameter.
+
+    Parameters
+    ==========
+    model : pint.models.TimingModel
+        PINT timing model object to which DM1 and/or DM2 will be added.
+    DM1 : float or True or False, optional
+        First-order DM time derivative. Pass True to add with default value 0.0,
+        a float value to add with that initialized value, or False to skip.
+        Default is True (add and initialize to 0.0).
+    DM2 : float or True or False, optional
+        Second-order DM time derivative. Pass True to add with default value 0.0,
+        a float value to add with that initialized value, or False to skip.
+        Default is True (add and initialize to 0.0).
+    frozen : bool, optional
+        Whether to freeze the DM, DM1, and DM2 parameters. Default is False.
+
+    Returns
+    =======
+    None
+    """
+    if 'DispersionDM' not in model.components:
+        raise ValueError("DispersionDM component is required before adding DM1/DM2.")
+
+    disp_dm = model.components['DispersionDM']
+
+    # Determine DM1 value to initialize to (0.0 if True, otherwise use the provided float)
+    dm1_value = 0.0 if DM1 is True else DM1
+
+    if DM1 is not False:
+        if hasattr(model, 'DM1'):
+            if getattr(model.DM1, 'is_prefix', False):
+                log.info(f'DM1 already exists as prefix; setting DM1={dm1_value}')
+                model.DM1.value = dm1_value
+            else:
+                log.warning('DM1 exists but is not a prefixParameter. Replacing with prefixParameter.')
+                disp_dm.remove_param('DM1')
+                disp_dm.add_param(
+                    prefixParameter(
+                        parameter_type='float',
+                        name='DM1',
+                        units='pc cm^-3/yr^1',
+                        description='1st order time derivative of the dispersion measure',
+                        long_double=True,
+                        tcb2tdb_scale_factor=DMconst,
+                    )
+                )
+                model.DM1.value = dm1_value
+        else:
+            log.info('Adding DM1 to the model as prefixParameter...')
+            disp_dm.add_param(
+                prefixParameter(
+                    parameter_type='float',
+                    name='DM1',
+                    units='pc cm^-3/yr^1',
+                    description='1st order time derivative of the dispersion measure',
+                    long_double=True,
+                    tcb2tdb_scale_factor=DMconst,
+                )
+            )
+            model.DM1.value = dm1_value
+
+    # Determine DM2 value to initialize to (0.0 if True, otherwise use the provided float)
+    dm2_value = 0.0 if DM2 is True else DM2
+
+    if DM2 is not False:
+        if hasattr(model, 'DM2'):
+            if getattr(model.DM2, 'is_prefix', False):
+                log.info(f'DM2 already exists as prefix; setting DM2={dm2_value}')
+                model.DM2.value = dm2_value
+            else:
+                log.warning('DM2 exists but is not a prefixParameter. Replacing with prefixParameter.')
+                disp_dm.remove_param('DM2')
+                disp_dm.add_param(
+                    prefixParameter(
+                        parameter_type='float',
+                        name='DM2',
+                        units='pc cm^-3/yr^2',
+                        description='2nd order time derivative of the dispersion measure',
+                        long_double=True,
+                        tcb2tdb_scale_factor=DMconst,
+                    )
+                )
+                model.DM2.value = dm2_value
+        else:
+            log.info('Adding DM2 to the model as prefixParameter...')
+            disp_dm.add_param(
+                prefixParameter(
+                    parameter_type='float',
+                    name='DM2',
+                    units='pc cm^-3/yr^2',
+                    description='2nd order time derivative of the dispersion measure',
+                    long_double=True,
+                    tcb2tdb_scale_factor=DMconst,
+                )
+            )
+            model.DM2.value = dm2_value
+
+    model.setup()
+    model.validate()
+    if frozen:
+        log.info('Freezing DM, DM1, and DM2...')
+        model.DM.frozen = True
+        if DM1 is not False:
+            model.DM1.frozen = True
+        if DM2 is not False:
+            model.DM2.frozen = True
+    else:
+        log.info('Unfreezing DM, DM1, and DM2...')
+        model.DM.frozen = False
+        if DM1 is not False:
+            model.DM1.frozen = False
+        if DM2 is not False:
+            model.DM2.frozen = False
+
+    if DM1 is not False and not model.DM1.frozen and 'DM1' not in model.fittable_params:
+        model.DM1.frozen = True
+        log.warning('DM1 is not fittable after setup; forcing DM1 frozen=True.')
+    if DM2 is not False and not model.DM2.frozen and 'DM2' not in model.fittable_params:
+        model.DM2.frozen = True
+        log.warning('DM2 is not fittable after setup; forcing DM2 frozen=True.')
+
+    return
+
+def add_chromatic_model_to_model(
+        model: models.TimingModel,
+        CM: Union[float, bool] = 0.0,
+        CM1: Union[float, bool] = 0.0,
+        CM2: Union[float, bool] = 0.0,
+        TNCHROMIDX: float = 4.0,
+        frozen: bool = False,
+        set_CMEPOCH_to_DMEPOCH: bool = True
+    ) -> None:
+    """
+    Add a deterministic chromatic measure (CM) model to the timing model.
+
+    Parameters
+    ==========
+    model : pint.models.TimingModel
+        PINT timing model object to which the ChromaticCM component will be added.
+    CM : float or False, optional
+        Value for the chromatic measure. Pass False to skip setting this parameter.
+        Default is 0.0.
+    CM1 : float or False, optional
+        Value for the first time derivative of chromatic measure. Pass False to skip.
+        Default is 0.0.
+    CM2 : float or False, optional
+        Value for the second time derivative of chromatic measure. Pass False to skip.
+        Default is 0.0.
+    TNCHROMIDX : float, optional
+        Chromatic index to use in model. Default is 4.0.
+    frozen : bool, optional
+        If True, ChromaticCM parameters will be frozen in fits; if False, they will be
+        free to vary. Default is False.
+    set_CMEPOCH_to_DMEPOCH : bool, optional
+        If True, sets CMEPOCH to DMEPOCH; if False, leaves CMEPOCH unchanged.
+        Default is True.
+
+    Returns
+    =======
+    None
+        Updates the ChromaticCM component in the model in-place.
+    """
+    log.info('Adding ChromaticCM model to par file')
+    all_components = Component.component_types
+    noise_class = all_components["ChromaticCM"]
+    noise = noise_class()  # Make the noise instance.
+    model.add_component(noise, validate=False, force=True)
+    # add parameters
+    if CM is not False:
+        model['CM'].value = CM
+    if CM1 is not False:
+        model['CM1'].value = CM1
+    if frozen:
+        if CM is not False:
+            model['CM'].frozen = True
+        if CM1 is not False:
+            model['CM1'].frozen = True
+    elif not frozen:
+        if CM is not False:
+            model['CM'].frozen = False
+        if CM1 is not False:
+            model['CM1'].frozen = False
+    if CM2 is not False:
+        cm_comp = model.components['ChromaticCM']
+        cm_comp.add_param(
+            prefixParameter(
+                parameter_type='float',
+                name='CM2',
+                units='pc cm^-3/yr^2/MHz^2',
+                description='2nd order time derivative of the chromatic measure',
+                long_double=True,
+                convert_tcb2tdb=False,
+            )
+        )
+        model['CM2'].value = CM2
+        model['CM2'].frozen = True if frozen else False
+    if set_CMEPOCH_to_DMEPOCH:
+        if model.DMEPOCH.value is not None:
+            model.CMEPOCH.quantity = model.DMEPOCH.quantity
+        else:
+            log.warning("DMEPOCH is not set; SWEPOCH will not be set to DMEPOCH.")
+    model['TNCHROMIDX'].value = TNCHROMIDX
+    model.setup()
+    return
+
+def add_deteriministic_solar_wind_to_model(
+        model,
+        NE_SW=6.67,
+        frozen=False,
+        SWM = 0,
+        set_SWEPOCH_to_DMEPOCH = True
+    ):
+    """
+     Adds a deterministic solar wind model to the input timing model.
+     Parameters
+     ==========
+     model: PINT model object
+     NE_SW: float, optional
+         Solar wind density at 1 AU in electrons per cubic centimeter; default is 6.67, which is the mean in the NANOGrav 15yr-year chromatic noise paper.
+    frozen: bool, optional
+        If True, NE_SW will be frozen in the fit; if False, it will be free to vary. Default is False.
+    SWM: int, optional
+        Solar wind model to use; default is 0, which is the simple 1/r^2 model. The only other option currently implemented is 1, which is the more complex model from You et al. (2007).
+    set_SWEPOCH_to_DMEPOCH: bool, optional
+        If True, sets SWEPOCH to DMEPOCH; if False, leaves SWEPOCH unchanged.
+    Returns
+    =======
+    No return.
+        But updates the solar wind dispersion component in the model.
+    """
+    log.info('Adding Solar Wind Dispersion to par file')
+    all_components = Component.component_types
+    noise_class = all_components["SolarWindDispersion"]
+    noise = noise_class()  # Make the dispersion instance.
+    model.add_component(noise, validate=False, force=True)
+    # add parameters
+    model['NE_SW'].quantity = NE_SW 
+    if frozen:
+        model['NE_SW'].frozen = True
+    elif not frozen:
+        model['NE_SW'].frozen = False
+    model['SWM'].value = SWM
+    if set_SWEPOCH_to_DMEPOCH:
+        if model.DMEPOCH.value is not None:
+            model.SWEPOCH.quantity = model.DMEPOCH.quantity
+        else:
+            log.warning("DMEPOCH is not set; SWEPOCH will not be set to DMEPOCH.")
     return
 
 def get_receivers(toas):
@@ -1618,3 +1881,37 @@ def convert_enterprise_equads(model):
             model[eq].value = new_eq
             log.info(f"{eq} has been converted from {old_eq} to {new_eq}.")
         return model
+
+def convert_equad_convention(noise_dict):
+    """ EQUADS from enterprise v3.3.0 and earlier follow temponest convention, rather than
+    that in Tempo/Tempo2/PINT; this function applies a simple conversion.
+    For example, with a given EFAC/EQUAD pair:
+
+    EQUAD (t2) = EQUAD (tn) / EFAC
+    or
+    EQUAD (tn) = EQUAD (t2) * EFAC
+
+
+    For more information, see https://github.com/nanograv/enterprise/releases/tag/v3.3.0
+    """
+    converted_dict = noise_dict.copy()
+    _ = [converted_dict.pop(i) for i in list(noise_dict.keys()) if '_equad' in i]
+    efacs = [x for x in noise_dict.keys() if 'efac' in x]
+    original_equads = [x for x in noise_dict.keys() if '_equad' in x]
+    if not len(original_equads):
+        log.warning('There are no equad parameters in this dictionary.')
+        return converted_dict
+    else:
+        # EQUADs in a noise dictionary are log10 values
+        # so dividing/multiplying by EFAC is a +/- log10(EFAC).
+        if '_tn' in original_equads[0]:
+            converted_keys = [par_name.replace('_tn','_t2') for par_name in original_equads]
+            converted_vals = [noise_dict[tneq] - np.log10(noise_dict[ef]) for tneq, ef in zip(original_equads, efacs)]
+        elif '_t2' in original_equads[0]:
+            converted_keys = [par_name.replace('_t2','_tn') for par_name in original_equads]
+            converted_vals = [noise_dict[t2eq] + np.log10(noise_dict[ef]) for t2eq, ef in zip(original_equads, efacs)]
+
+        for ky,val in zip(converted_keys, converted_vals):
+            converted_dict[ky] = val
+        assert len(converted_dict) == len(noise_dict), "Length of converted dict does not match original dict"
+        return converted_dict
