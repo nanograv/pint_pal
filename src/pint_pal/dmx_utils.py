@@ -647,6 +647,22 @@ def check_solar_wind(
         return dmx_ranges
 
 
+def apply_frequency_ratio_cuts(toas: pint.toa.TOAs,
+                               dmx_ranges: list,
+                               frequency_ratio: float = 1.1,
+                               quiet: bool = False):
+    # Find TOAs failing fratio test and apply cuts
+    ftoas, franges = check_frequency_ratio(toas, dmx_ranges,
+                                           frequency_ratio=frequency_ratio,
+                                           quiet=quiet, invert=True)
+    fratio_inds = toas.table['index'][ftoas]
+    if len(fratio_inds):
+        apply_cut_flag(toas,fratio_inds,'dmx')
+        apply_cut_select(toas,reason='frequency ratio check')
+
+    return toas
+
+
 def add_dmx(model: pint.models.timing_model.TimingModel, bin_width: float = 1.0) -> None:
     """
     Checks for DispersionDMX and ensures the bin width is the only parameter.
@@ -800,14 +816,8 @@ def setup_dmx(
             quiet=quiet)
     itoas, iranges = check_frequency_ratio(toas, dmx_ranges,
             frequency_ratio=frequency_ratio, quiet=quiet)
-
-    # Find TOAs failing fratio test and apply cuts
-    ftoas, franges = check_frequency_ratio(toas, dmx_ranges,
-            frequency_ratio=frequency_ratio, quiet=quiet, invert=True)
-    fratio_inds = toas.table['index'][ftoas]
-    if len(fratio_inds):
-        apply_cut_flag(toas,fratio_inds,'dmx')
-        apply_cut_select(toas,reason='frequency ratio check')
+    
+    apply_frequency_ratio_cuts(toas, dmx_ranges, frequency_ratio=frequency_ratio, quiet=quiet)
 
     dmx_ranges = np.array(dmx_ranges)[iranges]
     dmx_ranges = list(map(tuple, dmx_ranges))
