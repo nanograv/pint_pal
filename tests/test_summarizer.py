@@ -58,6 +58,13 @@ def test_generate_residual_stats(TestSummarizer):
     assert "Statistic" in text
     assert "Reduced" in text
 
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_generate_fit_convergence_check(TestSummarizer):
+    summarizer = TestSummarizer
+    summarizer.generate_fit_convergence_check()
+    text = summarizer.report.generate()
+    assert "χ2" in text
+    assert "Largest parameter change" in text
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_generate_timing_model_comparison(TestSummarizer):
