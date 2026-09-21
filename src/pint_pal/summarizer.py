@@ -68,6 +68,7 @@ class Summarizer:
         if autorun:
             self.generate_timing_model_comparison()
             self.generate_residual_stats(threshold=3) #hard coding for now
+            self.generate_fit_convergence_check()
             self.add_summary_plots()
             self.generate_summary_info()
             self.generate_software_versions()
@@ -188,6 +189,75 @@ class Summarizer:
             self.report.write(f"Reduced χ2 is {chi2_1:0.6f}/{ndof_1} = {rchi2_1_text} (false positive probability = {fpp_1_text})")
         else:
             self.report.write("No post-noise model found.") #this does not work
+        return
+
+
+def generate_fit_convergence_check(self, sigma_threshold: float = 0.1) -> None:
+        """
+        Check whether the par file was fully fit (i.e., the fitter converged)
+        by comparing initial and final chi-squared, and by checking how far
+        each free parameter moved (in units of sigma) during the fit.
+
+        Parameters
+        ----------
+        sigma_threshold : float, default=0.1
+            Flag any free parameter that moved more than this many sigma
+            during the fit.
+        """
+        self.report.add_section_by_title("Check Fit Convergence")
+
+        # chi2 convergence check
+        chi2_initial = self.fitter.resids_init.chi2
+        chi2_final = self.fitter.resids.chi2
+        chi2_decrease = chi2_initial - chi2_final
+
+        if chi2_decrease > 0:
+            error_msg = f"χ2 decreased by {chi2_decrease:.3f} during fitting; fitter has not fully converged"
+        else:
+            error_msg = f"χ2 increased by {-chi2_decrease:.3f} during fitting; fitter has produced a bogus result"
+
+        decrease_text = self.check_error(
+            f"{chi2_decrease:.3f}",
+            abs(chi2_decrease) <= 0.01,
+            error_msg,
+            "chi2_convergence",
+        )
+
+        self.report.write(f"Par file initial χ2: {chi2_initial:.3f}\n")
+        self.report.write(f"Par file final χ2: {chi2_final:.3f}\n")
+        self.report.write(f"Decrease: {decrease_text}\n")
+
+        # per-parameter convergence check
+        max_chi2 = 0
+        changed = None
+        for p in self.fitter.model.free_params:
+            param = getattr(self.fitter.model, p)
+            initial_value = getattr(self.fitter.model_init, p).value
+            if initial_value is None:
+                self.report.write(
+                    self.check_error(
+                        f"Free parameter `{p}` is unset in the input model.",
+                        False,
+                        f"Unset free parameter ({p})",
+                        f"unset_{p}",
+                    ) + "\n"
+                )
+                continue
+
+            final_value = pm.value
+            uncertainty = pm.uncertainty.value
+            chi2 = (initial_value - final_value) / uncertainty
+            if abs(chi2) >= abs(max_chi2):
+                max_chi2 = chi2
+                changed = p
+
+            if abs(chi2) > sigma_threshold:
+                msg = f"Parameter `{p}` changed from {initial_value} to {final_value} ({chi2:.2g} σ) during fit."
+                self.report.write(
+                    self.check_error(msg, False, f"Large parameter change ({p})", f"param_change_{p}") + "\n"
+                )
+
+        self.report.write(f"Largest parameter change during fit was `{changed}` ({max_chi2:.2g} σ).\n")
         return
 
 
