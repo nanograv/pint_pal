@@ -67,6 +67,13 @@ def test_generate_fit_convergence_check(TestSummarizer):
     assert "Largest parameter change" in text
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_generate_error_parameters_check(TestSummarizer):
+    summarizer = TestSummarizer
+    summarizer.generate_error_parameters_check()
+    text = summarizer.report.generate()
+    assert "EFAC" in text
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_generate_timing_model_comparison(TestSummarizer):
     summarizer = TestSummarizer
     pass
