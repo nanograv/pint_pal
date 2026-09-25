@@ -9,6 +9,7 @@ fitter.ftest('list of PINT parameter objects', 'list of corresponding timing mod
 
 
 import warnings
+from loguru import logger as log
 #from pint.models import (
 #    parameter as p,
 #)
@@ -19,7 +20,9 @@ import astropy.units as u
 import numpy as np
 import re
 
-ALPHA = 0.0027
+ALPHA = 0.0027 
+ALPHA_ADD = 0.0027 # 3-sigma
+ALPHA_REMOVE = 0.1336 # 1.5-sigma
 
 def param_check(name, fitter, check_enabled=True):
     """
@@ -169,16 +172,43 @@ def report_ptest(label, ftest_dict = None, alpha=ALPHA):
                 line = "%42s %7.3f %16.6f %9.2f %5d %.3g" % (label, rms, dmrms, chi2, ndof, Fstatistic)
             else:
                 line = "%42s %7.3f %9.2f %5d %.3g" % (label, rms, chi2, ndof, Fstatistic)
-            if Fstatistic < alpha:
-                line += " ***"
         else:
             if dmrms != None:
                 line = "%42s %7.3f %16.6f %9.2f %5d xxx" % (label, rms, dmrms, chi2, ndof)
             else:
                 line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
     print(line)
+   
+def checkFLogs(add_params,remove_params,tc):
+    if add_params:
+        add_params = [item.strip() for item in add_params[0].split(',')]
+    else:
+        add_params = []
+
+    if remove_params:
+        remove_params = [item.strip() for item in remove_params[0].split(',')]
+    else:
+        remove_params = []
     
-def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
+    if 'FTest' in tc.config:
+        oldFtests = tc.config['FTest']
+        
+        # - Compare old results with new to see if duplicates or loop occur
+        for item in sorted(add_params):
+            if item in oldFtests['Remove']:
+                log.warning(f'Parameter {item} has already been recommended to be removed.')
+                add_params.remove(item)
+        for item in sorted(remove_params):
+            if item in oldFtests['Add']:
+                log.warning(f'Parameter {item} has already been recommended to be added.')
+                remove_params.remove(item)
+
+    else:
+        print("No FTest in config.  Continuing...")
+
+    return sorted(set(add_params)), sorted(set(remove_params))
+
+def summarize_Ftest(Ftest_dict, fitter, tc, alpha = ALPHA):
     """
     Function to determine and print what parameters are recommended to be added from F-test dictionary.
 
@@ -203,6 +233,7 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
             fbused = (len(fblist)>0)
             fbp = [fblist[ifb] for ifb in sorted(fblist.keys())]  # sorted list of fb parameters
             # Removing FB parameters
+            alpha = ALPHA_REMOVE
             for i in range(1,len(fblist)):
                 p = [fbp[j] for j in range(i,len(fbp))]
                 ffk = 'FB%s+'%i
@@ -210,6 +241,7 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
                     if Ftest_dict[fk][ffk]['ft'] > alpha and Ftest_dict[fk][ffk]['ft']:
                         remove_params.append(ffk)
             # Adding FB parameters
+            alpha = ALPHA_ADD
             for i in range(len(fblist),fbmax+1):
                 p = ["FB%d" % (j) for j in range(len(fblist),i+1)]
                 ffk = 'FB%s'%i
@@ -218,6 +250,7 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
                         add_params.append(ffk)
         # Check which parameters should be removed
         elif "Remove" in fk:
+            alpha = ALPHA_REMOVE
             for ffk in Ftest_dict[fk].keys():
                 if ffk == 'Binary':
                     for fffk in Ftest_dict[fk][ffk].keys():
@@ -241,6 +274,7 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
                         print(f"Due to max iter limit, {ffk} hasn't converged and hence removing it can't be justified") 
         # Check which parameters should be added
         elif "Add" in fk:
+            alpha = ALPHA_ADD
             for ffk in Ftest_dict[fk].keys():
                 if ffk == 'Binary':
                     for fffk in Ftest_dict[fk][ffk].keys():
@@ -267,6 +301,9 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
     if fd_add:
         add_params.append(fd_add[np.where(fd_add_ft==min(fd_add_ft))[0][0]])
     
+    # Check the config for previous FTest results
+    add_params,remove_params = checkFLogs(add_params,remove_params,tc)
+
     # Now return which parameters to add/remove
     if remove_params:
         remove_statement = "F-tests recommend removing the following parameters: " + " ".join(remove_params)
@@ -276,6 +313,22 @@ def summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA):
         add_statement = "F-tests recommend adding the following parameters: " + " ".join(add_params)
     else:
         add_statement = "F-tests do not recommend adding any parameters."
+   
+    if 'FTest' in tc.config:
+        oldFtests = tc.config['FTest']
+        add_params = add_params + oldFtests["Add"]
+        remove_params = remove_params + oldFtests["Remove"]    
+ 
+    configAdd="[" + ",".join(sorted(set(add_params))) + "]"
+    configRemove="[" + ",".join(sorted(set(remove_params))) + "]" 
+    
+    print('\n')
+    print('Copy and paste below into .yaml file:')
+    print('FTest:\n' \
+        '  Add:',configAdd,'\n'\
+        '  Remove:',configRemove)
+    print('\n')
+    
     return add_statement, remove_statement
     
 def reset_params(params):
@@ -297,7 +350,7 @@ def reset_params(params):
             p.value = 0.0
             p.uncertainty = 0.0
 
-def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
+def run_Ftests(fitter, tc, alpha=ALPHA, FDnparams = 5, NITS = 1):
     """
     This is the main convenience function to run the various F-tests below. This includes F-tests for F2, PX, 
     binary parameters, FD parameters, etc. As part of the function, the tests, parameters, RMS of residuals, chi2,
@@ -333,6 +386,7 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
     retdict = {}
     # Start with initial printing from Finalize Timing:
     print("Testing additional parameters (*** = significant):")
+    ALPHA=ALPHA_ADD
     if NB:
         hdrline = "%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")
     else:
@@ -373,6 +427,7 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
     FDdict = check_FD(fitter, alpha=ALPHA, remove = False, maxcomponent=FDnparams, NITS = NITS)
     retdict['Add']['FD'] = FDdict
     print("Testing removal of parameters:")
+    ALPHA = ALPHA_REMOVE
     retdict['Remove'] = {}
     # Check parallax, NOTE - cannot remove PX if binary model is DDK, so check for that.
     if hasattr(fitter.model, "binary_model_name"):
@@ -395,6 +450,7 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
         elif fitter.model.binary_model_name == 'ELL1H':
             binarydict = check_binary_ELL1H(fitter, alpha=ALPHA, remove = True, NITS=NITS)
         retdict['Remove']['Binary'] = binarydict
+    
     # Test removing FD parameters
     FDdict = check_FD(fitter, alpha=ALPHA, remove = True, maxcomponent=FDnparams, NITS = NITS)
     retdict['Remove']['FD'] = FDdict
@@ -417,7 +473,7 @@ def run_Ftests(fitter, alpha=ALPHA, FDnparams = 5, NITS = 1):
                 retdict['FB'] = FBdict
     
     # Print a summary of the F-tests results and suggestions
-    add_statement, remove_statement = summarize_Ftest(retdict, fitter, alpha = ALPHA)
+    add_statement, remove_statement = summarize_Ftest(retdict, fitter, tc, alpha = ALPHA)
     print(add_statement)
     print(remove_statement)
 
