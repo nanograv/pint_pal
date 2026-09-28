@@ -8,7 +8,7 @@ import numpy as np
 from typing import List, Tuple, Optional, Dict, Union
 import pint.models
 import pint.toa
-import pint_pal.config
+import pint_pal
 from loguru import logger as log
 
 # these can be set elsewhere or overridden if needed
@@ -98,6 +98,7 @@ class DataChecker:
         p: str,
         raiseexcept: Optional[bool] = True,
         require_unfrozen: Optional[bool] = True,
+        require_frozen: Optional[bool] = False,
     ) -> bool:
         """
         Check for the existence of a single parameter, optionally it must be unfrozen
@@ -121,6 +122,10 @@ class DataChecker:
         KeyError
             If the check fails and ``raiseexcept`` is True
         """
+        if require_unfrozen and require_frozen:
+            # Do not use raiseexcept, just raise
+            raise ValueError("Both require_unfrozen and require_frozen cannot both be True.")
+        
         self.verify(has_model=True)
 
         if not (p in self.m.params and self.m[p].value is not None):
@@ -133,6 +138,13 @@ class DataChecker:
             if self.m[p].frozen:
                 self.raise_or_warn(
                     f"Parameter '{p}' found in timing model but frozen",
+                    KeyError if raiseexcept else None,
+                )
+                return False
+        if require_frozen:
+            if not self.m[p].frozen:
+                self.raise_or_warn(
+                    f"Parameter '{p}' found in timing model but unfrozen",
                     KeyError if raiseexcept else None,
                 )
                 return False
@@ -309,6 +321,8 @@ class NameChecker(DataChecker):
         """
         Parameters
         ----------
+        filename: str
+            Filename (par or tim) which should contain the pulsar name
         raiseexcept: bool, optional
             Will an error raise an exception (default) or just a warning
 
@@ -332,6 +346,7 @@ class NameChecker(DataChecker):
             return False
         return True
 
+    
 class EpochChecker(DataChecker):
     def check(
         self,
@@ -360,21 +375,30 @@ class EpochChecker(DataChecker):
         KeyError
             If the check fails and ``raiseexcept`` is True
         """
-        self.verify(has_model=True)
+        self.verify(has_model=True, has_toas=True)
 
 
+
+        # Check START/FINISH, these are required always
+        for item in ["START", "FINISH"]:
+            if self.m[item].value is None:
+                self.raise_or_warn(
+                    f"{item} parameter not found in par file.",
+                    KeyError if raiseexcept else None,
+                )
+                return False
 
         START = self.m["START"].value
         FINISH = self.m["FINISH"].value
-        PEPOCH = self.m["PEPOCH"].value
-        POSEPOCH = self.m["POSEPOCH"].value
-        DMEPOCH = self.m["DMEPOCH"].value
+            
         center = (FINISH - START)/2.0 + START
 
+        # Check required parameters
         for item in required:
             if item not in ["PEPOCH", "POSEPOCH", "DMEPOCH"]:
-                raise KeyError(
-                    f"Epoch parameter not defined: {item} not supported."
+                self.raise_or_warn(
+                    f"Epoch parameter not defined: {item} not supported.",
+                    KeyError if raiseexcept else None,
                 )
                 return False
             if not (item in required and self.m[item].value is not None and np.abs(self.m[item].value - center) < tolerance):
@@ -383,6 +407,24 @@ class EpochChecker(DataChecker):
                     ValueError if raiseexcept else None,
                 )
                 return False
+            
+        # At this point, all of the required values are within tolerance.
+        # Now check against TOAs
+        mjds = self.t.get_mjds().value
+        min_toa = min(mjds)
+        max_toa = max(mjds)
+        if not (np.abs(min_toa - START) < tolerance):
+            self.raise_or_warn(
+                f"START parameter not equal to minimum MJD within tolerance.",
+                ValueError if raiseexcept else None,
+            )
+            return False
+        if not (np.abs(max_toa - FINISH) < tolerance):
+            self.raise_or_warn(
+                f"FINISH parameter not equal to maximum MJD within tolerance.",
+                ValueError if raiseexcept else None,
+            )
+            return False
         return True
 
 
@@ -469,11 +511,7 @@ class ParChecker(DataChecker):
         Parameters
         ----------
         required: list
-            parameter names that must be present
-        excluded: list
-            parameter names that cannot be present
-        required_value : dict
-            parameter names and values that must be present
+            Key-value pairs of parameter names that are frozen with their values
         raiseexcept: bool, optional
             Will an error raise an exception (default) or just a warning
 
@@ -520,6 +558,49 @@ class ParChecker(DataChecker):
                 if not value:
                     return False
         return True
+
+    def check_frozen(
+        self,
+        required: Dict = {"NE_SW": 0}, 
+        raiseexcept: Optional[bool] = True,
+    ) -> bool:
+        """
+        Check parameters that must be frozen to a specific value
+
+        Parameters
+        ----------
+        required: dict
+            parameter names that must be present
+        excluded: list
+            parameter names that cannot be present
+        required_value : dict
+            parameter names and values that must be present
+        raiseexcept: bool, optional
+            Will an error raise an exception (default) or just a warning
+
+        Returns
+        -------
+        bool
+            True if the checks pass, False otherwise
+
+        Raises
+        ------
+        KeyError
+            If the check fails and ``raiseexcept`` is True
+        """
+        self.verify(has_model=True) #contained in each call of check_parameter
+
+        for p in required.keys():
+            self.check_parameter(p, raiseexcept=raiseexcept, require_unfrozen=False, require_frozen=True)
+            if self.m[p].value != required[p]:
+                self.raise_or_warn(
+                    f"Parameter '{p}' must be frozen to a value of {required[p]}, not {self.m[p].value}",
+                    ValueError if raiseexcept else None,
+                )
+                return False
+        return True
+        
+    
 
 
 class JumpChecker(DataChecker):
@@ -681,12 +762,13 @@ class TOAChecker(DataChecker):
             return False
         for k in badranges.keys():
             mjds = self.t.get_mjds()[self.t["be"] == k].value
-            filtered_mjds = (mjds >= badranges[k][0]) and (mjds <= badranges[k][1])
-            value = np.any(filtered_mjds)
-            if value:
-                self.raise_or_warn(
-                    f"TOAs for backend '{k}' contain {filtered_mjds.sum()} values between MJD {badranges[k][0]} and {badranges[k][1]}",
-                    ValueError if raiseexcept else None,
-                )
-            return False
+            if mjds.size > 0:
+                filtered_mjds = (mjds >= badranges[k][0]) and (mjds <= badranges[k][1])
+                value = np.any(filtered_mjds)
+                if value:
+                    self.raise_or_warn(
+                        f"TOAs for backend '{k}' contain {filtered_mjds.sum()} values between MJD {badranges[k][0]} and {badranges[k][1]}",
+                        ValueError if raiseexcept else None,
+                    )
+                    return False
         return True
