@@ -8,8 +8,7 @@ import numpy as np
 from typing import List, Tuple, Optional, Dict, Union
 import pint.models
 import pint.toa
-import pint_pal.packageconfiguration # must go before any use of pint_pal.config
-import pint_pal.config
+import pint_pal
 from loguru import logger as log
 
 # these can be set elsewhere or overridden if needed
