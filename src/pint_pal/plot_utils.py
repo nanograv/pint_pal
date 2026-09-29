@@ -1342,9 +1342,8 @@ def plot_dmx_time(
             DMX_center_Year,
             DMXs * 10**3,
             yerr=DMX_vErrs * 10**3,
-            fmt=".",
+            fmt=mkr,
             c=clr,
-            marker=mkr,
             label="Narrowband",
         )
     elif not NB and not compare:
@@ -1352,9 +1351,8 @@ def plot_dmx_time(
             DMX_center_Year,
             DMXs * 10**3,
             yerr=DMX_vErrs * 10**3,
-            fmt=".",
+            fmt=mkr,
             c=clr,
-            marker=mkr,
             label="Wideband",
         )
     elif compare:
@@ -1363,18 +1361,16 @@ def plot_dmx_time(
                 DMX_center_Year,
                 DMXs * 10**3,
                 yerr=DMX_vErrs * 10**3,
-                fmt=".",
+                fmt=mkr,
                 c=clr,
-                marker=mkr,
                 label="Narrowband",
             )
             ax1.errorbar(
                 dmx_mid_yr,
                 nb_dmx * 10**3,
                 yerr=nb_dmx_var * 10**3,
-                fmt=".",
+                fmt=mkr_nb,
                 color=clr_nb,
-                marker=mkr_nb,
                 label="Wideband",
             )
         else:
@@ -1382,18 +1378,16 @@ def plot_dmx_time(
                 DMX_center_Year,
                 DMXs * 10**3,
                 yerr=DMX_vErrs * 10**3,
-                fmt=".",
+                fmt=mkr,
                 c=clr,
-                marker=mkr,
                 label="Wideband",
             )
             ax1.errorbar(
                 dmx_mid_yr,
                 nb_dmx * 10**3,
                 yerr=nb_dmx_var * 10**3,
-                fmt=".",
+                fmt=mkr_nb,
                 color=clr_nb,
-                marker=mkr_nb,
                 label="Narrowband",
             )
 

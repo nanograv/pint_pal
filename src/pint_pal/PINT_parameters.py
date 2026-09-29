@@ -15,7 +15,7 @@ Those are the default values in the stand alone binary models
 "PBDOT": 0.0 u.day / u.day,
 "ECC": 0.0 u.Unit(""),
 "EDOT": 0.0 / u.second,
-"A1": 10.0 ls,
+"A1": 10.0 u.lsec,
 "A1DOT": 0.0 u.lsec / u.second,
 "T0": np.longdouble(54000.0) u.day,
 "OM": 0.0 u.deg,
