@@ -758,7 +758,6 @@ class TOAChecker(DataChecker):
 
 
         bools = (self.t["ver"] == version)
-        print("foo", ignorebe)
         if ignorebe is not None: 
             for k in ignorebe: #recursively add on boolean checks
                 bools = bools | (self.t["be"] == k)
