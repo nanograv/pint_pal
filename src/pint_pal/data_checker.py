@@ -8,7 +8,7 @@ import numpy as np
 from typing import List, Tuple, Optional, Dict, Union
 import pint.models
 import pint.toa
-import pint_pal
+import pint_pal.config
 from loguru import logger as log
 
 # these can be set elsewhere or overridden if needed
@@ -725,9 +725,10 @@ class TOAChecker(DataChecker):
 
     def check(
         self,
-        version=pint_pal.config.LATEST_TOA_RELEASE, #"2025.02.05-1fb9ef4.01.31-08c1687",
-        badranges={"PUPPI": [57984, 58447]},
+        version: str = pint_pal.config.LATEST_TOA_RELEASE, #"2025.02.05-1fb9ef4.01.31-08c1687",
+        badranges: dict[str, list[float]]  = {"PUPPI": [57984, 58447]},
         raiseexcept: Optional[bool] = True,
+        ignorebe: Optional[list] = None,
     ) -> bool:
         """
         Check the data
@@ -740,6 +741,8 @@ class TOAChecker(DataChecker):
             Dictionary of backend and MJD ranges that must be excluded
         raiseexcept: bool, optional
             Will an error raise an exception (default) or just a warning
+        ignorebe : list, optional
+            List of backends to ignore in the check
 
         Returns
         -------
@@ -753,7 +756,14 @@ class TOAChecker(DataChecker):
         """
         self.verify(has_toas=True)
 
-        value = np.all(self.t["ver"] == version)
+
+        bools = (self.t["ver"] == version)
+        print("foo", ignorebe)
+        if ignorebe is not None: 
+            for k in ignorebe: #recursively add on boolean checks
+                bools = bools | (self.t["be"] == k)
+        value = np.all(bools)
+        
         if not value:
             self.raise_or_warn(
                 f"TOA version is not '{version}' for all TOAs",
@@ -761,14 +771,15 @@ class TOAChecker(DataChecker):
             )
             return False
         for k in badranges.keys():
+            if not k in self.t["be"]:
+                continue
             mjds = self.t.get_mjds()[self.t["be"] == k].value
-            if mjds.size > 0:
-                filtered_mjds = (mjds >= badranges[k][0]) and (mjds <= badranges[k][1])
-                value = np.any(filtered_mjds)
-                if value:
-                    self.raise_or_warn(
-                        f"TOAs for backend '{k}' contain {filtered_mjds.sum()} values between MJD {badranges[k][0]} and {badranges[k][1]}",
-                        ValueError if raiseexcept else None,
-                    )
-                    return False
+            filtered_mjds = (mjds >= badranges[k][0]) and (mjds <= badranges[k][1])
+            value = np.any(filtered_mjds)
+            if value:
+                self.raise_or_warn(
+                    f"TOAs for backend '{k}' contain {filtered_mjds.sum()} values between MJD {badranges[k][0]} and {badranges[k][1]}",
+                    ValueError if raiseexcept else None,
+                )
+            return False
         return True
