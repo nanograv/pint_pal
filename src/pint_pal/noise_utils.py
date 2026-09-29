@@ -967,6 +967,12 @@ def add_noise_to_model(
     ==========
     model: PINT (or tempo2) timing model
     noise_dict: Dictionary containing noise parameters.
+        EQUADs may be given in either convention: the convention of ``noise_dict`` is
+        detected from its keys (``..._log10_t2equad`` vs ``..._log10_tnequad``, or the
+        pre-v3.3.0 ``..._log10_equad``, which is temponest). Temponest values are
+        converted with EQUAD(t2) = EQUAD(tn) / EFAC and T2 values are passed through, so
+        the EQUAD parameters added to the model always match how PINT applies them:
+        EFAC^2 x (toaerr^2 + EQUAD^2).
     model_kwargs: dictionary of noise model settings from tc.config['noise_run']['model']; Default: {}
         For each PL noise block (e.g., ``red_noise``, ``dm_noise``, ``chromatic_noise``,
         ``solar_wind``), ``nlog`` enables log-spaced Fourier bins below 1/Tspan in
@@ -989,14 +995,12 @@ def add_noise_to_model(
     ecorr_params = []
     dmefac_params = []
     dmequad_params = []
-    tneq_params = []  # index for TNEQUAD parameters
 
     efac_idx = 1
     equad_idx = 1
     ecorr_idx = 1
     dmefac_idx = 1
     dmequad_idx = 1
-    tneq_idx = 1  # index for TNEQ parameters
 
     psr_name = list(noise_dict.keys())[0].split("_")[0]
     noise_pars = np.array(list(noise_dict.keys()))
@@ -1005,16 +1009,19 @@ def add_noise_to_model(
         for key, val in noise_dict.items()
         if "efac" in key or "equad" in key or "ecorr" in key or "tnequad" in key
     }
-    # Test EQUAD convention and decide whether to convert
-    if test_equad_convention(wn_dict.keys()) == "tnequad":
+    # Test EQUAD convention and convert to the PINT/T2 convention if necessary
+    dict_convention = test_equad_convention(wn_dict.keys())
+    if np.any([p.endswith("_log10_equad") for p in wn_dict.keys()]):
+        log.info("WN parameters generated using enterprise pre-v3.3.0")
+    if dict_convention is None:
+        log.info("No EQUAD parameters found in the noise dictionary")
+    elif dict_convention == "tnequad":
         log.info(
-            "WN paramaters use temponest convention; EQUAD values are being converted"
+            "WN parameters use temponest convention; EQUAD values are being converted"
         )
         # converts tn_equads --> t2_equads which is the standard for PINT
-        wn_dict = lu.convert_equad_convention(wn_dict)
-        if np.any(["_equad" in p for p in wn_dict.keys()]):
-            log.info("WN parameters generated using enterprise pre-v3.3.0")
-    elif test_equad_convention(wn_dict.keys()) == "t2equad":
+        wn_dict = lu.convert_equad_convention(wn_dict, convention="t2equad")
+    else:
         log.info("WN parameters use T2 convention; no conversion necessary")
 
     for key, val in wn_dict.items():
@@ -1036,50 +1043,12 @@ def add_noise_to_model(
             efac_idx += 1
 
         # See https://github.com/nanograv/enterprise/releases/tag/v3.3.0
-        # ..._t2equad uses PINT/Tempo2/Tempo convention, resulting in total variance EFAC^2 x (toaerr^2 + EQUAD^2)
-        elif "_t2equad" in key:
+        # ..._t2equad uses PINT/Tempo2/Tempo convention, resulting in total variance EFAC^2 x (toaerr^2 + EQUAD^2);
+        # ..._tnequad (and the pre-v3.3.0 ..._equad) uses temponest convention, and has
+        # been converted to the T2 convention above; both are added as EQUAD parameters.
+        elif key.endswith(("_log10_t2equad", "_log10_tnequad", "_log10_equad")):
 
-            param_name = (
-                key.split("_t2equad")[0].split(psr_name)[1].split("_log10")[0][1:]
-            )
-
-            tp = maskParameter(
-                name="EQUAD",
-                index=equad_idx,
-                key="-f",
-                key_value=param_name,
-                value=10**val / 1e-6,
-                units="us",
-                convert_tcb2tdb=False,
-            )
-            equad_params.append(tp)
-            equad_idx += 1
-
-        # ..._tnequad uses temponest convention with separate TNEQ parameters
-        elif "_tnequad" in key:
-
-            param_name = (
-                key.split("_tnequad")[0].split(psr_name)[1].split("_log10")[0][1:]
-            )
-
-            tp = maskParameter(
-                name="TNEQ",
-                index=tneq_idx,
-                key="-f",
-                key_value=param_name,
-                value=10**val / 1e-6,
-                units="us",
-                convert_tcb2tdb=False,
-            )
-            tneq_params.append(tp)
-            tneq_idx += 1
-
-        # ..._equad uses temponest convention; generated with enterprise pre-v3.3.0
-        elif "_equad" in key:
-
-            param_name = (
-                key.split("_equad")[0].split(psr_name)[1].split("_log10")[0][1:]
-            )
+            param_name = key.rsplit("_log10_", 1)[0].split(psr_name)[1][1:]
 
             tp = maskParameter(
                 name="EQUAD",
@@ -1149,15 +1118,13 @@ def add_noise_to_model(
     ef_eq_comp = pm.ScaleToaError()
     ef_eq_comp.remove_param(param="EFAC1")
     ef_eq_comp.remove_param(param="EQUAD1")
-    if len(tneq_params) == 0:
-        # Only remove TNEQ1 if we're not adding TNEQ parameters
-        ef_eq_comp.remove_param(param="TNEQ1")
+    # EQUADs are never added as TNEQ parameters: PINT mirrors every TNEQ into an EQUAD
+    # on setup(), which would duplicate each EQUAD in the resulting par file.
+    ef_eq_comp.remove_param(param="TNEQ1")
     for efac_param in efac_params:
         ef_eq_comp.add_param(param=efac_param, setup=True)
     for equad_param in equad_params:
         ef_eq_comp.add_param(param=equad_param, setup=True)
-    for tneq_param in tneq_params:
-        ef_eq_comp.add_param(param=tneq_param, setup=True)
     model.add_component(ef_eq_comp, validate=True, force=True)
 
     if len(dmefac_params) > 0 or len(dmequad_params) > 0:

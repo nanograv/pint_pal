@@ -1882,7 +1882,7 @@ def convert_enterprise_equads(model):
             log.info(f"{eq} has been converted from {old_eq} to {new_eq}.")
         return model
 
-def convert_equad_convention(noise_dict):
+def convert_equad_convention(noise_dict, convention=None):
     """ EQUADS from enterprise v3.3.0 and earlier follow temponest convention, rather than
     that in Tempo/Tempo2/PINT; this function applies a simple conversion.
     For example, with a given EFAC/EQUAD pair:
@@ -1891,27 +1891,46 @@ def convert_equad_convention(noise_dict):
     or
     EQUAD (tn) = EQUAD (t2) * EFAC
 
+    Each EQUAD is converted using the EFAC of its own backend; pre-v3.3.0
+    ``..._log10_equad`` keys are treated as temponest convention.
 
     For more information, see https://github.com/nanograv/enterprise/releases/tag/v3.3.0
+
+    Parameters
+    ==========
+    noise_dict: dictionary of noise parameters
+    convention: target convention, 't2equad' or 'tnequad'; if None (default), the
+        convention already in use is toggled to the other one.
     """
     converted_dict = noise_dict.copy()
-    _ = [converted_dict.pop(i) for i in list(noise_dict.keys()) if '_equad' in i]
-    efacs = [x for x in noise_dict.keys() if 'efac' in x]
-    original_equads = [x for x in noise_dict.keys() if '_equad' in x]
+    # EQUADs are named ..._log10_t2equad, ..._log10_tnequad, or (pre-v3.3.0) ..._log10_equad;
+    # note ..._log10_dmequad is a DM EQUAD and must not be converted.
+    original_equads = [x for x in noise_dict.keys()
+                       if x.endswith(('_log10_t2equad', '_log10_tnequad', '_log10_equad'))]
+    _ = [converted_dict.pop(i) for i in original_equads]
     if not len(original_equads):
         log.warning('There are no equad parameters in this dictionary.')
         return converted_dict
     else:
+        current = 't2equad' if original_equads[0].endswith('_log10_t2equad') else 'tnequad'
+        if convention is None:
+            convention = 'tnequad' if current == 't2equad' else 't2equad'
+        elif convention not in ('t2equad', 'tnequad'):
+            raise ValueError(f"Invalid EQUAD convention: {convention}. Use 't2equad' or 'tnequad'.")
+        if convention == current:
+            log.info(f'EQUADs already use the {convention} convention; no conversion applied.')
+            return noise_dict.copy()
+
         # EQUADs in a noise dictionary are log10 values
         # so dividing/multiplying by EFAC is a +/- log10(EFAC).
-        if '_tn' in original_equads[0]:
-            converted_keys = [par_name.replace('_tn','_t2') for par_name in original_equads]
-            converted_vals = [noise_dict[tneq] - np.log10(noise_dict[ef]) for tneq, ef in zip(original_equads, efacs)]
-        elif '_t2' in original_equads[0]:
-            converted_keys = [par_name.replace('_t2','_tn') for par_name in original_equads]
-            converted_vals = [noise_dict[t2eq] + np.log10(noise_dict[ef]) for t2eq, ef in zip(original_equads, efacs)]
+        sign = -1.0 if convention == 't2equad' else 1.0
+        for eq in original_equads:
+            prefix = eq.rsplit('_log10_', 1)[0]  # e.g. J1234+5678_Rcvr1_2_GUPPI
+            ef = f'{prefix}_efac'
+            if ef not in noise_dict:
+                log.warning(f'No EFAC ({ef}) found for {eq}; assuming EFAC = 1 in the conversion.')
+            log10_efac = np.log10(noise_dict[ef]) if ef in noise_dict else 0.0
+            converted_dict[f'{prefix}_log10_{convention}'] = noise_dict[eq] + sign * log10_efac
 
-        for ky,val in zip(converted_keys, converted_vals):
-            converted_dict[ky] = val
         assert len(converted_dict) == len(noise_dict), "Length of converted dict does not match original dict"
         return converted_dict
