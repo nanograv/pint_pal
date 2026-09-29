@@ -12,7 +12,7 @@ from pathlib import Path
 from astropy import log
 import pint.models as models
 import pint.toa as toa
-import data_checker as dc
+import pint_pal.data_checker as dc
 
 from loguru import logger
 
