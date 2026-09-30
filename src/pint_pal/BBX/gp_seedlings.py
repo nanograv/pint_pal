@@ -600,6 +600,7 @@ def construct_fourier_grid(
     else:
         raise RuntimeError(f"Unknown strategy: {strategy!r}")
 
+    # Final metadata: spacing index and integer-cycle check
     spacing_index = spacing_hz * T_sec
     metadata["spacing_index"] = float(spacing_index)
     metadata["integer_cycle_spacing"] = bool(
