@@ -359,6 +359,7 @@ def run_Ftests(fitter, tc, alpha=ALPHA, FDnparams = 5, NITS = 1):
     Input:
     --------
     fitter [object]: The PINT fitter object.
+    tc [object]: The pint_pal TimingConfiguration object.
     alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
         the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
     FDnparams [int]: Maximum number of FD parameters to test [default: 5].
