@@ -6,8 +6,6 @@ BBX package: Bayesian Blocks DMX/SWX pipeline + diagnostics + utilities.
 
 from __future__ import annotations
 
-from .classic_dmx import ClassicDMXRun, run_classic_dmx
-
 # Core pipeline 
 from .bbx import (
     # Config Objects
@@ -120,8 +118,6 @@ from .gp_seedlings import (
 )
 
 __all__ = [
-    "ClassicDMXRun",
-    "run_classic_dmx",
     # Config/containers
     "ReceiverSelection",
     "PlotStyleConfig",
@@ -162,14 +158,6 @@ __all__ = [
     "DispersionMeasureProxy",
     "BBX",
     "NoiseAnalysis",
-    # calibration
-    "ACFResult",
-    "CalibrationProposal",
-    "empirical_acf",
-    "integrated_autocorrelation_time",
-    "estimate_effective_sample_size",
-    "first_crossing",
-    "propose_bbx_calibration",
     # utils
     "handle_diagnostics",
     "handle_diagnostics_multi",
