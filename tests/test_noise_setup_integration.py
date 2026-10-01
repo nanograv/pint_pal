@@ -9,7 +9,9 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 
+import jax
 import numpy as np
+import pandas as pd
 import pint.models as models
 import pytest
 
@@ -18,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from enterprise.pulsar import Pulsar
 
 import pint_pal.discovery_utils as du
+import pint_pal.lite_utils as lu
 import pint_pal.noise_utils as nu
 from pint_pal.timingconfiguration import TimingConfiguration
 
@@ -97,41 +100,45 @@ def _assert_discovery_likelihood_builds(psr, model_kwargs):
     return pulsar_likelihood
 
 
+def _midpoint_from_prior(par_name):
+    """Return a representative value for a discovery parameter."""
+    try:
+        low, high = du.ds_prior.getprior_uniform(par_name, du.ds.priordict_standard)
+        return 0.5 * (float(low) + float(high))
+    except (RuntimeError, KeyError, ValueError):
+        alias = par_name.replace("_dm_gp_", "_dmgp_")
+        if alias != par_name:
+            low, high = du.ds_prior.getprior_uniform(alias, du.ds.priordict_standard)
+            return 0.5 * (float(low) + float(high))
+
+        if par_name.endswith("_alpha"):
+            return 2.0
+        if par_name.endswith("_log10_A"):
+            return -15.5
+        if par_name.endswith("_gamma"):
+            return 3.5
+        if par_name.endswith("_efac") or par_name.endswith("_dmefac"):
+            return 1.0
+        if (
+            par_name.endswith("_log10_ecorr")
+            or par_name.endswith("_ecorr")
+            or par_name.endswith("_dmequad")
+        ):
+            return -6.5
+
+        raise AssertionError(
+            f"No prior midpoint mapping available for discovery parameter: {par_name}"
+        )
+
+
+def _params_from_prior_midpoints(pulsar_likelihood):
+    """Fill every likelihood parameter with its prior midpoint."""
+    return {p: _midpoint_from_prior(p) for p in pulsar_likelihood.logL.params}
+
+
 def _assert_discovery_likelihood_evaluates(pulsar_likelihood):
     """Evaluate discovery likelihood and assert finite logL across API variants."""
-
-    def _midpoint_from_prior(par_name):
-        try:
-            low, high = du.ds_prior.getprior_uniform(par_name, du.ds.priordict_standard)
-            return 0.5 * (float(low) + float(high))
-        except (RuntimeError, KeyError, ValueError):
-            alias = par_name.replace("_dm_gp_", "_dmgp_")
-            if alias != par_name:
-                low, high = du.ds_prior.getprior_uniform(
-                    alias, du.ds.priordict_standard
-                )
-                return 0.5 * (float(low) + float(high))
-
-            if par_name.endswith("_alpha"):
-                return 2.0
-            if par_name.endswith("_log10_A"):
-                return -15.5
-            if par_name.endswith("_gamma"):
-                return 3.5
-            if par_name.endswith("_efac") or par_name.endswith("_dmefac"):
-                return 1.0
-            if (
-                par_name.endswith("_log10_ecorr")
-                or par_name.endswith("_ecorr")
-                or par_name.endswith("_dmequad")
-            ):
-                return -6.5
-
-            raise AssertionError(
-                f"No prior midpoint mapping available for discovery parameter: {par_name}"
-            )
-
-    sampled_params = {}
+    sampled_params = _params_from_prior_midpoints(pulsar_likelihood)
 
     for _ in range(128):
         try:
@@ -429,8 +436,21 @@ def test_model_noise_setup_supports_optimizer_sampler_kwargs_combinations(
                 }
             }
         )
-        or ({"a": 1.0}, None),
+        or ({"pars": np.zeros(1)}, None),
     )
+
+    # model_noise inverts the optimizer's MAP `pars` vector back to physical
+    # parameters via the numpyro model's `to_df`; that transform needs the exact
+    # parameter count, which this plumbing-focused test doesn't reconstruct. Stub
+    # `to_df` (leaving the rest of the model real for the AutoDelta guide).
+    _real_make_numpyro_model = du.make_numpyro_model
+
+    def _make_numpyro_model_stub_todf(*args, **kwargs):
+        model_fn = _real_make_numpyro_model(*args, **kwargs)
+        model_fn.to_df = lambda chain: pd.DataFrame({"MAP_param": [0.0]})
+        return model_fn
+
+    monkeypatch.setattr(du, "make_numpyro_model", _make_numpyro_model_stub_todf)
 
     result = nu.model_noise(
         mo,
@@ -506,6 +526,114 @@ def test_add_noise_to_model_with_real_model_and_synthetic_noise(real_pint_model)
         noise_dict[f"{psr}_red_noise_gamma"]
     )
     assert int(rn.TNREDC.value) == 12
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_add_noise_to_model_converts_tnequad_to_t2equad(real_pint_model):
+    """Regression: temponest-convention EQUADs are converted and applied as EQUADs.
+
+    A noise dictionary written with the ``tn_equad`` convention (enterprise
+    ``log10_tnequad``) must be converted to the PINT/tempo2 convention
+    (``EQUAD(t2) = EQUAD(tn) / EFAC``, i.e. ``log10`` values shifted by
+    ``log10(EFAC)``) and end up as EQUAD maskParameters on ScaleToaError --
+    not dropped, and not left as TNEQ parameters.
+    """
+    model = deepcopy(real_pint_model)
+    psr = model.PSR.value
+
+    efacs = {"Rcvr1_2_GUPPI": 1.12, "Rcvr_800_GUPPI": 0.97}
+    log10_tnequads = {"Rcvr1_2_GUPPI": -6.5, "Rcvr_800_GUPPI": -6.9}
+    noise_dict = {}
+    for backend in efacs:
+        noise_dict[f"{psr}_{backend}_efac"] = efacs[backend]
+        noise_dict[f"{psr}_{backend}_log10_tnequad"] = log10_tnequads[backend]
+
+    assert nu.test_equad_convention(noise_dict.keys()) == "tnequad"
+
+    # the dictionary conversion itself: tn keys become t2 keys, values divided by EFAC
+    converted = lu.convert_equad_convention(deepcopy(noise_dict))
+    for backend in efacs:
+        assert f"{psr}_{backend}_log10_tnequad" not in converted
+        assert 10 ** converted[f"{psr}_{backend}_log10_t2equad"] == pytest.approx(
+            10 ** log10_tnequads[backend] / efacs[backend]
+        )
+
+    out = nu.add_noise_to_model(
+        model=model,
+        noise_dict=noise_dict,
+        model_kwargs={},
+        using_wideband=False,
+    )
+
+    assert out is model
+    assert "ScaleToaError" in model.components
+    wn = model.components["ScaleToaError"]
+
+    # converted EQUADs are applied; no TNEQ parameters are left behind
+    assert not [p for p in wn.params if p.startswith("TNEQ")]
+    equad_params = [getattr(model, p) for p in wn.params if p.startswith("EQUAD")]
+    assert len(equad_params) == len(log10_tnequads)
+
+    applied = {p.key_value[0]: float(p.value) for p in equad_params}
+    for backend in efacs:
+        # PINT EQUADs are in microseconds
+        expected_us = 10 ** log10_tnequads[backend] / efacs[backend] / 1e-6
+        assert applied[backend] == pytest.approx(expected_us)
+
+    # EFACs are untouched by the conversion
+    efac_params = [getattr(model, p) for p in wn.params if p.startswith("EFAC")]
+    applied_efacs = {p.key_value[0]: float(p.value) for p in efac_params}
+    assert applied_efacs == pytest.approx(efacs)
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+@pytest.mark.parametrize(
+    "suffix,converted",
+    [
+        ("log10_t2equad", False),  # already PINT convention: passed through
+        ("log10_tnequad", True),  # temponest: divided by EFAC
+        ("log10_equad", True),  # pre-v3.3.0 temponest naming
+    ],
+)
+def test_add_noise_to_model_writes_one_equad_per_backend(
+    real_pint_model, suffix, converted
+):
+    """Regression: each EQUAD appears exactly once in the par file, in T2 convention.
+
+    EQUADs used to be added as TNEQ parameters when the noise dictionary was in
+    temponest convention; PINT mirrors every TNEQ into an EQUAD on setup, so each
+    EQUAD ended up in the par file twice (and unconverted).
+    """
+    model = deepcopy(real_pint_model)
+    psr = model.PSR.value
+
+    efacs = {"Rcvr1_2_GUPPI": 1.12, "Rcvr_800_GUPPI": 0.97}
+    log10_equads = {"Rcvr1_2_GUPPI": -6.5, "Rcvr_800_GUPPI": -6.9}
+    noise_dict = {}
+    for backend in efacs:
+        noise_dict[f"{psr}_{backend}_efac"] = efacs[backend]
+        noise_dict[f"{psr}_{backend}_{suffix}"] = log10_equads[backend]
+
+    out = nu.add_noise_to_model(model, noise_dict, model_kwargs={}, using_wideband=False)
+    wn = out.components["ScaleToaError"]
+
+    assert not [p for p in wn.params if p.startswith("TNEQ")]
+    applied = {
+        getattr(out, p).key_value[0]: float(getattr(out, p).value)
+        for p in wn.params
+        if p.startswith("EQUAD")
+    }
+    assert len(applied) == len(efacs)
+    for backend in efacs:
+        expected = 10 ** log10_equads[backend] / 1e-6
+        if converted:
+            expected /= efacs[backend]
+        assert applied[backend] == pytest.approx(expected)
+
+    # ... and the par file carries one EQUAD line per backend, with no TNEQ lines
+    par_lines = out.as_parfile().splitlines()
+    assert len([l for l in par_lines if l.startswith("EQUAD")]) == len(efacs)
+    assert not [l for l in par_lines if l.startswith("TNEQ")]
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
@@ -589,17 +717,11 @@ def test_add_noise_to_model_adds_chromatic_gp_powerlaw(real_pint_model):
     noise_dict = _base_noise_dict(psr)
     noise_dict.update({f"{psr}_chrom_gp_log10_A": -13.9, f"{psr}_chrom_gp_gamma": 3.0})
 
-    if hasattr(nu.pm, "PLCMNoise"):
-        out = nu.add_noise_to_model(
-            model, noise_dict, model_kwargs={"chromatic_noise": {"Nfreqs": 15}}
-        )
-        assert out is model
-        assert "PLCMNoise" in model.components
-    else:
-        with pytest.raises(AttributeError, match="PLCMNoise"):
-            nu.add_noise_to_model(
-                model, noise_dict, model_kwargs={"chromatic_noise": {"Nfreqs": 15}}
-            )
+    out = nu.add_noise_to_model(
+        model, noise_dict, model_kwargs={"chromatic_noise": {"Nfreqs": 15}}
+    )
+    assert out is model
+    assert "PLChromNoise" in model.components
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
@@ -644,8 +766,8 @@ def test_add_noise_to_model_adds_solar_wind_powerlaw_gp_only(real_pint_model):
 @pytest.mark.parametrize(
     "sw_keys,expected_kernel",
     [
-        ({"sw_gp_log10_sigma_ridge": -7.0}, "ridge"),
-        ({"sw_gp_log10_sigma_sq_exp": -7.1, "sw_gp_log10_ell": 1.2}, "sqexp"),
+        ({"sw_gp_log10_sigma_ridge": -7.0}, "RIDGE"),
+        ({"sw_gp_log10_sigma_sq_exp": -7.1, "sw_gp_log10_ell": 1.2}, "SQEXP"),
         (
             {
                 "sw_gp_log10_sigma_quasi_periodic": -7.2,
@@ -653,9 +775,9 @@ def test_add_noise_to_model_adds_solar_wind_powerlaw_gp_only(real_pint_model):
                 "sw_gp_log10_gamma_p": -0.2,
                 "sw_gp_log10_p": 1.5,
             },
-            "quasi_periodic",
+            "QUASI_PERIODIC",
         ),
-        ({"sw_gp_log10_sigma_matern": -7.3, "sw_gp_log10_ell": 1.0}, "matern"),
+        ({"sw_gp_log10_sigma_matern": -7.3, "sw_gp_log10_ell": 1.0}, "MATERN"),
     ],
 )
 def test_add_noise_to_model_adds_time_domain_solar_wind_variants(
@@ -677,6 +799,163 @@ def test_add_noise_to_model_adds_time_domain_solar_wind_variants(
     assert "SolarWindDispersion" in model.components
     assert "TimeDomainSWNoise" in model.components
     assert model.components["TimeDomainSWNoise"].TDSWKERNEL.value == expected_kernel
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+@pytest.mark.parametrize("chromatic_idx", ["vary", 4.0])
+def test_gp_design_matrix_extraction_with_chromatic_gp(
+    real_tc, real_model_toas, chromatic_idx
+):
+    """GP realization bookkeeping must work for fixed and varying chromatic index.
+
+    With ``chromatic_idx='vary'`` discovery builds the compound design matrix as
+    a closure ``F(params)`` rather than a matrix, so the extraction has to
+    evaluate it at the sampled noise parameters.  Both cases must yield F
+    columns that line up with the drawn coefficients.
+    """
+    e_psr = _enterprise_pulsar_from_real_data(real_model_toas)
+
+    model_kwargs = _variant_model_kwargs(
+        real_tc,
+        timing_model={"svd": False, "tm_marg": False},
+        white_noise={"gp_ecorr": True, "tn_equad": True, "include_ecorr": False},
+        red_noise={"basis": "fourier", "Nfreqs": 5, "prior": "powerlaw"},
+        dm_noise=False,
+        chromatic_noise={
+            "basis": "fourier",
+            "Nfreqs": 5,
+            "prior": "powerlaw",
+            "chromatic_idx": chromatic_idx,
+        },
+        solar_wind=False,
+    )
+
+    psl = _assert_discovery_likelihood_builds(e_psr, model_kwargs)
+    params = _params_from_prior_midpoints(psl)
+
+    assert callable(psl.N.F) is (chromatic_idx == "vary")
+
+    _, draw = psl.sample_conditional(jax.random.PRNGKey(0), params)
+    index_map, F_columns, F_params = nu._extract_gp_design_matrix(psl.N, params)
+
+    expected_F_params = [f"{e_psr.name}_chrom_gp_alpha"] if chromatic_idx == "vary" else []
+    assert F_params == expected_F_params
+
+    assert any("chrom_gp" in key_name for key_name in index_map)
+    assert set(draw) == set(index_map) == set(F_columns)
+
+    for gp_key, coeffs in draw.items():
+        coeffs = np.asarray(coeffs)
+        F = np.asarray(F_columns[gp_key])
+        start, stop = index_map[gp_key]
+        assert F.shape == (len(e_psr.toas), coeffs.shape[0])
+        assert stop - start == coeffs.shape[0]
+        # F @ c is the time-domain realization used downstream for plotting
+        assert np.all(np.isfinite(F @ coeffs))
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+@pytest.mark.parametrize("chromatic_idx", ["vary", 4.0])
+def test_discovery_likelihood_chromatic_quadratic_filter(
+    real_tc, real_model_toas, chromatic_idx
+):
+    """`include_quadratic=True` adds a 3-column filter sharing the chromatic index."""
+    e_psr = _enterprise_pulsar_from_real_data(real_model_toas)
+
+    def _build(include_quadratic):
+        model_kwargs = _variant_model_kwargs(
+            real_tc,
+            timing_model={"svd": False, "tm_marg": False},
+            white_noise={"gp_ecorr": False, "tn_equad": True, "include_ecorr": True},
+            red_noise=False,
+            dm_noise=False,
+            chromatic_noise={
+                "basis": "fourier",
+                "Nfreqs": 5,
+                "prior": "powerlaw",
+                "chromatic_idx": chromatic_idx,
+                "include_quadratic": include_quadratic,
+            },
+            solar_wind=False,
+        )
+        return _assert_discovery_likelihood_builds(e_psr, model_kwargs)
+
+    psl_plain, psl_quad = _build(False), _build(True)
+    _assert_discovery_likelihood_evaluates(psl_quad)
+
+    params = _params_from_prior_midpoints(psl_quad)
+    params[f"{e_psr.name}_chrom_gp_alpha"] = 4.0
+
+    # the filter adds no new sampled parameters: a varying index is shared with
+    # the Fourier GP through the common `chrom_gp` name
+    assert sorted(psl_quad.logL.params) == sorted(psl_plain.logL.params)
+    # ... but it does change the likelihood, i.e. it is really in the model
+    assert not np.isclose(
+        float(psl_quad.logL(params)), float(psl_plain.logL(params))
+    )
+
+    index_plain, F_plain, _ = nu._extract_gp_design_matrix(psl_plain.N, params)
+    index_quad, F_quad, F_params = nu._extract_gp_design_matrix(psl_quad.N, params)
+    expected_alpha = [f"{e_psr.name}_chrom_gp_alpha"] if chromatic_idx == "vary" else []
+    assert F_params == expected_alpha
+
+    quad_keys = set(index_quad) - set(index_plain)
+    if chromatic_idx == "vary":
+        # a varying index makes the filter a variable GP: 3 extra design columns
+        quad_key = quad_keys.pop()
+        assert not quad_keys and "chrom_gp" in quad_key
+        start, stop = index_quad[quad_key]
+        assert stop - start == 3
+        assert np.asarray(F_quad[quad_key]).shape == (len(e_psr.toas), 3)
+    else:
+        # a fixed index gives a constant GP, marginalized like the timing model
+        assert not quad_keys
+
+    # the Fourier part of the model is untouched by adding the filter
+    for gp_key, F in F_plain.items():
+        assert np.allclose(np.asarray(F_quad[gp_key]), np.asarray(F))
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_gp_design_matrix_varying_index_matches_fixed_index(real_tc, real_model_toas):
+    """A varying chromatic index evaluated at alpha reproduces the fixed-alpha basis."""
+    e_psr = _enterprise_pulsar_from_real_data(real_model_toas)
+    alpha = 4.0
+
+    def _build(chromatic_idx):
+        model_kwargs = _variant_model_kwargs(
+            real_tc,
+            timing_model={"svd": False, "tm_marg": False},
+            white_noise={"gp_ecorr": False, "tn_equad": True, "include_ecorr": True},
+            red_noise=False,
+            dm_noise=False,
+            chromatic_noise={
+                "basis": "fourier",
+                "Nfreqs": 5,
+                "prior": "powerlaw",
+                "chromatic_idx": chromatic_idx,
+            },
+            solar_wind=False,
+        )
+        return _assert_discovery_likelihood_builds(e_psr, model_kwargs)
+
+    psl_vary, psl_fixed = _build("vary"), _build(alpha)
+    params = _params_from_prior_midpoints(psl_vary)
+    params[f"{e_psr.name}_chrom_gp_alpha"] = alpha
+
+    _, F_vary, _ = nu._extract_gp_design_matrix(psl_vary.N, params)
+    _, F_fixed, _ = nu._extract_gp_design_matrix(psl_fixed.N, params)
+
+    chrom_keys = [k for k in F_vary if "chrom_gp" in k]
+    assert chrom_keys
+    for gp_key in chrom_keys:
+        assert np.allclose(np.asarray(F_vary[gp_key]), np.asarray(F_fixed[gp_key]))
+
+    # and the basis really does depend on alpha, so evaluating it matters
+    params_other = dict(params, **{f"{e_psr.name}_chrom_gp_alpha": 2.0})
+    _, F_other, _ = nu._extract_gp_design_matrix(psl_vary.N, params_other)
+    for gp_key in chrom_keys:
+        assert not np.allclose(np.asarray(F_vary[gp_key]), np.asarray(F_other[gp_key]))
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")

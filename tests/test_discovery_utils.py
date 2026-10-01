@@ -53,14 +53,14 @@ def test_red_noise_block_scales_fmin_and_uses_getspan(monkeypatch):
         }
         return "BASIS"
 
-    def fake_makegp_fourier(_psr, prior, nfreqs, T, modes=None, fourierbasis=None, name=None):
+    def fake_makegp_fourier(_psr, prior, nfreqs, T, fourierbasis=None, name=None, noisedict=None):
         calls["makegp"] = {
             "prior": prior,
             "Nfreqs": nfreqs,
             "T": T,
-            "modes": modes,
             "fourierbasis": fourierbasis,
             "name": name,
+            "noisedict": noisedict,
         }
         return "RN_BLOCK"
 
@@ -84,6 +84,8 @@ def test_red_noise_block_scales_fmin_and_uses_getspan(monkeypatch):
     assert calls["makegp"]["prior"] is sentinel_prior
     assert calls["makegp"]["T"] == 100.0
     assert calls["makegp"]["fourierbasis"] == "BASIS"
+    # no noise_dict supplied -> forwarded as the empty default (variable GP)
+    assert calls["makegp"]["noisedict"] == {}
 
 
 def test_dm_noise_block_invalid_basis_raises():
@@ -153,13 +155,13 @@ def test_basic_noise_blocks_delegate(monkeypatch):
 
 def test_select_fourier_basis_nlog_zero_returns_expected_objects(monkeypatch):
     monkeypatch.setattr(du.ds, "fourierbasis", object())
-    monkeypatch.setattr(du.ds, "dmfourierbasis", object())
-    monkeypatch.setattr(du.ds, "freechromaticfourierbasis", object())
+    monkeypatch.setattr(du.ds, "fourierbasis_dm", object())
+    monkeypatch.setattr(du.ds, "fourierbasis_chrom", object())
     monkeypatch.setattr(du.ds_solar, "fourierbasis_solar_dm", object(), raising=False)
 
     assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "red_noise") is du.ds.fourierbasis
-    assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "dm_noise") is du.ds.dmfourierbasis
-    assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "chromatic") is du.ds.freechromaticfourierbasis
+    assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "dm_noise") is du.ds.fourierbasis_dm
+    assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "chromatic") is du.ds.fourierbasis_chrom
     assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "solar_wind") is du.ds_solar.fourierbasis_solar_dm
 
 
@@ -167,7 +169,7 @@ def test_select_fourier_basis_nlog_positive_calls_expected_builder(monkeypatch):
     called = {}
     monkeypatch.setattr(
         du.ds,
-        "log_dm_fourierbasis",
+        "log_fourierbasis_dm",
         lambda psr, T, logmode, f_min, nlin, nlog: called.update(
             dict(psr=psr, T=T, logmode=logmode, f_min=f_min, nlin=nlin, nlog=nlog)
         )
@@ -203,7 +205,7 @@ def test_solar_wind_interpolation_supported_prior(monkeypatch):
     monkeypatch.setattr(
         du.ds_solar,
         "makegp_timedomain_solar_dm",
-        lambda psr, covariance, dt, Umat, nodes, common, name: {
+        lambda psr, covariance, dt, Umat, nodes, common, name, noisedict={}: {
             "psr": psr,
             "covariance": covariance,
             "Umat": Umat,
@@ -315,8 +317,8 @@ def test_make_numpyro_model_uses_tanh_transform(monkeypatch):
     assert factored["logl"] == pytest.approx(1.0)
 
 
-def test_make_numpyro_model_to_df_uses_logx_to_df(monkeypatch):
-    """to_df on the model should delegate to logx.to_df."""
+def _fake_logx_model(monkeypatch):
+    """Build a numpyro model whose logx.to_df yields a single 'x' column."""
     import jax.numpy as jnp
     import pandas as pd
 
@@ -332,10 +334,38 @@ def test_make_numpyro_model_to_df_uses_logx_to_df(monkeypatch):
 
     monkeypatch.setattr(du.ds_prior, "makelogtransform_uniform",
                         lambda lnlike, priordict: FakeLogx())
-    model = du.make_numpyro_model(LnLike(), {})
+    return du.make_numpyro_model(LnLike(), {})
+
+
+def test_make_numpyro_model_to_df_uses_logx_to_df(monkeypatch):
+    """to_df delegates parameter columns to logx.to_df and adds lnlike."""
+    model = _fake_logx_model(monkeypatch)
     df = model.to_df({"pars": np.array([[1.5], [2.5]])})
-    assert list(df.columns) == ["x"]
+    assert list(df.columns) == ["x", "lnlike"]
     assert np.allclose(df["x"].values, [1.5, 2.5])
+
+
+def test_make_numpyro_model_to_df_reuses_runtime_lnlike(monkeypatch):
+    """lnlike recorded at sample time is carried through, not recomputed.
+
+    The model records lnlike via ``numpyro.deterministic`` while sampling, so a
+    chain that already carries the column must be used verbatim.
+    """
+    model = _fake_logx_model(monkeypatch)
+    df = model.to_df({
+        "pars": np.array([[1.5], [2.5]]),
+        "lnlike": np.array([-10.0, -20.0]),
+    })
+    assert list(df.columns) == ["x", "lnlike"]
+    assert np.allclose(df["lnlike"].values, [-10.0, -20.0])
+
+
+def test_make_numpyro_model_to_df_computes_lnlike_when_absent(monkeypatch):
+    """Chains predating the runtime lnlike site fall back to evaluating logx."""
+    model = _fake_logx_model(monkeypatch)
+    df = model.to_df({"pars": np.array([[1.5], [2.5]])})
+    # FakeLogx sums its parameter vector
+    assert np.allclose(df["lnlike"].values, [1.5, 2.5])
 
 
 def test_make_numpyro_model_custom_transform(monkeypatch):
@@ -739,36 +769,40 @@ class TestChromaticBasisSelection:
 
     # --- _select_fourier_basis, nlog==0 ---
 
-    def test_nlog0_vary_returns_freechromaticfourierbasis(self):
-        """chromatic_idx=None → bare ds.freechromaticfourierbasis (callable fmat)."""
+    def test_nlog0_vary_returns_fourierbasis_chrom(self):
+        """chromatic_idx=None → bare ds.fourierbasis_chrom (callable fmat)."""
         result = du._select_fourier_basis(
             psr=object(), Nfreqs=10, tspan=100.0,
             logmode=2, f_min=1e-3, nlog=0,
             noise_type='chromatic', chromatic_idx=None,
         )
-        assert result is du.ds.freechromaticfourierbasis
+        assert result is du.ds.fourierbasis_chrom
 
-    def test_nlog0_fixed_returns_partial(self):
-        """chromatic_idx=4.0 → partial(..., chromatic_idx=4.0)."""
-        from functools import partial
+    def test_nlog0_fixed_calls_make_fourierbasis_chrom(self, monkeypatch):
+        """chromatic_idx=4.0 → ds.make_fourierbasis_chrom(alpha=4.0) (fixed-index matrix)."""
+        captured = {}
+        def fake_make(alpha):
+            captured['alpha'] = alpha
+            return 'FIXED_BASIS'
+        monkeypatch.setattr(du.ds, 'make_fourierbasis_chrom', fake_make)
+
         result = du._select_fourier_basis(
             psr=object(), Nfreqs=10, tspan=100.0,
             logmode=2, f_min=1e-3, nlog=0,
             noise_type='chromatic', chromatic_idx=4.0,
         )
-        assert isinstance(result, partial)
-        assert result.func is du.ds.freechromaticfourierbasis
-        assert result.keywords == {'chromatic_idx': 4.0}
+        assert captured['alpha'] == 4.0
+        assert result == 'FIXED_BASIS'
 
     # --- _select_fourier_basis, nlog>0 ---
 
     def test_nlog_positive_vary_calls_log_free(self, monkeypatch):
-        """nlog>0 + chromatic_idx=None → lambda calling log_free_chromatic_fourierbasis."""
+        """nlog>0 + chromatic_idx=None → lambda calling log_fourierbasis_chrom."""
         calls = {}
         def fake_log_free(psr, T, logmode, f_min, nlin, nlog):
             calls['log_free'] = True
             return 'f', 'df', lambda alpha: 'FMAT'
-        monkeypatch.setattr(du.ds, 'log_free_chromatic_fourierbasis', fake_log_free)
+        monkeypatch.setattr(du.ds, 'log_fourierbasis_chrom', fake_log_free)
 
         psr = object()
         result = du._select_fourier_basis(
@@ -782,12 +816,12 @@ class TestChromaticBasisSelection:
         assert 'log_free' in calls
 
     def test_nlog_positive_fixed_calls_log_fixed(self, monkeypatch):
-        """nlog>0 + chromatic_idx=4.0 → lambda calling log_fixed_chromatic_fourierbasis."""
+        """nlog>0 + chromatic_idx=4.0 → lambda calling log_fourierbasis_chrom_fixed."""
         calls = {}
-        def fake_log_fixed(psr, chromatic_idx, T, logmode, f_min, nlin, nlog):
-            calls['chromatic_idx'] = chromatic_idx
+        def fake_log_fixed(psr, alpha, T, logmode, f_min, nlin, nlog):
+            calls['alpha'] = alpha
             return 'f', 'df', 'FMAT'
-        monkeypatch.setattr(du.ds, 'log_fixed_chromatic_fourierbasis', fake_log_fixed)
+        monkeypatch.setattr(du.ds, 'log_fourierbasis_chrom_fixed', fake_log_fixed)
 
         psr = object()
         result = du._select_fourier_basis(
@@ -797,7 +831,7 @@ class TestChromaticBasisSelection:
         )
         assert callable(result)
         result(psr, 10, 100.0)
-        assert calls['chromatic_idx'] == 4.0
+        assert calls['alpha'] == 4.0
 
     # --- chromatic_noise_block wiring ---
 
@@ -858,6 +892,119 @@ class TestChromaticBasisSelection:
         assert 'chromatic_idx' not in makegp_kwargs
 
 
+# ---------------------------------------------------------------------------
+# Chromatic quadratic filter
+# ---------------------------------------------------------------------------
+
+class TestChromaticQuadBlock:
+    """Tests for chromatic_quad_block and the chromatic_noise_block wiring."""
+
+    @staticmethod
+    def _patch_fourier(monkeypatch):
+        monkeypatch.setattr(du, '_select_fourier_basis', lambda *a, **k: 'BASIS')
+        monkeypatch.setattr(du.ds, 'getspan', lambda _: 100.0)
+        monkeypatch.setattr(du.ds, 'powerlaw', object())
+        monkeypatch.setattr(du.ds, 'makegp_fourier', lambda *a, **k: 'GP')
+
+    def test_quad_block_vary_uses_varF_with_alpha(self, monkeypatch):
+        """chromatic_idx='vary' → callable basis + makegp_improper_varF(param_names=['alpha'])."""
+        captured = {}
+        def fake_basis(psr, fref=1400.0, chrom_idx=None):
+            captured['basis'] = {'fref': fref, 'chrom_idx': chrom_idx}
+            return 'CALLABLE_BASIS'
+        def fake_varF(psr, fmat, constant=None, name=None, param_names=None, noisedict=None):
+            captured['varF'] = {'fmat': fmat, 'constant': constant, 'name': name,
+                                'param_names': param_names, 'noisedict': noisedict}
+            return 'QUAD'
+        monkeypatch.setattr(du.ds, 'chromatic_quad_basis', fake_basis)
+        monkeypatch.setattr(du.ds, 'makegp_improper_varF', fake_varF)
+
+        noise_dict = {'B1937+21_efac': 1.0}
+        assert du.chromatic_quad_block(object(), noise_dict=noise_dict) == 'QUAD'
+        assert captured['basis'] == {'fref': 1400.0, 'chrom_idx': None}
+        assert captured['varF']['fmat'] == 'CALLABLE_BASIS'
+        assert captured['varF']['param_names'] == ['alpha']
+        assert captured['varF']['name'] == 'chrom_gp'
+        assert captured['varF']['noisedict'] is noise_dict
+
+    def test_quad_block_fixed_uses_improper_with_matrix(self, monkeypatch):
+        """A numeric chromatic_idx → fixed basis matrix + makegp_improper."""
+        captured = {}
+        def fake_basis(psr, fref=1400.0, chrom_idx=None):
+            captured['basis'] = {'fref': fref, 'chrom_idx': chrom_idx}
+            return 'FIXED_BASIS'
+        def fake_improper(psr, fmat, constant=None, name=None):
+            captured['improper'] = {'fmat': fmat, 'constant': constant, 'name': name}
+            return 'QUAD'
+        monkeypatch.setattr(du.ds, 'chromatic_quad_basis', fake_basis)
+        monkeypatch.setattr(du.ds, 'makegp_improper', fake_improper)
+
+        result = du.chromatic_quad_block(object(), chromatic_idx=4.0, fref=800.0, name='chrom2_gp')
+        assert result == 'QUAD'
+        assert captured['basis'] == {'fref': 800.0, 'chrom_idx': 4.0}
+        assert captured['improper'] == {'fmat': 'FIXED_BASIS', 'constant': 1.0e40, 'name': 'chrom2_gp'}
+
+    def test_noise_block_without_quadratic_returns_single_gp(self, monkeypatch):
+        """include_quadratic=False (default) keeps the historical single-signal return."""
+        self._patch_fourier(monkeypatch)
+        assert du.chromatic_noise_block(object(), tspan=100.0) == 'GP'
+
+    def test_noise_block_with_quadratic_returns_pair(self, monkeypatch):
+        """include_quadratic=True → [chrom_gp, quad], sharing name/index/noise_dict."""
+        self._patch_fourier(monkeypatch)
+        captured = {}
+        def fake_quad(psr, noise_dict=None, name=None, chromatic_idx=None, fref=None):
+            captured.update(noise_dict=noise_dict, name=name,
+                            chromatic_idx=chromatic_idx, fref=fref)
+            return 'QUAD'
+        monkeypatch.setattr(du, 'chromatic_quad_block', fake_quad)
+
+        noise_dict = {'B1937+21_efac': 1.0}
+        result = du.chromatic_noise_block(
+            object(), noise_dict=noise_dict, tspan=100.0, name='chrom_gp',
+            chromatic_idx='vary', include_quadratic=True, quad_fref=800.0,
+        )
+        assert result == ['GP', 'QUAD']
+        assert captured == {'noise_dict': noise_dict, 'name': 'chrom_gp',
+                            'chromatic_idx': 'vary', 'fref': 800.0}
+
+    def test_noise_block_quadratic_forwards_fixed_index(self, monkeypatch):
+        """A fixed chromatic index reaches the quadratic filter unchanged."""
+        self._patch_fourier(monkeypatch)
+        captured = {}
+        monkeypatch.setattr(du, 'chromatic_quad_block',
+                            lambda psr, **k: (captured.update(k), 'QUAD')[1])
+
+        du.chromatic_noise_block(object(), tspan=100.0, chromatic_idx=4.0, include_quadratic=True)
+        assert captured['chromatic_idx'] == 4.0
+
+    def test_flatten_args_expands_multi_signal_blocks(self):
+        """flatten_args keeps single signals and expands sequences."""
+        assert du.flatten_args(['tm', 'GP']) == ['tm', 'GP']
+        assert du.flatten_args(['tm', ['GP', 'QUAD']]) == ['tm', 'GP', 'QUAD']
+        assert du.flatten_args(['tm', ('GP', 'QUAD')]) == ['tm', 'GP', 'QUAD']
+
+    def test_likelihood_args_include_quadratic(self, monkeypatch):
+        """The quadratic filter lands in the likelihood args as its own signal."""
+        monkeypatch.setattr(du.ds, 'getspan', lambda _: 100.0)
+        monkeypatch.setattr(du, 'timing_model_block', lambda *a, **k: 'tm')
+        monkeypatch.setattr(du, 'white_noise_block', lambda *a, **k: 'wn')
+        monkeypatch.setattr(du, 'chromatic_noise_block', lambda *a, **k: ['GP', 'QUAD'])
+
+        psr = SimpleNamespace(residuals=np.zeros(4), name='B1937+21')
+        args = du.make_single_pulsar_noise_likelihood_discovery(
+            psr,
+            noise_dict={},
+            model_kwargs={
+                'timing_model': {'svd': True},
+                'white_noise': {'tn_equad': True},
+                'chromatic_noise': {'Nfreqs': 5, 'include_quadratic': True},
+            },
+            return_args=True,
+        )
+        assert args[-2:] == ['GP', 'QUAD']
+
+
 @pytest.mark.parametrize("prior_name,prior_attr", [("powerlaw", "powerlaw"), ("broken_powerlaw", "broken_powerlaw"), ("freespectrum", "freespectrum")])
 def test_fourier_blocks_accept_supported_prior_values(monkeypatch, prior_name, prior_attr):
     sentinel_prior = object()
@@ -897,14 +1044,22 @@ def test_solar_wind_interpolation_invalid_prior_raises(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# modes forwarding tests
+# Nfreqs forwarding tests
+#
+# discovery's makegp_fourier takes `components`, which may be an int number of
+# frequencies or an explicit array of Fourier modes (this replaced the old
+# `modes` argument). The blocks forward Nfreqs into that slot unchanged.
 # ---------------------------------------------------------------------------
 
+FOURIER_BLOCKS = ["red_noise_block", "dm_noise_block",
+                  "chromatic_noise_block", "solar_wind_noise_block"]
+
+
 def _make_fake_makegp(calls, sentinel="BLOCK"):
-    """Return a fake ds.makegp_fourier that records its keyword arguments."""
-    def fake(psr, prior, nfreqs, T=None, modes=None, fourierbasis=None, name=None, **kwargs):
-        calls.update(dict(prior=prior, Nfreqs=nfreqs, T=T, modes=modes,
-                         fourierbasis=fourierbasis, name=name))
+    """Return a fake ds.makegp_fourier that records its arguments."""
+    def fake(psr, prior, components, T=None, fourierbasis=None, name=None, **kwargs):
+        calls.update(dict(prior=prior, components=components, T=T,
+                          fourierbasis=fourierbasis, name=name))
         return sentinel
     return fake
 
@@ -915,88 +1070,38 @@ def _patch_block(monkeypatch, tspan=500.0):
     monkeypatch.setattr(du.ds, "powerlaw", "powerlaw")
 
 
-def test_red_noise_block_forwards_modes(monkeypatch):
+@pytest.mark.parametrize("block_name", FOURIER_BLOCKS)
+def test_block_forwards_mode_array_as_components(monkeypatch, block_name):
+    """An explicit array of Fourier modes passes through as `components`, unmodified."""
     calls = {}
     _patch_block(monkeypatch)
     monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    modes = np.array([1e-9, 3e-9, 1e-8])
-    result = du.red_noise_block(object(), tspan=500.0, modes=modes)
-    assert result == "BLOCK"
-    assert calls["modes"] is modes
 
-
-def test_red_noise_block_modes_none_by_default(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    du.red_noise_block(object(), tspan=500.0)
-    assert calls["modes"] is None
-
-
-def test_dm_noise_block_forwards_modes(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    modes = np.array([2e-9, 4e-9, 6e-9, 8e-9])
-    result = du.dm_noise_block(object(), tspan=500.0, modes=modes)
-    assert result == "BLOCK"
-    assert calls["modes"] is modes
-
-
-def test_dm_noise_block_modes_none_by_default(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    du.dm_noise_block(object(), tspan=500.0)
-    assert calls["modes"] is None
-
-
-def test_chromatic_noise_block_forwards_modes(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    modes = np.linspace(1e-9, 1e-8, 5)
-    result = du.chromatic_noise_block(object(), tspan=500.0, modes=modes)
-    assert result == "BLOCK"
-    assert calls["modes"] is modes
-
-
-def test_chromatic_noise_block_modes_none_by_default(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    du.chromatic_noise_block(object(), tspan=500.0)
-    assert calls["modes"] is None
-
-
-def test_solar_wind_noise_block_forwards_modes(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    modes = np.array([5e-9, 1e-8, 2e-8])
-    result = du.solar_wind_noise_block(object(), tspan=500.0, modes=modes)
-    assert result == "BLOCK"
-    assert calls["modes"] is modes
-
-
-def test_solar_wind_noise_block_modes_none_by_default(monkeypatch):
-    calls = {}
-    _patch_block(monkeypatch)
-    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-    du.solar_wind_noise_block(object(), tspan=500.0)
-    assert calls["modes"] is None
-
-
-def test_all_block_modes_are_passed_as_exact_array(monkeypatch):
-    """Each block must pass the modes array through without copying or modifying it."""
-    _patch_block(monkeypatch)
     modes = np.array([1e-9, 2e-9, 3e-9, 4e-9, 5e-9])
-    for block_fn in (du.red_noise_block, du.dm_noise_block,
-                     du.chromatic_noise_block, du.solar_wind_noise_block):
-        calls = {}
-        monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
-        block_fn(object(), tspan=500.0, modes=modes)
-        assert calls["modes"] is modes, f"{block_fn.__name__} did not forward modes unchanged"
+    result = getattr(du, block_name)(object(), tspan=500.0, Nfreqs=modes)
+
+    assert result == "BLOCK"
+    assert calls["components"] is modes
+
+
+@pytest.mark.parametrize("block_name", FOURIER_BLOCKS)
+def test_block_forwards_integer_nfreqs_as_components(monkeypatch, block_name):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+
+    assert getattr(du, block_name)(object(), tspan=500.0, Nfreqs=7) == "BLOCK"
+    assert calls["components"] == 7
+
+
+@pytest.mark.parametrize("block_name", FOURIER_BLOCKS)
+def test_block_default_nfreqs_is_integer_components(monkeypatch, block_name):
+    calls = {}
+    _patch_block(monkeypatch)
+    monkeypatch.setattr(du.ds, "makegp_fourier", _make_fake_makegp(calls))
+
+    getattr(du, block_name)(object(), tspan=500.0)
+    assert calls["components"] == 100
 
 
 # ---------------------------------------------------------------------------
@@ -1067,17 +1172,17 @@ def test_compute_log_probs_lnpost_equals_sum(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# run_nuts_with_checkpoints — log-prob columns
+# run_nuts_with_checkpoints — saved chain columns
+#
+# lnlike is now recorded at sample time (a numpyro.deterministic site picked up
+# by the sampler's to_df), so checkpoints simply persist what the sampler
+# returns; they no longer recompute log-probabilities per checkpoint.
 # ---------------------------------------------------------------------------
 
-def test_run_nuts_with_checkpoints_appends_log_prob_columns(tmp_path, monkeypatch):
-    """When model is supplied, df saved to disk includes lnlike/lnprior/lnpost."""
-    import jax.numpy as jnp
-
-    N = 4
-
+def _fake_checkpoint_sampler(n_samples, columns):
+    """Sampler stub whose to_df returns the given columns."""
     class FakeSampler:
-        num_samples = N
+        num_samples = n_samples
         last_state = {}
         post_warmup_state = None
         calls = 0
@@ -1090,78 +1195,60 @@ def test_run_nuts_with_checkpoints_appends_log_prob_columns(tmp_path, monkeypatc
             self.last_state = {"s": self.calls}
 
         def to_df(self):
-            return pd.DataFrame({"par1": np.zeros(N), "par2": np.ones(N)})
+            return pd.DataFrame({k: np.asarray(v) for k, v in columns.items()})
 
-        def get_samples(self, group_by_chain=False):
-            return {"pars": jnp.zeros((N, 2))}
+    return FakeSampler()
 
+
+def test_run_nuts_with_checkpoints_saves_sampler_columns(tmp_path, monkeypatch):
+    """Saved checkpoints carry exactly the sampler's columns, lnlike included."""
+    N = 4
     saved_dfs = []
     monkeypatch.setattr(du, "save_chain", lambda df, path: saved_dfs.append(df.copy()))
     monkeypatch.setattr(du.jax.random, "split", lambda key: (key, key))
 
-    class FakeModel:
-        def compute_log_probs(self, chain):
-            n = chain['pars'].shape[0]
-            return {
-                'lnlike': jnp.full((n,), -1.0),
-                'lnprior': jnp.full((n,), -2.0),
-                'lnpost': jnp.full((n,), -3.0),
-            }
-
     du.run_nuts_with_checkpoints(
-        sampler=FakeSampler(),
+        sampler=_fake_checkpoint_sampler(
+            N,
+            {"par1": np.zeros(N), "par2": np.ones(N), "lnlike": np.full(N, -1.0)},
+        ),
         num_samples_per_checkpoint=2,
         rng_key=np.array([0, 1]),
         outdir=tmp_path,
         file_name="abc",
         diagnostics=False,
-        model=FakeModel(),
     )
 
     assert saved_dfs, "save_chain should have been called at least once"
     last_df = saved_dfs[-1]
-    for col in ('lnlike', 'lnprior', 'lnpost'):
-        assert col in last_df.columns, f"expected column '{col}' in saved df"
-    np.testing.assert_allclose(last_df['lnlike'].values, -1.0)
-    np.testing.assert_allclose(last_df['lnprior'].values, -2.0)
-    np.testing.assert_allclose(last_df['lnpost'].values, -3.0)
+    assert list(last_df.columns) == ["par1", "par2", "lnlike"]
+    np.testing.assert_allclose(last_df["lnlike"].values, -1.0)
 
 
-def test_run_nuts_with_checkpoints_no_model_no_log_cols(tmp_path, monkeypatch):
-    """When model is not supplied, no lnlike/lnprior/lnpost columns are added."""
+def test_run_nuts_with_checkpoints_does_not_recompute_log_probs(tmp_path, monkeypatch):
+    """Passing a model must not trigger per-checkpoint log-prob computation."""
     N = 4
-
-    class FakeSampler:
-        num_samples = N
-        last_state = {}
-        post_warmup_state = None
-        calls = 0
-
-        def _set_collection_params(self):
-            pass
-
-        def run(self, _rng):
-            self.calls += 1
-            self.last_state = {}
-
-        def to_df(self):
-            return pd.DataFrame({"par1": np.zeros(N)})
-
     saved_dfs = []
     monkeypatch.setattr(du, "save_chain", lambda df, path: saved_dfs.append(df.copy()))
     monkeypatch.setattr(du.jax.random, "split", lambda key: (key, key))
 
+    class FakeModel:
+        def compute_log_probs(self, chain, batch_size=None):
+            raise AssertionError("compute_log_probs should not run at checkpoint time")
+
     du.run_nuts_with_checkpoints(
-        sampler=FakeSampler(),
+        sampler=_fake_checkpoint_sampler(N, {"par1": np.zeros(N)}),
         num_samples_per_checkpoint=N,
         rng_key=np.array([0, 1]),
         outdir=tmp_path,
         file_name="nomodel",
         diagnostics=False,
+        model=FakeModel(),
     )
 
     last_df = saved_dfs[-1]
-    for col in ('lnlike', 'lnprior', 'lnpost'):
+    assert list(last_df.columns) == ["par1"]
+    for col in ("lnprior", "lnpost"):
         assert col not in last_df.columns
 
 
@@ -1253,3 +1340,132 @@ def test_make_single_pulsar_noise_likelihood_respects_disabled_model_fields(monk
     }
     args = du.make_single_pulsar_noise_likelihood_discovery(psr, noise_dict={}, tspan=None, model_kwargs=model_kwargs, return_args=True)
     assert args == ["res", "tm", "wn"]
+
+
+# ---------------------------------------------------------------------------
+# per-signal noise_dict forwarding (fixed-point / ConstantGP switch)
+# ---------------------------------------------------------------------------
+
+class TestNoiseDictForwarding:
+    """Each GP block forwards its own ``noise_dict`` to the underlying discovery
+    factory as ``noisedict``. This is what lets discovery switch a signal from a
+    VariableGP to a cached ConstantGP when all of that signal's hyperparameters
+    are supplied — done per-signal, never via one shared global dict."""
+
+    def _patch_fourier(self, monkeypatch, calls):
+        monkeypatch.setattr(du.ds, "getspan", lambda _psr: 500.0)
+        monkeypatch.setattr(du, "_select_fourier_basis", lambda *a, **k: "BASIS")
+        monkeypatch.setattr(du.ds, "powerlaw", "powerlaw")
+
+        def fake(psr, prior, nfreqs, T=None, fourierbasis=None,
+                 name=None, noisedict=None, **kwargs):
+            calls["noisedict"] = noisedict
+            return "BLOCK"
+        monkeypatch.setattr(du.ds, "makegp_fourier", fake)
+
+    def test_red_noise_block_forwards_noise_dict(self, monkeypatch):
+        calls = {}
+        self._patch_fourier(monkeypatch, calls)
+        nd = {"J0000+0000_red_noise_log10_A": -14.0, "J0000+0000_red_noise_gamma": 3.0}
+        du.red_noise_block(object(), noise_dict=nd, tspan=500.0)
+        assert calls["noisedict"] is nd
+
+    def test_dm_noise_block_forwards_noise_dict(self, monkeypatch):
+        calls = {}
+        self._patch_fourier(monkeypatch, calls)
+        nd = {"J0000+0000_dm_gp_log10_A": -13.0, "J0000+0000_dm_gp_gamma": 2.0}
+        du.dm_noise_block(object(), noise_dict=nd, tspan=500.0)
+        assert calls["noisedict"] is nd
+
+    def test_chromatic_noise_block_forwards_noise_dict(self, monkeypatch):
+        calls = {}
+        self._patch_fourier(monkeypatch, calls)
+        nd = {"J0000+0000_chrom_gp_log10_A": -13.0}
+        du.chromatic_noise_block(object(), noise_dict=nd, tspan=500.0)
+        assert calls["noisedict"] is nd
+
+    def test_solar_wind_block_forwards_noise_dict_fourier(self, monkeypatch):
+        calls = {}
+        self._patch_fourier(monkeypatch, calls)
+        nd = {"J0000+0000_sw_gp_log10_A": -6.0}
+        du.solar_wind_noise_block(object(), noise_dict=nd, tspan=500.0, basis="fourier")
+        assert calls["noisedict"] is nd
+
+    def test_dm_noise_block_forwards_noise_dict_interpolation(self, monkeypatch):
+        calls = {}
+        monkeypatch.setattr(du.ds_signals, "custom_blocked_interpolation_basis",
+                            lambda *a, **k: ("U", "N"), raising=False)
+        monkeypatch.setattr(du.ds_signals, "matern_kernel", lambda: "K", raising=False)
+
+        def fake_td(psr, covariance, dt=None, Umat=None, nodes=None, common=None,
+                    name=None, noisedict=None, **kwargs):
+            calls["noisedict"] = noisedict
+            return "DM_TD"
+        monkeypatch.setattr(du.ds_signals, "makegp_timedomain_dm", fake_td, raising=False)
+
+        nd = {"J0000+0000_dm_gp_log10_sigma": -6.0}
+        result = du.dm_noise_block(_solar_psr([0.0, 1.0]), noise_dict=nd,
+                                   basis="interpolation", prior="matern",
+                                   basis_nodes=np.array([1.0]))
+        assert result == "DM_TD"
+        assert calls["noisedict"] is nd
+
+    def test_solar_wind_block_forwards_noise_dict_interpolation(self, monkeypatch):
+        calls = {}
+        monkeypatch.setattr(du.ds_signals, "custom_blocked_interpolation_basis",
+                            lambda *a, **k: ("U", "N"), raising=False)
+        monkeypatch.setattr(du.ds_signals, "matern_kernel", lambda: "K", raising=False)
+
+        def fake_td(psr, covariance, dt=None, Umat=None, nodes=None, common=None,
+                    name=None, noisedict=None, **kwargs):
+            calls["noisedict"] = noisedict
+            return "SW_TD"
+        monkeypatch.setattr(du.ds_solar, "makegp_timedomain_solar_dm", fake_td, raising=False)
+
+        nd = {"J0000+0000_sw_gp_log10_sigma": -6.0}
+        result = du.solar_wind_noise_block(_solar_psr([0.0, 1.0]), noise_dict=nd,
+                                           basis="interpolation", prior="matern",
+                                           basis_nodes=np.array([1.0]))
+        assert result == "SW_TD"
+        assert calls["noisedict"] is nd
+
+    def test_default_noise_dict_is_empty(self, monkeypatch):
+        """With no noise_dict the block forwards {}, keeping the GP variable."""
+        calls = {}
+        self._patch_fourier(monkeypatch, calls)
+        du.red_noise_block(object(), tspan=500.0)
+        assert calls["noisedict"] == {}
+
+    def test_global_noise_dict_not_injected_into_gp_blocks(self, monkeypatch):
+        """The likelihood builder must route the global noise_dict only to white
+        noise / gp_ecorr; GP blocks get their noise_dict per-signal from
+        model_kwargs, so signals can be fixed or free independently."""
+        psr = SimpleNamespace(residuals="res", toas=np.array([0.0, 1.0]))
+        seen = {}
+        monkeypatch.setattr(du.ds, "getspan", lambda _x: 123.0)
+        monkeypatch.setattr(du, "timing_model_block", lambda *a, **k: "tm")
+        monkeypatch.setattr(du, "white_noise_block",
+                            lambda *a, noise_dict=None, **k: seen.update(white=noise_dict) or "wn")
+        monkeypatch.setattr(du, "red_noise_block",
+                            lambda *a, noise_dict={}, **k: seen.update(red=noise_dict) or "rn")
+        monkeypatch.setattr(du, "dm_noise_block",
+                            lambda *a, noise_dict={}, **k: seen.update(dm=noise_dict) or "dm")
+        monkeypatch.setattr(du.ds, "PulsarLikelihood", lambda args: ("PL", args))
+
+        global_nd = {"global": 1.0}
+        red_nd = {"J0000+0000_red_noise_log10_A": -14.0}
+        model_kwargs = {
+            "timing_model": {"svd": True, "tm_marg": False},
+            "white_noise": {"gp_ecorr": False, "include_ecorr": True, "tn_equad": True},
+            "red_noise": {"basis": "fourier", "noise_dict": red_nd},
+            "dm_noise": {"basis": "fourier"},
+            "chromatic_noise": False,
+            "solar_wind": False,
+        }
+        du.make_single_pulsar_noise_likelihood_discovery(
+            psr, noise_dict=global_nd, tspan=None, model_kwargs=model_kwargs)
+
+        assert seen["white"] == global_nd          # global dict -> white noise
+        assert seen["red"] is red_nd               # per-signal dict -> red noise
+        assert seen["dm"] == {}                     # no per-signal dict -> stays free
+        assert "global" not in seen["red"]          # global never leaks into a GP block

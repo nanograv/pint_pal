@@ -53,20 +53,20 @@ def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, 
                 f_min=f_min, nlin=Nfreqs, nlog=nlog,
                 )
         elif noise_type == 'dm_noise':
-            return lambda pulsar, comp, T : ds.log_dm_fourierbasis(
+            return lambda pulsar, comp, T : ds.log_fourierbasis_dm(
                 psr, T=tspan, logmode=logmode,
                 f_min=f_min, nlin=Nfreqs, nlog=nlog,
                 )
         elif noise_type == 'chromatic':
             if chromatic_idx is not None:
-                # Fixed chromatic index: use log_fixed_chromatic_fourierbasis (returns matrix)
-                return lambda pulsar, comp, T : ds.log_fixed_chromatic_fourierbasis(
-                    psr, chromatic_idx=chromatic_idx, T=tspan, logmode=logmode,
+                # Fixed chromatic index: use log_fourierbasis_chrom_fixed (returns matrix)
+                return lambda pulsar, comp, T : ds.log_fourierbasis_chrom_fixed(
+                    psr, alpha=chromatic_idx, T=tspan, logmode=logmode,
                     f_min=f_min, nlin=Nfreqs, nlog=nlog,
                     )
             else:
-                # Varying chromatic index: use log_free_chromatic_fourierbasis (returns callable)
-                return lambda pulsar, comp, T : ds.log_free_chromatic_fourierbasis(
+                # Varying chromatic index: use log_fourierbasis_chrom (returns callable)
+                return lambda pulsar, comp, T : ds.log_fourierbasis_chrom(
                     psr, T=tspan, logmode=logmode,
                     f_min=f_min, nlin=Nfreqs, nlog=nlog,
                     )
@@ -79,18 +79,32 @@ def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, 
         if noise_type == 'red_noise':
             return ds.fourierbasis
         elif noise_type == 'dm_noise':
-            return ds.dmfourierbasis
+            return ds.fourierbasis_dm
         elif noise_type == 'chromatic':
             if chromatic_idx is not None:
-                # Fixed chromatic index: bind it so freechromaticfourierbasis returns a matrix
-                return partial(ds.freechromaticfourierbasis, chromatic_idx=chromatic_idx)
+                # Fixed chromatic index: make_fourierbasis_chrom returns a basis giving a matrix
+                return ds.make_fourierbasis_chrom(alpha=chromatic_idx)
             else:
-                # Varying chromatic index: freechromaticfourierbasis returns callable fmat
-                return ds.freechromaticfourierbasis
+                # Varying chromatic index: fourierbasis_chrom returns callable fmat
+                return ds.fourierbasis_chrom
         elif noise_type == 'solar_wind':
             return ds_solar.fourierbasis_solar_dm
     else:
         raise ValueError(f"Invalid nlog value in {noise_type} model. Must be a non-negative integer.")
+
+
+def flatten_args(args: Sequence[Any]) -> List[Any]:
+    """
+    Flatten a likelihood argument list, expanding noise blocks that return
+    several signals (e.g. a chromatic GP plus its quadratic filter) in place.
+    """
+    flat = []
+    for arg in args:
+        if isinstance(arg, (list, tuple)):
+            flat.extend(arg)
+        else:
+            flat.append(arg)
+    return flat
 
 
 def timing_model_block(
@@ -245,6 +259,7 @@ def gp_ecorr_block(
 
 def red_noise_block(
         psr: Any,
+        noise_dict: Dict[str, Any] = {},
         tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
@@ -252,7 +267,6 @@ def red_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
-        modes=None,
         name: str = 'red_noise',
         ) -> Any:
     """
@@ -282,10 +296,6 @@ def red_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
-    modes : array-like, optional
-        User-supplied array of Fourier mode frequencies (in Hz). When provided
-        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
-        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is "red_noise".
 
@@ -315,13 +325,13 @@ def red_noise_block(
             prior,
             Nfreqs,
             T=tspan,
-            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
                 nlog, noise_type='red_noise'
             ),
-            name=name
+            name=name,
+            noisedict=noise_dict,
             )
     elif basis == 'interpolation':
         raise NotImplementedError("Interpolation basis for red noise is not yet implemented.")
@@ -332,6 +342,7 @@ def red_noise_block(
 
 def dm_noise_block(
         psr: Any,
+        noise_dict: Dict[str, Any] = {},
         tspan: Optional[float] = None,
         basis: str = 'fourier',
         basis_nodes: Optional[np.ndarray] = None,
@@ -342,7 +353,6 @@ def dm_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
-        modes=None,
         name: str = 'dm_gp',
         ) -> Any:
     """
@@ -379,10 +389,6 @@ def dm_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
-    modes : array-like, optional
-        User-supplied array of Fourier mode frequencies (in Hz). When provided
-        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
-        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is "dm_gp".
 
@@ -412,13 +418,13 @@ def dm_noise_block(
             prior,
             Nfreqs,
             T=tspan,
-            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
                 nlog, noise_type='dm_noise'
             ),
-            name=name
+            name=name,
+            noisedict=noise_dict,
             )
     elif basis == 'interpolation':
         if basis_nodes is None:
@@ -449,14 +455,73 @@ def dm_noise_block(
             nodes=nodes,
             common=[],
             name=name,
+            noisedict=noise_dict,
         )
     else:
         raise ValueError("Invalid basis specified for dm noise. Must be 'fourier' or 'interpolation'.")
 
     return dm_gp
 
+def chromatic_quad_block(
+        psr: Any,
+        noise_dict: Dict[str, Any] = {},
+        name: str = 'chrom_gp',
+        chromatic_idx: Union[str, float] = 'vary',
+        fref: float = 1400.0,
+        constant: float = 1.0e40,
+        ) -> Any:
+    """
+    Build a chromatic quadratic filter (the chromatic analogue of the DM, DM1,
+    DM2 timing-model terms) as an improper Gaussian process.
+
+    Sharing *name* with :func:`chromatic_noise_block` makes both signals use the
+    same ``{psr.name}_{name}_alpha`` chromatic-index parameter, so a varying
+    index is fit jointly by the quadratic filter and the chromatic Fourier GP.
+
+    Parameters
+    ----------
+    psr : Any
+        Pulsar object.
+    noise_dict : dict, optional
+        Dictionary of fixed noise parameters. If it contains
+        ``{psr.name}_{name}_alpha`` the basis is evaluated once and a constant
+        GP is returned. Default is empty dict.
+    name : str, optional
+        Name of the noise component. Default is ``"chrom_gp"``.
+    chromatic_idx : str or float, optional
+        ``"vary"`` (default) floats the chromatic index; a numeric value fixes
+        it, giving a constant basis.
+    fref : float, optional
+        Reference frequency in MHz for the chromatic scaling. Default is 1400.0.
+    constant : float, optional
+        Diagonal value of the improper (flat) prior on the basis coefficients.
+        Default is 1.0e40.
+
+    Returns
+    -------
+    Any
+        Discovery improper GP from ``ds.makegp_improper_varF`` (varying index)
+        or ``ds.makegp_improper`` (fixed index).
+    """
+    if chromatic_idx == 'vary':
+        return ds.makegp_improper_varF(
+            psr,
+            ds.chromatic_quad_basis(psr, fref=fref),
+            constant=constant,
+            name=name,
+            param_names=['alpha'],
+            noisedict=noise_dict,
+        )
+    return ds.makegp_improper(
+        psr,
+        ds.chromatic_quad_basis(psr, fref=fref, chrom_idx=chromatic_idx),
+        constant=constant,
+        name=name,
+    )
+
 def chromatic_noise_block(
         psr: Any,
+        noise_dict: Dict[str, Any] = {},
         tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
@@ -464,9 +529,10 @@ def chromatic_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
-        modes=None,
         name: str = 'chrom_gp',
         chromatic_idx: str = 'vary',
+        include_quadratic: bool = False,
+        quad_fref: float = 1400.0,
         ) -> Any:
     """
     Build the chromatic noise Gaussian-process block.
@@ -495,20 +561,24 @@ def chromatic_noise_block(
         Number of logarithmically spaced frequencies. If ``nlog > 0``,
         ``_select_fourier_basis`` returns a log/linear helper basis.
         Default is 0.
-    modes : array-like, optional
-        User-supplied array of Fourier mode frequencies (in Hz). When provided
-        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
-        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is ``"chrom_gp"``.
-    chromatic_idx : str, optional
-        Reserved argument for chromatic index handling mode. Currently not used
-        inside this function. Default is ``"vary"``.
+    chromatic_idx : str or float, optional
+        ``"vary"`` (default) floats the chromatic index; a numeric value fixes
+        it, selecting a fixed-index Fourier basis.
+    include_quadratic : bool, optional
+        If True, also build a chromatic quadratic filter (see
+        :func:`chromatic_quad_block`) sharing *name* — and hence the chromatic
+        index — with the Fourier GP. Default is False.
+    quad_fref : float, optional
+        Reference frequency in MHz for the quadratic filter. Default is 1400.0.
+        Only used when ``include_quadratic`` is True.
 
     Returns
     -------
-    Any
-        Discovery chromatic-noise block from ``ds.makegp_fourier``.
+    Any or list of Any
+        Discovery chromatic-noise block from ``ds.makegp_fourier``, or, when
+        ``include_quadratic`` is True, the list ``[chrom_gp, chrom_quad]``.
     """
     if tspan is None:
         tspan = ds.getspan(psr)
@@ -534,21 +604,35 @@ def chromatic_noise_block(
             prior,
             Nfreqs,
             T=tspan,
-            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
                 nlog, noise_type='chromatic',
                 chromatic_idx=chrom_idx_val,
             ),
-            name=name
+            name=name,
+            noisedict=noise_dict,
             )
     else:
         raise ValueError("Invalid *basis* specified for chromatic noise. Supported basis types: ['fourier']")
+
+    if include_quadratic:
+        # shares `{psr.name}_{name}_alpha` with the Fourier GP when the index varies
+        return [
+            chrom_gp,
+            chromatic_quad_block(
+                psr,
+                noise_dict=noise_dict,
+                name=name,
+                chromatic_idx=chromatic_idx,
+                fref=quad_fref,
+            ),
+        ]
     return chrom_gp
 
 def solar_wind_noise_block(
         psr: Any,
+        noise_dict: Dict[str, Any] = {},
         tspan: Optional[float] = None,
         basis: str = 'fourier',
         basis_nodes: Optional[np.ndarray] = None,
@@ -559,7 +643,6 @@ def solar_wind_noise_block(
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
-        modes=None,
         name: str = 'sw_gp',
         ) -> Any:
     """
@@ -587,10 +670,6 @@ def solar_wind_noise_block(
         Number of Fourier frequencies. Default is 100. Only used for Fourier basis.
     tspan : float, optional
         Time span for the Fourier basis. Default is None.
-    modes : array-like, optional
-        User-supplied array of Fourier mode frequencies (in Hz). When provided
-        the standard ``Nfreqs``-frequency grid is bypassed and these modes are
-        passed directly to the underlying ``fourierbasis``. Default is None.
     name : str, optional
         Name of the noise component. Default is "sw_gp".
 
@@ -622,13 +701,13 @@ def solar_wind_noise_block(
             prior,
             Nfreqs,
             T=tspan,
-            modes=modes,
             fourierbasis=_select_fourier_basis(
                 psr, Nfreqs, tspan, logmode,
                 f_min_frac*1/tspan, # scale f_min_frac to f_min using tspan
                 nlog, noise_type='solar_wind'
             ),
-            name=name
+            name=name,
+            noisedict=noise_dict,
             )
     elif basis == 'interpolation':
         if basis_nodes is None:
@@ -659,6 +738,7 @@ def solar_wind_noise_block(
             nodes=nodes,
             common=[],
             name=name,
+            noisedict=noise_dict,
         )
     else:
         raise ValueError("Invalid basis specified for solar wind noise. Must be 'fourier' or 'interpolation'.")
@@ -690,7 +770,9 @@ def make_single_pulsar_noise_likelihood_discovery(
         ``extra_signals`` may be a single pre-built signal or a list/tuple of
         signals; each is appended to the args tuple after all standard noise
         blocks, allowing the caller to inject custom models that are not
-        covered by the built-in noise blocks.
+        covered by the built-in noise blocks. Blocks that return several
+        signals (e.g. ``chromatic_noise`` with ``include_quadratic=True``) are
+        flattened into the final args list.
     return_args : bool, optional
         If True, return the raw argument list instead of the PulsarLikelihood instance.
 
@@ -773,7 +855,6 @@ def make_single_pulsar_noise_likelihood_discovery(
         args.append(
             chromatic_noise_block(
                 psr,
-                name='chrom_gp',
                 **model_kwargs['chromatic_noise']
             )
         )
@@ -792,6 +873,8 @@ def make_single_pulsar_noise_likelihood_discovery(
             extra = [extra]
         log.info(f"Adding {len(extra)} extra signal(s) to the model.")
         args.extend(extra)
+    # blocks may return several signals (e.g. chromatic GP + quadratic filter)
+    args = flatten_args(args)
     if return_args:
         return args
     else:
@@ -899,11 +982,21 @@ def make_numpyro_model(
     def numpyro_model() -> None:
         """NumPyro model using tanh-transformed parameters."""
         pars = numpyro.sample('pars', dist.Normal(0, 10).expand([parlen]))
-        numpyro.factor('logl', logx(pars))
+        logl = numpyro.deterministic('lnlike', logx(pars))
+        numpyro.factor('logl', logl)
 
-    numpyro_model.to_df = lambda chain: logx.to_df(chain['pars'])
+    def _to_df(chain):
+        df = logx.to_df(chain['pars'])
+        if 'lnlike' in chain:
+            df['lnlike'] = jnp.asarray(chain['lnlike'])
+        else:
+            pars = jnp.asarray(chain['pars'])
+            df['lnlike'] = jax.lax.map(logx, pars)
+        return df
 
-    def _compute_log_probs(chain):
+    numpyro_model.to_df = _to_df
+
+    def _compute_log_probs(chain, batch_size: Optional[int] = None):
         """Compute lnlike, lnprior, and lnpost for each sample in *chain*.
 
         Parameters
@@ -919,6 +1012,9 @@ def make_numpyro_model(
 
         Notes
         -----
+        This was previously being used to compute log-probabilities but now 
+        the likelihood is stored at compute time. This can still be used to 
+        compute the prior and posterior for chains.
         ``lnlike`` is ``logx(pars)`` — the tanh-transformed log-likelihood
         including the change-of-variables Jacobian from the uniform prior
         interval to the real line.
@@ -927,7 +1023,8 @@ def make_numpyro_model(
         ``lnpost = lnlike + lnprior`` is the log-posterior (up to a constant).
         """
         pars = jnp.asarray(chain['pars'])          # (N, parlen)
-        lnlike = jax.vmap(logx)(pars)              # (N,)
+        #lnlike = jax.vmap(logx)(pars)              # (N,)
+        lnlike = jax.lax.map(logx, pars, batch_size=batch_size)              # (N,)
         lnprior = jax.vmap(
             lambda p: jnp.sum(dist.Normal(0, 10).log_prob(p))
         )(pars)                                     # (N,)
@@ -964,10 +1061,11 @@ def run_nuts_with_checkpoints(
     resume : bool
         Whether to look for a state to resume from.
     model : callable, optional
-        NumPyro model returned by ``make_numpyro_model``.  When supplied and
-        the model exposes a ``compute_log_probs`` method, ``lnlike``,
-        ``lnprior``, and ``lnpost`` columns are appended to every checkpoint
-        DataFrame before it is written to disk.  Default is None.
+        NumPyro model returned by ``make_numpyro_model``.  Accepted for
+        backward compatibility but no longer used: ``lnlike`` is now recorded
+        at sample time as a ``numpyro.deterministic`` site and comes through
+        ``sampler.to_df()``, so checkpoints no longer recompute
+        log-probabilities.  Default is None.
     Returns
     -------
     None
@@ -1024,18 +1122,6 @@ def run_nuts_with_checkpoints(
         sampler.run(rng_key)
 
         df_new = sampler.to_df()
-
-        # --- append log-probability columns if model supports it ---
-        if model is not None and hasattr(model, 'compute_log_probs'):
-            try:
-                raw_samples = sampler.get_samples(group_by_chain=False)
-                lp = model.compute_log_probs(raw_samples)
-                df_new = df_new.copy()
-                df_new['lnlike']  = np.asarray(lp['lnlike'])
-                df_new['lnprior'] = np.asarray(lp['lnprior'])
-                df_new['lnpost']  = np.asarray(lp['lnpost'])
-            except Exception as _lp_err:
-                log.warning(f"Could not compute log-probability columns: {_lp_err}")
 
         df = pd.concat([df, df_new]) if df is not None else df_new
 
@@ -1299,6 +1385,9 @@ def run_svi_early_stopping(
         Minimum relative improvement in loss required to reset the patience counter.
         Computed as ``(best_loss - current_loss) / |best_loss|``, so a value of
         1e-3 means the loss must improve by at least 0.1% to count. Default is 1e-3.
+        This controls *when to stop*, not which parameters come back: the best
+        state is tracked by loss alone, so raising the threshold shortens the
+        run but can never return a worse point than the optimiser reached.
     diagnostics : bool, optional
         If True, collect gradient norms and intermediate states at each step.
         This adds computational overhead. Default is False.
@@ -1312,14 +1401,20 @@ def run_svi_early_stopping(
     -------
     dict
         Dictionary of optimized parameter values from the best SVI state
-        (lowest validation loss).
+        (lowest validation loss seen over the whole run).
 
     Notes
     -----
-    The early stopping criterion uses a scale-invariant relative improvement
-    measure: ``(best_loss - current_loss) / |best_loss|``. This makes the
-    threshold independent of the number of TOAs, parameters, or overall
-    likelihood scale.
+    The early stopping criterion uses a relative improvement measure,
+    ``(best_loss - current_loss) / |best_loss|``, evaluated once per batch.
+    Note the normalisation is the loss magnitude, which is dominated by the
+    constant part of the log-likelihood and so grows with the number of TOAs:
+    a given threshold corresponds to a larger absolute improvement for a
+    longer dataset.
+
+    Two separate decisions are made from each batch. The best state is kept
+    whenever the loss decreases at all; the threshold only decides whether the
+    batch counted as progress for the purposes of the patience counter.
 
     Examples
     --------
@@ -1342,7 +1437,6 @@ def run_svi_early_stopping(
 
     log.info(f"Starting training with batches of {batch_size} steps.")
 
-    final_params = None
     diagnostics_plot_dir = None
     diagnostics_plot_path = None
     if diagnostics and outdir is not None:
@@ -1471,13 +1565,21 @@ def run_svi_early_stopping(
             rel_improvement = (best_val_loss - current_val_loss) / max(abs(best_val_loss), 1e-30)
         print(f"relative_improvement = {rel_improvement:.6g}  (threshold = {difference_threshold:.6g})")
         log.info(f"{rel_improvement=:.6g}")
-        if rel_improvement > difference_threshold:
+
+        # Keep the best state on loss alone.  An improvement too small to reset
+        # the patience counter is still an improvement, and the returned
+        # parameters should never be worse than the best point visited: tying
+        # this to `difference_threshold` meant a large threshold discarded every
+        # state after the first batch.
+        if current_val_loss < best_val_loss:
             log.info(
-                f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f} "
-                f"(relative_improvement={rel_improvement:.6g}). Saving state.",
+                f"Loss improved from {best_val_loss:.4f} to {current_val_loss:.4f}. Saving state.",
             )
             best_val_loss = current_val_loss
             best_svi_state = svi_state
+
+        # `difference_threshold` governs early stopping only.
+        if rel_improvement > difference_threshold:
             patience_counter = 0
         else:
             patience_counter += 1
@@ -1491,16 +1593,14 @@ def run_svi_early_stopping(
                 break
 
             log.info(f"Best loss achieved: {best_val_loss:.4f}")
-
-            final_params = svi.get_params(best_svi_state)
     if diagnostics:
         # close the fig
         plt.close(fig)
     log.info("Optimization complete.")
-    # This conditional is entered if we exhaust the max training batches
-    # without early stopping
-    if final_params is None:
-        final_params = svi.get_params(best_svi_state)
+    # Always return the best state visited, however the loop ended (early
+    # stopping, or exhausting max_num_batches).
+    final_params = svi.get_params(best_svi_state)
+    log.info(f"Returning parameters at best loss {best_val_loss:.4f}.")
 
     cleaned_final_params = {}
     for name, value in final_params.items():

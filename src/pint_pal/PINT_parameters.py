@@ -1,6 +1,5 @@
 import pint.models.parameter as p
 import astropy.units as u
-from pint import ls
 
 """
 This file will be a list of pre-defined PINT parameters and components to be used for F-tests.
@@ -16,8 +15,8 @@ Those are the default values in the stand alone binary models
 "PBDOT": 0.0 u.day / u.day,
 "ECC": 0.0 u.Unit(""),
 "EDOT": 0.0 / u.second,
-"A1": 10.0 ls,
-"A1DOT": 0.0 ls / u.second,
+"A1": 10.0 u.lsec,
+"A1DOT": 0.0 u.lsec / u.second,
 "T0": np.longdouble(54000.0) u.day,
 "OM": 0.0 u.deg,
 "OMDOT": 0.0 u.deg / u.year,
@@ -138,7 +137,7 @@ XDOT_Component = 'Binary'
 A1DOT = p.floatParameter(parameter_type="float",
     name="A1DOT",
     value=0.0,
-    units= ls / u.second,
+    units= u.lsec / u.second,
     frozen = False,
     convert_tcb2tdb=False)
 A1DOT_Component = 'Binary'
