@@ -37,7 +37,7 @@ binary_params = {
     },
     "DD": {
         "all": {
-            "required": ["A1" "E", "T0", "PB", "OM"],
+            "required": ["A1", "E", "T0", "PB", "OM"],
             "optional": ["PBDOT", "A1DOT", "OMDOT", "EDOT"],
             "optional_sets": [["EPS1DOT", "EPS2DOT"]],
         }
