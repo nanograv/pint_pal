@@ -22,9 +22,70 @@ import copy
 
 ALPHA = 0.0027
 
-def whiten_resids(fitter, restype = 'postfit'):
+# def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
+#     """
+#     Function to whiten residuals. If no reddened residuals, input will be returned.
+
+#     Inputs:
+#     ---------
+#     fitter [object, dictionary]: PINT fitter class or dictionary output from ecorr_average() function.
+#     restype ['string']: Type of residuals, pre or post fit, to plot from fitter object. Options are:
+#         'prefit' - plot the prefit residuals.
+#         'postfit' - plot the postfit residuals (default)
+#     zero_mean [bool]: default - False. whether or not to subtract off the mean after whitening.
+
+#     Returns:
+#     ---------
+#     wres [array]: Array of whitened timing residuals.
+#     """
+#     # Check if input is the epoch averaged dictionary, should only be used if epoch averaged NB TOAs
+#     if type(fitter) is dict:
+#         rs = fitter['time_resids']
+#         noise_rs = fitter['noise_resids']
+#         # Now check if red noise residuals
+#         wres = rs.copy()
+#         for ky in list(noise_rs.keys()):
+#             log.info(f"Subtracting {ky} noise resids from time resids for whitening")
+#             wres -= noise_rs[ky]
+#         if np.all(wres == rs):
+#             log.warning("No red noise, residuals already white. Returning input residuals...")
+#     # if not assume it's a PINT fitter class object
+#     else:
+#         # Check if WB or NB
+#         if fitter.is_wideband:
+#             if restype == 'postfit':
+#                 time_resids = fitter.resids.residual_objs['toa'].time_resids
+#                 noise_resids = fitter.resids.toa.noise_resids
+#             else:
+#                 time_resids = fitter.resids_init.residual_objs['toa'].time_resids
+#                 noise_resids = fitter.resids_init.toa.noise_resids
+#         else:
+#             if restype == 'postfit':
+#                 time_resids = fitter.resids.time_resids
+#                 noise_resids = fitter.resids.noise_resids
+#             elif restype == 'prefit':
+#                 time_resids = fitter.resids_init.time_resids
+#                 noise_resids = fitter.resids_init.noise_resids
+#             else:
+#                 raise ValueError("Unrecognized residual type: %s. Please choose from 'prefit' or 'postfit'."%(restype))
+#             # Get number of residuals
+#         num_res = len(time_resids)
+#         # Check that the key is in the dictionary
+#         wres = time_resids.copy() # need to make a copy
+#         for ky in list(noise_resids.keys()):
+#             log.info(f"Subtracting {ky} noise resids from time resids for whitening")
+#             wres -= noise_resids[ky][:num_res]
+#         if np.all(time_resids == wres):
+#             log.warning("No red noise, residuals already white. Returning input residuals...")
+#     if zero_mean is True:
+#         wres = wres - np.mean(wres)
+#     return wres
+
+
+def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
     """
     Function to whiten residuals. If no reddened residuals, input will be returned.
+    Wrapper around the pint.residuals utility which preserved the dummy kwargs for backwards compatibility.
 
     Inputs:
     ---------
@@ -32,57 +93,16 @@ def whiten_resids(fitter, restype = 'postfit'):
     restype ['string']: Type of residuals, pre or post fit, to plot from fitter object. Options are:
         'prefit' - plot the prefit residuals.
         'postfit' - plot the postfit residuals (default)
+    zero_mean [bool]: default - False. whether or not to subtract off the mean after whitening.
 
     Returns:
     ---------
     wres [array]: Array of whitened timing residuals.
     """
     # Check if input is the epoch averaged dictionary, should only be used if epoch averaged NB TOAs
-    if type(fitter) is dict:
-        rs = fitter['time_resids']
-        noise_rs = fitter['noise_resids']
-        # Now check if red noise residuals
-        if "pl_red_noise" and "pl_DM_noise" in noise_rs:
-            wres = rs - noise_rs['pl_red_noise'] - noise_rs['pl_DM_noise']
-        elif "pl_red_noise" in noise_rs:
-            wres = rs - noise_rs['pl_red_noise']
-        elif "pl_DM_noise" in noise_rs:
-            wres = rs - noise_rs['pl_DM_noise']
-        else:
-            log.warning("No red noise, residuals already white. Returning input residuals...")
-            wres = rs
-    # if not assume it's a PINT fitter class object
-    else:
-        # Check if WB or NB
-        if fitter.is_wideband:
-            if restype == 'postfit':
-                time_resids = fitter.resids.residual_objs['toa'].time_resids
-                noise_resids = fitter.resids.toa.noise_resids
-            else:
-                time_resids = fitter.resids_init.residual_objs['toa'].time_resids
-                noise_resids = fitter.resids_init.toa.noise_resids
-        else:
-            if restype == 'postfit':
-                time_resids = fitter.resids.time_resids
-                noise_resids = fitter.resids.noise_resids
-            elif restype == 'prefit':
-                time_resids = fitter.resids_init.time_resids
-                noise_resids = fitter.resids_init.noise_resids
-            else:
-                raise ValueError("Unrecognized residual type: %s. Please choose from 'prefit' or 'postfit'."%(restype))
-            # Get number of residuals
-        num_res = len(time_resids)
-        # Check that the key is in the dictionary
-        if "pl_red_noise" and "pl_DM_noise" in noise_resids:
-            wres = time_resids - noise_resids['pl_red_noise'][:num_res] - noise_resids['pl_DM_noise'][:num_res]
-        elif "pl_red_noise" in noise_resids:
-            wres = time_resids - noise_resids['pl_red_noise'][:num_res]
-        elif "pl_DM_noise" in noise_resids:
-            wres = time_resids - noise_resids['pl_DM_noise'][:num_res]
-        else:
-            log.warning("No red noise, residuals already white. Returning input residuals...")
-            wres = time_resids
-    return wres
+
+    return fitter.resids.calc_whitened_resids()*1e-6*u.s
+
 
 def rms_by_backend(resids, errors, rcvr_backends, dm = False):
     """
