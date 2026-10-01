@@ -48,13 +48,6 @@ import pint_pal.noise_utils as nu
 
 from astropy.stats import bayesian_blocks
 
-from .calibration import (
-    ACFResult,
-    CalibrationProposal,
-    empirical_acf,
-    propose_bbx_calibration,
-)
-
 # Personal modules
 from .utils import (
     handle_diagnostics,
