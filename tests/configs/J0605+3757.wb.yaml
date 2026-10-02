@@ -23,6 +23,7 @@ dmx:  # control dmx windowing/fixing
   max-sw-delay: 0.1 # finer binning when solar wind delay > threshold (us)
   custom-dmx: [] # designated by [mjd_low,mjd_hi,binsize]
 
+noise_run:
   model:
     timing_model:
       svd: true
@@ -45,6 +46,26 @@ dmx:  # control dmx windowing/fixing
       prior: square_exponential
       interp_kind: linear
     chromatic_noise: False
+  inference:
+    likelihood: discovery
+    ####   optimizer   ####
+    sampler: optimizer
+    num_warmup_steps: 500
+    max_epochs: 1000
+    peak_learning_rate: 0.01
+    gradient_clipping_val: null
+    batch_size: 100
+    patience: 3
+    difference_threshold: 20.0 #(tune this)
+    max_num_batches: 50
+    ####   NUTS   ####
+    #sampler: NUTS
+    num_samples: 1000
+    num_samples_per_checkpoint: 100
+    num_warmup: 250
+    num_chains: 1
+    ####   misc   ####
+    diagnostics: true
 
 intermediate-results: # use results from previous runs
   #noise-dir: /nanograv/share/15yr/timing/intermediate/20221021.Noise.wb.a8ff4ddc/
