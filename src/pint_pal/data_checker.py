@@ -93,6 +93,18 @@ class DataChecker:
             raise exception(message)
         log.warning(message)
 
+    def is_unset(self, p: str) -> bool:
+        """
+        Is an optional parameter effectively absent from the timing model?
+
+        True if the parameter is not in the model, has no value, or is frozen at 0.
+        Certain versions of PINT sometimes introduce optional parameters frozen
+        at 0 even when they are not present in the par file.
+        """
+        if p not in self.m.params or self.m[p].value is None:
+            return True
+        return bool(self.m[p].frozen and self.m[p].value == 0)
+
     def check_parameter(
         self,
         p: str,
@@ -158,7 +170,8 @@ class DataChecker:
     ) -> bool:
         """
         Check for the existence of a single optional parameter.
-        If it does not exist or has no value then nothing is done.
+        If it does not exist, has no value, or is frozen at 0 (see
+        ``is_unset``) then nothing is done.
         Optionally it must be unfrozen
 
         Parameters
@@ -182,7 +195,7 @@ class DataChecker:
         """
         self.verify(has_model=True)
 
-        if p not in self.m.params or self.m[p].value is None:
+        if self.is_unset(p):
             return True
         if require_unfrozen:
             if self.m[p].frozen:
@@ -270,8 +283,8 @@ class DataChecker:
                 KeyError if raiseexcept else None,
             )
             return False
-        if all([self.m[x].value is None for x in p]):
-            # parameters are there, but all are unset
+        if all([self.is_unset(x) for x in p]):
+            # parameters are absent, or all unset (no value, or frozen at 0)
             return True
         if any([self.m[x].value is None for x in p]):
             self.raise_or_warn(

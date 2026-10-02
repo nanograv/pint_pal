@@ -9,9 +9,246 @@ from multiprocessing import Pool
 from pint.fitter import ConvergenceFailure
 import copy
 from scipy.special import fdtr
-from pint_pal.utils import apply_cut_flag, apply_cut_select
+from pint_pal.noise_utils import core_from_feather
+from pint_pal.utils import apply_cut_flag, apply_cut_select, apply_cut_select
 from pint_pal.lite_utils import write_tim
 from pint_pal.dmx_utils import *
+
+#######################################
+#### Discovery outliers functions ####
+#######################################
+
+def make_outlier_likelihood_discovery(psr, noise_dict=None, tspan=None, model_kwargs=None):
+    """
+    Build a discovery ``PulsarLikelihood`` configured for outlier analysis.
+
+    This is a thin wrapper around
+    :func:`~pint_pal.discovery_utils.make_single_pulsar_noise_likelihood_discovery`
+    that enforces the three requirements of the Wang & Taylor (2022) HMC-Gibbs
+    outlier model:
+
+    1. ``outliers=True`` on the measurement noise — introduces the per-TOA
+       variance-scaling parameter ``alpha_scaling``.
+    2. ``gp_ecorr=True`` — uses the GP-basis ECORR instead of the kernel
+       ECORR (required for ``variable=True`` ECORR via
+       ``psrl.sample_conditional``).
+    3. ``variable=True`` on the ECORR GP — coefficients are sampled rather
+       than marginalised so the Gibbs draws can update them.
+    4. ``tm_marg=False`` — timing-model GP coefficients are sampled rather
+       than marginalised (i.e. ``variable=True`` on the timing GP).
+
+    The caller's ``model_kwargs`` dict is deep-copied so it is never mutated.
+
+    Parameters
+    ----------
+    psr : Any
+        Pulsar object.
+    noise_dict : dict, optional
+        Noise parameter dictionary. Default is None.
+    tspan : float, optional
+        Time span for the noise model. Default is None.
+    model_kwargs : dict, optional
+        Model keyword arguments (same schema as
+        ``make_single_pulsar_noise_likelihood_discovery``). Forced keys:
+        ``timing_model.tm_marg=False``, ``white_noise.gp_ecorr=True``,
+        ``white_noise.variable=True``, ``white_noise.outliers=True``.
+
+    Returns
+    -------
+    discovery.PulsarLikelihood
+        Likelihood configured for outlier detection.
+    """
+    from pint_pal.discovery_utils import make_single_pulsar_noise_likelihood_discovery
+    import copy
+
+    mk = copy.deepcopy(model_kwargs) if model_kwargs is not None else {}
+
+    # -- timing model: sample coefficients rather than marginalise
+    if not mk.get('timing_model'):
+        mk['timing_model'] = {}
+    mk['timing_model']['tm_marg'] = False
+
+    # -- white noise: GP-basis ECORR, variable coefficients, outlier scaling
+    if not mk.get('white_noise'):
+        mk['white_noise'] = {}
+    mk['white_noise']['gp_ecorr'] = True
+    mk['white_noise']['variable'] = True
+    mk['white_noise']['outliers'] = True
+
+    return make_single_pulsar_noise_likelihood_discovery(
+        psr, noise_dict=noise_dict, tspan=tspan, model_kwargs=mk
+    )
+
+
+def run_outlier_analysis_nuts(
+    mo,
+    to,
+    outdir,
+    *,
+    model_kwargs=None,
+    sampler_kwargs=None,
+    seed=42,
+    resume=False,
+    return_sampler_without_sampling=False,
+):
+    """Run the Wang & Taylor (2022) HMC-Gibbs outlier analysis for a single pulsar.
+
+    1. Builds the outlier-configured ``PulsarLikelihood`` via
+       :func:`make_outlier_likelihood_discovery` (enforces ``outliers=True``,
+       ``gp_ecorr=True``, ``variable=True``, ``tm_marg=False``).
+    2. Merges the standard pint_pal prior dict with the discovery outlier
+       priors (``nu``, ``theta_m``).
+    3. Builds the numpyro model + Gibbs function from
+       ``discovery.models.nanograv_single_pulsar_outlier``.
+    4. Wraps them in a ``numpyro.infer.HMCGibbs`` kernel and runs with
+       checkpoints via :func:`~pint_pal.discovery_utils.run_nuts_with_checkpoints`.
+
+    The saved feather file contains one column per named numpyro site
+    (``efacs``, ``equads``, ``ecorrs``, ``nu``, any RN hyper names,
+    ``theta``, ``z_i``, ``alpha_i``, ``q``, ``coeffs``, ``loglike``).
+    Vector sites are expanded to ``<name>_0``, ``<name>_1``, … columns.
+
+    Parameters
+    ----------
+    mo : `pint.model.TimingModel` object
+    to : `pint.toa.TOAs` object
+    outdir : str
+        Directory to write checkpoint / feather output files.
+    model_kwargs : dict, optional
+        Model configuration (same schema as ``model_noise``).  The outlier
+        requirements (``tm_marg``, ``gp_ecorr``, ``variable``, ``outliers``)
+        are enforced on top of whatever is passed.
+    sampler_kwargs : dict, optional
+        Sampler configuration.  Recognised keys (with defaults):
+
+        - ``num_warmup`` (500)
+        - ``num_samples`` (2000)
+        - ``num_samples_per_checkpoint`` (500)
+        - ``max_tree_depth`` (6)
+        - ``target_accept_prob`` (0.8)
+        - ``diagnostics`` (True)
+    seed : int, optional
+        Random seed. Default 42.
+    resume : bool, optional
+        Resume from an existing checkpoint. Default False.
+    return_sampler_without_sampling : bool, optional
+        If True, build and return the ``numpyro.infer.MCMC`` object without
+        running it. Default False.
+
+    Returns
+    -------
+    numpyro.infer.MCMC or None
+        The MCMC object when *return_sampler_without_sampling* is True;
+        otherwise None.
+    """
+    import json
+    import numpy as np
+    import pandas as pd
+    import jax
+    import numpyro.infer
+    from jax.random import PRNGKey
+
+    from discovery.models.nanograv_single_pulsar_outlier import (
+        make_outlier_model,
+        make_outlier_gibbs_fn,
+        priordict_outlier_default,
+        _init_values_from_priordict,
+    )
+    from pint_pal import discovery_utils as disco_utils
+    from enterprise.pulsar import Pulsar
+
+    if model_kwargs is None:
+        model_kwargs = {}
+    if sampler_kwargs is None:
+        sampler_kwargs = {}
+
+    # get enterprise_pulsar object
+    e_psr = Pulsar(mo, to)
+    log.info(f"Setting up outlier analysis (discovery HMC-Gibbs) for {e_psr.name}")
+    os.makedirs(outdir, exist_ok=True)
+
+    # Build outlier PulsarLikelihood
+    with jax.default_device("cpu"):
+        psrl = make_outlier_likelihood_discovery(
+            psr=e_psr,
+            noise_dict={},
+            tspan=None,
+            model_kwargs=model_kwargs,
+        )
+
+    # Build prior dict: standard pint_pal priors + outlier extras
+    from discovery import priordict_standard as ds_pdict
+    prior_dict = priordict_outlier_default.copy()
+    pint_pal_priors = json.load(
+        open(os.path.join(os.path.dirname(__file__), "discovery_priors.json"))
+    )
+    prior_dict.update(pint_pal_priors)
+    # restore outlier-specific keys that pint_pal_priors may not contain
+    for k, v in priordict_outlier_default.items():
+        prior_dict.setdefault(k, v)
+
+    # Build the numpyro outlier model + Gibbs function
+    model = make_outlier_model(psrl, priordict=prior_dict)
+    gibbs_fn = make_outlier_gibbs_fn(psrl)
+
+    init = _init_values_from_priordict(psrl, prior_dict)
+    init_strategy = numpyro.infer.util.init_to_value(values=init)
+
+    # Build the HMCGibbs sampler
+    nuts_kernel = numpyro.infer.NUTS(
+        model,
+        init_strategy=init_strategy,
+        max_tree_depth=sampler_kwargs.get("max_tree_depth", 6),
+        target_accept_prob=sampler_kwargs.get("target_accept_prob", 0.8),
+    )
+    kernel = numpyro.infer.HMCGibbs(
+        nuts_kernel,
+        gibbs_fn=jax.jit(gibbs_fn),
+        gibbs_sites=["theta", "z_i", "alpha_i", "coeffs", "q"],
+    )
+    mcmc = numpyro.infer.MCMC(
+        kernel,
+        num_warmup=sampler_kwargs.get("num_warmup", 500),
+        num_samples=sampler_kwargs.get("num_samples", 2000),
+    )
+
+    # Attach a to_df method: flatten vector sites to "<name>_i" columns,
+    # drop the nested "params" deterministic (it's a dict-of-arrays).
+    def _outlier_to_df():
+        raw = mcmc.get_samples(group_by_chain=False)
+        rows = {}
+        for key, val in raw.items():
+            if key == "params":  # nested dict — skip
+                continue
+            arr = np.asarray(val)
+            if arr.ndim == 1:          # scalar site
+                rows[key] = arr
+            else:                      # vector site: expand to key_0, key_1, …
+                for i in range(arr.shape[-1]):
+                    rows[f"{key}_{i}"] = arr[:, i]
+        return pd.DataFrame(rows)
+
+    mcmc.to_df = _outlier_to_df
+
+    if return_sampler_without_sampling:
+        return mcmc
+
+    # Run with checkpoints
+    disco_utils.run_nuts_with_checkpoints(
+        sampler=mcmc,
+        num_samples_per_checkpoint=sampler_kwargs.get("num_samples_per_checkpoint", 500),
+        rng_key=PRNGKey(seed),
+        outdir=outdir,
+        file_name=f"{e_psr.name}_outlier_nuts_samples",
+        resume=resume,
+        diagnostics=sampler_kwargs.get("diagnostics", True),
+        model=None,  # loglike already a deterministic in the samples
+    )
+    return None
+
+
+## enterprise outlier analysis below ##
+
 
 def gibbs_run(entPintPulsar,results_dir=None,Nsamples=10000):
     """Necessary set-up to run gibbs sampler, and run it. Return pout.
@@ -79,36 +316,41 @@ def get_entPintPulsar(model,toas,sort=False,drop_pintpsr=True):
     from enterprise.pulsar import PintPulsar
     return PintPulsar(toas,model,sort=sort,drop_pintpsr=drop_pintpsr)
 
-def calculate_pout(model, toas, tc_object):
-    """Determines TOA outlier probabilities using choices specified in the
-    timing configuration file's outlier block. Write tim file with pout flags/values.
+def calculate_pout(model, toas, tc_object, feather_path, avg_method = 'mean'):
+    """Calculates and applies outlier probabilities to TOAs.
 
     Parameters
     ==========
     model: `pint.model.TimingModel` object
     toas: `pint.toa.TOAs` object
     tc_object: `pint_pal.timingconfiguration` object
+    feather_path: `pathlib.Path` object
+    avg_method: string, optional
+        Accepted values are 'mean' or 'median'. Defaults to 'mean'
     """
-    method = tc_object.get_outlier_method()
-    results_dir = f'outlier/{tc_object.get_outfile_basename()}'
-    Nsamples = tc_object.get_outlier_samples()
-    Nburnin = tc_object.get_outlier_burn()
 
-    if method == 'hmc':
-        epp = get_entPintPulsar(model, toas, drop_pintpsr=False)
-        from enterprise_outliers.hmc_outlier import OutlierHMC
-        pout = OutlierHMC(epp, outdir=results_dir, Nsamples=Nsamples, Nburnin=Nburnin)
-        print('') # Progress bar doesn't print a newline
-        # Some sorting will be needed here so pout refers to toas order?
-    elif method == 'gibbs':
-        epp = get_entPintPulsar(model, toas)
-        pout = gibbs_run(epp,results_dir=results_dir,Nsamples=Nsamples)
+    results_dir = f'outlier/{tc_object.get_outfile_basename()}'
+    method = tc_object.get_outlier_method()
+
+    #Read in feather file into a core object
+    c0 = core_from_feather(feather_path)
+    z_i = [p for p in c0.params if 'z_i' in p]
+
+    #Calculate pout via avging method for each z_i
+    pout = np.zeros(len(z_i))
+    if avg_method == 'mean':
+        for i in range(len(z_i)):
+            pout[i] = np.mean(c0(z_i[i]))
+    elif avg_method == 'median':
+        for i in range(len(z_i)):
+            pout[i] = np.median(c0(z_i[i]))
     else:
-        log.error(f'Specified method ({method}) is not recognized.')
+        raise ValueError("avg_method must be either 'mean' or 'median'")
 
     # Apply pout flags, cuts
     for i,oi in enumerate(toas.table['index']):
         toas.orig_table[oi]['flags'][f'pout_{method}'] = str(pout[i])
+
 
     # Re-introduce cut TOAs for writing tim file that includes -cut/-pout flags
     toas.table = toas.orig_table
@@ -119,27 +361,35 @@ def calculate_pout(model, toas, tc_object):
     # Need to mask TOAs once again
     apply_cut_select(toas,reason='resumption after write_tim, pout')
 
-def make_pout_cuts(model,toas,tc_object,outpct_threshold=8.0):
+def make_pout_cuts(model, toas, tc_object, outpct_threshold=8.0, save=True, save_dir='outlier'):
     """Apply cut flags to TOAs with outlier probabilities larger than specified threshold.
-    Also runs setup_dmx.
+    By default saves cut flags into a .tim file.
 
     Parameters
     ==========
+    model: `pint.model.TimingModel` object
     toas: `pint.toa.TOAs` object
     tc_object: `pint_pal.timingconfiguration` object
     outpct_threshold: float, optional
-       cut file's remaining TOAs (maxout) if X% were flagged as outliers (default set by 5/64=8%) 
+        cut file's remaining TOAs (maxout) if X% were flagged as outliers (default set by 5/64=8%)
+    save: bool, optional
+        save the cuts to a .tim file
+    save_dir: string, optional
     """
     toas = tc_object.apply_ignore(toas,specify_keys=['prob-outlier'])
     apply_cut_select(toas,reason='outlier analysis, specified key')
-    toas = setup_dmx(model,toas,frequency_ratio=tc_object.get_fratio(),max_delta_t=tc_object.get_sw_delay())
 
     # Now cut files if X% or more TOAs/file are flagged as outliers
     if tc_object.get_toa_type() == 'NB':
         tc_object.check_file_outliers(toas,outpct_threshold=outpct_threshold)
-        toas = setup_dmx(model,toas,frequency_ratio=tc_object.get_fratio(),max_delta_t=tc_object.get_sw_delay())
     else:
         log.info('Skipping maxout cuts (wideband).')
+
+    if save:
+        toas.table = toas.orig_table
+        fo = tc_object.construct_fitter(toas,model)
+        cuts_timfile = f'{save_dir}/{tc_object.get_outfile_basename()}_pout_cuts.tim'
+        write_tim(fo,toatype=tc_object.get_toa_type(),outfile=cuts_timfile)
 
 def Ftest(chi2_1, dof_1, chi2_2, dof_2):
     """
