@@ -67,3 +67,10 @@ versionfile_source = "src/pint_pal/_version.py"
 versionfile_build = "pint_pal/_version.py"
 tag_prefix = "v"
 parentdir_prefix = "pint-pal-"
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[tool.pixi.pypi-dependencies]
+pint-pal = { path = ".", editable = true }
