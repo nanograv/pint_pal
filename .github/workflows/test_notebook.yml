@@ -22,8 +22,8 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install texlive-latex-base cm-super-minimal pdftk latex2html
-    - uses: actions/checkout@v4
-    - uses: mamba-org/setup-micromamba@v1
+    - uses: actions/checkout@v7
+    - uses: mamba-org/setup-micromamba@v3
       with:
           init-shell: bash
           environment-name: pulsar
@@ -66,7 +66,7 @@ jobs:
         ls -lah
         mv tmp* nb_outputs
     - name: Archive Notebook Output Files
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: TestNB-OutputFiles_${{ matrix.python-version }}_${{ matrix.os }}_${{ steps.date.outputs.date }}
         path: |
