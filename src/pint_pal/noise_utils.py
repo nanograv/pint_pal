@@ -2,6 +2,7 @@ from xml.parsers.expat import model
 import numpy as np, os, json, itertools, time, pathlib, copy
 import pandas as pd
 from loguru import logger as log
+import astropy.units as u
 from astropy.time import Time
 
 from enterprise.pulsar import Pulsar
@@ -799,6 +800,43 @@ def convert_to_RNAMP(value):
     return (86400.0 * 365.24 * 1e6) / (2.0 * np.pi * np.sqrt(3.0)) * 10**value
 
 
+def _normalize_fourier_frequency_input(Nfreqs, noise_type):
+    """Return a Fourier component count and any explicit frequency grid.
+
+    Scalar input is the conventional number of harmonic components. Array-like
+    input is interpreted as the exact one-dimensional frequency grid in Hz.
+    """
+    values = np.asarray(Nfreqs)
+
+    if values.ndim == 0:
+        value = values.item()
+        if isinstance(value, (bool, np.bool_)) or not isinstance(
+            value, (int, np.integer)
+        ):
+            raise TypeError(
+                f"{noise_type} scalar Nfreqs must be an integer; "
+                f"received {type(value).__name__}."
+            )
+        if value <= 0:
+            raise ValueError(f"{noise_type} Nfreqs must be >= 1.")
+        return int(value), None
+
+    frequencies_hz = np.asarray(Nfreqs, dtype=float)
+    if frequencies_hz.ndim != 1 or frequencies_hz.size == 0:
+        raise ValueError(
+            f"{noise_type} array-valued Nfreqs must be a non-empty "
+            "one-dimensional frequency array."
+        )
+    if not np.all(np.isfinite(frequencies_hz)):
+        raise ValueError(f"{noise_type} Nfreqs contains non-finite frequencies.")
+    if np.any(frequencies_hz <= 0):
+        raise ValueError(f"{noise_type} frequencies must all be positive.")
+    if np.any(np.diff(frequencies_hz) <= 0):
+        raise ValueError(f"{noise_type} frequencies must be strictly increasing.")
+
+    return int(frequencies_hz.size), frequencies_hz
+
+
 def _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs):
     """Update Nfreq_cutoff prior upper bounds from per-block Nfreqs settings."""
     cutoff_prior_names = {"powerlaw_cutoff", "psd_cutoff"}
@@ -815,19 +853,42 @@ def _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs):
             continue
 
         prior_name = block_kwargs.get("prior", block_kwargs.get("psd"))
-        nfreqs = block_kwargs.get("Nfreqs")
+        raw_nfreqs = block_kwargs.get("Nfreqs")
         if (
             prior_name not in cutoff_prior_names
-            or nfreqs is None
+            or raw_nfreqs is None
             or prior_key not in prior_dict
         ):
             continue
 
+        nfreqs, _ = _normalize_fourier_frequency_input(
+            raw_nfreqs,
+            noise_type=block_name,
+        )
+
         bounds = prior_dict[prior_key]
         if isinstance(bounds, tuple):
-            prior_dict[prior_key] = (bounds[0], int(nfreqs))
+            prior_dict[prior_key] = (bounds[0], nfreqs)
         else:
-            prior_dict[prior_key][1] = int(nfreqs)
+            prior_dict[prior_key][1] = nfreqs
+
+
+def _pint_harmonic_grid_settings(frequencies_hz, block_name, rtol=1e-12):
+    """Convert an explicit ``f_n = n * df`` grid to PINT count/TSPAN form."""
+    frequencies_hz = np.asarray(frequencies_hz, dtype=float)
+    expected = frequencies_hz[0] * np.arange(
+        1,
+        frequencies_hz.size + 1,
+        dtype=float,
+    )
+
+    if not np.allclose(frequencies_hz, expected, rtol=rtol, atol=0.0):
+        raise NotImplementedError(
+            f"{block_name} frequencies are not of the form f_n = n*df "
+            "and cannot be represented by the current PINT component."
+        )
+
+    return int(frequencies_hz.size), (1.0 / frequencies_hz[0]) * u.s
 
 
 def _set_component_param_value(component, param_name, value):
@@ -850,11 +911,17 @@ def _translate_logfreq_kwargs(noise_kwargs):
     tuple
         ``(nlog, flog_factor, tspan_year)`` with None for unavailable values.
     """
+    tspan = noise_kwargs.get("tspan", None)
+    tspan_year = None
+    if tspan is not None:
+        # Discovery expresses T in seconds; PINT's TN*TSPAN parameters use years.
+        tspan_year = float(tspan) / (86400.0 * 365.25)
+
     nlog = noise_kwargs.get("nlog", noise_kwargs.get("Nfreqs_log", None))
     if nlog is not None:
         nlog = int(nlog)
     if nlog is not None and nlog <= 0:
-        return None, None, None
+        return None, None, tspan_year
 
     logmode = noise_kwargs.get("logmode", None)
     if (logmode is not None) and (int(logmode) != 0):
@@ -877,25 +944,19 @@ def _translate_logfreq_kwargs(noise_kwargs):
     if flog_factor is None and nlog is not None:
         flog_factor = 2.0
 
-    tspan = noise_kwargs.get("tspan", None)
-    tspan_year = None
-    if tspan is not None:
-        tspan_year = float(tspan) / (86400.0 * 365.25)
-
     return nlog, flog_factor, tspan_year
 
 
 def _apply_pl_component_logfreq_settings(
     component, noise_kwargs, flog_name, factor_name, tspan_name=None
 ):
-    """Apply log-spaced Fourier-basis settings to a PINT PL* noise component."""
+    """Apply Discovery Fourier-basis settings to a PINT PL* component."""
     nlog, flog_factor, tspan_year = _translate_logfreq_kwargs(noise_kwargs)
-    if nlog is None:
-        return
 
-    _set_component_param_value(component, flog_name, nlog)
-    _set_component_param_value(component, factor_name, flog_factor)
-    if tspan_name is not None:
+    if nlog is not None:
+        _set_component_param_value(component, flog_name, nlog)
+        _set_component_param_value(component, factor_name, flog_factor)
+    if tspan_name is not None and tspan_year is not None:
         _set_component_param_value(component, tspan_name, tspan_year)
 
 
@@ -1158,7 +1219,11 @@ def add_noise_to_model(
         # )
         rn_comp.TNREDAMP.quantity = noise_dict[psr_name + "_red_noise_log10_A"]
         rn_comp.TNREDGAM.quantity = noise_dict[psr_name + "_red_noise_gamma"]
-        rn_comp.TNREDC.quantity = rn_kwargs.get("Nfreqs", 30)
+        rn_nfreqs, rn_frequencies_hz = _normalize_fourier_frequency_input(
+            rn_kwargs.get("Nfreqs", 30),
+            noise_type="red_noise",
+        )
+        rn_comp.TNREDC.quantity = rn_nfreqs
         _apply_pl_component_logfreq_settings(
             rn_comp,
             rn_kwargs,
@@ -1166,6 +1231,12 @@ def add_noise_to_model(
             factor_name="TNREDFLOG_FACTOR",
             tspan_name="TNREDTSPAN",
         )
+        if rn_frequencies_hz is not None:
+            _, rn_fourier_tspan = _pint_harmonic_grid_settings(
+                rn_frequencies_hz,
+                block_name="red_noise",
+            )
+            rn_comp.TNREDTSPAN.quantity = rn_fourier_tspan.to(u.yr)
         # Add red noise to the timing model
         model.add_component(rn_comp, validate=True, force=True)
     else:
@@ -1184,7 +1255,11 @@ def add_noise_to_model(
             dm_comp = pm.PLDMNoise()
             dm_comp.TNDMAMP.quantity = noise_dict[psr_name + "_dm_gp_log10_A"]
             dm_comp.TNDMGAM.quantity = noise_dict[psr_name + "_dm_gp_gamma"]
-            dm_comp.TNDMC.quantity = dm_kwargs.get("Nfreqs", 100)
+            dm_nfreqs, dm_frequencies_hz = _normalize_fourier_frequency_input(
+                dm_kwargs.get("Nfreqs", 100),
+                noise_type="dm_noise",
+            )
+            dm_comp.TNDMC.quantity = dm_nfreqs
             _apply_pl_component_logfreq_settings(
                 dm_comp,
                 dm_kwargs,
@@ -1192,6 +1267,12 @@ def add_noise_to_model(
                 factor_name="TNDMFLOG_FACTOR",
                 tspan_name="TNDMTSPAN",
             )
+            if dm_frequencies_hz is not None:
+                _, dm_fourier_tspan = _pint_harmonic_grid_settings(
+                    dm_frequencies_hz,
+                    block_name="dm_noise",
+                )
+                dm_comp.TNDMTSPAN.quantity = dm_fourier_tspan.to(u.yr)
             # Add red noise to the timing model
             model.add_component(dm_comp, validate=True, force=True)
         ###### FREE SPECTRAL (WaveX) DM NOISE ######
@@ -1229,7 +1310,16 @@ def add_noise_to_model(
             # chrom_keys = np.array([key for key, val in noise_dict.items() if "_chrom_gp_" in key])
             chrom_comp.TNCHROMAMP.quantity = noise_dict[psr_name + "_chrom_gp_log10_A"]
             chrom_comp.TNCHROMGAM.quantity = noise_dict[psr_name + "_chrom_gp_gamma"]
-            chrom_comp.TNCHROMC.quantity = chrom_kwargs.get("Nfreqs", 100)
+            chrom_nfreqs, chrom_frequencies_hz = _normalize_fourier_frequency_input(
+                chrom_kwargs.get("Nfreqs", 100),
+                noise_type="chromatic_noise",
+            )
+            chrom_comp.TNCHROMC.quantity = chrom_nfreqs
+            chrom_tspan_name = (
+                "TNCHROMTSPAN"
+                if hasattr(chrom_comp, "TNCHROMTSPAN")
+                else "TNCMTSPAN"
+            )
             _apply_pl_component_logfreq_settings(
                 chrom_comp,
                 chrom_kwargs,
@@ -1241,12 +1331,18 @@ def add_noise_to_model(
                     if hasattr(chrom_comp, "TNCHROMFLOG_FACTOR")
                     else "TNCMFLOG_FACTOR"
                 ),
-                tspan_name=(
-                    "TNCHROMTSPAN"
-                    if hasattr(chrom_comp, "TNCHROMTSPAN")
-                    else "TNCMTSPAN"
-                ),
+                tspan_name=chrom_tspan_name,
             )
+            if chrom_frequencies_hz is not None:
+                _, chrom_fourier_tspan = _pint_harmonic_grid_settings(
+                    chrom_frequencies_hz,
+                    block_name="chromatic_noise",
+                )
+                _set_component_param_value(
+                    chrom_comp,
+                    chrom_tspan_name,
+                    chrom_fourier_tspan.to(u.yr),
+                )
             # Add red noise to the timing model
             model.add_component(chrom_comp, validate=True, force=True)
         ###### FREE SPECTRAL (WaveX) DM NOISE ######
@@ -1275,7 +1371,16 @@ def add_noise_to_model(
             sw_comp.TNSWAMP.frozen = True
             sw_comp.TNSWGAM.quantity = noise_dict[f"{psr_name}_sw_gp_gamma"]
             sw_comp.TNSWGAM.frozen = True
-            sw_comp.TNSWC.quantity = sw_kwargs.get("Nfreqs", 100)
+            sw_nfreqs, sw_frequencies_hz = _normalize_fourier_frequency_input(
+                sw_kwargs.get("Nfreqs", 100),
+                noise_type="solar_wind",
+            )
+            if sw_frequencies_hz is not None:
+                raise NotImplementedError(
+                    "Array-valued solar-wind Nfreqs cannot be serialized "
+                    "because PLSWNoise has no TNSWTSPAN parameter."
+                )
+            sw_comp.TNSWC.quantity = sw_nfreqs
             sw_comp.TNSWC.frozen = True
             _apply_pl_component_logfreq_settings(
                 sw_comp,

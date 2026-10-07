@@ -34,6 +34,19 @@ def test_select_fourier_basis_negative_nlog_raises():
         )
 
 
+def test_select_fourier_basis_rejects_explicit_grid_with_nlog():
+    with pytest.raises(ValueError, match="cannot be combined with nlog > 0"):
+        du._select_fourier_basis(
+            psr=object(),
+            Nfreqs=np.array([1e-9, 2e-9]),
+            tspan=100.0,
+            logmode=0,
+            f_min=1e-10,
+            nlog=2,
+            noise_type="dm_noise",
+        )
+
+
 def test_red_noise_block_scales_fmin_and_uses_getspan(monkeypatch):
     calls = {}
     psr = object()
