@@ -34,9 +34,7 @@ jobs:
     - name: Test with Standard Pulsar
       shell: bash
       run: |
-        export PULSAR_NAME='J0605+3757'
-        export JUPYTER_PLATFORM_DIRS=1
-        pixi run pytest tests/test_run_notebook.py -k $PULSAR_NAME
+        pixi run pytest tests/test_run_notebook.py
         ls -lah
         mv tmp* nb_outputs
     - name: Archive Notebook Output Files
