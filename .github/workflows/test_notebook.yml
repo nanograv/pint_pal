@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  build:
+  pinned:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -17,32 +17,48 @@ jobs:
         os: [ubuntu-26.04, ubuntu-26.04-arm] # Once we get the tex packages changed, we should include "macos-13"
 
     steps:
-    - name: Install Required Ubuntu Packages
+    - name: Install required Ubuntu packages
       run: |
         sudo apt-get update
         sudo apt-get install texlive-latex-base cm-super-minimal pdftk latex2html
+
     - uses: actions/checkout@v7
+
     - uses: prefix-dev/setup-pixi@v0.10.0
       with:
         pixi-version: v0.81.0
         cache: true
         locked: true
-    - name: Run Unit Tests
+
+    - name: Run unit tests
       shell: bash
       run: |
         pixi run pytest --ignore=tests/test_run_notebook.py
-    - name: Test with Standard Pulsar
+
+    - name: Test with standard pulsar
       shell: bash
       run: |
         pixi run pytest tests/test_run_notebook.py
         ls -lah
         mv tmp* nb_outputs
-    - name: Archive Notebook Output Files
+
+    - name: Prepare summary PDF
+      shell: bash
+      run: |
+        pdfs=(nb_outputs/*/*.pdf)
+        pdftk ${pdfs[@]} cat output nb_report_${{ matrix.os }}.pdf
+
+    - name: Upload summary PDF
       uses: actions/upload-artifact@v7
       with:
-        name: TestNB-OutputFiles_${{ matrix.python-version }}_${{ matrix.os }}_${{ steps.date.outputs.date }}
+        path: nb_report_${{ matrix.os }}.pdf
+        archive: false
+
+    - name: Upload notebook outputs
+      uses: actions/upload-artifact@v7
+      with:
+        name: nb_outputs_${{ matrix.os }}
         path: |
-          nb_outputs/*/*.pdf
           nb_outputs/*/*.tim
           nb_outputs/*/*.par
         compression-level: 6
