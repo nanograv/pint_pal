@@ -28,11 +28,11 @@ jobs:
         cache: true
         locked: true
     - name: Run Unit Tests
-      shell: bash -el {0}
+      shell: bash
       run: |
         pixi run pytest --ignore=tests/test_run_notebook.py
     - name: Test with Standard Pulsar
-      shell: bash -el {0}
+      shell: bash
       run: |
         export PULSAR_NAME='J0605+3757'
         export JUPYTER_PLATFORM_DIRS=1
