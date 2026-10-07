@@ -75,6 +75,7 @@ platforms = ["linux-64", "linux-aarch64"]
 [tool.pixi.dependencies]
 gcc = "*"
 setuptools = "*"
+cython = ">=3.2.4"
 suitesparse = "*"
 
 [tool.pixi.pypi-options]
