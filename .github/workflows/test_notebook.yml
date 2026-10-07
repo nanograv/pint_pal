@@ -14,8 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest] # Once we get the tex packages changed, we should include "macos-13"
-        python-version: ["3.10", "3.11", "3.12.13"]
+        os: [ubuntu-26.04, ubuntu-26.04-arm] # Once we get the tex packages changed, we should include "macos-13"
 
     steps:
     - uses: actions/checkout@v7
