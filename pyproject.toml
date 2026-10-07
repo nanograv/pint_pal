@@ -73,7 +73,16 @@ channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64"]
 
 [tool.pixi.dependencies]
+gcc = "*"
 suitesparse = "*"
+
+[tool.pixi.pypi-options]
+no-build-isolation = ["scikit-sparse"] # so it can find pixi's suitesparse
+
+[tool.pixi.activation.env]
+CPATH = "$CONDA_PREFIX/include/suitesparse"
+LIBRARY_PATH = "$CONDA_PREFIX/lib"
+LD_LIBRARY_PATH = "$CONDA_PREFIX/lib"
 
 [tool.pixi.pypi-dependencies]
 pint-pal = { path = ".", editable = true }
