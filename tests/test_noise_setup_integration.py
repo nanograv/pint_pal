@@ -711,6 +711,48 @@ def test_add_noise_to_model_adds_dm_gp_powerlaw(real_pint_model):
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_add_noise_to_model_preserves_harmonic_dm_grid(real_model_toas):
+    model, toas = real_model_toas
+    model = deepcopy(model)
+    psr = model.PSR.value
+
+    df = 1.0 / (10.0 * 365.25 * 86400.0)
+    dm_modes = df * np.arange(1, 7, dtype=float)
+    noise_dict = _base_noise_dict(psr)
+    noise_dict.update(
+        {
+            f"{psr}_dm_gp_log10_A": -13.6,
+            f"{psr}_dm_gp_gamma": 2.1,
+        }
+    )
+
+    out = nu.add_noise_to_model(
+        model,
+        noise_dict,
+        model_kwargs={"dm_noise": {"Nfreqs": dm_modes}},
+    )
+
+    dm_component = out.components["PLDMNoise"]
+    assert int(dm_component.TNDMC.value) == len(dm_modes)
+
+    _, pint_modes = dm_component.get_time_frequencies(toas)
+    np.testing.assert_allclose(
+        pint_modes,
+        dm_modes,
+        rtol=1e-12,
+        atol=0.0,
+    )
+
+
+def test_pint_harmonic_grid_rejects_irregular_frequencies():
+    with pytest.raises(NotImplementedError, match="f_n = n\\*df"):
+        nu._pint_harmonic_grid_settings(
+            np.array([1e-9, 2.5e-9, 3e-9]),
+            block_name="dm_noise",
+        )
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_add_noise_to_model_adds_chromatic_gp_powerlaw(real_pint_model):
     model = deepcopy(real_pint_model)
     psr = model.PSR.value
