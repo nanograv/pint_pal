@@ -21,7 +21,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "ruamel.yaml",
-    "pint_pulsar @ git+https://github.com/nanograv/PINT",
+    "pint_pulsar>=1.1.8",
     "enterprise-pulsar>=3.5.0",
     "enterprise-extensions>=v2.4.1",
     "pytest",
