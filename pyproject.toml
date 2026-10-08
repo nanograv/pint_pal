@@ -18,7 +18,7 @@ authors = [
 ]
 description = "A long-lived repository for NANOGrav Pulsar Timing analysis work."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "ruamel.yaml",
     "pint_pulsar @ git+https://github.com/nanograv/PINT",
