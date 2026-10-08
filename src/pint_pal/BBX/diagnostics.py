@@ -1336,7 +1336,7 @@ def plot_b_snr_vs_time(
     ax.set_yscale("log")
     ax.grid(True, which="both", linestyle="--", alpha=0.5)
     ax.set_xlabel("Epoch MJD")
-    ax.set_ylabel("|b| / $\sigma_b$ (log)")
+    ax.set_ylabel(r"|b| / $\sigma_b$ (log)")
     ax.set_title("Chromatic slope significance over time")
 
     fig.text(
