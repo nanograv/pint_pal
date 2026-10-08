@@ -42,23 +42,12 @@ jobs:
         ls -lah
         mv tmp* nb_outputs
 
-    - name: Prepare summary PDF
-      shell: bash
-      run: |
-        pdfs=(nb_outputs/*/*.pdf)
-        pdftk ${pdfs[@]} cat output nb_report_${{ matrix.os }}.pdf
-
-    - name: Upload summary PDF
-      uses: actions/upload-artifact@v7
-      with:
-        path: nb_report_${{ matrix.os }}.pdf
-        archive: false
-
     - name: Upload notebook outputs
       uses: actions/upload-artifact@v7
       with:
         name: nb_outputs_${{ matrix.os }}
         path: |
+          nb_outputs/*/*.pdf
           nb_outputs/*/*.tim
           nb_outputs/*/*.par
         compression-level: 6
