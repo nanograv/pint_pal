@@ -38,3 +38,6 @@ core.*
 /*.tim
 *.pickle.gz
 /*.out
+
+# installed pixi environment
+.pixi/
