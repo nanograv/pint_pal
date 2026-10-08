@@ -12,6 +12,7 @@ runs:
   using: composite
   steps:
   - name: Install required Ubuntu packages
+    shell: bash
     run: |
       sudo apt-get update
       sudo apt-get install texlive-latex-base cm-super-minimal pdftk latex2html
