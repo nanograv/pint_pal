@@ -39,7 +39,7 @@ runs:
   - name: Upload notebook outputs
     uses: actions/upload-artifact@v7
     with:
-      name: nb-outputs-${{ matrix.os }}
+      name: nb-outputs-${{ inputs.artifact-suffix }}
       path: |
         nb_outputs/*/*.pdf
         nb_outputs/*/*.tim
