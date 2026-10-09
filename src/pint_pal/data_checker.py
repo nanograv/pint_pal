@@ -91,7 +91,7 @@ class DataChecker:
         """
         if not (exception is None or (isinstance(exception, bool) and not exception)):
             raise exception(message)
-        log.warning(message)
+        log.opt(depth=1).error(message)
 
     def is_unset(self, p: str) -> bool:
         """
