@@ -5,7 +5,7 @@ Reworked version modified from https://github.com/dlakaplan/ngchecker
 import re
 from astropy import units as u, constants as c
 import numpy as np
-from typing import List, Tuple, Optional, Dict, Union
+from typing import List, Tuple, Optional, Dict, Union, Any
 import pint.models
 import pint.toa
 import pint_pal
@@ -509,12 +509,7 @@ class ParChecker(DataChecker):
         self,
         required: List[str] = ["F0", "F1", "PX", "ELONG", "ELAT", "PMELONG", "PMELAT"],
         excluded: List[str] = ["F2"],
-        required_value: Dict = {
-            "PLANET_SHAPIRO": pint_pal.config.PLANET_SHAPIRO,
-            "EPHEM": pint_pal.config.LATEST_EPHEM,
-            "CLOCK": pint_pal.config.LATEST_BIPM,
-            "CORRECT_TROPOSPHERE": pint_pal.config.CORRECT_TROPOSPHERE,
-        },
+        required_value: dict[str, Any] | None = None,
         othercheckers=[NameChecker, BinaryChecker],
         raiseexcept: Optional[bool] = True,
     ) -> bool:
@@ -524,7 +519,11 @@ class ParChecker(DataChecker):
         Parameters
         ----------
         required: list
-            Key-value pairs of parameter names that are frozen with their values
+            List of required parameters
+        excluded: list
+            List of excluded parameters
+        required_value: dict
+            Maps names of parameters to the required (frozen) values
         raiseexcept: bool, optional
             Will an error raise an exception (default) or just a warning
 
@@ -538,6 +537,14 @@ class ParChecker(DataChecker):
         KeyError
             If the check fails and ``raiseexcept`` is True
         """
+        if required_value is None:
+            required_value = {
+                "PLANET_SHAPIRO": pint_pal.config.PLANET_SHAPIRO,
+                "EPHEM": pint_pal.config.LATEST_EPHEM,
+                "CLOCK": pint_pal.config.LATEST_BIPM,
+                "CORRECT_TROPOSPHERE": pint_pal.config.CORRECT_TROPOSPHERE,
+            }
+
         self.verify(has_model=True)
 
         value = self.check_parameter_set(
@@ -738,7 +745,7 @@ class TOAChecker(DataChecker):
 
     def check(
         self,
-        version: str = pint_pal.config.LATEST_TOA_RELEASE, #"2025.02.05-1fb9ef4.01.31-08c1687",
+        version: str | None = None,
         badranges: dict[str, list[float]]  = {"PUPPI": [57984, 58447]},
         raiseexcept: Optional[bool] = True,
         ignorebe: Optional[list] = None,
@@ -767,6 +774,9 @@ class TOAChecker(DataChecker):
         ValueError
             If the check fails and ``raiseexcept`` is True
         """
+        if version is None:
+            version = pint_pal.config.LATEST_TOA_RELEASE
+
         self.verify(has_toas=True)
 
 
