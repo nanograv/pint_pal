@@ -18,10 +18,10 @@ authors = [
 ]
 description = "A long-lived repository for NANOGrav Pulsar Timing analysis work."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "ruamel.yaml",
-    "pint_pulsar @ git+https://github.com/nanograv/PINT",
+    "pint_pulsar>=1.1.8",
     "enterprise-pulsar>=3.5.0",
     "enterprise-extensions>=v2.4.1",
     "pytest",
@@ -67,3 +67,30 @@ versionfile_source = "src/pint_pal/_version.py"
 versionfile_build = "pint_pal/_version.py"
 tag_prefix = "v"
 parentdir_prefix = "pint-pal-"
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[tool.pixi.environments]
+py311 = { dependencies = { python = "3.11.*" } }
+py312 = { dependencies = { python = "3.12.*" } }
+py313 = { dependencies = { python = "3.13.*" } }
+py314 = { dependencies = { python = "3.14.*" } }
+
+[tool.pixi.dependencies]
+gcc = "*"
+setuptools = "*"
+cython = ">=3.2.4"
+suitesparse = "*"
+
+[tool.pixi.pypi-options]
+no-build-isolation = ["scikit-sparse"] # so it can find pixi's suitesparse
+
+[tool.pixi.activation.env]
+CPATH = "$CONDA_PREFIX/include/suitesparse"
+LIBRARY_PATH = "$CONDA_PREFIX/lib"
+LD_LIBRARY_PATH = "$CONDA_PREFIX/lib"
+
+[tool.pixi.pypi-dependencies]
+pint-pal = { path = ".", editable = true }

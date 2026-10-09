@@ -1,0 +1,47 @@
+name: Run test suite
+
+inputs:
+  environment:
+    description: Name of the pixi environment to test
+    required: true
+  artifact-suffix:
+    description: Suffix that makes artifact names unique within the run
+    required: true
+
+runs:
+  using: composite
+  steps:
+  - name: Install required Ubuntu packages
+    shell: bash
+    run: |
+      sudo apt-get update
+      sudo apt-get install texlive-latex-base cm-super-minimal pdftk latex2html
+
+  - uses: prefix-dev/setup-pixi@v0.10.0
+    with:
+      pixi-version: v0.81.0
+      environments: ${{ inputs.environment }}
+      cache: true
+      locked: true
+
+  - name: Run unit tests
+    shell: bash
+    run: |
+      pixi run pytest --ignore=tests/test_run_notebook.py
+
+  - name: Test with standard pulsar
+    shell: bash
+    run: |
+      pixi run pytest tests/test_run_notebook.py
+      ls -lah
+      mv tmp* nb_outputs
+
+  - name: Upload notebook outputs
+    uses: actions/upload-artifact@v7
+    with:
+      name: nb-outputs-${{ inputs.artifact-suffix }}
+      path: |
+        nb_outputs/*/*.pdf
+        nb_outputs/*/*.tim
+        nb_outputs/*/*.par
+      compression-level: 6
