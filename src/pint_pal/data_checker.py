@@ -541,7 +541,7 @@ class ParChecker(DataChecker):
             required_value = {
                 "PLANET_SHAPIRO": pint_pal.config.PLANET_SHAPIRO,
                 "EPHEM": pint_pal.config.LATEST_EPHEM,
-                "CLOCK": pint_pal.config.LATEST_BIPM,
+                "CLOCK": f"TT({pint_pal.config.LATEST_BIPM})",
                 "CORRECT_TROPOSPHERE": pint_pal.config.CORRECT_TROPOSPHERE,
             }
 
@@ -567,7 +567,7 @@ class ParChecker(DataChecker):
         for p in required_value.keys():
             if not (self.m[p].value == required_value[p]):
                 self.raise_or_warn(
-                    f"Required parameter '{p}' is present, but value is '{self.m[p].value}, not {required_value[p]}",
+                    f"Required parameter '{p}' is present, but value is '{self.m[p].value}', not '{required_value[p]}'",
                     KeyError if raiseexcept else None,
                 )
                 return False
