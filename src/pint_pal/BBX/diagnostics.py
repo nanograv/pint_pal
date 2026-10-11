@@ -23,6 +23,8 @@ from matplotlib.legend_handler import HandlerBase
 
 import astropy.units as u
 
+from . import utils as ut
+
 
 # =============================================================================
 # Shared helpers
@@ -2975,7 +2977,7 @@ def plot_simple_dmx_time(
     err_val = err.to_value()     # [pc/cm3]
 
     # Convert to decimal years
-    years = mjd_to_year(mjd_val)
+    years = ut.mjd_to_year(mjd_val)
 
     # Use existing axis or create a new one
     if settings["ax"] is None:
@@ -3038,7 +3040,7 @@ def plot_simple_dmx_time(
     # Conjunction lines
     if settings["min_elong_mjds"] is not None:
         for k, mj in enumerate(np.asarray(settings["min_elong_mjds"], float)):
-            ax1.axvline(mjd_to_year(mj), 
+            ax1.axvline(ut.mjd_to_year(np.atleast_1d(mj))[0], 
                         color="orange", 
                         linestyle=":", 
                         alpha=0.4,
@@ -3048,8 +3050,7 @@ def plot_simple_dmx_time(
     if twin:
         ax2 = ax1.twiny()
         x0, x1 = ax1.get_xlim()
-        mjd0 = year_to_mjd(x0)
-        mjd1 = year_to_mjd(x1)
+        mjd0, mjd1 = ut.year_to_mjd(np.array([x0, x1]))
         ax2.set_xlim(mjd0, mjd1)
         ax2.set_xlabel("MJD")
 
