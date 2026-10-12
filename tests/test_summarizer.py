@@ -72,7 +72,7 @@ def test_generate_error_parameters_check(TestSummarizer):
     summarizer.generate_error_parameters_check()
     text = summarizer.report.generate()
     assert "EFAC" in text
-    assert "Red noise spectral index" in text
+    assert "ed noise spectral index" in text #Red/red
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_generate_timing_model_comparison(TestSummarizer):
