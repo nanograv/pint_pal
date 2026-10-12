@@ -287,6 +287,8 @@ class Summarizer:
         Check whether EFAC, EQUAD/ECORR (and DM equivalents), and the red
         noise spectral index take on reasonable values.
 
+        If chains are available, compare against those as well.
+
         Parameters
         ----------
         efac_bounds : tuple[float, float], default=(0.8, 1.2)
@@ -382,6 +384,42 @@ class Summarizer:
             )
             self.report.write(f"Red noise spectral index (`{idx_param}`): {idx_text}\n")
 
+
+        # Chain comparison
+        self.report.add_section_by_title("Check Noise Parameter Agreement With Chains")
+
+        if self.fitter_post_noise is self.fitter:
+            self.report.write("No post-noise-model fitter available; cannot compare against noise chains.\n")
+            return
+
+        table = "| Parameter | Par value | Post-noise value | Ratio |\n| --- | --- | --- | --- |\n"
+        for p in sorted(self.fitter.model.params):
+            if not any(p.startswith(pfx) for pfx in ["EQUAD", "ECORR", "EFAC", "DMEQUAD", "DMECORR", "TN"]):
+                continue
+            pm = getattr(self.fitter.model, p)
+            if pm.value is None:
+                continue
+            name = f"{p} {pm.key} {pm.key_value[0]}" if getattr(pm, "key_value", None) else p
+            try:
+                pm_noise = getattr(self.fitter_post_noise.model, p)
+                if pm_noise.value is None:
+                    raise AttributeError
+                noise_value_text = f"{pm_noise.value:.3g} {pm_noise.units}"
+                ratio = pm.value / pm_noise.value
+                ratio_text = self.check_error(
+                    f"{ratio:.2f}", 0.9 < ratio < 1.1,
+                    f"Noise parameter differs between par file and post-noise model ({name})",
+                    f"chain_mismatch_{p}",
+                )
+            except AttributeError:
+                noise_value_text = "–"
+                ratio_text = "–"
+
+            table += f"| `{name}` | {pm.value:.3g} {pm.units} | {noise_value_text} | {ratio_text} |\n"
+        self.report.write(table)
+
+
+            
         return    
 
     def generate_residual_plots(self) -> None:
