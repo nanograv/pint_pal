@@ -281,7 +281,7 @@ class Summarizer:
         equad_ecorr_ratio_threshold: float = 0.75,
         equad_ecorr_prior_limit: float = 9.5,
         equad_ecorr_large_value: float = 3.0,
-            red_noise_index_bounds: tuple[float, float] = (-7.0, -1.0),
+        red_noise_index_bounds: tuple[float, float] = (-7.0, -1.0),
     ) -> None:
         """
         Check whether EFAC, EQUAD/ECORR (and DM equivalents), and the red
