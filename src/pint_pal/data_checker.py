@@ -711,7 +711,10 @@ class JumpChecker(DataChecker):
         keyset = []
         passes = False
         for k in keys:
-            keyset.append(np.array(self.t[k][not_jumped_or_offset]))
+            if isinstance(k, str):
+                keyset.append(np.array(self.t[k][not_jumped_or_offset]))
+            else:
+                keyset.append(np.array([self.t[x][not_jumped_or_offset] for x in k]))
             if len(np.unique(keyset[-1])) == 1:
                 log.info(
                     f"{len(not_jumped_or_offset)} TOAs are not covered by JUMPs or -to flags, but have the same value of '{k}' = '{list(np.unique(keyset[-1]))}'"
@@ -749,7 +752,12 @@ class JumpChecker(DataChecker):
             keyset = []
             passes = False
             for k in keys:
-                keyset.append(np.array(self.t[k][not_jumped_or_offset]))
+                if isinstance(k, str):
+                    keyset.append(np.array(self.t[k][not_jumped_or_offset]))
+                else:
+                    keyset.append(
+                        np.array([self.t[x][not_jumped_or_offset] for x in k])
+                    )
                 if len(np.unique(keyset[-1])) == 1:
                     log.info(
                         f"{len(not_jumped_or_offset)} TOAs are not covered by DMJUMPs, but have the same value of '{k}' = '{list(np.unique(keyset[-1]))}'"
