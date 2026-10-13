@@ -792,7 +792,7 @@ def make_single_pulsar_noise_likelihood_discovery(
     if not model_kwargs['timing_model']:
         log.error("Timing model must be included in the `noise_run` config block for the likelihood to be properly constructed.")
     if not model_kwargs['white_noise']:
-        log.error("White noise must be included in the `noise_run` config block for the likelihood to be properly constructed.")
+        log.warning("White noise must be included in the `noise_run` config block for the likelihood to be properly constructed.")
     if not model_kwargs['red_noise']:
         log.warning("Red noise is not included in the `noise_run` config block. Proceed with caution.")       
     ## add pulsar's time spans to model for signals where not included

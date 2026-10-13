@@ -126,12 +126,54 @@ class TimingConfiguration:
             return os.path.join(self.par_directory, self.config['compare-model'])
         return None
 
-    def get_free_params(self, fitter):
-        """Return list of free parameters"""
-        if self.config["free-dmx"]:
-            return self.config['free-params'] + [p for p in fitter.model.params if p.startswith("DMX_")]
-        else:
-            return self.config['free-params']
+    def get_free_params(self, fitter: pint.fitter.Fitter):
+        """ Return list of free parameters """
+        free_params = self.config['free-params']
+        retval = free_params[:] # copy list, do not write over the data
+        if 'free-dmx' in self.config.keys() and self.config['free-dmx']:
+            retval += [p for p in fitter.model.params if p.startswith("DMX_")]
+        if 'free-jumps' in self.config.keys():
+            retval += self.get_free_jumps(fitter=fitter, convert_to_indices=True)
+        return retval
+
+    def get_free_jumps(self, fitter: pint.fitter.Fitter | None = None, convert_to_indices: bool = False):
+        """
+        Return list of free JUMPs
+
+        Parameters
+        ----------
+        fitter: pint.fitter.Fitter, default=None
+            Fitter object used if convert_to_indices==True. See below. 
+        convert_to_indices : bool, default=False
+            Returns JUMPs in the format JUMP1, JUMP2, etc., rather than JUMP -flag flag_value.
+            fitter cannot be None as it needs to reference this object. If it is None and convert_to_indices is True, raise an exception
+
+        """
+        if fitter is None and convert_to_indices:
+            raise ValueError("Fitter object cannot be None, is required with convert_to_indices==True")
+
+        retval = None
+        if 'free-jumps' in self.config.keys():
+            free_jumps = self.config['free-jumps']
+            retval = free_jumps[:] # copy list, do not write over the data
+        
+            for i, free_jump in enumerate(free_jumps):
+                flag, value = free_jump
+                if convert_to_indices:
+                    pint_jumps = fitter.model.jumps
+                    found = False
+                    for jump in pint_jumps:
+                        if fitter.model[jump].key == flag and fitter.model[jump].key_value[0] == value: #assumes only one key_value
+                            found = True
+                            retval[i] = jump
+                            break
+                    if not found:
+                        raise KeyError("JUMP {flag} {value} not found in timing model.")
+                else:
+                    retval[i] = f"JUMP {flag} {value}"
+
+        return retval
+
         
     #def get_febe_pairs(self):
     #    febe_list = []
@@ -896,24 +938,25 @@ class TimingConfiguration:
                     bt_match = np.where((names==name) & (subints==subint))[0]
                 if len(bt_match): btinds.append(bt_match[0])
                 else: log.warning(f"Listed bad TOA not matched: [{name}, {chan}, {subint}]")
-            btinds = np.array(btinds)
+            btinds = np.array(btinds, dtype=int)
 
             # Check for pre-existing cut flags if there are bad toas matched:
-            cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
-            remaining = np.array([not cut for cut in cuts[btinds]])
-            alreadycut = np.invert(remaining)
+            if btinds.size:
+                cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
+                remaining = np.array([not cut for cut in cuts[btinds]])
+                alreadycut = np.invert(remaining)
 
-            if np.any(alreadycut):
-                log.info(f"{np.sum(alreadycut)} bad-toa entries already cut: {set(cuts[btinds][alreadycut])}")
-                log.info(f"bad-toa list can be reduced to {np.sum(remaining)} entries...")
-                for i in btinds[remaining]:
-                    if self.get_toa_type() == 'NB': print(f"  - [{names[i]},{chans[i]},{subints[i]}]")
-                    else: print(f"  - [{names[i]},None,{subints[i]}]")
+                if np.any(alreadycut):
+                    log.info(f"{np.sum(alreadycut)} bad-toa entries already cut: {set(cuts[btinds][alreadycut])}")
+                    log.info(f"bad-toa list can be reduced to {np.sum(remaining)} entries...")
+                    for i in btinds[remaining]:
+                        if self.get_toa_type() == 'NB': print(f"  - [{names[i]},{chans[i]},{subints[i]}]")
+                        else: print(f"  - [{names[i]},None,{subints[i]}]")
 
             if logwarntoa:
                 log.warning(f'One or more bad-toa entries lack reasons for excision; please add them.')
 
-            apply_cut_flag(toas,np.array(btinds),'badtoa',warn=warn)
+            apply_cut_flag(toas,btinds,'badtoa',warn=warn)
         
         if 'bad-toa-averaged' in valid_valued:
             logwarntoa = False
@@ -924,23 +967,24 @@ class TimingConfiguration:
                 bt_match = np.where((names==name))[0]
                 if len(bt_match): btinds.append(bt_match[0])
                 else: log.warning(f"Listed bad TOA not matched: [{name}]")
-            btinds = np.array(btinds)
+            btinds = np.array(btinds, dtype=int)
 
             # Check for pre-existing cut flags if there are bad toas matched:
-            cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
-            remaining = np.array([not cut for cut in cuts[btinds]])
-            alreadycut = np.invert(remaining)
+            if btinds.size:
+                cuts = np.array([f['cut'] if 'cut' in f else None for f in toas.orig_table['flags']])
+                remaining = np.array([not cut for cut in cuts[btinds]])
+                alreadycut = np.invert(remaining)
 
-            if np.any(alreadycut):
-                log.info(f"{np.sum(alreadycut)} bad-toa entries already cut: {set(cuts[btinds][alreadycut])}")
-                log.info(f"bad-toa-averaged list can be reduced to {np.sum(remaining)} entries...")
-                for i in btinds[remaining]:
-                    print(f"  - [{names[i]},None,None]")
+                if np.any(alreadycut):
+                    log.info(f"{np.sum(alreadycut)} bad-toa entries already cut: {set(cuts[btinds][alreadycut])}")
+                    log.info(f"bad-toa-averaged list can be reduced to {np.sum(remaining)} entries...")
+                    for i in btinds[remaining]:
+                        print(f"  - [{names[i]},None,None]")
 
             if logwarntoa:
                 log.warning(f'One or more bad-toa entries lack reasons for excision; please add them.')
 
-            apply_cut_flag(toas,np.array(btinds),'badtoa-averaged',warn=warn)
+            apply_cut_flag(toas,btinds,'badtoa-averaged',warn=warn)
 
         return toas
 
