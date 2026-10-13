@@ -766,8 +766,8 @@ def test_add_noise_to_model_adds_solar_wind_powerlaw_gp_only(real_pint_model):
 @pytest.mark.parametrize(
     "sw_keys,expected_kernel",
     [
-        ({"sw_gp_log10_sigma_ridge": -7.0}, "ridge"),
-        ({"sw_gp_log10_sigma_sq_exp": -7.1, "sw_gp_log10_ell": 1.2}, "sqexp"),
+        ({"sw_gp_log10_sigma_ridge": -7.0}, "RIDGE"),
+        ({"sw_gp_log10_sigma_sq_exp": -7.1, "sw_gp_log10_ell": 1.2}, "SQEXP"),
         (
             {
                 "sw_gp_log10_sigma_quasi_periodic": -7.2,
@@ -775,15 +775,20 @@ def test_add_noise_to_model_adds_solar_wind_powerlaw_gp_only(real_pint_model):
                 "sw_gp_log10_gamma_p": -0.2,
                 "sw_gp_log10_p": 1.5,
             },
-            "quasi_periodic",
+            "QUASI_PERIODIC",
         ),
-        ({"sw_gp_log10_sigma_matern": -7.3, "sw_gp_log10_ell": 1.0}, "matern"),
+        ({"sw_gp_log10_sigma_matern": -7.3, "sw_gp_log10_ell": 1.0}, "MATERN"),
     ],
 )
 def test_add_noise_to_model_adds_time_domain_solar_wind_variants(
     real_pint_model, sw_keys, expected_kernel
 ):
-    """TimeDomainSWNoise (unified class) is added with the correct TDSWKERNEL value."""
+    """TimeDomainSWNoise (unified class) is added with the correct TDSWKERNEL value.
+
+    TDSWKERNEL is canonically upper case: PINT's ``TimeDomainSWNoise.validate``
+    normalises whatever is supplied, so the stored value is always upper case
+    regardless of how the noise dictionary spelled it.
+    """
     model = deepcopy(real_pint_model)
     psr = model.PSR.value
 

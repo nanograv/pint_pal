@@ -914,12 +914,14 @@ def _apply_tdsw_interp_settings(sw_comp, sw_kwargs, kernel_name):
         Keyword arguments from the ``solar_wind`` model block, typically
         containing ``dt``, ``basis_nodes``, and/or ``interp_kind``.
     kernel_name : str
-        Human-readable kernel name used in error messages (e.g. ``"ridge"``).
+        Human-readable kernel name used in error messages (e.g. ``"RIDGE"``).
     """
     dt = sw_kwargs.get("dt", False)
     basis_nodes = sw_kwargs.get("basis_nodes", None)
+    # PINT normalises TDSWINTERP_KIND to upper case in validate(), so store the
+    # canonical form here rather than relying on that normalisation happening.
     kind = sw_kwargs.get("interp_kind", "linear")
-    sw_comp.TDSWINTERP_KIND.value = kind
+    sw_comp.TDSWINTERP_KIND.value = kind.upper()
     if dt:
         sw_comp.TDSWDT.quantity = dt
     elif basis_nodes is not None:
@@ -1292,31 +1294,31 @@ def add_noise_to_model(
         elif f"{psr_name}_sw_gp_log10_sigma_ridge" in sw_pars:
             log.info("Including Time Domain Ridge SW Noise for this pulsar")
             sw_comp = pm.TimeDomainSWNoise()
-            sw_comp.TDSWKERNEL.value = "ridge"
+            sw_comp.TDSWKERNEL.value = "RIDGE"
             sw_comp.TDSWLOGSIG.quantity = noise_dict[
                 f"{psr_name}_sw_gp_log10_sigma_ridge"
             ]
             sw_comp.TDSWLOGSIG.frozen = True
-            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "ridge")
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "RIDGE")
             model.add_component(sw_comp, validate=False, force=True)
         elif f"{psr_name}_sw_gp_log10_sigma_sq_exp" in sw_pars:
             log.info(
                 "Including Time Domain Square-Exponential SW Noise for this pulsar"
             )
             sw_comp = pm.TimeDomainSWNoise()
-            sw_comp.TDSWKERNEL.value = "sqexp"
+            sw_comp.TDSWKERNEL.value = "SQEXP"
             sw_comp.TDSWLOGSIG.quantity = noise_dict[
                 f"{psr_name}_sw_gp_log10_sigma_sq_exp"
             ]
             sw_comp.TDSWLOGSIG.frozen = True
             sw_comp.TDSWLOGELL.quantity = noise_dict[f"{psr_name}_sw_gp_log10_ell"]
             sw_comp.TDSWLOGELL.frozen = True
-            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "sqexp")
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "SQEXP")
             model.add_component(sw_comp, validate=False, force=True)
         elif f"{psr_name}_sw_gp_log10_sigma_quasi_periodic" in sw_pars:
             log.info("Including Time Domain Quasi-Periodic SW Noise for this pulsar")
             sw_comp = pm.TimeDomainSWNoise()
-            sw_comp.TDSWKERNEL.value = "quasi_periodic"
+            sw_comp.TDSWKERNEL.value = "QUASI_PERIODIC"
             sw_comp.TDSWLOGSIG.quantity = noise_dict[
                 f"{psr_name}_sw_gp_log10_sigma_quasi_periodic"
             ]
@@ -1327,12 +1329,12 @@ def add_noise_to_model(
             sw_comp.TDSWLOGGAMP.frozen = True
             sw_comp.TDSWLOGP.quantity = noise_dict[f"{psr_name}_sw_gp_log10_p"]
             sw_comp.TDSWLOGP.frozen = True
-            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "quasi_periodic")
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "QUASI_PERIODIC")
             model.add_component(sw_comp, validate=False, force=True)
         elif f"{psr_name}_sw_gp_log10_sigma_matern" in sw_pars:
             log.info("Including Time Domain Matern SW Noise for this pulsar")
             sw_comp = pm.TimeDomainSWNoise()
-            sw_comp.TDSWKERNEL.value = "matern"
+            sw_comp.TDSWKERNEL.value = "MATERN"
             sw_comp.TDSWLOGSIG.quantity = noise_dict[
                 f"{psr_name}_sw_gp_log10_sigma_matern"
             ]
@@ -1341,7 +1343,7 @@ def add_noise_to_model(
             sw_comp.TDSWLOGELL.frozen = True
             sw_comp.TDSWNU.quantity = sw_kwargs.get("nu", 1.5)
             sw_comp.TDSWNU.frozen = True
-            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "matern")
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "MATERN")
             model.add_component(sw_comp, validate=False, force=True)
         else:
             log.warning(
