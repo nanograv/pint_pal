@@ -2,6 +2,7 @@
 This is a set of utilities which check par files for completeness
 Reworked version modified from https://github.com/dlakaplan/ngchecker
 """
+
 import re
 from astropy import units as u, constants as c
 import numpy as np
@@ -27,7 +28,11 @@ binary_params = {
             "optional": ["A1DOT"],
             "optional_sets": [["EPS1DOT", "EPS2DOT"]],
         },
-        "PB": {"required": ["PB"], "optional": ["PBDOT"], "optional_sets": [["M2", "SINI"]]},
+        "PB": {
+            "required": ["PB"],
+            "optional": ["PBDOT"],
+            "optional_sets": [["M2", "SINI"]],
+        },
     },
     "ELL1H": {
         "all": {
@@ -52,14 +57,20 @@ binary_params = {
 
 
 class DataChecker:
-    def __init__(self, model: pint.models.TimingModel | None = None, toas: pint.toa.TOAs | None = None):
+    def __init__(
+        self,
+        model: pint.models.TimingModel | None = None,
+        toas: pint.toa.TOAs | None = None,
+    ):
         """
         Check data sets (timing model and TOAs) for problems.
 
         Abstract class that should be sub-classed for specific cases.
         """
         if model is None and toas is None:
-            raise ValueError("Both model and toas are set to None; at least one must be provided.")
+            raise ValueError(
+                "Both model and toas are set to None; at least one must be provided."
+            )
         self.m = model
         self.t = toas
 
@@ -136,8 +147,10 @@ class DataChecker:
         """
         if require_unfrozen and require_frozen:
             # Do not use raiseexcept, just raise
-            raise ValueError("Both require_unfrozen and require_frozen cannot both be True.")
-        
+            raise ValueError(
+                "Both require_unfrozen and require_frozen cannot both be True."
+            )
+
         self.verify(has_model=True)
 
         if not (p in self.m.params and self.m[p].value is not None):
@@ -322,7 +335,10 @@ class NameChecker(DataChecker):
         """
         self.verify(has_model=True)
 
-        value = bool(re.match(r"J\d{4}[+-]\d{4}", self.m.PSR.value) or re.match(r"B\d{4}[+-]\d{2}", self.m.PSR.value))
+        value = bool(
+            re.match(r"J\d{4}[+-]\d{4}", self.m.PSR.value)
+            or re.match(r"B\d{4}[+-]\d{2}", self.m.PSR.value)
+        )
         if not value:
             self.raise_or_warn(
                 f"Pulsar name '{self.m.PSR.value}' does not match required format",
@@ -330,7 +346,9 @@ class NameChecker(DataChecker):
             )
         return value
 
-    def check_against_filename(self, filename: str, raiseexcept: Optional[bool] = True) -> bool:
+    def check_against_filename(
+        self, filename: str, raiseexcept: Optional[bool] = True
+    ) -> bool:
         """
         Parameters
         ----------
@@ -351,7 +369,7 @@ class NameChecker(DataChecker):
         """
         self.verify(has_model=True)
 
-        if self.m.PSR.value not in filename: #testing membership, not at the start
+        if self.m.PSR.value not in filename:  # testing membership, not at the start
             self.raise_or_warn(
                 f"Pulsar name '{self.m.PSR.value}' is not present in the filename",
                 KeyError if raiseexcept else None,
@@ -359,13 +377,13 @@ class NameChecker(DataChecker):
             return False
         return True
 
-    
+
 class EpochChecker(DataChecker):
     def check(
         self,
         raiseexcept: Optional[bool] = True,
         required: List[str] = ["PEPOCH", "POSEPOCH"],
-        tolerance: float = 1.0
+        tolerance: float = 1.0,
     ) -> bool:
         """
         Checks epoch centering (PEPOCH/POSEPOCH/DMEPOCH),
@@ -390,8 +408,6 @@ class EpochChecker(DataChecker):
         """
         self.verify(has_model=True, has_toas=True)
 
-
-
         # Check START/FINISH, these are required always
         for item in ["START", "FINISH"]:
             if self.m[item].value is None:
@@ -403,8 +419,8 @@ class EpochChecker(DataChecker):
 
         START = self.m["START"].value
         FINISH = self.m["FINISH"].value
-            
-        center = (FINISH - START)/2.0 + START
+
+        center = (FINISH - START) / 2.0 + START
 
         # Check required parameters
         for item in required:
@@ -414,13 +430,17 @@ class EpochChecker(DataChecker):
                     KeyError if raiseexcept else None,
                 )
                 return False
-            if not (item in required and self.m[item].value is not None and np.abs(self.m[item].value - center) < tolerance):
+            if not (
+                item in required
+                and self.m[item].value is not None
+                and np.abs(self.m[item].value - center) < tolerance
+            ):
                 self.raise_or_warn(
                     f"Pulsar name '{item}' not centered within a tolerance of '{tolerance}' days",
                     ValueError if raiseexcept else None,
                 )
                 return False
-            
+
         # At this point, all of the required values are within tolerance.
         # Now check against TOAs
         mjds = self.t.get_mjds().value
@@ -447,7 +467,9 @@ class BinaryChecker(DataChecker):
 
     """
 
-    def __init__(self, model: pint.models.TimingModel, toas: pint.toa.TOAs | None = None):
+    def __init__(
+        self, model: pint.models.TimingModel, toas: pint.toa.TOAs | None = None
+    ):
         super().__init__(model, toas)
         if self.m.is_binary:
             if self.m["BINARY"].value not in binary_params.keys():
@@ -581,7 +603,7 @@ class ParChecker(DataChecker):
 
     def check_frozen(
         self,
-        required: Dict = {"NE_SW": 0}, 
+        required: Dict = {"NE_SW": 0},
         raiseexcept: Optional[bool] = True,
     ) -> bool:
         """
@@ -608,10 +630,12 @@ class ParChecker(DataChecker):
         KeyError
             If the check fails and ``raiseexcept`` is True
         """
-        self.verify(has_model=True) #contained in each call of check_parameter
+        self.verify(has_model=True)  # contained in each call of check_parameter
 
         for p in required.keys():
-            self.check_parameter(p, raiseexcept=raiseexcept, require_unfrozen=False, require_frozen=True)
+            self.check_parameter(
+                p, raiseexcept=raiseexcept, require_unfrozen=False, require_frozen=True
+            )
             if self.m[p].value != required[p]:
                 self.raise_or_warn(
                     f"Parameter '{p}' must be frozen to a value of {required[p]}, not {self.m[p].value}",
@@ -619,20 +643,19 @@ class ParChecker(DataChecker):
                 )
                 return False
         return True
-        
-    
 
 
 class JumpChecker(DataChecker):
     """
     Check data sets (timing model and TOAs) for timing jumps.
 
-    All TOAs should be covered by JUMPs or -to flags except for a set defined by a single list of flags
+    All TOAs should be covered by JUMPs or (optionally) -to flags except for a set defined by a single list of flags
     """
 
     def check(
         self,
         keys: Optional[List[Tuple]] = [("f"), ("fe", "be")],
+        includeoffsets: Optional[bool] = False,
         raiseexcept: Optional[bool] = True,
     ) -> bool:
         """
@@ -642,6 +665,8 @@ class JumpChecker(DataChecker):
         ----------
         keys: list of tuples, optional
             Each element of the list is a set of one or more TOA flags to check for establishing a single dataset
+        includeoffsets: bool, optional
+            Consider offsets (``-to`` flags) similar to JUMPs
         raiseexcept: bool, optional
             Will an error raise an exception (default) or just a warning
 
@@ -658,9 +683,10 @@ class JumpChecker(DataChecker):
         self.verify(has_model=True)
 
         jump_or_offset = np.zeros(len(self.t), dtype=bool)
-        offsets, offset_indices = self.t.get_flag_value("to", np.nan, float)
-        if len(offset_indices) > 0:
-            jump_or_offset[np.array(offset_indices)] = True
+        if includeoffsets:
+            offsets, offset_indices = self.t.get_flag_value("to", np.nan, float)
+            if len(offset_indices) > 0:
+                jump_or_offset[np.array(offset_indices)] = True
         jump_indices = {}
         for p in self.m.components["PhaseJump"].params:
             jump_indices[p] = self.m[p].select_toa_mask(self.t)
@@ -670,7 +696,9 @@ class JumpChecker(DataChecker):
                     f"Jump '{p}' = '{self.m[p].key} {v}' has 0 TOAs but is not frozen",
                     KeyError if raiseexcept else None,
                 )
-            jump_or_offset[jump_indices[p]] = True
+            # frozen jumps are OK
+            if not self.m[p].frozen:
+                jump_or_offset[jump_indices[p]] = True
         not_jumped_or_offset = np.setdiff1d(
             np.arange(len(self.t)), np.where(jump_or_offset)[0]
         )
@@ -746,7 +774,7 @@ class TOAChecker(DataChecker):
     def check(
         self,
         version: str | None = None,
-        badranges: dict[str, list[float]]  = {"PUPPI": [57984, 58447]},
+        badranges: dict[str, list[float]] = {"PUPPI": [57984, 58447]},
         raiseexcept: Optional[bool] = True,
         ignorebe: Optional[list] = None,
     ) -> bool:
@@ -779,13 +807,12 @@ class TOAChecker(DataChecker):
 
         self.verify(has_toas=True)
 
-
-        bools = (self.t["ver"] == version)
-        if ignorebe is not None: 
-            for k in ignorebe: #recursively add on boolean checks
+        bools = self.t["ver"] == version
+        if ignorebe is not None:
+            for k in ignorebe:  # recursively add on boolean checks
                 bools = bools | (self.t["be"] == k)
         value = np.all(bools)
-        
+
         if not value:
             self.raise_or_warn(
                 f"TOA version is not '{version}' for all TOAs",
