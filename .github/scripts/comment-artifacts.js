@@ -1,5 +1,6 @@
 // Create a comment with summary PDF, par, and tim files
 // and update it as new commits come in
+// This script was originally written by Claude Opus 5.5
 
 const MARKER = '<!-- notebook-artifacts -->';
 
