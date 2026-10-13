@@ -10,6 +10,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import jax
+import json
 import numpy as np
 import pandas as pd
 import pint.models as models
@@ -100,10 +101,14 @@ def _assert_discovery_likelihood_builds(psr, model_kwargs):
     return pulsar_likelihood
 
 
+_PINT_PAL_PRIORS = json.load(open(Path(nu.__file__).parent / "discovery_priors.json"))
+
+
 def _midpoint_from_prior(par_name):
     """Return a representative value for a discovery parameter."""
     try:
-        low, high = du.ds_prior.getprior_uniform(par_name, du.ds.priordict_standard)
+        # same priors model_noise samples with: discovery's standard + pint_pal's
+        low, high = du.ds_prior.getprior_uniform(par_name, _PINT_PAL_PRIORS)
         return 0.5 * (float(low) + float(high))
     except (RuntimeError, KeyError, ValueError):
         alias = par_name.replace("_dm_gp_", "_dmgp_")
@@ -292,11 +297,6 @@ def test_discovery_likelihood_variant_solar_wind_interpolation(
     real_tc, real_model_toas
 ):
     """Interpolation-basis solar wind should build when discovery backend supports it."""
-    if not hasattr(du.ds_solar, "custom_blocked_interpolation_basis"):
-        pytest.skip(
-            "Installed discovery.solar does not expose interpolation basis helper"
-        )
-
     e_psr = _enterprise_pulsar_from_real_data(real_model_toas)
     toas_days = np.asarray(e_psr.toas) / 86400.0
     nodes = np.linspace(float(np.min(toas_days)), float(np.max(toas_days)), 6)
@@ -681,17 +681,21 @@ def test_add_noise_to_model_maps_log_spaced_fourier_settings(real_pint_model):
 
     assert out is model
 
+    # Nfreqs counts all modes; PINT's TN*C counts only the linear ones
     rn = model.components["PLRedNoise"]
+    assert int(rn.TNREDC.value) == 12 - 3
     assert int(rn.TNREDFLOG.value) == 3
     assert float(rn.TNREDFLOG_FACTOR.value) == pytest.approx(2.0)
     assert float(rn.TNREDTSPAN.value) == pytest.approx(10.0)
 
     dm = model.components["PLDMNoise"]
+    assert int(dm.TNDMC.value) == 20 - 2
     assert int(dm.TNDMFLOG.value) == 2
     assert float(dm.TNDMFLOG_FACTOR.value) == pytest.approx(2.0)
     assert float(dm.TNDMTSPAN.value) == pytest.approx(8.0)
 
     sw = model.components["PLSWNoise"]
+    assert int(sw.TNSWC.value) == 9 - 4
     assert int(sw.TNSWFLOG.value) == 4
     assert float(sw.TNSWFLOG_FACTOR.value) == pytest.approx(2.0)
 
@@ -725,20 +729,22 @@ def test_add_noise_to_model_adds_chromatic_gp_powerlaw(real_pint_model):
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_add_noise_to_model_deterministic_solar_wind_currently_notimplemented(
-    real_pint_model,
-):
+@pytest.mark.parametrize("key", ["n_earth", "{psr}_n_earth"])
+@pytest.mark.parametrize("with_gp", [True, False])
+def test_add_noise_to_model_writes_n_earth_as_ne_sw(real_pint_model, key, with_gp):
+    """A deterministic solar-wind density is written as NE_SW, with or without a SW GP."""
     model = deepcopy(real_pint_model)
     psr = model.PSR.value
     noise_dict = _base_noise_dict(psr)
-    noise_dict.update(
-        {"n_earth": 6.2, f"{psr}_sw_gp_log10_A": -13.0, f"{psr}_sw_gp_gamma": 2.6}
-    )
+    noise_dict[key.format(psr=psr)] = 6.2
+    if with_gp:
+        noise_dict.update({f"{psr}_sw_gp_log10_A": -13.0, f"{psr}_sw_gp_gamma": 2.6})
 
-    with pytest.raises(NotImplementedError):
-        nu.add_noise_to_model(
-            model, noise_dict, model_kwargs={"solar_wind": {"Nfreqs": 12}}
-        )
+    nu.add_noise_to_model(model, noise_dict, model_kwargs={"solar_wind": {"Nfreqs": 12}})
+
+    assert model.NE_SW.value == pytest.approx(6.2)
+    assert model.NE_SW.frozen
+    assert ("PLSWNoise" in model.components) == with_gp
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
@@ -979,3 +985,119 @@ def test_add_noise_to_model_adds_wideband_dm_white_noise_components(real_pint_mo
     assert out is model
     assert "ScaleToaError" in model.components
     assert "ScaleDmError" in model.components
+
+
+# ---------------------------------------------------------------------------
+# Models PINT cannot represent, and values that must reach the par file
+# ---------------------------------------------------------------------------
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+@pytest.mark.parametrize("gp_name", ["red_noise", "dm_gp", "chrom_gp", "sw_gp"])
+@pytest.mark.parametrize(
+    "extra, kind",
+    [
+        ({"log10_rho(10)": np.full(10, -7.0)}, "free-spectrum"),
+        ({"log10_A": -14.0, "gamma": 3.0, "Nfreq_cutoff": 20.0}, "powerlaw_cutoff"),
+        ({"log10_A": -14.0, "gamma": 3.0, "log10_fb": -8.0}, "broken power-law"),
+    ],
+)
+def test_add_noise_to_model_rejects_spectra_pint_cannot_represent(
+    real_pint_model, gp_name, extra, kind
+):
+    model = deepcopy(real_pint_model)
+    psr = model.PSR.value
+    noise_dict = _base_noise_dict(psr)
+    noise_dict.update({f"{psr}_{gp_name}_{k}": v for k, v in extra.items()})
+
+    with pytest.raises(NotImplementedError, match=kind):
+        nu.add_noise_to_model(model, noise_dict, model_kwargs={})
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_add_noise_to_model_rejects_time_domain_dm_noise(real_pint_model):
+    model = deepcopy(real_pint_model)
+    psr = model.PSR.value
+    noise_dict = _base_noise_dict(psr)
+    noise_dict.update({f"{psr}_dm_gp_log10_sigma_sq_exp": -6.0, f"{psr}_dm_gp_log10_ell": 2.0})
+
+    with pytest.raises(NotImplementedError, match="interpolation basis"):
+        nu.add_noise_to_model(model, noise_dict, model_kwargs={"dm_noise": {"basis": "interpolation"}})
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+@pytest.mark.parametrize(
+    "noise_extra, chrom_kwargs, expected",
+    [
+        ({}, {"chromatic_idx": 6.0}, 6.0),                       # fixed index from the fit config
+        ({"{psr}_chrom_gp_alpha": 8.25}, {"chromatic_idx": "vary"}, 8.25),  # sampled index
+        ({}, {}, 4.0),                                           # nothing given: alpha=4
+    ],
+)
+def test_add_noise_to_model_writes_fitted_chromatic_index(
+    real_pint_model, noise_extra, chrom_kwargs, expected
+):
+    model = deepcopy(real_pint_model)
+    psr = model.PSR.value
+    noise_dict = _base_noise_dict(psr)
+    noise_dict.update({f"{psr}_chrom_gp_log10_A": -14.0, f"{psr}_chrom_gp_gamma": 3.0})
+    noise_dict.update({k.format(psr=psr): v for k, v in noise_extra.items()})
+
+    nu.add_noise_to_model(model, noise_dict, model_kwargs={"chromatic_noise": chrom_kwargs})
+
+    assert model.TNCHROMIDX.value == pytest.approx(expected)
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_add_noise_to_model_updates_index_of_existing_chromatic_component(real_pint_model):
+    """A model that already carries ChromaticCM still gets the fitted index."""
+    model = deepcopy(real_pint_model)
+    psr = model.PSR.value
+    noise_dict = _base_noise_dict(psr)
+    noise_dict.update({f"{psr}_chrom_gp_log10_A": -14.0, f"{psr}_chrom_gp_gamma": 3.0})
+    nu.add_noise_to_model(model, noise_dict, model_kwargs={"chromatic_noise": {"chromatic_idx": 4.0}})
+    nu.add_noise_to_model(model, noise_dict, model_kwargs={"chromatic_noise": {"chromatic_idx": 5.5}})
+
+    assert model.TNCHROMIDX.value == pytest.approx(5.5)
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+@pytest.mark.parametrize(
+    "sw_kwargs, expected_dt",
+    [({}, 30.0), ({"interp_dt": 15.0}, 15.0), ({"dt": 10.0}, 10.0)],
+)
+def test_add_noise_to_model_writes_interp_dt_as_tdswdt(real_pint_model, sw_kwargs, expected_dt):
+    model = deepcopy(real_pint_model)
+    psr = model.PSR.value
+    noise_dict = _base_noise_dict(psr)
+    noise_dict[f"{psr}_sw_gp_log10_sigma_ridge"] = -1.0
+
+    nu.add_noise_to_model(model, noise_dict, model_kwargs={"solar_wind": {"basis": "interpolation", **sw_kwargs}})
+
+    assert model.TDSWDT.value == pytest.approx(expected_dt)
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_solar_wind_default_interpolation_basis_matches_pint(real_model_toas):
+    """The discovery SW basis pint_pal fits with is the one PINT rebuilds from TDSWDT.
+
+    Rows are matched by time; the residual difference is the barycentric offset
+    (minutes) between enterprise and PINT TOAs against 30-day node spacing.
+    """
+    model, toas = deepcopy(real_model_toas[0]), real_model_toas[1]
+    e_psr = _enterprise_pulsar_from_real_data(real_model_toas)
+    t = np.asarray(e_psr.toas)
+    sw_gp = du.solar_wind_noise_block(e_psr, basis="interpolation", prior="ridge", interp_dt=30.0)
+
+    comp = nu.pm.TimeDomainSWNoise()
+    comp.TDSWDT.value = 30.0
+    model.add_component(comp, validate=False, force=True)
+    model.setup()
+    U_pint, _ = comp.get_basis_and_nodes(toas)
+    U_disco, _ = du.ds_signals.custom_blocked_interpolation_basis(
+        t, nodes=np.arange(t.min() / 86400, t.max() / 86400 + 30.0, 30.0), kind="linear"
+    )
+
+    assert U_disco.shape == U_pint.shape
+    t_pint = toas.get_tdb_seconds(dtype=np.float64) if hasattr(toas, "get_tdb_seconds") else t
+    np.testing.assert_allclose(U_disco[np.argsort(t)], U_pint[np.argsort(np.asarray(t_pint))], atol=1e-3)
+    assert np.shape(sw_gp.F)[1] == U_pint.shape[1]
