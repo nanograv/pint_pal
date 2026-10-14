@@ -245,7 +245,7 @@ def summarize_Ftest(Ftest_dict: dict,
     tc : pint_pal.timingconfiguration.TimingConfiguration
         The pint_pal TimingConfiguration object.
     alpha_add : float
-        Value to compare for F-statistic significance when adding a parameter. If the F-statistic is lower than alpha_add, the timing model parameters are deemed statistically significant to add the timing model.
+        Value to compare for F-statistic significance when adding a parameter. If the F-statistic is lower than alpha_add, the timing model parameters are deemed statistically significant to (add to) the timing model.
     alpha_remove : float
         Value to compare for F-statistic significance when removing a parameter. If the F-statistic is lower than alpha_remove, the timing model parameters are deemed statistically significant to remove from timing model.
 
@@ -362,7 +362,7 @@ def summarize_Ftest(Ftest_dict: dict,
     
     return add_statement, remove_statement
     
-def reset_params(params):
+def reset_params(params: list):
     """
     Resets parameter values to defaults as assigned in pint_parameters.py. Most are reset to zero.
     
@@ -381,26 +381,39 @@ def reset_params(params):
             p.value = 0.0
             p.uncertainty = 0.0
 
-def run_Ftests(fitter, tc, alpha=ALPHA, FDnparams = 5, NITS = 1):
+def run_Ftests(fitter: pint.fitter.Fitter,
+               tc: pint_pal.timingconfiguration.TimingConfiguration,
+               alpha_add: float = ALPHA_ADD,
+               alpha_remove: float = ALPHA_REMOVE,
+               FDnparams: int = 5,
+               NITS: int = 1
+) -> dict:
     """
     This is the main convenience function to run the various F-tests below. This includes F-tests for F2, PX, 
     binary parameters, FD parameters, etc. As part of the function, the tests, parameters, RMS of residuals, chi2,
     degrees of freedom, F-statistic values are all printed in a nice human readable format.
 
-    Input:
-    --------
-    fitter [object]: The PINT fitter object.
-    tc [object]: The pint_pal TimingConfiguration object.
-    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
-    FDnparams [int]: Maximum number of FD parameters to test [default: 5].
-    NITS [int]: Number of fit iterations to run during FD parameter F-tests when adding FD parameters to the
+    Parameters
+    ----------
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object.
+    tc : pint_pal.timingconfiguration.TimingConfiguration
+        The pint_pal TimingConfiguration object.
+    alpha_add : float
+        Value to compare for F-statistic significance when adding a parameter. If the F-statistic is lower than alpha_add, the timing model parameters are deemed statistically significant to (add to) the timing model.
+    alpha_remove : float
+        Value to compare for F-statistic significance when removing a parameter. If the F-statistic is lower than alpha_remove, the timing model parameters are deemed statistically significant to remove from timing model.
+    FDnparams : int
+        Maximum number of FD parameters to test.
+    NITS : int
+        Number of fit iterations to run during FD parameter F-tests when adding FD parameters to the
         timing model after each F-test is run. Should only need to be increased if FD parameter F-tests do
         not appear to be converged [default: 1].
         
-    Returns:
-    ---------
-    retdict [dictionary]: A nested dictionary of all of the different F-tests done and subsequent reported values for each
+    Returns
+    -------
+    dict
+        A nested dictionary of all of the different F-tests done and subsequent reported values for each
         F-test. These include keys for added ['Add'] or removed ['Remove'] parameters, the initial values ['initial']
         and within each of those, further nested dictionaries of parameters [e.g. 'PX'], and the reported values.
     """
@@ -418,7 +431,6 @@ def run_Ftests(fitter, tc, alpha=ALPHA, FDnparams = 5, NITS = 1):
     retdict = {}
     # Start with initial printing from Finalize Timing:
     print("Testing additional parameters (*** = significant):")
-    ALPHA=ALPHA_ADD
     if NB:
         hdrline = "%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")
     else:
@@ -447,44 +459,44 @@ def run_Ftests(fitter, tc, alpha=ALPHA, FDnparams = 5, NITS = 1):
     retdict['Add'] = {}
     if hasattr(fitter.model, "binary_model_name"):
         if fitter.model.binary_model_name == 'DD' or fitter.model.binary_model_name == 'BT':
-            binarydict = check_binary_DD(fitter, alpha=ALPHA, remove = False, NITS=NITS)
+            binarydict = check_binary_DD(fitter, alpha=alpha_add, remove = False, NITS=NITS)
         elif fitter.model.binary_model_name == 'DDK':
-            binarydict = check_binary_DDK(fitter, alpha=ALPHA, remove = False, NITS=NITS)
+            binarydict = check_binary_DDK(fitter, alpha=alpha_add, remove = False, NITS=NITS)
         elif fitter.model.binary_model_name == 'ELL1':
-            binarydict = check_binary_ELL1(fitter, alpha=ALPHA, remove = False, NITS=NITS)
+            binarydict = check_binary_ELL1(fitter, alpha=alpha_add, remove = False, NITS=NITS)
         elif fitter.model.binary_model_name == 'ELL1H':
-            binarydict = check_binary_ELL1H(fitter, alpha=ALPHA, remove = False, NITS=NITS)
+            binarydict = check_binary_ELL1H(fitter, alpha=alpha_add, remove = False, NITS=NITS)
         retdict['Add']['Binary'] = binarydict
     # Test adding FD parameters
-    FDdict = check_FD(fitter, alpha=ALPHA, remove = False, maxcomponent=FDnparams, NITS = NITS)
+    FDdict = check_FD(fitter, alpha=alpha_add, remove = False, maxcomponent=FDnparams, NITS = NITS)
     retdict['Add']['FD'] = FDdict
     print("Testing removal of parameters:")
-    ALPHA = ALPHA_REMOVE
+
     retdict['Remove'] = {}
     # Check parallax, NOTE - cannot remove PX if binary model is DDK, so check for that.
     if hasattr(fitter.model, "binary_model_name"):
         if fitter.model.binary_model_name == 'DDK':
             print(" PX, KOM and KIN cannot be removed in DDK.")
         else:
-            PXdict = check_PX(fitter, alpha=ALPHA, NITS=NITS)
+            PXdict = check_PX(fitter, alpha=alpha_remove, NITS=NITS)
             retdict['Remove']['PX'] = PXdict['PX']
     else:
-        PXdict = check_PX(fitter, alpha=ALPHA, NITS=NITS)
+        PXdict = check_PX(fitter, alpha=alpha_remove, NITS=NITS)
         retdict['Remove']['PX'] = PXdict['PX']
     # Check removing binary parameters
     if hasattr(fitter.model, "binary_model_name"):
         if fitter.model.binary_model_name == 'DD' or fitter.model.binary_model_name == 'BT':
-            binarydict = check_binary_DD(fitter, alpha=ALPHA, remove = True, NITS=NITS)
+            binarydict = check_binary_DD(fitter, alpha=alpha_remove, remove = True, NITS=NITS)
         elif fitter.model.binary_model_name == 'DDK':
-            binarydict = check_binary_DDK(fitter, alpha=ALPHA, remove = True, NITS=NITS)
+            binarydict = check_binary_DDK(fitter, alpha=alpha_remove, remove = True, NITS=NITS)
         elif fitter.model.binary_model_name == 'ELL1':
-            binarydict = check_binary_ELL1(fitter, alpha=ALPHA, remove = True, NITS=NITS)
+            binarydict = check_binary_ELL1(fitter, alpha=alpha_remove, remove = True, NITS=NITS)
         elif fitter.model.binary_model_name == 'ELL1H':
-            binarydict = check_binary_ELL1H(fitter, alpha=ALPHA, remove = True, NITS=NITS)
+            binarydict = check_binary_ELL1H(fitter, alpha=alpha_remove, remove = True, NITS=NITS)
         retdict['Remove']['Binary'] = binarydict
     
     # Test removing FD parameters
-    FDdict = check_FD(fitter, alpha=ALPHA, remove = True, maxcomponent=FDnparams, NITS = NITS)
+    FDdict = check_FD(fitter, alpha=alpha_remove, remove = True, maxcomponent=FDnparams, NITS = NITS)
     retdict['Remove']['FD'] = FDdict
     # Get current number of spin frequency derivatives
     current_freq_deriv = 1
@@ -494,18 +506,18 @@ def run_Ftests(fitter, tc, alpha=ALPHA, FDnparams = 5, NITS = 1):
             current_freq_deriv = i
     print("Testing spin freq derivs (%s enabled):" % (current_freq_deriv))
     # NOTE - CURRENTLY ONLY TESTS F2
-    F2dict = check_F2(fitter, alpha=ALPHA, NITS=NITS)
+    F2dict = check_F2(fitter, alpha=alpha_remove, NITS=NITS)
     retdict['F'] = F2dict
     # Now check FB parameters
     if hasattr(fitter.model, "binary_model_name"):
         if fitter.model.binary_model_name == 'ELL1':
             fblist = get_fblist(fitter)
             if fblist:
-                FBdict = check_FB(fitter, alpha=ALPHA, fbmax = 5, NITS=NITS)
+                FBdict = check_FB(fitter, alpha=alpha_remove, fbmax = 5, NITS=NITS)
                 retdict['FB'] = FBdict
     
     # Print a summary of the F-tests results and suggestions
-    add_statement, remove_statement = summarize_Ftest(retdict, fitter, tc, alpha = ALPHA)
+    add_statement, remove_statement = summarize_Ftest(retdict, fitter, tc, alpha=alpha_add, alpha_remove=alpha_remove)
     print(add_statement)
     print(remove_statement)
 
