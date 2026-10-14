@@ -13,6 +13,7 @@ from loguru import logger as log
 #from pint.models import (
 #    parameter as p,
 #)
+import pint.fitter
 import pint_pal.PINT_parameters as pparams
 from pint.models.timing_model import Component
 import copy
@@ -541,8 +542,8 @@ def check_F2(fitter: pint.fitter.Fitter,
     NITS : int
         Number of fit iterations
     
-    Returns:
-    --------
+    Returns
+    -------
     dict
         Returns the dictionary output from the F-tests.
     """
@@ -582,8 +583,8 @@ def check_PX(fitter: pint.fitter.Fitter,
     NITS : int
         Number of fit iterations
     
-    Returns:
-    --------
+    Returns
+    -------
     dict
         Returns the dictionary output from the F-tests.
     """
@@ -629,8 +630,8 @@ def check_FD(fitter: pint.fitter.Fitter,
     NITS : int
         Number of fit iterations
     
-    Returns:
-    --------
+    Returns
+    -------
     dict
         Returns the dictionary output from the F-tests.
     """
@@ -716,8 +717,8 @@ def check_binary_DD(fitter: pint.fitter.Fitter,
     NITS : int
         Number of fit iterations
     
-    Returns:
-    --------
+    Returns
+    -------
     dict
         Returns the dictionary output from the F-tests.
     """
@@ -776,8 +777,8 @@ def check_binary_DDK(fitter: pint.fitter.Fitter,
     NITS : int
         Number of fit iterations
     
-    Returns:
-    --------
+    Returns
+    -------
     dict
         Returns the dictionary output from the F-tests.
     """
@@ -841,8 +842,8 @@ def check_binary_ELL1(fitter: pint.fitter.Fitter,
     NITS : int
         Number of fit iterations
     
-    Returns:
-    --------
+    Returns
+    -------
     dict
         Returns the dictionary output from the F-tests.
     """
@@ -936,8 +937,8 @@ def check_binary_ELL1H(fitter: pint.fitter.Fitter,
     NITS : int
         Number of fit iterations
     
-    Returns:
-    --------
+    Returns
+    -------
     dict
         Returns the dictionary output from the F-tests.
     """
@@ -989,8 +990,8 @@ def check_FB(fitter: pint.fitter.Fitter,
     NITS : int
         Number of fit iterations
     
-    Returns:
-    --------
+    Returns
+    -------
     dict
         Returns the dictionary output from the F-tests.
     """
