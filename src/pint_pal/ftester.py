@@ -23,21 +23,28 @@ import re
 ALPHA_ADD = 0.0027 # 3-sigma
 ALPHA_REMOVE = 0.1336 # 1.5-sigma
 
-def param_check(name, fitter, check_enabled=True):
+def param_check(name: str,
+                fitter: pint.fitter.Fitter,
+                check_enabled: bool = True
+) -> bool:
     """
     Checks if a timing model parameter is in the timing model.
     
-    Inputs:
-    --------
-    name [string]: Name of the timing model parameter to be checked.
-    fitter [object]: The PINT fitter object.
-    check_enaabled [boolean]: If True, check if the model parameter is fit for as well [default: True].
+    Parameters
+    ----------
+    name: str
+        Name of the timing model parameter to be checked.
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object.
+    check_enabled: bool
+        If True, check if the model parameter is fit for as well [default: True].
     
-    Returns:
-    --------
-    [boolean]: Returns either True or False depending on if the parameters is in the model and/or enabled.
-    
+    Returns
+    -------
+    bool
+        Returns either True or False depending on if the parameters is in the model and/or enabled.
     """
+    
     if not name in fitter.model.params:
         return False
     # If frozen is False, then it's fit for, if frozen is True, parameter not fit for
