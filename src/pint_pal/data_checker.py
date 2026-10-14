@@ -715,11 +715,11 @@ class JumpChecker(DataChecker):
         for k in keys:
             if isinstance(k, str):
                 keyset.append(np.array(self.t[k][not_jumped_or_offset]))
-                unique_keysets[k] = list(np.unique(keyset[-1]))
+                unique_keysets[k] = list(map(str, np.unique(keyset[-1])))
             else:
                 keyset.append(np.array([self.t[x][not_jumped_or_offset] for x in k]))
                 unique_keysets[k] = [
-                    tuple(row) for row in np.unique(keyset[-1], axis=1).T
+                    tuple(map(str, row)) for row in np.unique(keyset[-1], axis=1).T
                 ]
             if len(unique_keysets[k]) == 1:
                 log.info(
@@ -728,6 +728,7 @@ class JumpChecker(DataChecker):
                 passes = True
                 break
         if not passes:
+
             self.raise_or_warn(
                 f"{len(not_jumped_or_offset)} TOAs are not covered by {messagetext} and do not have common sets of flags: {unique_keysets}",
                 KeyError if raiseexcept else None,
@@ -738,7 +739,7 @@ class JumpChecker(DataChecker):
             jump_or_offset = np.zeros(len(self.t), dtype=bool)
             jump_indices = {}
             for p in self.m.components["DispersionJump"].params:
-                jump_indices[p] = self.m[p].select_toa_mask(t)
+                jump_indices[p] = self.m[p].select_toa_mask(self.t)
                 if (len(jump_indices[p]) == 0) and (not self.m[p].frozen):
                     v = " ".join(self.m[p].key_value)
                     self.raise_or_warn(
@@ -761,13 +762,13 @@ class JumpChecker(DataChecker):
             for k in keys:
                 if isinstance(k, str):
                     keyset.append(np.array(self.t[k][not_jumped_or_offset]))
-                    unique_keysets[k] = list(np.unique(keyset[-1]))
+                    unique_keysets[k] = list(map(str, np.unique(keyset[-1])))
                 else:
                     keyset.append(
                         np.array([self.t[x][not_jumped_or_offset] for x in k])
                     )
                     unique_keysets[k] = [
-                        tuple(row) for row in np.unique(keyset[-1], axis=1).T
+                        tuple(map(str, row)) for row in np.unique(keyset[-1], axis=1).T
                     ]
                 if len(unique_keysets[k]) == 1:
                     log.info(
