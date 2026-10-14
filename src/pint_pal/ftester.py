@@ -52,17 +52,19 @@ def param_check(name: str,
         return False
     return True
 
-def get_fblist(fitter):
+def get_fblist(fitter: pint.fitter.Fitter) -> dict:
     """
     Returns the list of FB parameters for the ELL1 model.
 
-    Input:
-    --------
-    fitter [object]: The PINT fitter object.
+    Parameters
+    ----------
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object.
 
-    Returns:
-    --------
-    fblist [dictionary]: Dictionary of FB parameters currently in the timing model.
+    Returns
+    -------
+    dict
+        Dictionary of FB parameters currently in the timing model.
     """
     fblist = {}
     for p in fitter.model.params:
@@ -81,21 +83,23 @@ def get_fblist(fitter):
              " ".join([fblist[i] for i in k]) )
     return fblist
 
-def binary_params_ftest(bparams, fitter, remove):
+def binary_params_ftest(bparams: list, fitter: pint.fitter.Fitter, remove: bool) -> (list, list):
     """
     Returns the list of parameters and components to put in the check for binary models.
 
-    Input:
-    --------
-    bparams [list]: List of timing model binary parameters to check for.
-    fitter [object]: The PINT fitter object.
-    remove [boolean]: If True, check to see if parameters need to be removed, if False check to see
-        what parameters need to be added.
+    Parameters
+    ----------
+    bparams : list
+        List of timing model binary parameters to check for.
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object.
+    remove: bool
+        If True, check to see if parameters need to be removed, if False check to see what parameters need to be added.
 
-    Returns:
+    Returns
     --------
-    plist [list]: List of PINT parameters to iterate through for the F-tests.
-    clist [list]: List of PINT components to iterate through for the F-tests.
+    plist, clist: list, list
+        List of PINT parameters and components, respectivel, to iterate through for the F-tests.
     """
     # list of parameters as strings to remove or add in the F-test
     p_test = []
