@@ -519,7 +519,7 @@ def run_Ftests(fitter: pint.fitter.Fitter,
                 retdict['FB'] = FBdict
     
     # Print a summary of the F-tests results and suggestions
-    add_statement, remove_statement = summarize_Ftest(retdict, fitter, tc, alpha=alpha_add, alpha_remove=alpha_remove)
+    add_statement, remove_statement = summarize_Ftest(retdict, fitter, tc, alpha_add=alpha_add, alpha_remove=alpha_remove)
     print(add_statement)
     print(remove_statement)
 
