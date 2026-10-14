@@ -20,6 +20,7 @@ import astropy.units as u
 import numpy as np
 import re
 
+ALPHA = 0.0027 # 3-sigma
 ALPHA_ADD = 0.0027 # 3-sigma
 ALPHA_REMOVE = 0.1336 # 1.5-sigma
 
@@ -146,16 +147,21 @@ def binary_params_ftest(bparams: list, fitter: pint.fitter.Fitter, remove: bool)
     # return the values
     return pint_params, pint_comps
 
-def report_ptest(label, ftest_dict = None, alpha=ALPHA):
+def report_ptest(label: str,
+                 ftest_dict: dict | None = None,
+                 alpha: float = ALPHA
+) -> str:
     """
     Nicely prints the results of F-tests in a human-readable format.
     
-    Input:
-    --------
-    label [string]: Name of the parameter(s) that were added/removed for the F-test.
-    ftest_dict [dictionary]: Dictionary of output values from the PINT `ftest()` function. If `None`, will
-        print a line of NaNs for each reported value.
-    alpha [float]: Value to compare for F-statistic significance. If the F-statistic is lower than alpha, 
+    Parameters
+    ----------
+    label: str
+        Name of the parameter(s) that were added/removed for the F-test.
+    ftest_dict: dict
+        Dictionary of output values from the PINT `ftest()` function. If `None`, will print a line of NaNs for each reported value.
+    alpha: float
+        Value to compare for F-statistic significance. If the F-statistic is lower than alpha,
         the timing model parameters are deemed statistically significant to the timing model.
     """
     # If F-test fails, print line of NaNs
@@ -171,21 +177,21 @@ def report_ptest(label, ftest_dict = None, alpha=ALPHA):
             dmrms = ftest_dict['dm_resid_wrms_test'].value # weighted root mean square of DM residuals
         else:
             dmrms = None
-        Fstatistic=  ftest_dict['ft'] # F-statistic from the F-test comparison
+        Fstatistic = ftest_dict['ft'] # F-statistic from the F-test comparison
         if Fstatistic is None:
-            if dmrms != None:
+            if dmrms is not None:
                 line = "%42s %7.3f %16.6f %9.2f %5d --" % (label, rms, dmrms, chi2, ndof)
             else:
                 line = "%42s %7.3f %9.2f %5d --" % (label, rms, chi2, ndof)
         elif Fstatistic:
-            if dmrms != None:
+            if dmrms is not None:
                 line = "%42s %7.3f %16.6f %9.2f %5d %.3g" % (label, rms, dmrms, chi2, ndof, Fstatistic)
             else:
                 line = "%42s %7.3f %9.2f %5d %.3g" % (label, rms, chi2, ndof, Fstatistic)
             if Fstatistic < alpha:
                 line += " ***"
         else:
-            if dmrms != None:
+            if dmrms is not None:
                 line = "%42s %7.3f %16.6f %9.2f %5d xxx" % (label, rms, dmrms, chi2, ndof)
             else:
                 line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
