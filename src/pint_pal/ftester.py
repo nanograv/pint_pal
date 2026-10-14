@@ -810,31 +810,41 @@ def check_binary_DDK(fitter: pint.fitter.Fitter,
     return retdict
 
 
-def check_binary_ELL1(fitter, alpha=ALPHA, remove = False, NITS=1):
+def check_binary_ELL1(fitter: pint.fitter.Fitter,
+             alpha: float = ALPHA,
+             remove: bool = False,
+             NITS: int = 1
+) -> dict:
     """
     Check the binary parameter F-tests for the ELL1 binary model, either removing or adding parameters.
 
-    Input:
-    --------
-    fitter [object]: The PINT fitter object.
-    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
-    remove [boolean]: If True, will do and report F-test values for removing parameters.
-             If False, will look for and report F-test values for adding parameters [default: False].
-             Parameters to check:
-                1. PB
-                    a. M2, SINI
-                    b. PBDOT
-                    c. XDOT -> A1DOT
-                    d. EPS1DOT, EPS2DOT
-                2. FB0, FB1
-                    a. FB2-FB6+ ( These are checked by running `check_FB()` )
-                    b. XDOT -> A1DOT
-                    c. EPS1DOT, EPS2DOT
+    Parameters to check:
+    1. PB
+        a. M2, SINI
+        b. PBDOT
+        c. XDOT -> A1DOT
+        d. EPS1DOT, EPS2DOT
+    2. FB0, FB1
+        a. FB2-FB6+ ( These are checked by running `check_FB()` )
+        b. XDOT -> A1DOT
+        c. EPS1DOT, EPS2DOT
 
+    Parameters
+    ----------
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object.
+    alpha : float
+        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
+    remove : bool:
+        If True, will do and report F-test values for removing parameters.
+        If False, will look for and report F-test values for adding parameters [default: False].
+    NITS : int
+        Number of fit iterations
+    
     Returns:
-    ---------
-    retdict [dictionary]: Returns the dictionary output from the F-tests.
+    --------
+    dict
+        Returns the dictionary output from the F-tests.
     """
     # Define dictionary for returned value
     retdict = {}
@@ -899,27 +909,37 @@ def check_binary_ELL1(fitter, alpha=ALPHA, remove = False, NITS=1):
         # Return the dictionary
         return retdict
 
-def check_binary_ELL1H(fitter, alpha=ALPHA, remove = False, NITS=1):
+def check_binary_ELL1H(fitter: pint.fitter.Fitter,
+             alpha: float = ALPHA,
+             remove: bool = False,
+             NITS: int = 1
+) -> dict:
     """
     Check the binary parameter F-tests for the ELL1H binary model, either removing or adding parameters.
 
-    Input:
-    --------
-    fitter [object]: The PINT fitter object.
-    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
-    remove [boolean]: If True, will do and report F-test values for removing parameters.
-             If False, will look for and report F-test values for adding parameters [default: False].
-             Parameters to check:
-                1. PBDOT
-                2. XDOT -> A1DOT
-                3. EPS1DOT, EPS2DOT
-                4. H3
-                    a. H4
-
+    Parameters to check:
+    1. PBDOT
+    2. XDOT -> A1DOT
+    3. EPS1DOT, EPS2DOT
+    4. H3
+        a. H4
+    
+    Parameters
+    ----------
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object.
+    alpha : float
+        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
+    remove : bool:
+        If True, will do and report F-test values for removing parameters.
+        If False, will look for and report F-test values for adding parameters [default: False].
+    NITS : int
+        Number of fit iterations
+    
     Returns:
-    ---------
-    retdict [dictionary]: Returns the dictionary output from the F-tests.
+    --------
+    dict
+        Returns the dictionary output from the F-tests.
     """
     # Define dictionary for returned value
     retdict = {}
