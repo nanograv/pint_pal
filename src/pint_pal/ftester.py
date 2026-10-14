@@ -689,27 +689,37 @@ def check_FD(fitter: pint.fitter.Fitter,
     # Return the dictionary
     return retdict
 
-def check_binary_DD(fitter, alpha=ALPHA, remove = False, NITS=1):
+def check_binary_DD(fitter: pint.fitter.Fitter,
+             alpha: float = ALPHA,
+             remove: bool = False,
+             NITS: int = 1
+) -> dict:
     """
     Check the binary parameter F-tests for the DD binary model, either removing or adding parameters.
 
-    Input:
-    --------
-    fitter [object]: The PINT fitter object.
-    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
-    remove [boolean]: If True, will do and report F-test values for removing parameters.
-             If False, will look for and report F-test values for adding parameters [default: False].
-             Parameters to check:
-                1. M2, SINI
-                2. PBDOT
-                3. XDOT -> A1DOT
-                4. OMDOT
-                5. EDOT
-
+    Parameters to check:
+    1. M2, SINI
+    2. PBDOT
+    3. XDOT -> A1DOT
+    4. OMDOT
+    5. EDOT
+    
+    Parameters
+    ----------
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object.
+    alpha : float
+        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
+    remove : bool:
+        If True, will do and report F-test values for removing parameters.
+        If False, will look for and report F-test values for adding parameters [default: False].
+    NITS : int
+        Number of fit iterations
+    
     Returns:
-    ---------
-    retdict [dictionary]: Returns the dictionary output from the F-tests.
+    --------
+    dict
+        Returns the dictionary output from the F-tests.
     """
     # Add dictionary for return values
     retdict = {}
@@ -739,27 +749,37 @@ def check_binary_DD(fitter, alpha=ALPHA, remove = False, NITS=1):
     # Return the dictionary
     return retdict
 
-def check_binary_DDK(fitter, alpha=ALPHA, remove = False, NITS=1):
+def check_binary_DDK(fitter: pint.fitter.Fitter,
+             alpha: float = ALPHA,
+             remove: bool = False,
+             NITS: int = 1
+) -> dict:
     """
     Check the binary parameter F-tests for the DDK binary model, either removing or adding parameters.
 
-    Input:
-    --------
-    fitter [object]: The PINT fitter object.
-    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
-    remove [boolean: If True, will do and report F-test values for removing parameters.
-             If False, will look for and report F-test values for adding parameters [default: False].
-             Parameters to check:
-                1. M2, SINI
-                2. PBDOT
-                3. XDOT -> A1DOT
-                4. OMDOT
-                5. EDOT
+    Parameters to check:
+    1. M2, SINI
+    2. PBDOT
+    3. XDOT -> A1DOT
+    4. OMDOT
+    5. EDOT
 
+    Parameters
+    ----------
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object.
+    alpha : float
+        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
+    remove : bool:
+        If True, will do and report F-test values for removing parameters.
+        If False, will look for and report F-test values for adding parameters [default: False].
+    NITS : int
+        Number of fit iterations
+    
     Returns:
-    ---------
-    retdict [dictionary]: Returns the dictionary output from the F-tests.
+    --------
+    dict
+        Returns the dictionary output from the F-tests.
     """
     # Add dictionary for return values
     retdict = {}
