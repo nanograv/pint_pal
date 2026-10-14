@@ -524,7 +524,7 @@ def run_Ftests(fitter: pint.fitter.Fitter,
     return retdict
 
 
-def check_F2(fitter: pint.fitter.Fitter
+def check_F2(fitter: pint.fitter.Fitter,
              alpha: float = ALPHA,
              NITS: int = 1
 ) -> dict:
@@ -565,7 +565,7 @@ def check_F2(fitter: pint.fitter.Fitter
     return retdict
 
 
-def check_PX(fitter: pint.fitter.Fitter
+def check_PX(fitter: pint.fitter.Fitter,
              alpha: float = ALPHA,
              NITS: int = 1
 ) -> dict:
