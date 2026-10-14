@@ -85,7 +85,7 @@ def get_fblist(fitter: pint.fitter.Fitter) -> dict:
              " ".join([fblist[i] for i in k]) )
     return fblist
 
-def binary_params_ftest(bparams: list, fitter: pint.fitter.Fitter, remove: bool) -> (list, list):
+def binary_params_ftest(bparams: list, fitter: pint.fitter.Fitter, remove: bool) -> tuple[list, list]:
     """
     Returns the list of parameters and components to put in the check for binary models.
 
@@ -233,7 +233,7 @@ def summarize_Ftest(Ftest_dict: dict,
                     tc: pint_pal.timingconfiguration.TimingConfiguration,
                     alpha_add: float = ALPHA_ADD,
                     alpha_remove: float = ALPHA_REMOVE
-) -> (str, str):
+) -> tuple[str, str]:
     """
     Function to determine and print what parameters are recommended to be added from F-test dictionary.
 
