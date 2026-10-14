@@ -543,7 +543,8 @@ def check_F2(fitter: pint.fitter.Fitter
     
     Returns:
     --------
-    retdict [dictionary]: Returns the dictionary output from the F-tests.
+    dict
+        Returns the dictionary output from the F-tests.
     """
     # Add dictionary for return values
     retdict = {}
@@ -564,20 +565,27 @@ def check_F2(fitter: pint.fitter.Fitter
     return retdict
 
 
-def check_PX(fitter, alpha=ALPHA, NITS=1):
+def check_PX(fitter: pint.fitter.Fitter
+             alpha: float = ALPHA,
+             NITS: int = 1
+) -> dict:
     """
     Check the significance of PX with an F-test.
     In general, we fit PX but we still wish to test for this as in the past.
 
-    Input:
-    --------
-    fitter [object]: The PINT fitter object.
-    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
-
+    Parameters
+    ----------
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object.
+    alpha : float
+        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
+    NITS : int
+        Number of fit iterations
+    
     Returns:
     --------
-    retdict [dictionary]: Returns the dictionary output from the F-tests.
+    dict
+        Returns the dictionary output from the F-tests.
     """
     # Add dictionary for return values
     retdict = {}
