@@ -182,12 +182,15 @@ def report_ptest(label, ftest_dict = None, alpha=ALPHA):
                 line = "%42s %7.3f %16.6f %9.2f %5d %.3g" % (label, rms, dmrms, chi2, ndof, Fstatistic)
             else:
                 line = "%42s %7.3f %9.2f %5d %.3g" % (label, rms, chi2, ndof, Fstatistic)
+            if Fstatistic < alpha:
+                line += " ***"
         else:
             if dmrms != None:
                 line = "%42s %7.3f %16.6f %9.2f %5d xxx" % (label, rms, dmrms, chi2, ndof)
             else:
                 line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
     print(line)
+    return line
    
 def checkFLogs(add_params,remove_params,tc):
     if add_params:
