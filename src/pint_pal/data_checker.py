@@ -769,7 +769,7 @@ class JumpChecker(DataChecker):
                     unique_keysets[k] = [
                         tuple(row) for row in np.unique(keyset[-1], axis=1).T
                     ]
-                if len(np.unique(keyset[-1])) == 1:
+                if len(unique_keysets[k]) == 1:
                     log.info(
                         f"{len(not_jumped_or_offset)} TOAs are not covered by DMJUMPs, but have the same value of '{k}' = '{unique_keysets[k]}'"
                     )
