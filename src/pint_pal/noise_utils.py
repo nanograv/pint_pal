@@ -946,6 +946,20 @@ def _apply_pl_component_logfreq_settings(
         _set_component_param_value(component, tspan_name, tspan_year)
 
 
+def _replace_component(model, component, validate=True):
+    """Add *component* to *model*, replacing any component of the same class.
+
+    PINT's ``add_component(force=True)`` keeps the existing component alongside the
+    new one, and noise components are summed (e.g. ``scaled_toa_uncertainty`` adds
+    every ``ScaleToaError``'s sigma), so a model that already carried noise would
+    double count it in memory even though its par file looks right.
+    """
+    name = component.__class__.__name__
+    if name in model.components:
+        model.remove_component(name)
+    model.add_component(component, validate=validate)
+
+
 def _check_gp_supported_in_pint(noise_dict, psr_name, gp_name, label):
     """Raise for discovery GP models that PINT has no component for.
 
@@ -1197,7 +1211,7 @@ def add_noise_to_model(
         ef_eq_comp.add_param(param=efac_param, setup=True)
     for equad_param in equad_params:
         ef_eq_comp.add_param(param=equad_param, setup=True)
-    model.add_component(ef_eq_comp, validate=True, force=True)
+    _replace_component(model, ef_eq_comp, validate=True)
 
     if len(dmefac_params) > 0 or len(dmequad_params) > 0:
         dm_comp = pm.noise_model.ScaleDmError()
@@ -1207,13 +1221,13 @@ def add_noise_to_model(
             dm_comp.add_param(param=dmefac_param, setup=True)
         for dmequad_param in dmequad_params:
             dm_comp.add_param(param=dmequad_param, setup=True)
-        model.add_component(dm_comp, validate=True, force=True)
+        _replace_component(model, dm_comp, validate=True)
     if len(ecorr_params) > 0:
         ec_comp = pm.EcorrNoise()
         ec_comp.remove_param("ECORR1")
         for ecorr_param in ecorr_params:
             ec_comp.add_param(param=ecorr_param, setup=True)
-        model.add_component(ec_comp, validate=True, force=True)
+        _replace_component(model, ec_comp, validate=True)
 
     # Create red noise component and add it to the model
     rn_keys = np.array([key for key, val in noise_dict.items() if "red_noise" in key])
@@ -1241,7 +1255,7 @@ def add_noise_to_model(
             nmodes_name="TNREDC",
         )
         # Add red noise to the timing model
-        model.add_component(rn_comp, validate=True, force=True)
+        _replace_component(model, rn_comp, validate=True)
     else:
         log.info("Not including red noise for this pulsar")
 
@@ -1277,7 +1291,7 @@ def add_noise_to_model(
                 nmodes_name="TNDMC",
             )
             # Add red noise to the timing model
-            model.add_component(dm_comp, validate=True, force=True)
+            _replace_component(model, dm_comp, validate=True)
 
     # Check to see if higher order chromatic noise is present
     chrom_pars = [key for key in noise_pars if "_chrom_gp" in key]
@@ -1334,7 +1348,7 @@ def add_noise_to_model(
                 nmodes_name="TNCHROMC",
             )
             # Add red noise to the timing model
-            model.add_component(chrom_comp, validate=True, force=True)
+            _replace_component(model, chrom_comp, validate=True)
 
     # Check to see if solar wind is present
     sw_pars = [key for key in noise_pars if "n_earth" in key or "sw_gp" in key]
@@ -1342,10 +1356,11 @@ def add_noise_to_model(
         _check_gp_supported_in_pint(noise_dict, psr_name, "sw_gp", "Solar wind noise")
         sw_kwargs = model_kwargs.get("solar_wind") or {}
         log.info("Adding Solar Wind Dispersion to par file")
-        all_components = Component.component_types
-        noise_class = all_components["SolarWindDispersion"]
-        noise = noise_class()  # Make the dispersion instance.
-        model.add_component(noise, validate=False, force=True)
+        # reuse the deterministic solar wind component if the model has one, so its
+        # NE_SW is kept unless the noise dict supplies n_earth
+        if "SolarWindDispersion" not in model.components:
+            noise_class = Component.component_types["SolarWindDispersion"]
+            model.add_component(noise_class(), validate=False)
         # add parameters
         # deterministic 1/r^2 solar wind density (PINT's default SWM=0 model), keyed
         # `n_earth` when common or `<psr>_n_earth` when per-pulsar
@@ -1374,7 +1389,7 @@ def add_noise_to_model(
                 tspan_name=None,
                 nmodes_name="TNSWC",
             )
-            model.add_component(sw_comp, validate=False, force=True)
+            _replace_component(model, sw_comp, validate=False)
         elif f"{psr_name}_sw_gp_log10_sigma_ridge" in sw_pars:
             log.info("Including Time Domain Ridge SW Noise for this pulsar")
             sw_comp = pm.TimeDomainSWNoise()
@@ -1384,7 +1399,7 @@ def add_noise_to_model(
             ]
             sw_comp.TDSWLOGSIG.frozen = True
             _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "RIDGE")
-            model.add_component(sw_comp, validate=False, force=True)
+            _replace_component(model, sw_comp, validate=False)
         elif f"{psr_name}_sw_gp_log10_sigma_sq_exp" in sw_pars:
             log.info(
                 "Including Time Domain Square-Exponential SW Noise for this pulsar"
@@ -1398,7 +1413,7 @@ def add_noise_to_model(
             sw_comp.TDSWLOGELL.quantity = noise_dict[f"{psr_name}_sw_gp_log10_ell"]
             sw_comp.TDSWLOGELL.frozen = True
             _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "SQEXP")
-            model.add_component(sw_comp, validate=False, force=True)
+            _replace_component(model, sw_comp, validate=False)
         elif f"{psr_name}_sw_gp_log10_sigma_quasi_periodic" in sw_pars:
             log.info("Including Time Domain Quasi-Periodic SW Noise for this pulsar")
             sw_comp = pm.TimeDomainSWNoise()
@@ -1414,7 +1429,7 @@ def add_noise_to_model(
             sw_comp.TDSWLOGP.quantity = noise_dict[f"{psr_name}_sw_gp_log10_p"]
             sw_comp.TDSWLOGP.frozen = True
             _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "QUASI_PERIODIC")
-            model.add_component(sw_comp, validate=False, force=True)
+            _replace_component(model, sw_comp, validate=False)
         elif f"{psr_name}_sw_gp_log10_sigma_matern" in sw_pars:
             log.info("Including Time Domain Matern SW Noise for this pulsar")
             sw_comp = pm.TimeDomainSWNoise()
@@ -1428,7 +1443,7 @@ def add_noise_to_model(
             sw_comp.TDSWNU.quantity = sw_kwargs.get("nu", 1.5)
             sw_comp.TDSWNU.frozen = True
             _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "MATERN")
-            model.add_component(sw_comp, validate=False, force=True)
+            _replace_component(model, sw_comp, validate=False)
         else:
             log.warning(
                 "Solar wind parameters not recognized. Check parameter names and ensure match standard noise conventions."
