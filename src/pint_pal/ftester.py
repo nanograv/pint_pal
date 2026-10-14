@@ -1,10 +1,8 @@
-""" This is a set of utilities which performs F-test calculations for parameter inclusion/exclusion """
+""" This is a set of utilities which performs F-test calculations for parameter inclusion/exclusion
 
-
-'''
 fitter.ftest('list of PINT parameter objects', 'list of corresponding timing model components', remove=True/False, full_output = True) and this will output a dictionary with keys: ft, resid_rms_test, resid_wrms_test, chi2_test, dof_test, where the test values are of the nested modeled that was tested.
-
-'''
+"""
+from __future__ import annotations
 
 
 
@@ -14,6 +12,9 @@ from loguru import logger as log
 #    parameter as p,
 #)
 import pint.fitter
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pint_pal.timingconfiguration import TimingConfiguration
 import pint_pal.PINT_parameters as pparams
 from pint.models.timing_model import Component
 import copy
@@ -230,7 +231,7 @@ def checkFLogs(add_params,remove_params,tc):
 
 def summarize_Ftest(Ftest_dict: dict,
                     fitter: pint.fitter.Fitter,
-                    tc: pint_pal.timingconfiguration.TimingConfiguration,
+                    tc: TimingConfiguration,
                     alpha_add: float = ALPHA_ADD,
                     alpha_remove: float = ALPHA_REMOVE
 ) -> tuple[str, str]:
@@ -383,7 +384,7 @@ def reset_params(params: list):
             p.uncertainty = 0.0
 
 def run_Ftests(fitter: pint.fitter.Fitter,
-               tc: pint_pal.timingconfiguration.TimingConfiguration,
+               tc: TimingConfiguration,
                alpha_add: float = ALPHA_ADD,
                alpha_remove: float = ALPHA_REMOVE,
                FDnparams: int = 5,
