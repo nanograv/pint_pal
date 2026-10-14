@@ -605,26 +605,34 @@ def check_PX(fitter: pint.fitter.Fitter
     # Return the dictionary
     return retdict
 
-def check_FD(fitter, alpha=ALPHA, remove=False, maxcomponent=5, NITS = 1):
+def check_FD(fitter: pint.fitter.Fitter,
+             alpha: float = ALPHA,
+             remove: bool = False,
+             maxcomponent: int = 5,
+             NITS: int = 1
+) -> dict:
     """
     Check adding FD parameters with an F-test.
 
-    Input:
-    --------
-    fitter [object]: The PINT fitter object.
-    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
-    remove [boolean]: If True, will do and report F-test values for removing parameters.
+    Parameters
+    ----------
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object.
+    alpha : float
+        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
+    remove : bool:
+        If True, will do and report F-test values for removing parameters.
         If False, will look for and report F-test values for adding parameters [default: False].
-    maxcomponent [int]: Maximum number of FD parameters to add to the model [default: 5]. If remove=True,
+    maxcomponent : int
+        Maximum number of FD parameters to add to the model [default: 5]. If remove=True,
         This parameter is ignored.
-    NITS [int]: Number of fit iterations to run when adding FD parameters to the timing model after 
-        each F-test is run. Should only need to be increased if FD parameter F-tests do not appear 
-        to be converged [default: 1].
-
+    NITS : int
+        Number of fit iterations
+    
     Returns:
     --------
-    retdict [dictionary]: Returns the dictionary output from the F-tests.
+    dict
+        Returns the dictionary output from the F-tests.
     """
     # Print how many FD currently enabled
     cur_fd = [param for param in fitter.model.free_params if "FD" in param]
