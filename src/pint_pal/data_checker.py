@@ -681,6 +681,7 @@ class JumpChecker(DataChecker):
             If the check fails and ``raiseexcept`` is True
         """
         self.verify(has_model=True)
+        messagetext = "JUMPs or -to flags" if includeoffsets else "JUMPs"
 
         jump_or_offset = np.zeros(len(self.t), dtype=bool)
         if includeoffsets:
@@ -710,20 +711,25 @@ class JumpChecker(DataChecker):
             return False
         keyset = []
         passes = False
+        unique_keysets = {}
         for k in keys:
             if isinstance(k, str):
                 keyset.append(np.array(self.t[k][not_jumped_or_offset]))
+                unique_keysets[k] = list(np.unique(keyset[-1]))
             else:
                 keyset.append(np.array([self.t[x][not_jumped_or_offset] for x in k]))
-            if len(np.unique(keyset[-1])) == 1:
+                unique_keysets[k] = [
+                    tuple(row) for row in np.unique(keyset[-1], axis=1).T
+                ]
+            if len(unique_keysets[k]) == 1:
                 log.info(
-                    f"{len(not_jumped_or_offset)} TOAs are not covered by JUMPs or -to flags, but have the same value of '{k}' = '{list(np.unique(keyset[-1]))}'"
+                    f"{len(not_jumped_or_offset)} TOAs are not covered by {messagetext}, but have the same value of '{k}' = '{unique_keysets[k]}'"
                 )
                 passes = True
                 break
         if not passes:
             self.raise_or_warn(
-                f"{len(not_jumped_or_offset)} TOAs are not covered by JUMPs or -to flags and do not have common sets of flags",
+                f"{len(not_jumped_or_offset)} TOAs are not covered by {messagetext} and do not have common sets of flags: {unique_keysets}",
                 KeyError if raiseexcept else None,
             )
             return False
@@ -751,22 +757,27 @@ class JumpChecker(DataChecker):
                 return False
             keyset = []
             passes = False
+            unique_keysets = {}
             for k in keys:
                 if isinstance(k, str):
                     keyset.append(np.array(self.t[k][not_jumped_or_offset]))
+                    unique_keysets[k] = list(np.unique(keyset[-1]))
                 else:
                     keyset.append(
                         np.array([self.t[x][not_jumped_or_offset] for x in k])
                     )
+                    unique_keysets[k] = [
+                        tuple(row) for row in np.unique(keyset[-1], axis=1).T
+                    ]
                 if len(np.unique(keyset[-1])) == 1:
                     log.info(
-                        f"{len(not_jumped_or_offset)} TOAs are not covered by DMJUMPs, but have the same value of '{k}' = '{list(np.unique(keyset[-1]))}'"
+                        f"{len(not_jumped_or_offset)} TOAs are not covered by DMJUMPs, but have the same value of '{k}' = '{unique_keysets[k]}'"
                     )
                     passes = True
                     break
             if not passes:
                 self.raise_or_warn(
-                    f"{len(not_jumped_or_offset)} TOAs are not covered by DMJUMPs and do not have common sets of flags",
+                    f"{len(not_jumped_or_offset)} TOAs are not covered by DMJUMPs and do not have common sets of flags: {unique_keysets}",
                     KeyError if raiseexcept else None,
                 )
                 return False
