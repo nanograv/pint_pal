@@ -970,20 +970,29 @@ def check_binary_ELL1H(fitter: pint.fitter.Fitter,
     # Return the dictionary
     return retdict
 
-def check_FB(fitter, alpha=ALPHA, fbmax = 5, NITS=1):
+def check_FB(fitter: pint.fitter.Fitter,
+             alpha: float = ALPHA,
+             fbmax: int = 5,
+             NITS: int = 1
+) -> dict:
     """
     Check the FB parameter F-tests for the ELL1 binary model doing both removing and addtion.
 
-    Input:
-    --------
-    fitter [object]: The PINT fitter object.
-    alpha [float]: The F-test significance value. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model [default: 0.0027].
-    fbmax [int]: Number of FB parameters to check in the F-tests [default: 5].
-
+    Parameters
+    ----------
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object.
+    alpha : float
+        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
+    fbmax : int
+        Number of FB parameters to check in the F-tests [default: 5].
+    NITS : int
+        Number of fit iterations
+    
     Returns:
-    ---------
-    retdict [dictionary]: Returns the dictionary output from the F-tests.
+    --------
+    dict
+        Returns the dictionary output from the F-tests.
     """
     # Define dictionary for returned value
     retdict = {}
