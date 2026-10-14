@@ -297,9 +297,9 @@ def summarize_Ftest(Ftest_dict, fitter, tc, alpha = ALPHA):
     
     # Determine which FD parameters to add/remove
     if fd_remove:
-        remove_params.append(fd_remove[np.where(fd_remove_ft==min(fd_remove_ft))[0][0]])
+        remove_params.append(fd_remove[np.argmin(fd_remove_ft)])
     if fd_add:
-        add_params.append(fd_add[np.where(fd_add_ft==min(fd_add_ft))[0][0]])
+        add_params.append(fd_add[np.argmin(fd_add_ft)])
     
     # Check the config for previous FTest results
     add_params,remove_params = checkFLogs(add_params,remove_params,tc)
