@@ -1,4 +1,4 @@
-import pint_pal.packageconfiguration # must go before any use of pint_pal.config
+import pint_pal.packageconfiguration  # must go before any use of pint_pal.config
 from pint_pal.packageconfiguration import set_data_root, reset_config
 from pint_pal.threads import set_thread_limit
 import pint_pal.checkin
@@ -12,13 +12,17 @@ from pathlib import Path
 # shared directory unless the TEMPO2 environment variable is set.
 # This will set it automatically as long as Tempo2 exists in the
 # "obvious" place, and so should reduce the need to manually set it.
-if 'TEMPO2' not in os.environ:
+if "TEMPO2" not in os.environ:
     env_base_dir = Path(sys.executable).parent.parent
-    tempo2_dir = env_base_dir / 'share' / 'tempo2'
+    tempo2_dir = env_base_dir / "share" / "tempo2"
     if tempo2_dir.exists():
-        os.environ['TEMPO2'] = str(tempo2_dir)
+        os.environ["TEMPO2"] = str(tempo2_dir)
 
 from . import _version
-__version__ = _version.get_versions()['version']
 
-from . import BBX
+__version__ = _version.get_versions()["version"]
+
+try:
+    from . import BBX
+except ImportError:
+    pass

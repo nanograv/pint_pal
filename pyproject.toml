@@ -19,11 +19,10 @@ authors = [
 description = "A long-lived repository for NANOGrav Pulsar Timing analysis work."
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
+[dependency-groups]
+base = [
     "ruamel.yaml",
     "pint_pulsar @ git+https://github.com/nanograv/PINT",
-    "enterprise-pulsar>=3.5.0",
-    "enterprise-extensions>=v2.4.1",
     "pytest",
     "nbconvert",
     "ipywidgets>=7.6.3",
@@ -34,18 +33,26 @@ dependencies = [
     "notebook",
     "seaborn",
     "gitpython",
-    "la-forge",
     "arviz",
     "dill",
-    "discovery @ git+https://github.com/jeremy-baier/discovery@twg-dev",
-    "fastshermanmorrison-pulsar",
-    "jax",
     "loguru",
-    "numpyro",
-    "optax",
     "pandas",
     "threadpoolctl",
+]
+noise_runs = [
+    "enterprise-pulsar>=3.5.0",
+    "enterprise-extensions>=v2.4.1",
+    "discovery @ git+https://github.com/jeremy-baier/discovery@twg-dev",
+    "fastshermanmorrison-pulsar",
+    "la-forge",
+    "jax",
+    "numpyro",
+    "optax",
     "scikit-sparse>=0.4.5",
+]
+all = [
+    { include-group = "base" },
+    { include-group = "noise_runs" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
