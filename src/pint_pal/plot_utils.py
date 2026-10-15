@@ -5360,7 +5360,7 @@ def _gp_time_domain(payload, gp_key, realization_idx=None):
 _TM_PARAMS_FOR_CATEGORY = {
     'red_noise': ['F0', 'F1', 'F2'],
     'dm_gp':     ['DM', 'DM1', 'DM2', 'DM3'],
-    'sw':        ['NE_SW', 'NE1', 'SWPRBETA1', 'sw_proxy_beta'],
+    'sw':        ['NE_SW', 'NE1', 'SWPRBETA1', 'SWPRBETA0'],
     'chrom':     ['CM', 'CM1', 'CM2'],        # we don't often use these but they could be included in principle
 }
 
