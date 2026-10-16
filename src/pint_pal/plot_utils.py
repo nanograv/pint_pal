@@ -5600,7 +5600,7 @@ def get_tm_delays(payload, psr_name=None):
 
 
 def _extract_ne_sw_reference(model):
-    """Extract the reference NE_SW value from a PINT timing model.
+    r"""Extract the reference NE_SW value from a PINT timing model.
 
     Parameters
     ----------
