@@ -273,16 +273,18 @@ def summarize_Ftest(Ftest_dict: dict,
             for i in range(1,len(fblist)):
                 p = [fbp[j] for j in range(i,len(fbp))]
                 ffk = 'FB%s+'%i
-                if Ftest_dict[fk][ffk]['ft'] is not None:
-                    if Ftest_dict[fk][ffk]['ft'] > alpha_remove and Ftest_dict[fk][ffk]['ft']:
-                        remove_params.append(ffk)
+                if Ftest_dict[fk][ffk] is not None:
+                    if Ftest_dict[fk][ffk]['ft'] is not None:
+                        if Ftest_dict[fk][ffk]['ft'] > alpha_remove and Ftest_dict[fk][ffk]['ft']:
+                            remove_params.append(ffk)
             # Adding FB parameters
             for i in range(len(fblist),fbmax+1):
                 p = ["FB%d" % (j) for j in range(len(fblist),i+1)]
                 ffk = 'FB%s'%i
-                if Ftest_dict[fk][ffk]['ft'] is not None:
-                    if Ftest_dict[fk][ffk]['ft'] <= alpha_add and Ftest_dict[fk][ffk]['ft']:
-                        add_params.append(ffk)
+                if Ftest_dict[fk][ffk] is not None:
+                    if Ftest_dict[fk][ffk]['ft'] is not None:
+                        if Ftest_dict[fk][ffk]['ft'] <= alpha_add and Ftest_dict[fk][ffk]['ft']:
+                            add_params.append(ffk)
         # Check which parameters should be removed
         elif "Remove" in fk:
             for ffk in Ftest_dict[fk].keys():
@@ -321,9 +323,10 @@ def summarize_Ftest(Ftest_dict: dict,
                                 fd_add.append(fffk)
                                 fd_add_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
                 else:
-                    if Ftest_dict[fk][ffk]['ft'] is not None:
-                        if Ftest_dict[fk][ffk]['ft'] <= alpha_add and Ftest_dict[fk][ffk]['ft']:
-                            add_params.append(ffk)
+                    if Ftest_dict[fk][ffk] is not None:
+                        if Ftest_dict[fk][ffk]['ft'] is not None:
+                            if Ftest_dict[fk][ffk]['ft'] <= alpha_add and Ftest_dict[fk][ffk]['ft']:
+                                add_params.append(ffk)
         # Policy is to never add additional spin derivatives in general
         elif fk == 'F':
             pass
