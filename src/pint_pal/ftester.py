@@ -639,8 +639,9 @@ def check_FD(fitter: pint.fitter.Fitter,
     dict
         Returns the dictionary output from the F-tests.
     """
-    # Print how many FD currently enabled
-    cur_fd = [param for param in fitter.model.free_params if "FD" in param]
+    # Print how many FD currently enabled, must be of the format FDi to avoid FDJUMP parameters
+    cur_fd = [param for param in fitter.model.free_params
+              if p.startswith("FD") and p[2:].isdigit()]
     if remove:
         print("Testing removing FD terms (", cur_fd, "enabled):")
     else:
