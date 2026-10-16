@@ -570,3 +570,55 @@ def test_extract_gp_design_matrix_without_F_or_index():
     )
     assert index_map == {} and F_columns == {}
 
+
+
+@pytest.mark.parametrize(
+    "bounds, nfreqs, expected",
+    [([50, 150], 30, [1, 30]), ((50, 150), 30, (1, 30)), ([100, 300], 200, [100, 200])],
+)
+def test_update_cutoff_nfreq_prior_max_keeps_range_valid(bounds, nfreqs, expected):
+    """Nfreq_cutoff is capped at Nfreqs; a lower bound at or above it opens to mode 1."""
+    key = "(.*_)?red_noise_Nfreq_cutoff.*"
+    prior_dict = {key: bounds}
+    nu._update_cutoff_nfreq_prior_max(
+        prior_dict, {"red_noise": {"prior": "powerlaw_cutoff", "Nfreqs": nfreqs}}
+    )
+    assert prior_dict[key] == expected
+
+
+@pytest.mark.parametrize(
+    "par",
+    [
+        "J0000+0000_dm_gp_gamma", "J0000+0000_dm_gp_log10_A",
+        "J0000+0000_chrom_gp_alpha", "J0000+0000_chrom_gp_gamma", "J0000+0000_chrom_gp_log10_A",
+        "J0000+0000_sw_gp_gamma", "J0000+0000_sw_gp_log10_A",
+        "J0000+0000_red_noise_gamma", "J0000+0000_chromequad_idx",
+        "J0000+0000_Rcvr_800_log10_chromequad",
+    ],
+)
+def test_pint_pal_priors_take_precedence_over_discovery_defaults(par):
+    """discovery puts priordict_standard first and re.match takes the first hit, so a
+    pint_pal prior only applies if no standard (or earlier) pattern also matches."""
+    from discovery import prior as ds_prior
+    pint_pal_priors = json.load(open(Path(nu.__file__).parent / "discovery_priors.json"))
+    expected = next(v for k, v in pint_pal_priors.items() if re.fullmatch(k, par))
+    assert list(ds_prior.getprior_uniform(par, pint_pal_priors)) == list(expected)
+
+
+def test_svi_diagnostics_payload_skips_svi_states_and_keeps_ragged_grad_norms():
+    """run_svi_early_stopping's (svi_states_list, grad_norms_list) must serialise;
+    np.asarray on the SVIState list raised 'setting an array element with a sequence'."""
+    from numpyro.infer.svi import SVIState
+
+    state = SVIState(optim_state=(0, ({"a": np.zeros(3)}, {"a": np.ones(3)})), mutable_state=None, rng_key=np.zeros(2))
+    diagnostics = ([[state, state], [state]], [np.array([1.0, 2.0]), np.array([3.0])])
+
+    payload = nu._svi_diagnostics_payload(diagnostics)
+
+    assert payload == {"global_grad_norms": [[1.0, 2.0], [3.0]]}
+    json.dumps(payload)
+
+
+@pytest.mark.parametrize("diagnostics, expected", [(None, {}), ({"loss": 1.5}, {"loss": 1.5})])
+def test_svi_diagnostics_payload_simple_inputs(diagnostics, expected):
+    assert nu._svi_diagnostics_payload(diagnostics) == expected

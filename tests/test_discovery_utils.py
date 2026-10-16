@@ -119,7 +119,8 @@ def test_solar_wind_interpolation_rejects_powerlaw_and_builds_default_nodes(monk
         )
 
     assert calls["kind"] == "linear"
-    assert np.allclose(calls["nodes"], np.arange(10.0, 22.0, 5.0))
+    # same grid as PINT's TDSWDT: one node past the last TOA
+    assert np.allclose(calls["nodes"], [10.0, 15.0, 20.0, 25.0])
 
 
 def test_basic_noise_blocks_delegate(monkeypatch):
@@ -170,20 +171,106 @@ def test_select_fourier_basis_nlog_positive_calls_expected_builder(monkeypatch):
     monkeypatch.setattr(
         du.ds,
         "log_fourierbasis_dm",
-        lambda psr, T, logmode, f_min, nlin, nlog: called.update(
-            dict(psr=psr, T=T, logmode=logmode, f_min=f_min, nlin=nlin, nlog=nlog)
+        lambda psr, components, T, logmode, f_min, nlog: called.update(
+            dict(psr=psr, components=components, T=T, logmode=logmode, f_min=f_min, nlog=nlog)
         )
         or "ok",
     )
 
     fn = du._select_fourier_basis("PSR", 7, 100.0, 3, 0.01, 2, "dm_noise")
-    out = fn(None, None, None)
+    # makegp_fourier calls fourierbasis(psr, components, T=T)
+    out = fn("PSR2", 7, T=100.0)
 
     assert out == "ok"
-    assert called["psr"] == "PSR"
+    assert called["psr"] == "PSR2"
+    assert called["components"] == 7
     assert called["T"] == 100.0
-    assert called["nlin"] == 7
+    assert called["logmode"] == 3
+    assert called["f_min"] == 0.01
     assert called["nlog"] == 2
+
+
+def test_select_fourier_basis_nlog_exceeds_nfreqs_raises():
+    with pytest.raises(ValueError, match="cannot exceed Nfreqs"):
+        du._select_fourier_basis(object(), 5, 100.0, 0, 1e-3, 6, "red_noise")
+
+
+def test_select_fourier_basis_solar_wind_nlog_positive_not_implemented():
+    with pytest.raises(NotImplementedError, match="solar wind"):
+        du._select_fourier_basis(object(), 10, 100.0, 0, 1e-3, 2, "solar_wind")
+
+
+def _log_basis_psr(n=120, seed=0):
+    rng = np.random.default_rng(seed)
+    toas = np.sort(rng.uniform(0.0, 10 * 3.15e7, n))
+    return SimpleNamespace(name="J0000+0000", toas=toas, freqs=rng.uniform(700.0, 1600.0, n),
+                           residuals=np.zeros(n), toaerrs=np.full(n, 1e-6),
+                           pos=np.array([1.0, 0.0, 0.0]))
+
+
+@pytest.mark.parametrize(
+    "noise_type, chromatic_idx",
+    [("red_noise", None), ("dm_noise", None), ("chromatic", None), ("chromatic", 4.0)],
+)
+def test_select_fourier_basis_log_against_real_discovery(noise_type, chromatic_idx):
+    """Un-mocked: the log bases accept makegp_fourier's (psr, components, T) call and
+    give Nfreqs total modes, nlog of them below the linear grid."""
+    psr = _log_basis_psr()
+    tspan = du.ds.getspan(psr)
+    nfreqs, nlog = 12, 4
+    basis = du._select_fourier_basis(psr, nfreqs, tspan, 0, 0.2 / tspan, nlog, noise_type,
+                                     chromatic_idx=chromatic_idx)
+    f, df, fmat = basis(psr, nfreqs, T=tspan)
+
+    assert len(f) == len(df) == 2 * nfreqs
+    assert np.all(np.asarray(df) > 0)
+    assert np.sum(np.asarray(f[::2]) < 1.0 / tspan) == nlog
+    fmat = fmat(4.0) if callable(fmat) else fmat
+    assert np.shape(fmat) == (len(psr.toas), 2 * nfreqs)
+
+
+@pytest.mark.parametrize("block", ["red_noise_block", "dm_noise_block", "chromatic_noise_block"])
+def test_block_defaults_to_standard_linear_basis(block, monkeypatch):
+    """With no log kwargs a block uses the standard 1/T, 2/T, ..., Nfreqs/T basis."""
+    captured = {}
+    real_makegp = du.ds.makegp_fourier
+
+    def spy(psr, prior, components, T=None, fourierbasis=None, **kwargs):
+        captured["f"], _, _ = fourierbasis(psr, components, T=T)
+        return real_makegp(psr, prior, components, T=T, fourierbasis=fourierbasis, **kwargs)
+
+    monkeypatch.setattr(du.ds, "makegp_fourier", spy)
+    psr = _log_basis_psr()
+    tspan = du.ds.getspan(psr)
+    getattr(du, block)(psr, Nfreqs=10)
+    np.testing.assert_allclose(captured["f"][::2], np.arange(1, 11) / tspan)
+
+
+def test_nlog_only_keeps_linear_grid_at_one_over_T(monkeypatch):
+    """Turning on nlog alone (default logmode) adds log modes below 1/T; the linear
+    modes are still 1/T, 2/T, ..."""
+    captured = {}
+    real_makegp = du.ds.makegp_fourier
+
+    def spy(psr, prior, components, T=None, fourierbasis=None, **kwargs):
+        captured["f"], _, _ = fourierbasis(psr, components, T=T)
+        return real_makegp(psr, prior, components, T=T, fourierbasis=fourierbasis, **kwargs)
+
+    monkeypatch.setattr(du.ds, "makegp_fourier", spy)
+    psr = _log_basis_psr()
+    tspan = du.ds.getspan(psr)
+    du.red_noise_block(psr, Nfreqs=12, nlog=4)
+    f = np.asarray(captured["f"][::2])
+    np.testing.assert_allclose(f[4:], np.arange(1, 9) / tspan)
+    assert np.all(f[:4] < 1.0 / tspan)
+
+
+@pytest.mark.parametrize("block", ["red_noise_block", "dm_noise_block"])
+def test_log_basis_block_builds_freespectrum_against_real_discovery(block):
+    """Un-mocked: a vector (freespectrum) prior is sized to the full Nfreqs basis."""
+    psr = _log_basis_psr()
+    gp = getattr(du, block)(psr, Nfreqs=12, nlog=4, logmode=0, prior="freespectrum")
+    assert np.shape(gp.F) == (len(psr.toas), 24)
 
 
 def test_block_prior_and_basis_validation_errors():
@@ -799,8 +886,8 @@ class TestChromaticBasisSelection:
     def test_nlog_positive_vary_calls_log_free(self, monkeypatch):
         """nlog>0 + chromatic_idx=None → lambda calling log_fourierbasis_chrom."""
         calls = {}
-        def fake_log_free(psr, T, logmode, f_min, nlin, nlog):
-            calls['log_free'] = True
+        def fake_log_free(psr, components, T, logmode, f_min, nlog):
+            calls['log_free'] = (components, T, nlog)
             return 'f', 'df', lambda alpha: 'FMAT'
         monkeypatch.setattr(du.ds, 'log_fourierbasis_chrom', fake_log_free)
 
@@ -812,14 +899,15 @@ class TestChromaticBasisSelection:
         )
         # Result is a lambda; calling it should call the log_free function
         assert callable(result)
-        result(psr, 10, 100.0)
-        assert 'log_free' in calls
+        result(psr, 10, T=100.0)
+        assert calls['log_free'] == (10, 100.0, 5)
 
     def test_nlog_positive_fixed_calls_log_fixed(self, monkeypatch):
         """nlog>0 + chromatic_idx=4.0 → lambda calling log_fourierbasis_chrom_fixed."""
         calls = {}
-        def fake_log_fixed(psr, alpha, T, logmode, f_min, nlin, nlog):
+        def fake_log_fixed(psr, components, T, alpha, logmode, f_min, nlog):
             calls['alpha'] = alpha
+            calls['components'] = components
             return 'f', 'df', 'FMAT'
         monkeypatch.setattr(du.ds, 'log_fourierbasis_chrom_fixed', fake_log_fixed)
 
@@ -830,8 +918,9 @@ class TestChromaticBasisSelection:
             noise_type='chromatic', chromatic_idx=4.0,
         )
         assert callable(result)
-        result(psr, 10, 100.0)
+        result(psr, 10, T=100.0)
         assert calls['alpha'] == 4.0
+        assert calls['components'] == 10
 
     # --- chromatic_noise_block wiring ---
 
@@ -961,7 +1050,7 @@ class TestChromaticQuadBlock:
 
         noise_dict = {'B1937+21_efac': 1.0}
         result = du.chromatic_noise_block(
-            object(), noise_dict=noise_dict, tspan=100.0, name='chrom_gp',
+            SimpleNamespace(name="B1937+21"), noise_dict=noise_dict, tspan=100.0, name='chrom_gp',
             chromatic_idx='vary', include_quadratic=True, quad_fref=800.0,
         )
         assert result == ['GP', 'QUAD']
@@ -1005,7 +1094,7 @@ class TestChromaticQuadBlock:
         assert args[-2:] == ['GP', 'QUAD']
 
 
-@pytest.mark.parametrize("prior_name,prior_attr", [("powerlaw", "powerlaw"), ("broken_powerlaw", "broken_powerlaw"), ("freespectrum", "freespectrum")])
+@pytest.mark.parametrize("prior_name,prior_attr", [("powerlaw", "powerlaw"), ("broken_powerlaw", "brokenpowerlaw"), ("freespectrum", "freespectrum")])
 def test_fourier_blocks_accept_supported_prior_values(monkeypatch, prior_name, prior_attr):
     sentinel_prior = object()
     monkeypatch.setattr(du.ds, prior_attr, sentinel_prior, raising=False)
@@ -1381,7 +1470,7 @@ class TestNoiseDictForwarding:
         calls = {}
         self._patch_fourier(monkeypatch, calls)
         nd = {"J0000+0000_chrom_gp_log10_A": -13.0}
-        du.chromatic_noise_block(object(), noise_dict=nd, tspan=500.0)
+        du.chromatic_noise_block(SimpleNamespace(name="B1937+21"), noise_dict=nd, tspan=500.0)
         assert calls["noisedict"] is nd
 
     def test_solar_wind_block_forwards_noise_dict_fourier(self, monkeypatch):
@@ -1469,3 +1558,49 @@ class TestNoiseDictForwarding:
         assert seen["red"] is red_nd               # per-signal dict -> red noise
         assert seen["dm"] == {}                     # no per-signal dict -> stays free
         assert "global" not in seen["red"]          # global never leaks into a GP block
+
+
+# ---------------------------------------------------------------------------
+# Un-mocked checks against the installed discovery
+# ---------------------------------------------------------------------------
+
+def _chrom_psr(n=150, seed=3):
+    psr = _log_basis_psr(n=n, seed=seed)
+    t = psr.toas / psr.toas.max()
+    psr.Mmat = np.vstack([np.ones(n), t, t**2]).T
+    return psr
+
+
+def test_noise_dict_alpha_fixes_index_for_fourier_gp_and_quadratic_filter():
+    """A fixed chrom_gp_alpha must fix the index in both signals, not just the filter."""
+    psr = _chrom_psr()
+    alpha_key = f"{psr.name}_chrom_gp_alpha"
+    fourier_gp, quad = du.chromatic_noise_block(
+        psr, Nfreqs=10, chromatic_idx="vary", include_quadratic=True,
+        noise_dict={alpha_key: 4.0},
+    )
+    assert not callable(fourier_gp.F)
+    assert not callable(quad.F)
+    psl = du.ds.PulsarLikelihood([psr.residuals, du.ds.makenoise_measurement_simple(psr),
+                                  fourier_gp, quad])
+    assert alpha_key not in psl.logL.params
+
+
+def test_vary_index_without_noise_dict_stays_shared():
+    psr = _chrom_psr()
+    alpha_key = f"{psr.name}_chrom_gp_alpha"
+    fourier_gp, quad = du.chromatic_noise_block(psr, Nfreqs=10, include_quadratic=True)
+    assert callable(fourier_gp.F) and callable(quad.F)
+    assert alpha_key in fourier_gp.F.params and alpha_key in quad.F.params
+
+
+@pytest.mark.parametrize("block", ["red_noise_block", "dm_noise_block",
+                                   "chromatic_noise_block", "solar_wind_noise_block"])
+def test_broken_powerlaw_prior_builds(block):
+    psr = _log_basis_psr()
+    if block == "solar_wind_noise_block":
+        psr.planetssb = np.zeros((len(psr.toas), 9, 6))
+        psr.sunssb = np.tile([1.5e11, 0, 0, 0, 0, 0], (len(psr.toas), 1)).astype(float)
+        psr.pos_t = np.tile([1.0, 0.0, 0.0], (len(psr.toas), 1))
+    gp = getattr(du, block)(psr, Nfreqs=10, prior="broken_powerlaw")
+    assert any("log10_fb" in p for p in gp.Phi.params)
