@@ -1018,7 +1018,7 @@ def check_FB(fitter: pint.fitter.Fitter,
             try:
                 ftest_dict = fitter.ftest(param_list, component_list, remove=True, full_output=True, maxiter=NITS)
             except ValueError as e:
-                warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
+                warnings.warn(f"Error when running F-test for {[p.name for p in param_list]}: {e}")
                 ftest_dict = None
             # Add to dictionary to return
             retdict['FB%s+'%i] = ftest_dict
