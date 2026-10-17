@@ -82,8 +82,8 @@ def get_fblist(fitter: pint.fitter.Fitter) -> dict:
         if i!=ifb:
             fbbad = True
     if fbbad:
-        print_bad("FB parameters not a series of integers: "+
-             " ".join([fblist[i] for i in k]) )
+        log.warning("FB parameters not a series of integers: "+
+                    " ".join([fblist[i] for i in k]) )
     return fblist
 
 def binary_params_ftest(bparams: list, fitter: pint.fitter.Fitter, remove: bool) -> tuple[list, list]:
