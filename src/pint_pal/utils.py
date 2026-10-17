@@ -977,7 +977,7 @@ def pdf_writer(fitter,
             fsum.write(l + '\n')
         fsum.write(r'\end{verbatim}' + '\n')
         # Write a summary of the F-test results and suggestions
-        add_statement, remove_statement = summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA)
+        add_statement, remove_statement = summarize_Ftest(Ftest_dict, fitter, tc) # use default alphas
         fsum.write(add_statement + "\n")
         fsum.write(remove_statement + "\n")
 
