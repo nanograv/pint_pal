@@ -374,10 +374,11 @@ class TimingNotebook:
         ''')
         self.add_code_cell('''\
         PARFILE = os.path.join(tc.par_directory,tc.config["timing-model"])
-        if not using_wideband:
-            pdf_writer(fo, PARFILE, rs_dict, Ftest_dict, append=None)
-        else:
-            pdf_writer(fo, PARFILE, rs_dict, Ftest_dict, dm_dict = dm_dict)\
+        # Deprecated summary PDF writer:
+        #if not using_wideband:
+        #    pdf_writer(fo, PARFILE, rs_dict, Ftest_dict, append=None)
+        #else:
+        #    pdf_writer(fo, PARFILE, rs_dict, Ftest_dict, dm_dict = dm_dict)\
         ''')
 
     def add_changelog(self,autorun=False):

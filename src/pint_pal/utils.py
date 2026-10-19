@@ -475,6 +475,7 @@ def pdf_writer(fitter,
                cuts_dict=None,
                no_corner=False):
     """Take output from timing notebook functions and write things out nicely in a summary pdf.
+    This is deprecated in favor of the Summarizer functionality.
 
     Input
     -----
