@@ -16,7 +16,10 @@ from pint_pal.summarizer import Summarizer
 
 from loguru import logger
 
-logger.remove(0)
+try:
+    logger.remove()
+except ValueError:
+    pass
 logger.add(sys.stderr, level="ERROR") # do not show PINT warnings here to avoid clutter
 
 @pytest.fixture(params=['B1855+09', 'J1024-0719'])
