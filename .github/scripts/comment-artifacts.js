@@ -43,7 +43,12 @@ module.exports = async ({ github, context, core }) => {
   // that would instead have a single string value like "nanograv/pint_pal".
   const { owner, repo } = context.repo;
 
-  // pull_requests is empty for fork PRs, so fall back to a head-branch lookup
+  // Determine the PR number, so we can find it to post the comment.
+  // For PRs from a branch in the same repo we can get this from
+  // `run.pull_requests`, but this is empty for PRs that came from a fork
+  // (see `https://github.com/github/docs/issues/22501`),
+  // so in that case we fall back to listing the PRs and finding the one with
+  // the same head branch.
   let prNumber = run.pull_requests?.[0]?.number;
   if (!prNumber) {
     const { data: prs } = await github.rest.pulls.list({
@@ -57,6 +62,7 @@ module.exports = async ({ github, context, core }) => {
     return;
   }
 
+  // Find the artifacts produced by this run.
   const artifacts = await github.paginate(
     github.rest.actions.listWorkflowRunArtifacts,
     { owner, repo, run_id: run.id },
@@ -66,6 +72,9 @@ module.exports = async ({ github, context, core }) => {
     return;
   }
 
+  // Build up the rows of the markdown table, with a link to each artifact.
+  // Artifacts are sorted alphabetically using `localeCompare()`.
+  // For PDF artifacts, we provide a direct link to view the PDF.
   artifacts.sort((a, b) => a.name.localeCompare(b.name));
   const rows = artifacts.map(a => {
     const url = `https://github.com/${owner}/${repo}/actions/runs/${run.id}/artifacts/${a.id}`;
@@ -73,6 +82,7 @@ module.exports = async ({ github, context, core }) => {
     return `| ${a.name} | [${label}](${url}) |`;
   });
 
+  // Construct the body of the comment using the marker and table rows.
   const body = [
     MARKER,
     '### Notebook pipeline artifacts',
@@ -83,6 +93,8 @@ module.exports = async ({ github, context, core }) => {
     ...rows,
   ].join('\n');
 
+  // List the existing comments and go through them to find if there is already
+  // a comment containing the hidden marker text.
   const comments = await github.paginate(
     github.rest.issues.listComments,
     { owner, repo, issue_number: prNumber, per_page: 100 },
@@ -91,6 +103,7 @@ module.exports = async ({ github, context, core }) => {
     c => c.user?.login === 'github-actions[bot]' && c.body?.includes(MARKER),
   );
 
+  // Create a new comment using the body text, or, if one already exists, update it.
   if (existing) {
     await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
     core.info(`Updated comment ${existing.id} on PR #${prNumber}`);
