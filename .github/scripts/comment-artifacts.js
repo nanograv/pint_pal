@@ -22,10 +22,10 @@ module.exports = async ({ github, context, core }) => {
   // The `context` object contains the values of various environment variables
   // set by GitHub for the action being run. These variables are documented at
   // `https://docs.github.com/en/actions/reference/workflows-and-actions/variables`,
-  // and the mapping is mostly obvious (e.g., GITHUB_REPO becomes context.repo),
-  // but can also be easily read from a section of code linked to from the README.
+  // and the mapping is mostly obvious (e.g., GITHUB_SHA becomes context.sha),
+  // but can also be read from a section of code linked to from the README.
   // Additionally, it contains the webhook payload corresponding to the event that
-  // was run, as `context.payload`. For this script, this is always `workflow_run`.
+  // was run (here, always `workflow_run`), as `context.payload`.
   // The parameters in the webhook payload are documented at
   // `https://docs.github.com/en/webhooks/webhook-events-and-payloads`.
   //
@@ -33,7 +33,14 @@ module.exports = async ({ github, context, core }) => {
   // `https://github.com/actions/core`. Here, it is mainly used for logging.
   // Its various methods are documented in the README for the `core` action.
 
+  // Unpack relevant pieces of context.
+  // We can assume the event type is `workflow_run` because that is the way the
+  // trigger is set up in `commenting_artifacts.yml`.
   const run = context.payload.workflow_run;
+  // The value of `context.repo` is the owner and name of the current repo, e.g.
+  // `{ "owner": "nanograv", "repo": "pint_pal" }`. In a fork, it will point to
+  // the fork instead. This is based on the GITHUB_REPOSITORY env variable, but
+  // that would instead have a single string value like "nanograv/pint_pal".
   const { owner, repo } = context.repo;
 
   // pull_requests is empty for fork PRs, so fall back to a head-branch lookup
