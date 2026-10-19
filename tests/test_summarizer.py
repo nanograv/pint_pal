@@ -12,7 +12,7 @@ from astropy import log
 import pint.models as models
 import pint.toa as toa
 from pint.fitter import DownhillGLSFitter
-from summarizer import Summarizer
+from pint_pal.summarizer import Summarizer
 
 from loguru import logger
 
