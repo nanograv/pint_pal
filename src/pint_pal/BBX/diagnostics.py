@@ -1174,7 +1174,7 @@ def plot_epoch_fit_examples(
         ax.set_xlabel("x (dispersion regressor)")
         ax.set_ylabel("residual")
         ax.set_title(
-            f"MJD~{r['mid_mjd']:.1f}  n={r['n_used']}  |b|/$\sigma$={abs(r['b'])/r['sb']:.2g}"
+            f"MJD~{r['mid_mjd']:.1f}  n={r['n_used']}  |b|/$\\sigma$={abs(r['b'])/r['sb']:.2g}"
             if (np.isfinite(r["sb"]) and r["sb"] > 0)
             else f"MJD~{r['mid_mjd']:.1f}  n={r['n_used']}"
         )
@@ -1189,7 +1189,7 @@ def plot_epoch_fit_examples(
         -0.01,
         "Each panel shows a single epoch’s WLS fit of residuals vs. dispersion regressor (either $x=1/\nu^2$ or $x=(\nu_{ref}/\nu)^2$). "
         "The blue points are TOAs within that epoch; the orange line is the fitted model y = a + b·x. "
-        "Epochs with few TOAs, narrow x-span, or weak slope (low |b|/$\sigma_b$) indicate poor chromatic–achromatic separation. "
+        r"Epochs with few TOAs, narrow x-span, or weak slope (low |b|/$\sigma_b$) indicate poor chromatic–achromatic separation. "
         "Consistent slopes across epochs suggest a stable DM proxy; scattered or flat fits may signal overfitting or inadequate sampling.",
         ha="center",
         va="top",
@@ -1276,11 +1276,11 @@ def plot_points_per_epoch_arrays(
     if min_span_str:
         bullets.append(f"min_x_span={min_span_str}")
     if isinstance(min_snr, (int, float)) and min_snr > 0:
-        bullets.append(f"SNR cut |b|/$\sigma_b$≥{min_snr:g}")
+        bullets.append(f"SNR cut |b|/$\\sigma_b$≥{min_snr:g}")
     if req_err:
         bullets.append("require positive finite y-errors")
     if clip_out:
-        bullets.append(f"MAD clip (±{mad_sig}$\sigma$)" if mad_sig is not None else "MAD clip")
+        bullets.append(f"MAD clip (±{mad_sig}$\\sigma$)" if mad_sig is not None else "MAD clip")
     if norm_x:
         bullets.append(f"x normalized ({norm_meth})" if norm_meth else "x normalized")
 
@@ -1329,20 +1329,20 @@ def plot_b_snr_vs_time(
         edgecolors="black",
         linewidths=0.3,
         alpha=0.7,
-        label="|b|/$\sigma_b$",
+        label=r"|b|/$\sigma_b$",
     )
-    ax.axhline(2.0, linestyle="--", color="tab:red", linewidth=1.2, alpha=0.9, label="2$\sigma$")
-    ax.axhline(3.0, linestyle="--", color="tab:green", linewidth=1.2, alpha=0.9, label="3$\sigma$")
+    ax.axhline(2.0, linestyle="--", color="tab:red", linewidth=1.2, alpha=0.9, label=r"2$\sigma$")
+    ax.axhline(3.0, linestyle="--", color="tab:green", linewidth=1.2, alpha=0.9, label=r"3$\sigma$")
     ax.set_yscale("log")
     ax.grid(True, which="both", linestyle="--", alpha=0.5)
     ax.set_xlabel("Epoch MJD")
-    ax.set_ylabel("|b| / $\sigma_b$ (log)")
+    ax.set_ylabel(r"|b| / $\sigma_b$ (log)")
     ax.set_title("Chromatic slope significance over time")
 
     fig.text(
         0.5,
         -0.01,
-        "Shows how significant the chromatic slope (b) is in each epoch. Good DM proxy fits have many epochs above 2–3$\sigma$, "
+        r"Shows how significant the chromatic slope (b) is in each epoch. Good DM proxy fits have many epochs above 2–3$\sigma$, "
         "indicating measurable dispersion trends.",
         ha="center",
         va="top",
@@ -1396,7 +1396,7 @@ def plot_a_vs_b_correlation(
     _apply_style(fig, style)
 
     if not np.any(mask):
-        ax.text(0.5, 0.5, "No finite |a|/$\sigma_a$ and |b|/$\sigma_b$ pairs.", ha="center", va="center")
+        ax.text(0.5, 0.5, r"No finite |a|/$\sigma_a$ and |b|/$\sigma_b$ pairs.", ha="center", va="center")
         ax.set_axis_off()
         return fig
 
@@ -1479,7 +1479,7 @@ def plot_a_b_time_scatter(
     _apply_style(fig, style)
 
     if not (np.any(m_a) or np.any(m_b)):
-        ax.text(0.5, 0.5, "No finite |a|/$\sigma_a$ or |b|/$\sigma_b$ values to plot.", ha="center", va="center")
+        ax.text(0.5, 0.5, r"No finite |a|/$\sigma_a$ or |b|/$\sigma_b$ values to plot.", ha="center", va="center")
         ax.set_axis_off()
         return fig
 
@@ -1512,8 +1512,8 @@ def plot_a_b_time_scatter(
     fig.text(
         0.5, -0.03,
         "Per-epoch WLS significance for the achromatic intercept (a) and chromatic slope (b). "
-        "Large |b|/$\sigma_b$ indicates a well-measured chromatic (DM-like) trend in that epoch; "
-        "large |a|/$\sigma_a$ indicates a well-measured broadband offset.",
+        r"Large |b|/$\sigma_b$ indicates a well-measured chromatic (DM-like) trend in that epoch; "
+        r"large |a|/$\sigma_a$ indicates a well-measured broadband offset.",
         ha="center", va="top", fontsize=9, wrap=True,
     )
 
@@ -1541,7 +1541,7 @@ def plot_proxy_segmentation_overlay(
     # normalization (default)
     normalize: bool = True,
     norm_method: str = "robust_z",                      # {"robust_z", "z", "mad"}
-    normalized_ylabel_suffix: str = " ($\sigma$ normalized)",  # used when normalize=True
+    normalized_ylabel_suffix: str = r" ($\sigma$ normalized)",  # used when normalize=True
     show_units_when_normalized: bool = False,   # if True, append raw-unit label in parentheses
     # aesthetics
     figsize: Tuple[float, float] = (11, 5),
@@ -1866,18 +1866,18 @@ def plot_wls_epoch_summaries(
             alpha=0.7,
             label="epochs",
         )
-    ax1.axhline(2.0, linestyle="--", color="tab:red", linewidth=1.2, alpha=0.9, label="2$\sigma$")
-    ax1.axhline(3.0, linestyle="--", color="tab:green", linewidth=1.2, alpha=0.9, label="3$\sigma$")
+    ax1.axhline(2.0, linestyle="--", color="tab:red", linewidth=1.2, alpha=0.9, label=r"2$\sigma$")
+    ax1.axhline(3.0, linestyle="--", color="tab:green", linewidth=1.2, alpha=0.9, label=r"3$\sigma$")
     ax1.set_yscale("log")
     ax1.grid(True, which="both", linestyle="--", alpha=0.5)
     ax1.set_xlabel("Epoch index")
-    ax1.set_ylabel("|b| / $\sigma_b$ (log)")
+    ax1.set_ylabel(r"|b| / $\sigma_b$ (log)")
     ax1.set_title("Per-epoch slope significance")
 
     fig1.text(
         0.5,
         -0.01,
-        "Shows how often chromatic slopes exceed 2–3$\sigma$. A good DM proxy fit has consistent epochs above these thresholds, "
+        r"Shows how often chromatic slopes exceed 2–3$\sigma$. A good DM proxy fit has consistent epochs above these thresholds, "
         "indicating robust detection of dispersion.",
         ha="center",
         va="top",
@@ -2083,7 +2083,7 @@ def plot_epoch_fit_status_timeline(
     results: Sequence[Mapping[str, Any]],
     failures: Optional[Mapping[str, Any]] = None,
     style: Optional["PlotStyleConfig"] = None,
-    title: str = "Epochwise WLS status timeline (pass/fail + |b|/$\sigma_b$)",
+    title: str = r"Epochwise WLS status timeline (pass/fail + |b|/$\sigma_b$)",
 ) -> "Figure":
     """
     Summarize epochwise WLS outcomes.
@@ -2615,7 +2615,7 @@ def plot_param_ellipses_from_fitter(
         )
 
     # One-sigma rectangles in each coordinate, as in PINT tut.
-    ax.axvspan(-sigmas[0], sigmas[0], alpha=0.3, label="1$\sigma$ in " + p1)
+    ax.axvspan(-sigmas[0], sigmas[0], alpha=0.3, label=r"1$\sigma$ in " + p1)
     ax.axhspan(-sigmas[1], sigmas[1], alpha=0.3)
 
     ax.set_xlabel(r"$\Delta$" + f"{p1}")
