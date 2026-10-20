@@ -37,6 +37,13 @@ from numpyro.infer.svi import SVIState
 #from numpyro.infer import SVI, SVIState
 from IPython.display import display, clear_output
 
+FourierFrequencyInput = Union[
+    int,
+    np.integer,
+    Sequence[float],
+    np.ndarray,
+]
+
 
 #warnings.filterwarnings("ignore")
 #log.disable("pint")
@@ -46,6 +53,11 @@ log.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices
 
 def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, chromatic_idx=None):
     "Convoluted helper function for setting log/lin Fourier bases of different types"
+    if not np.isscalar(Nfreqs) and nlog > 0:
+        raise ValueError(
+            f"Array-valued Nfreqs already defines the complete {noise_type} "
+            "frequency grid and cannot be combined with nlog > 0."
+        )
     if nlog > 0:
         if noise_type == 'red_noise':
             return lambda pulsar, comp, T : ds.log_fourierbasis(
@@ -263,7 +275,7 @@ def red_noise_block(
         tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
-        Nfreqs: int = 100,
+        Nfreqs: FourierFrequencyInput = 100,
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
@@ -286,8 +298,10 @@ def red_noise_block(
         values are ``"powerlaw"``, ``"powerlaw_cutoff"``,
         ``"broken_powerlaw"``, and ``"freespectrum"``.
         Default is ``"powerlaw"``.
-    Nfreqs : int, optional
-        Number of Fourier frequencies. Default is 100.
+    Nfreqs : int or array-like, optional
+        Number of Fourier frequencies, or an explicit one-dimensional array
+        of Fourier frequencies in Hz. Explicit arrays require ``nlog=0``.
+        Default is 100.
     logmode : int, optional
         Log-binning mode for hybrid log/linear Fourier bases. Default is -1.
     f_min : float, optional
@@ -349,7 +363,7 @@ def dm_noise_block(
         interp_dt: Optional[float] = 30.0,
         interp_kind: str = 'linear',
         prior: str = 'powerlaw',
-        Nfreqs: int = 100,
+        Nfreqs: FourierFrequencyInput = 100,
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
@@ -378,8 +392,10 @@ def dm_noise_block(
         Fourier basis supports ["powerlaw", "powerlaw_cutoff", "broken_powerlaw", "freespectrum"].
         Time-domain interpolation basis supports ["ridge", "square_exponential", "quasi_periodic", "matern"].
         Default is ``"powerlaw"``.
-    Nfreqs : int, optional
-        Number of Fourier frequencies. Default is 100.
+    Nfreqs : int or array-like, optional
+        Number of Fourier frequencies, or an explicit one-dimensional array
+        of Fourier frequencies in Hz. Explicit arrays require ``nlog=0``.
+        Default is 100.
     logmode : int, optional
         Log-binning mode for hybrid log/linear Fourier bases. Default is 2.
     f_min_frac : float, optional
@@ -525,7 +541,7 @@ def chromatic_noise_block(
         tspan: Optional[float] = None,
         basis: str = 'fourier',
         prior: str = 'powerlaw',
-        Nfreqs: int = 100,
+        Nfreqs: FourierFrequencyInput = 100,
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
@@ -549,8 +565,10 @@ def chromatic_noise_block(
         values are ``"powerlaw"``, ``"powerlaw_cutoff"``,
         ``"broken_powerlaw"``, and ``"freespectrum"``.
         Default is ``"powerlaw"``.
-    Nfreqs : int, optional
-        Number of Fourier frequencies. Default is 100.
+    Nfreqs : int or array-like, optional
+        Number of Fourier frequencies, or an explicit one-dimensional array
+        of Fourier frequencies in Hz. Explicit arrays require ``nlog=0``.
+        Default is 100.
     tspan : float, optional
         Total data span passed to Fourier basis construction. Default is None.
     logmode : int, optional
@@ -639,7 +657,7 @@ def solar_wind_noise_block(
         interp_dt: Optional[float] = 30.0,
         interp_kind: str = 'linear',
         prior: str = 'powerlaw',
-        Nfreqs: int = 100,
+        Nfreqs: FourierFrequencyInput = 100,
         logmode=2,
         f_min_frac=1/5,
         nlog=0,
@@ -666,8 +684,10 @@ def solar_wind_noise_block(
         Fourier basis supports ["powerlaw", "powerlaw_cutoff", "broken_powerlaw", "freespectrum"].
         Time-domain interpolation basis supports ["ridge", "square_exponential", "quasi_periodic", "matern"].
         Default is "powerlaw".
-    Nfreqs : int, optional
-        Number of Fourier frequencies. Default is 100. Only used for Fourier basis.
+    Nfreqs : int or array-like, optional
+        Number of Fourier frequencies, or an explicit one-dimensional array
+        of Fourier frequencies in Hz. Explicit arrays require ``nlog=0``.
+        Default is 100. Only used for the Fourier basis.
     tspan : float, optional
         Time span for the Fourier basis. Default is None.
     name : str, optional
