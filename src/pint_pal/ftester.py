@@ -200,7 +200,27 @@ def report_ptest(label: str,
     print(line)
     return line
    
-def checkFLogs(add_params,remove_params,tc):
+def checkFLogs(add_params: list,
+               remove_params: list,
+               tc: TimingConfiguration
+) -> tuple[list, list]:
+    """
+    Checks config file for previous F-test recommendations to avoid looping.
+
+    Parameters
+    ----------
+    add_params : list
+        List of parameters recommended to be added.
+    remove_params : list
+        List of parameters recommended to be removed.
+    tc : pint_pal.timingconfiguration.TimingConfiguration
+        The pint_pal TimingConfiguration object.
+
+    Returns
+    -------
+    (list, list)
+        Sets of added, removed parameter recommendations
+    """
     if add_params:
         add_params = [item.strip() for item in add_params[0].split(',')]
     else:
