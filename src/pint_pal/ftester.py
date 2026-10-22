@@ -208,7 +208,7 @@ def report_ptest(
 def checkFLogs(
     add_params: list,
     remove_params: list,
-    tc: TimingConfiguration
+    tc: "TimingConfiguration"
 ) -> tuple[list, list]:
     """
     Checks config file for previous F-test recommendations to avoid looping.
@@ -258,7 +258,7 @@ def checkFLogs(
 def summarize_Ftest(
     Ftest_dict: dict,
     fitter: pint.fitter.Fitter,
-    tc: TimingConfiguration,
+    tc: "TimingConfiguration",
     alpha_add: float = ALPHA_ADD,
     alpha_remove: float = ALPHA_REMOVE
 ) -> tuple[str, str]:
@@ -416,7 +416,7 @@ def reset_params(params: list) -> None:
 
 def run_Ftests(
     fitter: pint.fitter.Fitter,
-    tc: TimingConfiguration,
+    tc: "TimingConfiguration",
     alpha_add: float = ALPHA_ADD,
     alpha_remove: float = ALPHA_REMOVE,
     FDnparams: int = 5,
