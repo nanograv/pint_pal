@@ -2,7 +2,6 @@
 
 fitter.ftest('list of PINT parameter objects', 'list of corresponding timing model components', remove=True/False, full_output = True) and this will output a dictionary with keys: ft, resid_rms_test, resid_wrms_test, chi2_test, dof_test, where the test values are of the nested modeled that was tested.
 """
-from __future__ import annotations
 
 
 
@@ -26,9 +25,10 @@ ALPHA = 0.0027 # 3-sigma
 ALPHA_ADD = 0.0027 # 3-sigma
 ALPHA_REMOVE = 0.1336 # 1.5-sigma
 
-def param_check(name: str,
-                fitter: pint.fitter.Fitter,
-                check_enabled: bool = True
+def param_check(
+    name: str,
+    fitter: pint.fitter.Fitter,
+    check_enabled: bool = True
 ) -> bool:
     """
     Checks if a timing model parameter is in the timing model.
@@ -86,7 +86,11 @@ def get_fblist(fitter: pint.fitter.Fitter) -> dict:
                     " ".join([fblist[i] for i in k]) )
     return fblist
 
-def binary_params_ftest(bparams: list, fitter: pint.fitter.Fitter, remove: bool) -> tuple[list, list]:
+def binary_params_ftest(
+    bparams: list,
+    fitter: pint.fitter.Fitter,
+    remove: bool
+) -> tuple[list, list]:
     """
     Returns the list of parameters and components to put in the check for binary models.
 
@@ -149,9 +153,10 @@ def binary_params_ftest(bparams: list, fitter: pint.fitter.Fitter, remove: bool)
     # return the values
     return pint_params, pint_comps
 
-def report_ptest(label: str,
-                 ftest_dict: dict | None = None,
-                 alpha: float = ALPHA
+def report_ptest(
+    label: str,
+    ftest_dict: dict | None = None,
+    alpha: float = ALPHA
 ) -> str:
     """
     Nicely prints the results of F-tests in a human-readable format.
@@ -200,9 +205,10 @@ def report_ptest(label: str,
     print(line)
     return line
    
-def checkFLogs(add_params: list,
-               remove_params: list,
-               tc: TimingConfiguration
+def checkFLogs(
+    add_params: list,
+    remove_params: list,
+    tc: TimingConfiguration
 ) -> tuple[list, list]:
     """
     Checks config file for previous F-test recommendations to avoid looping.
@@ -249,11 +255,12 @@ def checkFLogs(add_params: list,
 
     return sorted(set(add_params)), sorted(set(remove_params))
 
-def summarize_Ftest(Ftest_dict: dict,
-                    fitter: pint.fitter.Fitter,
-                    tc: TimingConfiguration,
-                    alpha_add: float = ALPHA_ADD,
-                    alpha_remove: float = ALPHA_REMOVE
+def summarize_Ftest(
+    Ftest_dict: dict,
+    fitter: pint.fitter.Fitter,
+    tc: TimingConfiguration,
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE
 ) -> tuple[str, str]:
     """
     Function to determine and print what parameters are recommended to be added from F-test dictionary.
@@ -387,7 +394,7 @@ def summarize_Ftest(Ftest_dict: dict,
     
     return add_statement, remove_statement
     
-def reset_params(params: list):
+def reset_params(params: list) -> None:
     """
     Resets parameter values to defaults as assigned in pint_parameters.py. Most are reset to zero.
     
@@ -405,13 +412,15 @@ def reset_params(params: list):
         else:
             p.value = 0.0
             p.uncertainty = 0.0
+    return
 
-def run_Ftests(fitter: pint.fitter.Fitter,
-               tc: TimingConfiguration,
-               alpha_add: float = ALPHA_ADD,
-               alpha_remove: float = ALPHA_REMOVE,
-               FDnparams: int = 5,
-               NITS: int = 1
+def run_Ftests(
+    fitter: pint.fitter.Fitter,
+    tc: TimingConfiguration,
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE,
+    FDnparams: int = 5,
+    NITS: int = 1
 ) -> dict:
     """
     This is the main convenience function to run the various F-tests below. This includes F-tests for F2, PX, 
@@ -549,9 +558,10 @@ def run_Ftests(fitter: pint.fitter.Fitter,
     return retdict
 
 
-def check_F2(fitter: pint.fitter.Fitter,
-             alpha: float = ALPHA,
-             NITS: int = 1
+def check_F2(
+    fitter: pint.fitter.Fitter,
+    alpha: float = ALPHA,
+    NITS: int = 1
 ) -> dict:
     """
     Check the significance of F2 with an F-test.
@@ -590,9 +600,10 @@ def check_F2(fitter: pint.fitter.Fitter,
     return retdict
 
 
-def check_PX(fitter: pint.fitter.Fitter,
-             alpha: float = ALPHA,
-             NITS: int = 1
+def check_PX(
+    fitter: pint.fitter.Fitter,
+    alpha: float = ALPHA,
+    NITS: int = 1
 ) -> dict:
     """
     Check the significance of PX with an F-test.
@@ -630,11 +641,12 @@ def check_PX(fitter: pint.fitter.Fitter,
     # Return the dictionary
     return retdict
 
-def check_FD(fitter: pint.fitter.Fitter,
-             alpha: float = ALPHA,
-             remove: bool = False,
-             maxcomponent: int = 5,
-             NITS: int = 1
+def check_FD(
+    fitter: pint.fitter.Fitter,
+    alpha: float = ALPHA,
+    remove: bool = False,
+    maxcomponent: int = 5,
+    NITS: int = 1
 ) -> dict:
     """
     Check adding FD parameters with an F-test.
@@ -715,10 +727,11 @@ def check_FD(fitter: pint.fitter.Fitter,
     # Return the dictionary
     return retdict
 
-def check_binary_DD(fitter: pint.fitter.Fitter,
-             alpha: float = ALPHA,
-             remove: bool = False,
-             NITS: int = 1
+def check_binary_DD(
+    fitter: pint.fitter.Fitter,
+    alpha: float = ALPHA,
+    remove: bool = False,
+    NITS: int = 1
 ) -> dict:
     """
     Check the binary parameter F-tests for the DD binary model, either removing or adding parameters.
@@ -775,10 +788,11 @@ def check_binary_DD(fitter: pint.fitter.Fitter,
     # Return the dictionary
     return retdict
 
-def check_binary_DDK(fitter: pint.fitter.Fitter,
-             alpha: float = ALPHA,
-             remove: bool = False,
-             NITS: int = 1
+def check_binary_DDK(
+    fitter: pint.fitter.Fitter,
+    alpha: float = ALPHA,
+    remove: bool = False,
+    NITS: int = 1
 ) -> dict:
     """
     Check the binary parameter F-tests for the DDK binary model, either removing or adding parameters.
@@ -836,10 +850,11 @@ def check_binary_DDK(fitter: pint.fitter.Fitter,
     return retdict
 
 
-def check_binary_ELL1(fitter: pint.fitter.Fitter,
-             alpha: float = ALPHA,
-             remove: bool = False,
-             NITS: int = 1
+def check_binary_ELL1(
+    fitter: pint.fitter.Fitter,
+    alpha: float = ALPHA,
+    remove: bool = False,
+    NITS: int = 1
 ) -> dict:
     """
     Check the binary parameter F-tests for the ELL1 binary model, either removing or adding parameters.
@@ -935,10 +950,11 @@ def check_binary_ELL1(fitter: pint.fitter.Fitter,
         # Return the dictionary
         return retdict
 
-def check_binary_ELL1H(fitter: pint.fitter.Fitter,
-             alpha: float = ALPHA,
-             remove: bool = False,
-             NITS: int = 1
+def check_binary_ELL1H(
+    fitter: pint.fitter.Fitter,
+    alpha: float = ALPHA,
+    remove: bool = False,
+    NITS: int = 1
 ) -> dict:
     """
     Check the binary parameter F-tests for the ELL1H binary model, either removing or adding parameters.
