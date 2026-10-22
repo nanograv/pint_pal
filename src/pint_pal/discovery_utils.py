@@ -46,35 +46,34 @@ log.info(f"Using {jax.default_backend()} with {jax.local_device_count()} devices
 
 def _select_fourier_basis(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, chromatic_idx=None):
     "Convoluted helper function for setting log/lin Fourier bases of different types"
+    # Nfreqs is the total number of modes: nlog log-spaced plus Nfreqs - nlog linear.
+    # The log bases take (psr, components, T) like ds.fourierbasis, so makegp_fourier
+    # passes Nfreqs and tspan straight through.
     if nlog > 0:
+        if nlog > Nfreqs:
+            raise ValueError(f"nlog ({nlog}) cannot exceed Nfreqs ({Nfreqs}) in {noise_type} model; "
+                             "Nfreqs is the total number of modes, including the log-spaced ones.")
         if noise_type == 'red_noise':
-            return lambda pulsar, comp, T : ds.log_fourierbasis(
-                psr, T=tspan, logmode=logmode,
-                f_min=f_min, nlin=Nfreqs, nlog=nlog,
+            return lambda pulsar, comp, T=None : ds.log_fourierbasis(
+                pulsar, comp, T=T, logmode=logmode, f_min=f_min, nlog=nlog,
                 )
         elif noise_type == 'dm_noise':
-            return lambda pulsar, comp, T : ds.log_fourierbasis_dm(
-                psr, T=tspan, logmode=logmode,
-                f_min=f_min, nlin=Nfreqs, nlog=nlog,
+            return lambda pulsar, comp, T=None : ds.log_fourierbasis_dm(
+                pulsar, comp, T=T, logmode=logmode, f_min=f_min, nlog=nlog,
                 )
         elif noise_type == 'chromatic':
             if chromatic_idx is not None:
                 # Fixed chromatic index: use log_fourierbasis_chrom_fixed (returns matrix)
-                return lambda pulsar, comp, T : ds.log_fourierbasis_chrom_fixed(
-                    psr, alpha=chromatic_idx, T=tspan, logmode=logmode,
-                    f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                return lambda pulsar, comp, T=None : ds.log_fourierbasis_chrom_fixed(
+                    pulsar, comp, T=T, alpha=chromatic_idx, logmode=logmode, f_min=f_min, nlog=nlog,
                     )
             else:
                 # Varying chromatic index: use log_fourierbasis_chrom (returns callable)
-                return lambda pulsar, comp, T : ds.log_fourierbasis_chrom(
-                    psr, T=tspan, logmode=logmode,
-                    f_min=f_min, nlin=Nfreqs, nlog=nlog,
+                return lambda pulsar, comp, T=None : ds.log_fourierbasis_chrom(
+                    pulsar, comp, T=T, logmode=logmode, f_min=f_min, nlog=nlog,
                     )
         elif noise_type == 'solar_wind':
-            return lambda pulsar, comp, T : ds_solar.log_solardm_fourierbasis(
-                psr, T=tspan, logmode=logmode,
-                f_min=f_min, nlin=Nfreqs, nlog=nlog,
-                )  
+            raise NotImplementedError("Log-spaced Fourier basis is not available for solar wind in discovery; use nlog=0.")
     elif nlog == 0:
         if noise_type == 'red_noise':
             return ds.fourierbasis
@@ -264,7 +263,7 @@ def red_noise_block(
         basis: str = 'fourier',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        logmode=2,
+        logmode=0,
         f_min_frac=1/5,
         nlog=0,
         name: str = 'red_noise',
@@ -287,15 +286,18 @@ def red_noise_block(
         ``"broken_powerlaw"``, and ``"freespectrum"``.
         Default is ``"powerlaw"``.
     Nfreqs : int, optional
-        Number of Fourier frequencies. Default is 100.
+        Total number of Fourier frequencies, including the ``nlog``
+        log-spaced ones. Default is 100.
     logmode : int, optional
-        Log-binning mode for hybrid log/linear Fourier bases. Default is -1.
+        Index of the lowest linear mode for hybrid log/linear bases: the linear
+        grid starts at ``(1 + logmode) / T``. Only used if ``nlog > 0``. Default is 0.
     f_min : float, optional
         Minimum Fourier frequency for hybrid log/linear bases. Default is None.
     nlog : int, optional
-        Number of logarithmically spaced frequencies. If ``nlog > 0``,
-        ``_select_fourier_basis`` returns a log/linear helper basis.
-        Default is 0.
+        Number of the ``Nfreqs`` frequencies that are log-spaced below the
+        linear grid; the remaining ``Nfreqs - nlog`` are linear. If ``nlog > 0``,
+        ``_select_fourier_basis`` returns a discovery ``log_fourierbasis*`` basis.
+        Default is 0: a standard linear basis ``1/T, 2/T, ..., Nfreqs/T``.
     name : str, optional
         Name of the noise component. Default is "red_noise".
 
@@ -312,7 +314,7 @@ def red_noise_block(
         elif prior == 'powerlaw_cutoff':
             prior = ds.powerlaw_cutoff
         elif prior == 'broken_powerlaw':
-            prior = ds.broken_powerlaw
+            prior = ds.brokenpowerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
         elif callable(prior):
@@ -350,7 +352,7 @@ def dm_noise_block(
         interp_kind: str = 'linear',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        logmode=2,
+        logmode=0,
         f_min_frac=1/5,
         nlog=0,
         name: str = 'dm_gp',
@@ -379,16 +381,19 @@ def dm_noise_block(
         Time-domain interpolation basis supports ["ridge", "square_exponential", "quasi_periodic", "matern"].
         Default is ``"powerlaw"``.
     Nfreqs : int, optional
-        Number of Fourier frequencies. Default is 100.
+        Total number of Fourier frequencies, including the ``nlog``
+        log-spaced ones. Default is 100.
     logmode : int, optional
-        Log-binning mode for hybrid log/linear Fourier bases. Default is 2.
+        Index of the lowest linear mode for hybrid log/linear bases: the linear
+        grid starts at ``(1 + logmode) / T``. Only used if ``nlog > 0``. Default is 0.
     f_min_frac : float, optional
         Fractional minimum Fourier frequency for hybrid log/linear bases
         (scaled to an absolute frequency using ``tspan``). Default is None.
     nlog : int, optional
-        Number of logarithmically spaced frequencies. If ``nlog > 0``,
-        ``_select_fourier_basis`` returns a log/linear helper basis.
-        Default is 0.
+        Number of the ``Nfreqs`` frequencies that are log-spaced below the
+        linear grid; the remaining ``Nfreqs - nlog`` are linear. If ``nlog > 0``,
+        ``_select_fourier_basis`` returns a discovery ``log_fourierbasis*`` basis.
+        Default is 0: a standard linear basis ``1/T, 2/T, ..., Nfreqs/T``.
     name : str, optional
         Name of the noise component. Default is "dm_gp".
 
@@ -405,7 +410,7 @@ def dm_noise_block(
         elif prior == 'powerlaw_cutoff':
             prior = ds.powerlaw_cutoff
         elif prior == 'broken_powerlaw':
-            prior = ds.broken_powerlaw
+            prior = ds.brokenpowerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
         elif callable(prior):
@@ -526,7 +531,7 @@ def chromatic_noise_block(
         basis: str = 'fourier',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        logmode=2,
+        logmode=0,
         f_min_frac=1/5,
         nlog=0,
         name: str = 'chrom_gp',
@@ -550,22 +555,27 @@ def chromatic_noise_block(
         ``"broken_powerlaw"``, and ``"freespectrum"``.
         Default is ``"powerlaw"``.
     Nfreqs : int, optional
-        Number of Fourier frequencies. Default is 100.
+        Total number of Fourier frequencies, including the ``nlog``
+        log-spaced ones. Default is 100.
     tspan : float, optional
         Total data span passed to Fourier basis construction. Default is None.
     logmode : int, optional
-        Log-binning mode for hybrid log/linear Fourier bases. Default is -1.
+        Index of the lowest linear mode for hybrid log/linear bases: the linear
+        grid starts at ``(1 + logmode) / T``. Only used if ``nlog > 0``. Default is 0.
     f_min : float, optional
         Minimum Fourier frequency for hybrid log/linear bases. Default is None.
     nlog : int, optional
-        Number of logarithmically spaced frequencies. If ``nlog > 0``,
-        ``_select_fourier_basis`` returns a log/linear helper basis.
-        Default is 0.
+        Number of the ``Nfreqs`` frequencies that are log-spaced below the
+        linear grid; the remaining ``Nfreqs - nlog`` are linear. If ``nlog > 0``,
+        ``_select_fourier_basis`` returns a discovery ``log_fourierbasis*`` basis.
+        Default is 0: a standard linear basis ``1/T, 2/T, ..., Nfreqs/T``.
     name : str, optional
         Name of the noise component. Default is ``"chrom_gp"``.
     chromatic_idx : str or float, optional
         ``"vary"`` (default) floats the chromatic index; a numeric value fixes
-        it, selecting a fixed-index Fourier basis.
+        it, selecting a fixed-index Fourier basis. With ``"vary"``, a
+        ``{psr.name}_{name}_alpha`` entry in *noise_dict* fixes the index to that
+        value for both the Fourier GP and the quadratic filter.
     include_quadratic : bool, optional
         If True, also build a chromatic quadratic filter (see
         :func:`chromatic_quad_block`) sharing *name* — and hence the chromatic
@@ -588,13 +598,19 @@ def chromatic_noise_block(
         elif prior == 'powerlaw_cutoff':
             prior = ds.powerlaw_cutoff
         elif prior == 'broken_powerlaw':
-            prior = ds.broken_powerlaw
+            prior = ds.brokenpowerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
         elif callable(prior):
             pass # pass a callable prior
         else:
             raise ValueError("Invalid *prior* specified for Fourier basis chromatic noise. Try one of: ['powerlaw', 'powerlaw_cutoff', 'broken_powerlaw', 'freespectrum']")
+
+        # A chromatic index fixed in noise_dict fixes it for both the Fourier GP and the
+        # quadratic filter. Otherwise the filter's ConstantGP would hold it fixed while the
+        # Fourier GP (fixed only when all its hyperparameters are given) kept sampling it.
+        if chromatic_idx == 'vary' and noise_dict:
+            chromatic_idx = noise_dict.get(f'{psr.name}_{name}_alpha', 'vary')
 
         # Resolve chromatic index: None means 'vary' (callable fmat), else fixed (matrix fmat)
         chrom_idx_val = None if chromatic_idx == 'vary' else chromatic_idx
@@ -640,7 +656,7 @@ def solar_wind_noise_block(
         interp_kind: str = 'linear',
         prior: str = 'powerlaw',
         Nfreqs: int = 100,
-        logmode=2,
+        logmode=0,
         f_min_frac=1/5,
         nlog=0,
         name: str = 'sw_gp',
@@ -668,6 +684,7 @@ def solar_wind_noise_block(
         Default is "powerlaw".
     Nfreqs : int, optional
         Number of Fourier frequencies. Default is 100. Only used for Fourier basis.
+        Log-spaced modes (``nlog > 0``) are not supported for solar wind.
     tspan : float, optional
         Time span for the Fourier basis. Default is None.
     name : str, optional
@@ -688,7 +705,7 @@ def solar_wind_noise_block(
         elif prior == 'powerlaw_cutoff':
             prior = ds.powerlaw_cutoff
         elif prior == 'broken_powerlaw':
-            prior = ds.broken_powerlaw
+            prior = ds.brokenpowerlaw
         elif prior == 'freespectrum':
             prior = ds.freespectrum
         elif callable(prior):
@@ -711,7 +728,9 @@ def solar_wind_noise_block(
             )
     elif basis == 'interpolation':
         if basis_nodes is None:
-            basis_nodes = np.arange(psr.toas.min()/86400, psr.toas.max()/86400, interp_dt)
+            # same grid as PINT's TimeDomainSWNoise TDSWDT (endpoint past the last TOA),
+            # so add_noise_to_model can write interp_dt and reproduce this basis
+            basis_nodes = np.arange(psr.toas.min()/86400, psr.toas.max()/86400 + interp_dt, interp_dt)
         # else basis nodes are provided by user.
         td_basis, nodes = ds_signals.custom_blocked_interpolation_basis(
             psr.toas,
