@@ -110,7 +110,7 @@ class Summarizer:
         else:
             self.report.write(f"[{error}: {text}](#{anchor})", section_title="Errors")
             if new_anchor:
-                return color_text(f"<a name=\"{anchor}\">{text}</a>", color="white", highlight="red")
+                return f"<a name=\"{anchor}\">{color_text(text, color='white', highlight='red')}</a>"
             else:
                 return color_text(text, color="white", highlight="red")
 
