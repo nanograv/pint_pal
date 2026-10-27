@@ -301,6 +301,26 @@ def test_color_text_defaults():
     assert result.endswith("</span>")
 
 
+def test_color_text_bold_no_highlight():
+    """Test color_text with bold text and no background"""
+    result = color_text("Warning", color="red", highlight=None, bold=True)
+    assert result == '<span style="color:red; font-weight: bold;">Warning</span>'
+    assert "background-color" not in result
+
+
+def test_color_text_bold_with_highlight():
+    """Test that bold can be combined with a highlight"""
+    result = color_text("Warning", color="red", highlight="yellow", bold=True)
+    assert "color:red" in result
+    assert "background-color: yellow" in result
+    assert "font-weight: bold" in result
+
+
+def test_color_text_not_bold_by_default():
+    """Test that existing calls are unchanged: not bold"""
+    assert "font-weight" not in color_text("Warning", color="red", highlight="yellow")
+
+
 class TestIntegration:
     """Integration tests for the complete workflow"""
 

@@ -12,14 +12,11 @@ from astropy import log
 import pint.models as models
 import pint.toa as toa
 from pint.fitter import DownhillGLSFitter
-from pint_pal.summarizer import Summarizer
+from summarizer import Summarizer
 
 from loguru import logger
 
-try:
-    logger.remove()
-except ValueError:
-    pass
+logger.remove(0)
 logger.add(sys.stderr, level="ERROR") # do not show PINT warnings here to avoid clutter
 
 @pytest.fixture(params=['B1855+09', 'J1024-0719'])
@@ -46,6 +43,24 @@ def test_init(TestSummarizer):
 def test_check_error(TestSummarizer):
     summarizer = TestSummarizer
     pass
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_check_error_formatting(TestSummarizer):
+    summarizer = TestSummarizer
+    # no error: text unchanged
+    assert summarizer.check_error("1.0", True, "Bad value", "anchor_ok") == "1.0"
+    # error with a new anchor: bold red text inside an anchor, no background
+    text = summarizer.check_error("9.9", False, "Bad value", "anchor_new")
+    assert text.startswith('<a name="anchor_new">')
+    assert "color:red" in text and "font-weight: bold" in text
+    assert "background-color" not in text
+    # error reusing an anchor: bold red text, no new anchor
+    text = summarizer.check_error("9.9", False, "Bad value", "anchor_new", new_anchor=False)
+    assert "<a name" not in text
+    assert "color:red" in text and "font-weight: bold" in text
+    # the error is also listed (and linked) in the Errors section
+    assert "[Bad value: 9.9](#anchor_new)" in summarizer.report.get_section("Errors").generate()
+
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_generate_timing_model_comparison(TestSummarizer):

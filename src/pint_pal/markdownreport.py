@@ -259,7 +259,7 @@ class MarkdownReport:
         )
 
 
-def color_text(text: str, color: str = "black", highlight: str = "white") -> str:
+def color_text(text: str, color: str = "black", highlight: str | None = "white", bold: bool = False) -> str:
     """
     Convenience function to generate colored text in a markdown string via HTML
 
@@ -269,7 +269,14 @@ def color_text(text: str, color: str = "black", highlight: str = "white") -> str
        Text to color.
     color : str, default="black"
        Color of the text.
-    highlight : str, default="white"
+    highlight : str | None, default="white"
        Color of the highlight/background.
+    bold : bool, default=False
+       If True, render the text in bold.
     """
-    return f"<span style=\"color:{color}; background-color: {highlight};\">{text}</span>"
+    style = f"color:{color};"
+    if highlight is not None:
+        style += f" background-color: {highlight};"
+    if bold:
+        style += " font-weight: bold;"
+    return f"<span style=\"{style}\">{text}</span>"

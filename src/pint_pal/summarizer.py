@@ -109,10 +109,11 @@ class Summarizer:
             return text
         else:
             self.report.write(f"[{error}: {text}](#{anchor})", section_title="Errors")
+            flagged = color_text(text, color='red', highlight=None, bold=True)
             if new_anchor:
-                return f"<a name=\"{anchor}\">{color_text(text, color='white', highlight='red')}</a>"
+                return f"<a name=\"{anchor}\">{flagged}</a>"
             else:
-                return color_text(text, color="white", highlight="red")
+                return flagged
 
             
     def generate_timing_model_comparison(self):
