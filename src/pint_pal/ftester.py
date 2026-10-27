@@ -47,7 +47,6 @@ if TYPE_CHECKING:
 
 ALPHA_ADD = 0.0027  # 3-sigma; parameters are recommended to be added if the F-statistic is <= ALPHA_ADD
 ALPHA_REMOVE = 0.1336  # 1.5-sigma; parameters are recommended to be removed if the F-statistic is > ALPHA_REMOVE
-ALPHA = ALPHA_ADD  # default significance value
 
 
 def param_check(
@@ -189,6 +188,28 @@ class _SerialExecutor(concurrent.futures.Executor):
         except BaseException as e:
             future.set_exception(e)
         return future
+
+    def map(self, fn: Callable, *iterables, timeout: float | None = None, chunksize: int = 1):
+        """
+        Runs the tasks one at a time as their results are requested, so a progress bar follows the fits.
+
+        Parameters
+        ----------
+        fn : callable
+            The task to run for each set of arguments.
+        *iterables
+            The arguments, as for the built-in `map()`.
+        timeout : float or None
+            Ignored; accepted for compatibility with `concurrent.futures.Executor.map()`.
+        chunksize : int
+            Ignored; accepted for compatibility with `concurrent.futures.Executor.map()`.
+
+        Returns
+        -------
+        iterator
+            The results, in order.
+        """
+        return map(fn, *iterables)
 
 
 def _has_value(model: pint.models.TimingModel, name: str) -> bool:
@@ -626,7 +647,13 @@ def _build_Ftest_dict(results: dict) -> dict:
     return Ftest_dict
 
 
-def report_ptest(label: str, ftest_dict: dict | None = None, alpha: float = ALPHA) -> str:
+def report_ptest(
+    label: str,
+    ftest_dict: dict | None = None,
+    action: str = 'add',
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE
+) -> str:
     """
     Formats the results of an F-test as a line of a human-readable table.
 
@@ -637,8 +664,15 @@ def report_ptest(label: str, ftest_dict: dict | None = None, alpha: float = ALPH
     ftest_dict : dict or None
         The test's entry in the nested F-test results dictionary (see `_test_entry()`). If None (the fit
         failed), a line of NaNs is returned.
-    alpha : float
-        The F-test is marked significant ('***') if the F-statistic is lower than alpha [default: 0.0027].
+    action : str
+        'add' if the test adds the parameter(s), 'remove' if it removes them. This sets which threshold is used
+        to mark the test significant ('***') [default: 'add'].
+    alpha_add : float
+        An 'add' test is marked significant ('***'), i.e. the parameter(s) are worth adding, if the F-statistic
+        is lower than or equal to alpha_add [default: 0.0027].
+    alpha_remove : float
+        A 'remove' test is marked significant ('***'), i.e. the parameter(s) are worth keeping, if the
+        F-statistic is lower than or equal to alpha_remove [default: 0.1336].
 
     Returns
     -------
@@ -647,6 +681,10 @@ def report_ptest(label: str, ftest_dict: dict | None = None, alpha: float = ALPH
         data), chi2, degrees of freedom, and the F-statistic ('--' for the initial model, 'xxx' if the test
         can't be used).
     """
+    if action not in ('add', 'remove'):
+        raise ValueError(f"action must be 'add' or 'remove', not {action!r}.")
+    # The same thresholds as the recommendations: added if F <= alpha_add, kept if F <= alpha_remove
+    threshold = alpha_add if action == 'add' else alpha_remove
     # If the fit failed, give a line of NaNs
     if ftest_dict is None:
         return "%42s %7.3f %9.2f %5f %.3f" % (label, np.nan, np.nan, np.nan, np.nan)
@@ -659,7 +697,7 @@ def report_ptest(label: str, ftest_dict: dict | None = None, alpha: float = ALPH
     if Fstatistic is None:
         line += " --"
     elif _valid_ft(Fstatistic):
-        line += " %.3g%s" % (Fstatistic, " ***" if Fstatistic < alpha else "")
+        line += " %.3g%s" % (Fstatistic, " ***" if Fstatistic <= threshold else "")
     else:
         line += " xxx"
     return line
@@ -669,8 +707,7 @@ def get_Ftest_lines(
     Ftest_dict: dict,
     fitter: pint.fitter.Fitter | None = None,
     alpha_add: float = ALPHA_ADD,
-    alpha_remove: float = ALPHA_REMOVE,
-    alpha: float | None = None
+    alpha_remove: float = ALPHA_REMOVE
 ) -> list[str]:
     """
     Returns the F-test results as lines of a human-readable table, in the same layout as earlier versions of
@@ -684,20 +721,17 @@ def get_Ftest_lines(
         The PINT Fitter object. If given, the enabled FD parameters, the number of spin frequency derivatives and
         the FB parameters in the model are listed in the section headings [default: None].
     alpha_add : float
-        Add tests are marked significant ('***') if the F-statistic is lower than alpha_add [default: 0.0027].
+        Add tests are marked significant ('***'), i.e. worth adding, if the F-statistic is lower than or equal
+        to alpha_add [default: 0.0027].
     alpha_remove : float
-        Removal tests are marked significant ('***') if the F-statistic is lower than alpha_remove
-        [default: 0.1336].
-    alpha : float or None
-        Older name for alpha_add, kept so existing calls still work. If given, overrides alpha_add.
+        Removal tests are marked significant ('***'), i.e. worth keeping, if the F-statistic is lower than or
+        equal to alpha_remove [default: 0.1336].
 
     Returns
     -------
     list of str
-        Lines of the table, starting with the column headings and ending with a line explaining the markers.
+        Lines of the table, starting with the column headings and ending with two lines explaining the markers.
     """
-    if alpha is not None:
-        alpha_add = alpha
     if 'initial' not in Ftest_dict:
         Ftest_dict = _build_Ftest_dict(Ftest_dict)
     wideband = 'dm_resid_wrms_test' in Ftest_dict['initial']
@@ -708,24 +742,25 @@ def get_Ftest_lines(
     lines.append(report_ptest("initial", Ftest_dict['initial']))
 
     cur_fd = ([p for p in fitter.model.free_params if re.fullmatch(r"FD\d+", p)] if fitter is not None else None)
-    for action, heading in (('Add', "Testing additional parameters:"), ('Remove', "Testing removal of parameters:")):
-        alpha_test = alpha_add if action == 'Add' else alpha_remove
+    thresholds = {'alpha_add': alpha_add, 'alpha_remove': alpha_remove}
+    for section, heading in (('Add', "Testing additional parameters:"), ('Remove', "Testing removal of parameters:")):
+        action = section.lower()
         lines.append(heading)
-        for key, entry in Ftest_dict.get(action, {}).items():
+        for key, entry in Ftest_dict.get(section, {}).items():
             if key == 'Binary':
-                lines += [report_ptest(k, v, alpha=alpha_test) for k, v in entry.items()]
+                lines += [report_ptest(k, v, action, **thresholds) for k, v in entry.items()]
             elif key == 'FD':
-                verb = "adding" if action == 'Add' else "removing"
+                verb = "adding" if action == 'add' else "removing"
                 lines.append(f"Testing {verb} FD terms" + (f" ( {cur_fd} enabled):" if cur_fd is not None else ":"))
-                lines += [report_ptest(k, v, alpha=alpha_test) for k, v in entry.items()]
+                lines += [report_ptest(k, v, action, **thresholds) for k, v in entry.items()]
             else:
-                lines.append(report_ptest(key, entry, alpha=alpha_test))
+                lines.append(report_ptest(key, entry, action, **thresholds))
 
     if 'F' in Ftest_dict:
         n_deriv = max([int(p[1:]) for p in fitter.model.params if re.fullmatch(r"F\d+", p)] or [1]) \
             if fitter is not None else None
         lines.append("Testing spin freq derivs" + (f" ({n_deriv} enabled):" if n_deriv is not None else ":"))
-        lines += [report_ptest(k, v, alpha=alpha_add) for k, v in Ftest_dict['F'].items()]
+        lines += [report_ptest(k, v, 'add', **thresholds) for k, v in Ftest_dict['F'].items()]
 
     if 'FB' in Ftest_dict:
         fbp = [p for _, p in sorted(get_fblist(fitter).items())] if fitter is not None else None
@@ -738,14 +773,16 @@ def get_Ftest_lines(
         if fbp is not None:
             lines.append("Testing FB parameters, present list: " + " ".join(fbp))
         lines.append("Testing removal of FB parameters:")
-        lines += [report_ptest(fb_label(k), v, alpha=alpha_remove) for k, v in Ftest_dict['FB'].items() if k.endswith('+')]
+        lines += [report_ptest(fb_label(k), v, 'remove', **thresholds) for k, v in Ftest_dict['FB'].items()
+                  if k.endswith('+')]
         lines.append("Testing addition of FB parameters:")
-        lines += [report_ptest(fb_label(k), v, alpha=alpha_add) for k, v in Ftest_dict['FB'].items()
+        lines += [report_ptest(fb_label(k), v, 'add', **thresholds) for k, v in Ftest_dict['FB'].items()
                   if not k.endswith('+')]
 
     # Explain the markers, since '***' means the opposite outcome for 'add' and 'remove' tests
-    lines.append(f"*** = significant: worth adding (F < {alpha_add:g}) or worth keeping (F < {alpha_remove:g}); "
-                 "xxx = fit failed or not converged, or F-test not possible")
+    lines.append(f"*** = significant: worth adding (F <= alpha_add = {alpha_add:g}) "
+                 f"or worth keeping (F <= alpha_remove = {alpha_remove:g})")
+    lines.append("xxx = fit failed or not converged, or F-test not possible")
     return lines
 
 
@@ -955,9 +992,9 @@ def parseParallelResults(
 def summarize_Ftest(
     Ftest_dict: dict,
     fitter: pint.fitter.Fitter | None = None,
+    tc: "TimingConfiguration | None" = None,
     alpha_add: float = ALPHA_ADD,
-    alpha_remove: float = ALPHA_REMOVE,
-    alpha: float | None = None
+    alpha_remove: float = ALPHA_REMOVE
 ) -> tuple[str, str]:
     """
     Function to determine what parameters are recommended to be added/removed from the F-test results.
@@ -968,24 +1005,26 @@ def summarize_Ftest(
         Output of `run_Ftests()` or `runFtest_parallel()`.
     fitter : pint.fitter.Fitter or None
         The PINT Fitter object. [currently unused]
+    tc : pint_pal.timingconfiguration.TimingConfiguration or None
+        The pint_pal TimingConfiguration object. If given, new recommendations that would undo previous ones in
+        the config are left out, as in `run_Ftests()`, so the statements match the ones it printed
+        [default: None].
     alpha_add : float
         Parameters are recommended to be added if the F-statistic is lower than or equal to alpha_add, i.e.
         they are statistically significant to the timing model [default: 0.0027].
     alpha_remove : float
         Parameters are recommended to be removed if the F-statistic is greater than alpha_remove, i.e. they
         are not statistically significant to the timing model [default: 0.1336].
-    alpha : float or None
-        Older name for alpha_add, kept so existing calls still work. If given, overrides alpha_add.
 
     Returns
     -------
     (str, str)
         Add, Remove text statements.
     """
-    if alpha is not None:
-        alpha_add = alpha
     add_params, remove_params = parseParallelResults(_raw_results(Ftest_dict), alpha_add=alpha_add,
                                                      alpha_remove=alpha_remove, verbose=False)
+    if tc is not None:
+        add_params, remove_params = _drop_reversals(add_params, remove_params, _get_old_ftests(tc))
     return _recommendation_statements(add_params, remove_params)
 
 
@@ -1008,6 +1047,38 @@ def _get_old_ftests(tc: "TimingConfiguration") -> tuple[list[str], list[str]] | 
     old_ftests = tc.config['FTest'] or {}
     # An empty YAML entry (e.g. "Add:") is read as None
     return list(old_ftests.get('Add') or []), list(old_ftests.get('Remove') or [])
+
+
+def _drop_reversals(
+    add_params: list[str],
+    remove_params: list[str],
+    old_ftests: tuple[list[str], list[str]] | None
+) -> tuple[list[str], list[str]]:
+    """
+    Leaves out new recommendations that would undo previous ones in the config, i.e. adding a parameter that
+    was previously recommended to be removed, or removing one that was previously recommended to be added.
+
+    Parameters
+    ----------
+    add_params : list of str
+        Parameters recommended to be added.
+    remove_params : list of str
+        Parameters recommended to be removed.
+    old_ftests : (list of str, list of str) or None
+        Previous Add, Remove recommendations (see `_get_old_ftests()`), or None if there are none.
+
+    Returns
+    -------
+    (list of str, list of str)
+        Sorted, unique lists of parameters to add and to remove.
+    """
+    add_params = sorted(set(add_params))
+    remove_params = sorted(set(remove_params))
+    if old_ftests is None:
+        return add_params, remove_params
+    old_add, old_remove = old_ftests
+    return ([item for item in add_params if item not in old_remove],
+            [item for item in remove_params if item not in old_add])
 
 
 def checkFLogs(
@@ -1049,10 +1120,7 @@ def checkFLogs(
     for item in remove_params:
         if item in old_add:
             log.warning(f'Parameter {item} has already been recommended to be added.')
-    add_params = [item for item in add_params if item not in old_remove]
-    remove_params = [item for item in remove_params if item not in old_add]
-
-    return add_params, remove_params
+    return _drop_reversals(add_params, remove_params, old_ftests)
 
 
 def _process_test_results(
@@ -1134,13 +1202,13 @@ def _process_test_results(
 def run_Ftests(
     fitter: pint.fitter.Fitter,
     tc: "TimingConfiguration",
-    results_log: bool | str | os.PathLike = False,
-    maxiter: int = 20,
     alpha_add: float = ALPHA_ADD,
     alpha_remove: float = ALPHA_REMOVE,
     FDnparams: int = 5,
+    NITS: int | None = None,
+    maxiter: int = 20,
     FBnparams: int = 5,
-    alpha: float | None = None
+    results_log: bool | str | os.PathLike = False
 ) -> dict:
     """
     Runs the F-tests one at a time (serially), for computers that are not set up for parallel processing.
@@ -1153,11 +1221,6 @@ def run_Ftests(
         The PINT Fitter object. Its current model and TOAs are what is tested.
     tc : pint_pal.timingconfiguration.TimingConfiguration
         The pint_pal TimingConfiguration object.
-    results_log : bool, str or os.PathLike
-        If True, write the raw results to results.json in the current directory; if a path, write them there
-        instead [default: False].
-    maxiter : int
-        Maximum number of fit iterations for each test [default: 20].
     alpha_add : float
         Parameters are recommended to be added if the F-statistic is lower than or equal to alpha_add, i.e.
         they are statistically significant to the timing model [default: 0.0027].
@@ -1166,10 +1229,16 @@ def run_Ftests(
         are not statistically significant to the timing model [default: 0.1336].
     FDnparams : int
         Maximum number of FD parameters to test [default: 5].
+    NITS : int or None
+        Older name for maxiter, as used by the notebook templates (e.g. ``NITS=tc.get_niter()``). If given,
+        overrides maxiter [default: None].
+    maxiter : int
+        Maximum number of fit iterations for each test [default: 20].
     FBnparams : int
         Maximum number of FB parameters to test, for ELL1 models using FB [default: 5].
-    alpha : float or None
-        Older name for alpha_add, kept so existing calls still work. If given, overrides alpha_add.
+    results_log : bool, str or os.PathLike
+        If True, write the raw results to results.json in the current directory; if a path, write them there
+        instead [default: False].
 
     Returns
     -------
@@ -1179,8 +1248,8 @@ def run_Ftests(
         recommendations to add and remove, combined with those already in the config, as in the .yaml block)
         and 'fits' (the raw output of the `TestFitter` fits).
     """
-    if alpha is not None:
-        alpha_add = alpha
+    if NITS is not None:
+        maxiter = NITS
     results = _run_test_fits(fitter, executor=_SerialExecutor(), maxiter=maxiter,
                              FDnparams=FDnparams, FBnparams=FBnparams)
     return _process_test_results(results, fitter, tc, results_log=results_log,
@@ -1196,7 +1265,8 @@ def runFtest_parallel(
     alpha_add: float = ALPHA_ADD,
     alpha_remove: float = ALPHA_REMOVE,
     FDnparams: int = 5,
-    FBnparams: int = 5
+    FBnparams: int = 5,
+    NITS: int | None = None
 ) -> dict:
     """
     Runs the F-tests in parallel with `pint_pal.parallel_fit`, prints the recommendations, and prints
@@ -1227,6 +1297,8 @@ def runFtest_parallel(
         Maximum number of FD parameters to test [default: 5].
     FBnparams : int
         Maximum number of FB parameters to test, for ELL1 models using FB [default: 5].
+    NITS : int or None
+        Older name for maxiter, as used by the notebook templates. If given, overrides maxiter [default: None].
 
     Returns
     -------
@@ -1236,6 +1308,8 @@ def runFtest_parallel(
         recommendations to add and remove, combined with those already in the config, as in the .yaml block)
         and 'fits' (the raw output of the `TestFitter` fits).
     """
+    if NITS is not None:
+        maxiter = NITS
     if ncpu is not None and ncpu < 1:
         raise ValueError(f"ncpu must be 1 or more (or None to use all CPUs), not {ncpu}.")
     # With one CPU, use the serial executor (as in run_Ftests()) rather than PINT's own single-CPU mode, which
