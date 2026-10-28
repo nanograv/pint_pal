@@ -351,24 +351,19 @@ class Summarizer:
             name = f"{p} {param.key} {param.key_value[0]}" if param.key_value else p
             ratio = param.value / unc
 
+            reasons = []
+            if ratio > equad_ecorr_ratio_threshold:
+                reasons.append(f"large relative to TOA uncertainties")
+            if p.startswith(("EQUAD", "ECORR")) and param.value > equad_ecorr_prior_limit:
+                reasons.append(f"close to the {equad_ecorr_prior_limit:.1f} μs prior limit")
+            elif p.startswith(("EQUAD", "ECORR")) and param.value > equad_ecorr_large_value:
+                reasons.append(f"larger than {equad_ecorr_large_value:.1f} μs")
             ratio_text = self.check_error(
                 f"{ratio:.2f}",
-                ratio <= equad_ecorr_ratio_threshold,
-                f"EQUAD/ECORR large relative to TOA uncertainties ({name})",
-                f"large_ratio_{p}",
+                not reasons,
+                f"EQUAD/ECORR {'; '.join(reasons)} ({name})",
+                f"equad_ecorr_{p}",
             )
-            if p.startswith(("EQUAD", "ECORR")) and param.value > equad_ecorr_prior_limit:
-                ratio_text = self.check_error(
-                    ratio_text, False,
-                    f"EQUAD/ECORR close to the {equad_ecorr_prior_limit:.1f} μs prior limit ({name})",
-                    f"prior_limit_{p}", new_anchor=False,
-                )
-            elif p.startswith(("EQUAD", "ECORR")) and param.value > equad_ecorr_large_value:
-                ratio_text = self.check_error(
-                    ratio_text, False,
-                    f"EQUAD/ECORR larger than {equad_ecorr_large_value:.1f} μs ({name})",
-                    f"large_value_{p}", new_anchor=False,
-                )
 
             table += f"| `{name}` | {param.value:.3f} {units} | {unc:.3f} {units} | {ratio_text} |\n"
         self.report.write(table)
