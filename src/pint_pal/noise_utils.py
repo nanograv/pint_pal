@@ -762,25 +762,13 @@ def model_noise(
             with open(os.path.join(outdir, f"{e_psr.name}_map_params.json"), "w") as f:
                 json.dump(physical_map_params, f, indent=4)
             try:
-                if sampler_kwargs.get("diagnostics", False):
-                    if diagnostics is None:
-                        diagnostics_payload = {}
-                    elif isinstance(diagnostics, dict):
-                        diagnostics_payload = {
-                            k: (float(v) if np.isscalar(v) else np.asarray(v).tolist())
-                            for k, v in diagnostics.items()
-                        }
-                    elif isinstance(diagnostics, (tuple, list)):
-                        diagnostics_payload = {
-                            f"diagnostic_{i}": np.asarray(v).tolist()
-                            for i, v in enumerate(diagnostics)
-                        }
-                    else:
-                        diagnostics_payload = {"diagnostics": str(diagnostics)}
+                # same default as the run_svi_early_stopping call above, so the JSON
+                # is written whenever the diagnostics plot is
+                if sampler_kwargs.get("diagnostics", True):
                     with open(
                         os.path.join(outdir, f"{e_psr.name}_svi_diagnostics.json"), "w"
                     ) as f:
-                        json.dump(diagnostics_payload, f, indent=4)
+                        json.dump(_svi_diagnostics_payload(diagnostics), f, indent=4)
             except Exception as e:
                 log.warning(f"Failed to save diagnostics: {e}")
     else:
@@ -790,6 +778,43 @@ def model_noise(
         )
     if return_sampler_without_sampling:
         return samp if "samp" in locals() else None
+
+
+def _svi_diagnostics_payload(diagnostics):
+    """JSON-serialisable view of ``run_svi_early_stopping``'s diagnostics.
+
+    That returns ``(svi_states_list, global_norm_grads_list)``: per-batch lists of
+    numpyro ``SVIState`` objects and of per-step gradient norms. The states are
+    parameter and optimiser-state pytrees with no array form, so only the numeric
+    histories are kept, one list per batch (batches can differ in length).
+    """
+    if diagnostics is None:
+        return {}
+    if isinstance(diagnostics, dict):
+        items = diagnostics.items()
+    elif isinstance(diagnostics, (tuple, list)):
+        names = (
+            ["svi_states", "global_grad_norms"]
+            if len(diagnostics) == 2
+            else [f"diagnostic_{i}" for i in range(len(diagnostics))]
+        )
+        items = zip(names, diagnostics)
+    else:
+        return {"diagnostics": str(diagnostics)}
+
+    payload = {}
+    for name, value in items:
+        if np.isscalar(value):
+            payload[name] = float(value)
+            continue
+        try:
+            if isinstance(value, (list, tuple)):
+                payload[name] = [np.asarray(v, dtype=float).tolist() for v in value]
+            else:
+                payload[name] = np.asarray(value, dtype=float).tolist()
+        except (TypeError, ValueError):
+            log.debug(f"Skipping non-numeric SVI diagnostic {name!r} in JSON output.")
+    return payload
 
 
 def convert_to_RNAMP(value):
@@ -823,11 +848,20 @@ def _update_cutoff_nfreq_prior_max(prior_dict, model_kwargs):
         ):
             continue
 
-        bounds = prior_dict[prior_key]
-        if isinstance(bounds, tuple):
-            prior_dict[prior_key] = (bounds[0], int(nfreqs))
+        # Nfreq_cutoff is a mode index, so it can only range up to Nfreqs. If the
+        # default lower bound sits at or above that, open the range down to mode 1.
+        lower, upper = prior_dict[prior_key][0], int(nfreqs)
+        if lower >= upper:
+            log.warning(
+                f"{block_name}: Nfreq_cutoff prior lower bound {lower} is not below "
+                f"Nfreqs={upper}; using [1, {upper}] instead."
+            )
+            lower = 1
+        if isinstance(prior_dict[prior_key], tuple):
+            prior_dict[prior_key] = (lower, upper)
         else:
-            prior_dict[prior_key][1] = int(nfreqs)
+            prior_dict[prior_key][0] = lower
+            prior_dict[prior_key][1] = upper
 
 
 def _set_component_param_value(component, param_name, value):
@@ -886,25 +920,73 @@ def _translate_logfreq_kwargs(noise_kwargs):
 
 
 def _apply_pl_component_logfreq_settings(
-    component, noise_kwargs, flog_name, factor_name, tspan_name=None
+    component, noise_kwargs, flog_name, factor_name, tspan_name=None, nmodes_name=None
 ):
-    """Apply log-spaced Fourier-basis settings to a PINT PL* noise component."""
+    """Apply log-spaced Fourier-basis settings to a PINT PL* noise component.
+
+    Discovery's ``Nfreqs`` counts all modes, log-spaced included, while PINT's
+    ``nmodes_name`` parameter (e.g. ``TNREDC``) counts only the linear ones, so it
+    is reduced by ``nlog`` here.
+    """
     nlog, flog_factor, tspan_year = _translate_logfreq_kwargs(noise_kwargs)
     if nlog is None:
         return
 
+    if nmodes_name is not None:
+        nmodes = int(getattr(component, nmodes_name).value)
+        if nlog > nmodes:
+            raise ValueError(
+                f"nlog ({nlog}) cannot exceed Nfreqs ({nmodes}); Nfreqs is the total "
+                "number of modes, including the log-spaced ones."
+            )
+        _set_component_param_value(component, nmodes_name, nmodes - nlog)
     _set_component_param_value(component, flog_name, nlog)
     _set_component_param_value(component, factor_name, flog_factor)
     if tspan_name is not None:
         _set_component_param_value(component, tspan_name, tspan_year)
 
 
+def _replace_component(model, component, validate=True):
+    """Add *component* to *model*, replacing any component of the same class.
+
+    PINT's ``add_component(force=True)`` keeps the existing component alongside the
+    new one, and noise components are summed (e.g. ``scaled_toa_uncertainty`` adds
+    every ``ScaleToaError``'s sigma), so a model that already carried noise would
+    double count it in memory even though its par file looks right.
+    """
+    name = component.__class__.__name__
+    if name in model.components:
+        model.remove_component(name)
+    model.add_component(component, validate=validate)
+
+
+def _check_gp_supported_in_pint(noise_dict, psr_name, gp_name, label):
+    """Raise for discovery GP models that PINT has no component for.
+
+    Writing these to a par file would silently replace the fitted model with a
+    plain power law (or drop it), so fail loudly instead.
+    """
+    unsupported = {
+        "log10_rho": "free-spectrum",
+        "Nfreq_cutoff": "powerlaw_cutoff",
+        "log10_fb": "broken power-law",
+    }
+    prefix = f"{psr_name}_{gp_name}_"
+    for par, kind in unsupported.items():
+        if any(key.startswith(prefix + par) for key in noise_dict):
+            raise NotImplementedError(
+                f"{label}: {kind} spectra are not available in PINT, so this model "
+                "cannot be written to the par file."
+            )
+
+
 def _apply_tdsw_interp_settings(sw_comp, sw_kwargs, kernel_name):
     """Apply interpolation settings to a ``TimeDomainSWNoise`` component.
 
-    Sets ``TDSWDT`` or ``TDSWNODE_*`` entries (and ``TDSWINTERP_KIND``) on
-    *sw_comp* from *sw_kwargs*.  Either ``dt`` or ``basis_nodes`` must be
-    provided; otherwise a ``ValueError`` is raised.
+    Sets ``TDSWNODE_*`` entries from ``basis_nodes`` if given, else ``TDSWDT``
+    from ``interp_dt`` (alias ``dt``, default 30 days), plus ``TDSWINTERP_KIND``.
+    This mirrors how ``discovery_utils.solar_wind_noise_block`` builds the basis.
+    A ``ValueError`` is raised if the node spacing is set to zero or None.
 
     Parameters
     ----------
@@ -912,19 +994,23 @@ def _apply_tdsw_interp_settings(sw_comp, sw_kwargs, kernel_name):
         The component to configure.
     sw_kwargs : dict
         Keyword arguments from the ``solar_wind`` model block, typically
-        containing ``dt``, ``basis_nodes``, and/or ``interp_kind``.
+        containing ``interp_dt``, ``basis_nodes``, and/or ``interp_kind``.
     kernel_name : str
-        Human-readable kernel name used in error messages (e.g. ``"ridge"``).
+        Human-readable kernel name used in error messages (e.g. ``"RIDGE"``).
     """
-    dt = sw_kwargs.get("dt", False)
+    # Same precedence and default as discovery_utils.solar_wind_noise_block: explicit
+    # basis_nodes, else a grid every interp_dt days (``dt`` is accepted as an alias).
     basis_nodes = sw_kwargs.get("basis_nodes", None)
+    dt = sw_kwargs.get("interp_dt", sw_kwargs.get("dt", 30.0))
+    # PINT normalises TDSWINTERP_KIND to upper case in validate(), so store the
+    # canonical form here rather than relying on that normalisation happening.
     kind = sw_kwargs.get("interp_kind", "linear")
-    sw_comp.TDSWINTERP_KIND.value = kind
-    if dt:
-        sw_comp.TDSWDT.quantity = dt
-    elif basis_nodes is not None:
+    sw_comp.TDSWINTERP_KIND.value = kind.upper()
+    if basis_nodes is not None:
         for node in basis_nodes:
             sw_comp.add_tdsw_node_component(node)
+    elif dt:
+        sw_comp.TDSWDT.quantity = dt
     else:
         raise ValueError(
             f"Must specify either dt or basis_nodes for TimeDomainSWNoise "
@@ -1125,7 +1211,7 @@ def add_noise_to_model(
         ef_eq_comp.add_param(param=efac_param, setup=True)
     for equad_param in equad_params:
         ef_eq_comp.add_param(param=equad_param, setup=True)
-    model.add_component(ef_eq_comp, validate=True, force=True)
+    _replace_component(model, ef_eq_comp, validate=True)
 
     if len(dmefac_params) > 0 or len(dmequad_params) > 0:
         dm_comp = pm.noise_model.ScaleDmError()
@@ -1135,17 +1221,18 @@ def add_noise_to_model(
             dm_comp.add_param(param=dmefac_param, setup=True)
         for dmequad_param in dmequad_params:
             dm_comp.add_param(param=dmequad_param, setup=True)
-        model.add_component(dm_comp, validate=True, force=True)
+        _replace_component(model, dm_comp, validate=True)
     if len(ecorr_params) > 0:
         ec_comp = pm.EcorrNoise()
         ec_comp.remove_param("ECORR1")
         for ecorr_param in ecorr_params:
             ec_comp.add_param(param=ecorr_param, setup=True)
-        model.add_component(ec_comp, validate=True, force=True)
+        _replace_component(model, ec_comp, validate=True)
 
     # Create red noise component and add it to the model
     rn_keys = np.array([key for key, val in noise_dict.items() if "red_noise" in key])
     if len(rn_keys) > 0:
+        _check_gp_supported_in_pint(noise_dict, psr_name, "red_noise", "Red noise")
         log.info("Including red noise for this pulsar")
         rn_kwargs = model_kwargs.get("red_noise", {})
         # Add the ML RN parameters to their component
@@ -1165,15 +1252,25 @@ def add_noise_to_model(
             flog_name="TNREDFLOG",
             factor_name="TNREDFLOG_FACTOR",
             tspan_name="TNREDTSPAN",
+            nmodes_name="TNREDC",
         )
         # Add red noise to the timing model
-        model.add_component(rn_comp, validate=True, force=True)
+        _replace_component(model, rn_comp, validate=True)
     else:
         log.info("Not including red noise for this pulsar")
 
     # Check to see if dm noise is present
     dm_pars = [key for key in noise_pars if "_dm_gp" in key]
     if len(dm_pars) > 0:
+        _check_gp_supported_in_pint(noise_dict, psr_name, "dm_gp", "DM noise")
+        if any(
+            key.startswith((f"{psr_name}_dm_gp_log10_sigma", f"{psr_name}_dm_gp_log10_ell"))
+            for key in dm_pars
+        ):
+            raise NotImplementedError(
+                "DM noise: time-domain (interpolation basis) DM noise is not available "
+                "in PINT, so this model cannot be written to the par file."
+            )
         dm_kwargs = model_kwargs.get("dm_noise", {})
         ###### POWERLAW DM NOISE ######
         if f"{psr_name}_dm_gp_log10_A" in dm_pars:
@@ -1191,17 +1288,24 @@ def add_noise_to_model(
                 flog_name="TNDMFLOG",
                 factor_name="TNDMFLOG_FACTOR",
                 tspan_name="TNDMTSPAN",
+                nmodes_name="TNDMC",
             )
             # Add red noise to the timing model
-            model.add_component(dm_comp, validate=True, force=True)
-        ###### FREE SPECTRAL (WaveX) DM NOISE ######
-        elif f"{psr_name}_dm_gp_log10_rho_0" in dm_pars:
-            log.info("Adding Free Spectral DM GP as DMWaveXnoise to par file")
-            raise NotImplementedError("DMWaveXNoise not yet implemented")
+            _replace_component(model, dm_comp, validate=True)
 
     # Check to see if higher order chromatic noise is present
     chrom_pars = [key for key in noise_pars if "_chrom_gp" in key]
     if len(chrom_pars) > 0:
+        _check_gp_supported_in_pint(noise_dict, psr_name, "chrom_gp", "Chromatic noise")
+        chrom_kwargs = model_kwargs.get("chromatic_noise") or {}
+        # Chromatic index, in order of preference: the sampled index (discovery names
+        # it `<psr>_chrom_gp_alpha`), the fixed index the model was fit with, a fixed
+        # `<psr>_chrom_idx`, and finally the standard alpha=4 scattering index.
+        fixed_idx = chrom_kwargs.get("chromatic_idx", "vary")
+        chrom_idx = noise_dict.get(
+            f"{psr_name}_chrom_gp_alpha",
+            fixed_idx if fixed_idx != "vary" else noise_dict.get(f"{psr_name}_chrom_idx", 4.0),
+        )
         if "ChromaticCM" not in model.components:
             log.info(
                 "Adding ChromaticCM component to model since chromatic noise parameters detected."
@@ -1212,17 +1316,12 @@ def add_noise_to_model(
                 0.0,
                 False,
                 frozen=True,
-                # prefer the sampled chromatic index (discovery names it
-                # `<psr>_chrom_gp_alpha`); fall back to a fixed `<psr>_chrom_idx`
-                # and finally to the standard alpha=4 scattering index.
-                TNCHROMIDX=noise_dict.get(
-                    f"{psr_name}_chrom_gp_alpha",
-                    noise_dict.get(f"{psr_name}_chrom_idx", 4.0),
-                ),
+                TNCHROMIDX=chrom_idx,
             )
+        else:
+            model.TNCHROMIDX.value = chrom_idx
         ###### POWERLAW CHROMATIC NOISE ######
         if f"{psr_name}_chrom_gp_log10_A" in chrom_pars:
-            chrom_kwargs = model_kwargs.get("chromatic_noise", {})
             log.info("Adding Powerlaw CHROM GP noise as PLChromNoise to par file")
             # Add the ML RN parameters to their component
             chrom_comp = pm.PLChromNoise()
@@ -1246,30 +1345,35 @@ def add_noise_to_model(
                     if hasattr(chrom_comp, "TNCHROMTSPAN")
                     else "TNCMTSPAN"
                 ),
+                nmodes_name="TNCHROMC",
             )
             # Add red noise to the timing model
-            model.add_component(chrom_comp, validate=True, force=True)
-        ###### FREE SPECTRAL (WaveX) DM NOISE ######
-        elif f"{psr_name}_chrom_gp_log10_rho_0" in chrom_pars:
-            log.info("Adding Free Spectral CHROM GP as CMWaveXnoise to par file")
-            raise NotImplementedError("CMWaveXNoise not yet implemented")
+            _replace_component(model, chrom_comp, validate=True)
 
     # Check to see if solar wind is present
     sw_pars = [key for key in noise_pars if "n_earth" in key or "sw_gp" in key]
     if len(sw_pars) > 0:
-        sw_kwargs = model_kwargs.get("solar_wind", {})
+        _check_gp_supported_in_pint(noise_dict, psr_name, "sw_gp", "Solar wind noise")
+        sw_kwargs = model_kwargs.get("solar_wind") or {}
         log.info("Adding Solar Wind Dispersion to par file")
-        all_components = Component.component_types
-        noise_class = all_components["SolarWindDispersion"]
-        noise = noise_class()  # Make the dispersion instance.
-        model.add_component(noise, validate=False, force=True)
+        # reuse the deterministic solar wind component if the model has one, so its
+        # NE_SW is kept unless the noise dict supplies n_earth
+        if "SolarWindDispersion" not in model.components:
+            noise_class = Component.component_types["SolarWindDispersion"]
+            model.add_component(noise_class(), validate=False)
         # add parameters
-        if "n_earth" in sw_pars:
-            model["NE_SW"].quantity = noise_dict["n_earth"]
-            model["NE_SW"].frozen = True
-            model["SWM"] = 1
-            model["SWP"] = 2
-        if f"{psr_name}_sw_gp_log10_A" in sw_pars:
+        # deterministic 1/r^2 solar wind density (PINT's default SWM=0 model), keyed
+        # `n_earth` when common or `<psr>_n_earth` when per-pulsar
+        n_earth_key = next(
+            (key for key in sw_pars if key == "n_earth" or key.endswith("_n_earth")), None
+        )
+        if n_earth_key is not None:
+            model.NE_SW.value = noise_dict[n_earth_key]
+            model.NE_SW.frozen = True
+        sw_gp_pars = [key for key in sw_pars if "sw_gp" in key]
+        if not sw_gp_pars:
+            pass
+        elif f"{psr_name}_sw_gp_log10_A" in sw_pars:
             sw_comp = pm.PLSWNoise()
             sw_comp.TNSWAMP.quantity = noise_dict[f"{psr_name}_sw_gp_log10_A"]
             sw_comp.TNSWAMP.frozen = True
@@ -1283,40 +1387,37 @@ def add_noise_to_model(
                 flog_name="TNSWFLOG",
                 factor_name="TNSWFLOG_FACTOR",
                 tspan_name=None,
+                nmodes_name="TNSWC",
             )
-            model.add_component(sw_comp, validate=False, force=True)
-        elif f"{psr_name}_sw_gp_log10_rho" in sw_pars:
-            raise NotImplementedError(
-                "Solar Wind Dispersion free spec GP not yet implemented"
-            )
+            _replace_component(model, sw_comp, validate=False)
         elif f"{psr_name}_sw_gp_log10_sigma_ridge" in sw_pars:
             log.info("Including Time Domain Ridge SW Noise for this pulsar")
             sw_comp = pm.TimeDomainSWNoise()
-            sw_comp.TDSWKERNEL.value = "ridge"
+            sw_comp.TDSWKERNEL.value = "RIDGE"
             sw_comp.TDSWLOGSIG.quantity = noise_dict[
                 f"{psr_name}_sw_gp_log10_sigma_ridge"
             ]
             sw_comp.TDSWLOGSIG.frozen = True
-            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "ridge")
-            model.add_component(sw_comp, validate=False, force=True)
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "RIDGE")
+            _replace_component(model, sw_comp, validate=False)
         elif f"{psr_name}_sw_gp_log10_sigma_sq_exp" in sw_pars:
             log.info(
                 "Including Time Domain Square-Exponential SW Noise for this pulsar"
             )
             sw_comp = pm.TimeDomainSWNoise()
-            sw_comp.TDSWKERNEL.value = "sqexp"
+            sw_comp.TDSWKERNEL.value = "SQEXP"
             sw_comp.TDSWLOGSIG.quantity = noise_dict[
                 f"{psr_name}_sw_gp_log10_sigma_sq_exp"
             ]
             sw_comp.TDSWLOGSIG.frozen = True
             sw_comp.TDSWLOGELL.quantity = noise_dict[f"{psr_name}_sw_gp_log10_ell"]
             sw_comp.TDSWLOGELL.frozen = True
-            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "sqexp")
-            model.add_component(sw_comp, validate=False, force=True)
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "SQEXP")
+            _replace_component(model, sw_comp, validate=False)
         elif f"{psr_name}_sw_gp_log10_sigma_quasi_periodic" in sw_pars:
             log.info("Including Time Domain Quasi-Periodic SW Noise for this pulsar")
             sw_comp = pm.TimeDomainSWNoise()
-            sw_comp.TDSWKERNEL.value = "quasi_periodic"
+            sw_comp.TDSWKERNEL.value = "QUASI_PERIODIC"
             sw_comp.TDSWLOGSIG.quantity = noise_dict[
                 f"{psr_name}_sw_gp_log10_sigma_quasi_periodic"
             ]
@@ -1327,12 +1428,12 @@ def add_noise_to_model(
             sw_comp.TDSWLOGGAMP.frozen = True
             sw_comp.TDSWLOGP.quantity = noise_dict[f"{psr_name}_sw_gp_log10_p"]
             sw_comp.TDSWLOGP.frozen = True
-            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "quasi_periodic")
-            model.add_component(sw_comp, validate=False, force=True)
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "QUASI_PERIODIC")
+            _replace_component(model, sw_comp, validate=False)
         elif f"{psr_name}_sw_gp_log10_sigma_matern" in sw_pars:
             log.info("Including Time Domain Matern SW Noise for this pulsar")
             sw_comp = pm.TimeDomainSWNoise()
-            sw_comp.TDSWKERNEL.value = "matern"
+            sw_comp.TDSWKERNEL.value = "MATERN"
             sw_comp.TDSWLOGSIG.quantity = noise_dict[
                 f"{psr_name}_sw_gp_log10_sigma_matern"
             ]
@@ -1341,8 +1442,8 @@ def add_noise_to_model(
             sw_comp.TDSWLOGELL.frozen = True
             sw_comp.TDSWNU.quantity = sw_kwargs.get("nu", 1.5)
             sw_comp.TDSWNU.frozen = True
-            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "matern")
-            model.add_component(sw_comp, validate=False, force=True)
+            _apply_tdsw_interp_settings(sw_comp, sw_kwargs, "MATERN")
+            _replace_component(model, sw_comp, validate=False)
         else:
             log.warning(
                 "Solar wind parameters not recognized. Check parameter names and ensure match standard noise conventions."
@@ -1904,9 +2005,10 @@ def generate_gp_realizations(
             interp_dt = sw_block.get("interp_dt", 30.0)
             interp_kind = sw_block.get("interp_kind", "linear")
             if basis_nodes is None:
+                # matches discovery_utils.solar_wind_noise_block and PINT's TDSWDT grid
                 basis_nodes = np.arange(
                     e_psr.toas.min() / 86400,
-                    e_psr.toas.max() / 86400,
+                    e_psr.toas.max() / 86400 + interp_dt,
                     interp_dt,
                 )
             _, nodes = custom_blocked_interpolation_basis(

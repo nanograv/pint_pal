@@ -16,76 +16,15 @@ import glob
 import pint
 import astropy
 # import enterprise_extensions as e_e # NOTE - enterprise_extensions has no attribute __version__
-from pint_pal.ftester import get_fblist, param_check, summarize_Ftest
+from pint_pal.ftester import get_fblist, param_check, summarize_Ftest, report_ptest
 import scipy.stats
 import copy
 
 ALPHA = 0.0027
 
-# def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
-#     """
-#     Function to whiten residuals. If no reddened residuals, input will be returned.
-
-#     Inputs:
-#     ---------
-#     fitter [object, dictionary]: PINT fitter class or dictionary output from ecorr_average() function.
-#     restype ['string']: Type of residuals, pre or post fit, to plot from fitter object. Options are:
-#         'prefit' - plot the prefit residuals.
-#         'postfit' - plot the postfit residuals (default)
-#     zero_mean [bool]: default - False. whether or not to subtract off the mean after whitening.
-
-#     Returns:
-#     ---------
-#     wres [array]: Array of whitened timing residuals.
-#     """
-#     # Check if input is the epoch averaged dictionary, should only be used if epoch averaged NB TOAs
-#     if type(fitter) is dict:
-#         rs = fitter['time_resids']
-#         noise_rs = fitter['noise_resids']
-#         # Now check if red noise residuals
-#         wres = rs.copy()
-#         for ky in list(noise_rs.keys()):
-#             log.info(f"Subtracting {ky} noise resids from time resids for whitening")
-#             wres -= noise_rs[ky]
-#         if np.all(wres == rs):
-#             log.warning("No red noise, residuals already white. Returning input residuals...")
-#     # if not assume it's a PINT fitter class object
-#     else:
-#         # Check if WB or NB
-#         if fitter.is_wideband:
-#             if restype == 'postfit':
-#                 time_resids = fitter.resids.residual_objs['toa'].time_resids
-#                 noise_resids = fitter.resids.toa.noise_resids
-#             else:
-#                 time_resids = fitter.resids_init.residual_objs['toa'].time_resids
-#                 noise_resids = fitter.resids_init.toa.noise_resids
-#         else:
-#             if restype == 'postfit':
-#                 time_resids = fitter.resids.time_resids
-#                 noise_resids = fitter.resids.noise_resids
-#             elif restype == 'prefit':
-#                 time_resids = fitter.resids_init.time_resids
-#                 noise_resids = fitter.resids_init.noise_resids
-#             else:
-#                 raise ValueError("Unrecognized residual type: %s. Please choose from 'prefit' or 'postfit'."%(restype))
-#             # Get number of residuals
-#         num_res = len(time_resids)
-#         # Check that the key is in the dictionary
-#         wres = time_resids.copy() # need to make a copy
-#         for ky in list(noise_resids.keys()):
-#             log.info(f"Subtracting {ky} noise resids from time resids for whitening")
-#             wres -= noise_resids[ky][:num_res]
-#         if np.all(time_resids == wres):
-#             log.warning("No red noise, residuals already white. Returning input residuals...")
-#     if zero_mean is True:
-#         wres = wres - np.mean(wres)
-#     return wres
-
-
 def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
     """
     Function to whiten residuals. If no reddened residuals, input will be returned.
-    Wrapper around the pint.residuals utility which preserved the dummy kwargs for backwards compatibility.
 
     Inputs:
     ---------
@@ -100,8 +39,69 @@ def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
     wres [array]: Array of whitened timing residuals.
     """
     # Check if input is the epoch averaged dictionary, should only be used if epoch averaged NB TOAs
+    if type(fitter) is dict:
+        rs = fitter['time_resids']
+        noise_rs = fitter['noise_resids']
+        # Now check if red noise residuals
+        wres = rs.copy()
+        for ky in list(noise_rs.keys()):
+            log.info(f"Subtracting {ky} noise resids from time resids for whitening")
+            wres -= noise_rs[ky]
+        if np.all(wres == rs):
+            log.warning("No red noise, residuals already white. Returning input residuals...")
+    # if not assume it's a PINT fitter class object
+    else:
+        # Check if WB or NB
+        if fitter.is_wideband:
+            if restype == 'postfit':
+                time_resids = fitter.resids.residual_objs['toa'].time_resids
+                noise_resids = fitter.resids.toa.noise_resids
+            else:
+                time_resids = fitter.resids_init.residual_objs['toa'].time_resids
+                noise_resids = fitter.resids_init.toa.noise_resids
+        else:
+            if restype == 'postfit':
+                time_resids = fitter.resids.time_resids
+                noise_resids = fitter.resids.noise_resids
+            elif restype == 'prefit':
+                time_resids = fitter.resids_init.time_resids
+                noise_resids = fitter.resids_init.noise_resids
+            else:
+                raise ValueError("Unrecognized residual type: %s. Please choose from 'prefit' or 'postfit'."%(restype))
+            # Get number of residuals
+        num_res = len(time_resids)
+        # Check that the key is in the dictionary
+        wres = time_resids.copy() # need to make a copy
+        for ky in list(noise_resids.keys()):
+            log.info(f"Subtracting {ky} noise resids from time resids for whitening")
+            wres -= noise_resids[ky][:num_res]
+        if np.all(time_resids == wres):
+            log.warning("No red noise, residuals already white. Returning input residuals...")
+    if zero_mean is True:
+        wres = wres - np.mean(wres)
+    return wres
 
-    return fitter.resids.calc_whitened_resids()*1e-6*u.s
+
+# def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
+#     """
+#     Function to whiten residuals. If no reddened residuals, input will be returned.
+#     Wrapper around the pint.residuals utility which preserved the dummy kwargs for backwards compatibility.
+
+#     Inputs:
+#     ---------
+#     fitter [object, dictionary]: PINT fitter class or dictionary output from ecorr_average() function.
+#     restype ['string']: Type of residuals, pre or post fit, to plot from fitter object. Options are:
+#         'prefit' - plot the prefit residuals.
+#         'postfit' - plot the postfit residuals (default)
+#     zero_mean [bool]: default - False. whether or not to subtract off the mean after whitening.
+
+#     Returns:
+#     ---------
+#     wres [array]: Array of whitened timing residuals.
+#     """
+#     # Check if input is the epoch averaged dictionary, should only be used if epoch averaged NB TOAs
+
+#     return fitter.resids.calc_whitened_resids()*1e-6*u.s
 
 
 def rms_by_backend(resids, errors, rcvr_backends, dm = False):
@@ -298,52 +298,6 @@ def year(mjd):
     year [float]: MJD value converted to a year.
     """
     return (mjd - 51544.0)/365.25 + 2000.0
-
-
-def report_ptest(label, ftest_dict = None, alpha=ALPHA):
-    """
-    Nicely prints the results of F-tests in a human-readable format.
-    
-    Input:
-    --------
-    label [string]: Name of the parameter(s) that were added/removed for the F-test.
-    ftest_dict [dictionary]: Dictionary of output values from the PINT `ftest()` function. If `None`, will
-        print a line of NaNs for each reported value.
-    alpha [float]: Value to compare for F-statistic significance. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model.
-    """
-    # If F-test fails, print line of NaNs
-    if ftest_dict == None:
-        line = "%42s %7.3f %9.2f %5f %.3f" % (label, np.nan, np.nan, np.nan, np.nan)
-    # Else print the computed values
-    else:
-        # Get values from input dictionary
-        rms = ftest_dict['resid_wrms_test'].value # weighted root mean square of timing residuals
-        chi2 = ftest_dict['chi2_test'] # chi-squared value of the fit of the F-tested model
-        ndof = ftest_dict['dof_test'] # number of degrees of freedom in the F-tested model
-        if "dm_resid_wrms_test" in ftest_dict.keys():
-            dmrms = ftest_dict['dm_resid_wrms_test'].value # weighted root mean square of DM residuals
-        else:
-            dmrms = None
-        Fstatistic=  ftest_dict['ft'] # F-statistic from the F-test comparison
-        if Fstatistic is None:
-            if dmrms != None:
-                line = "%42s %7.3f %16.6f %9.2f %5d --" % (label, rms, dmrms, chi2, ndof)
-            else:
-                line = "%42s %7.3f %9.2f %5d --" % (label, rms, chi2, ndof)
-        elif Fstatistic:
-            if dmrms != None:
-                line = "%42s %7.3f %16.6f %9.2f %5d %.3g" % (label, rms, dmrms, chi2, ndof, Fstatistic)
-            else:
-                line = "%42s %7.3f %9.2f %5d %.3g" % (label, rms, chi2, ndof, Fstatistic)
-            if Fstatistic < alpha:
-                line += " ***"
-        else:
-            if dmrms != None:
-                line = "%42s %7.3f %16.6f %9.2f %5d xxx" % (label, rms, dmrms, chi2, ndof)
-            else:
-                line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
-    return line
 
 
 def get_Ftest_lines(Ftest_dict, fitter, alpha = ALPHA):
@@ -978,7 +932,7 @@ def pdf_writer(fitter,
             fsum.write(l + '\n')
         fsum.write(r'\end{verbatim}' + '\n')
         # Write a summary of the F-test results and suggestions
-        add_statement, remove_statement = summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA)
+        add_statement, remove_statement = summarize_Ftest(Ftest_dict, fitter, tc) # use default alphas
         fsum.write(add_statement + "\n")
         fsum.write(remove_statement + "\n")
 

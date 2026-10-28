@@ -5360,7 +5360,7 @@ def _gp_time_domain(payload, gp_key, realization_idx=None):
 _TM_PARAMS_FOR_CATEGORY = {
     'red_noise': ['F0', 'F1', 'F2'],
     'dm_gp':     ['DM', 'DM1', 'DM2', 'DM3'],
-    'sw':        ['NE_SW', 'NE1', 'SWPRBETA1', 'sw_proxy_beta'],
+    'sw':        ['NE_SW', 'NE1', 'SWPRBETA1', 'SWPRBETA0'],
     'chrom':     ['CM', 'CM1', 'CM2'],        # we don't often use these but they could be included in principle
 }
 
@@ -5600,7 +5600,7 @@ def get_tm_delays(payload, psr_name=None):
 
 
 def _extract_ne_sw_reference(model):
-    """Extract the reference NE_SW value from a PINT timing model.
+    r"""Extract the reference NE_SW value from a PINT timing model.
 
     Parameters
     ----------
