@@ -16,7 +16,7 @@ import glob
 import pint
 import astropy
 # import enterprise_extensions as e_e # NOTE - enterprise_extensions has no attribute __version__
-from pint_pal.ftester import get_fblist, param_check, summarize_Ftest
+from pint_pal.ftester import get_fblist, param_check, summarize_Ftest, report_ptest
 import scipy.stats
 import copy
 
@@ -298,52 +298,6 @@ def year(mjd):
     year [float]: MJD value converted to a year.
     """
     return (mjd - 51544.0)/365.25 + 2000.0
-
-
-def report_ptest(label, ftest_dict = None, alpha=ALPHA):
-    """
-    Nicely prints the results of F-tests in a human-readable format.
-    
-    Input:
-    --------
-    label [string]: Name of the parameter(s) that were added/removed for the F-test.
-    ftest_dict [dictionary]: Dictionary of output values from the PINT `ftest()` function. If `None`, will
-        print a line of NaNs for each reported value.
-    alpha [float]: Value to compare for F-statistic significance. If the F-statistic is lower than alpha, 
-        the timing model parameters are deemed statistically significant to the timing model.
-    """
-    # If F-test fails, print line of NaNs
-    if ftest_dict == None:
-        line = "%42s %7.3f %9.2f %5f %.3f" % (label, np.nan, np.nan, np.nan, np.nan)
-    # Else print the computed values
-    else:
-        # Get values from input dictionary
-        rms = ftest_dict['resid_wrms_test'].value # weighted root mean square of timing residuals
-        chi2 = ftest_dict['chi2_test'] # chi-squared value of the fit of the F-tested model
-        ndof = ftest_dict['dof_test'] # number of degrees of freedom in the F-tested model
-        if "dm_resid_wrms_test" in ftest_dict.keys():
-            dmrms = ftest_dict['dm_resid_wrms_test'].value # weighted root mean square of DM residuals
-        else:
-            dmrms = None
-        Fstatistic=  ftest_dict['ft'] # F-statistic from the F-test comparison
-        if Fstatistic is None:
-            if dmrms != None:
-                line = "%42s %7.3f %16.6f %9.2f %5d --" % (label, rms, dmrms, chi2, ndof)
-            else:
-                line = "%42s %7.3f %9.2f %5d --" % (label, rms, chi2, ndof)
-        elif Fstatistic:
-            if dmrms != None:
-                line = "%42s %7.3f %16.6f %9.2f %5d %.3g" % (label, rms, dmrms, chi2, ndof, Fstatistic)
-            else:
-                line = "%42s %7.3f %9.2f %5d %.3g" % (label, rms, chi2, ndof, Fstatistic)
-            if Fstatistic < alpha:
-                line += " ***"
-        else:
-            if dmrms != None:
-                line = "%42s %7.3f %16.6f %9.2f %5d xxx" % (label, rms, dmrms, chi2, ndof)
-            else:
-                line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
-    return line
 
 
 def get_Ftest_lines(Ftest_dict, fitter, alpha = ALPHA):
@@ -977,7 +931,7 @@ def pdf_writer(fitter,
             fsum.write(l + '\n')
         fsum.write(r'\end{verbatim}' + '\n')
         # Write a summary of the F-test results and suggestions
-        add_statement, remove_statement = summarize_Ftest(Ftest_dict, fitter, alpha = ALPHA)
+        add_statement, remove_statement = summarize_Ftest(Ftest_dict, fitter, tc) # use default alphas
         fsum.write(add_statement + "\n")
         fsum.write(remove_statement + "\n")
 

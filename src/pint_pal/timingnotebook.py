@@ -353,7 +353,7 @@ class TimingNotebook:
         try:
             log.remove()
             log.add(sys.stderr, level="WARNING")
-            Ftest_dict = run_Ftests(fo, alpha = 0.0027)
+            Ftest_dict = run_Ftests(fo, tc, alpha = 0.0027)
         finally:
             log.remove()
             log.add(sys.stderr, level=LOG_LEVEL)\
