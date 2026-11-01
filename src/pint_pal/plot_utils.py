@@ -8,6 +8,7 @@ Code since butchered by many timers.
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
+import math
 from loguru import logger as log
 import astropy.units as u
 import yaml
@@ -16,6 +17,7 @@ import pint.toa as toa
 import pint.models as model
 import pint.fitter as fitter
 import pint.utils as pu
+from pint import DMconst
 import subprocess
 
 from pint_pal.utils import *
@@ -5171,11 +5173,9 @@ def rn_sub(testing, rn_subtract, fo_nb, fo_wb):
 # GP realization plotting helpers
 # ---------------------------------------------------------------------------
 
-# DM constant: 1 / (2.41e-16) in the conventional DMconst = 4.148808e3
 # to convert DM (pc cm^-3) to time delay (s) at freq MHz:
 #   dt = DM * DMconst / freq_MHz^2   [seconds]
-_DMCONST_MHZ2_S = 4.148808e3  # MHz^2 s pc^-1 cm^3
-_DM_K = 2.41e-16  # s MHz^2 pc^-1 cm^3  (Discovery convention)
+_DMCONST_MHZ2_S = DMconst.to_value(u.MHz**2 * u.s * u.cm**3 / u.pc)
 
 # Pretty-print labels for known GP components
 _GP_LABELS = {
@@ -5360,7 +5360,7 @@ def _gp_time_domain(payload, gp_key, realization_idx=None):
 _TM_PARAMS_FOR_CATEGORY = {
     'red_noise': ['F0', 'F1', 'F2'],
     'dm_gp':     ['DM', 'DM1', 'DM2', 'DM3'],
-    'sw':        ['NE_SW', 'NE1', 'SWPRBETA1', 'SWPRBETA0'],
+    'sw':        ['NE_SW', 'NE_SW1', 'NE_SW2', 'NE1', 'SWPRBETA1', 'SWPRBETA2'],
     'chrom':     ['CM', 'CM1', 'CM2'],        # we don't often use these but they could be included in principle
 }
 
@@ -5423,7 +5423,10 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
         ref_delay = ref_value * Mmat[toa, column]
                   = ref_value * d(delay)/d(param)
     This gives the time-delay contribution of the reference value at each TOA,
-    which is then broadcasted across all realizations.
+    which is then broadcasted across all realizations.  For ``'dm_gp'`` the
+    delay is instead built as ``ref_value * d(DM)/d(param) * DMconst / f^2``,
+    so that it converts back to DM exactly (``Mmat`` DM columns carry the
+    binary Doppler factor from PINT's chain rule).
 
     Note that the saved ``F_columns`` are *not* ``Mmat``: Discovery's
     ``makegp_timing`` stores a column-normalized basis,
@@ -5446,7 +5449,8 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
         If True and model is provided, add reference parameter values
         (converted to time delays) to the fitted perturbations. Default False.
         Reference values are never added for the 'sw' category (handled
-        separately in plot_gp_sw_ne).
+        separately in plot_gp_sw_ne) or the 'red_noise' category
+        (F0 * d(delay)/d(F0) is not a meaningful delay).
 
     Returns
     -------
@@ -5506,21 +5510,20 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
     c_sub = coeffs_tm[:, col_idx]       # (n_real, n_sel)
     tm_signal = c_sub @ F_sub.T         # (n_real, n_toas)
 
-    # Add reference contributions if requested, model provided, and category is not 'sw'.
-    # Each parameter's reference value is converted to a time delay by multiplying
-    # by the corresponding *raw* design matrix column:
+    # Add reference contributions if requested, model provided, and category is
+    # not 'sw' or 'red_noise'.  Each parameter's reference value is converted to
+    # a time delay by multiplying by the corresponding *raw* design matrix column:
     #   ref_delay[toa] = ref_value * F_tm[toa, col] * norm[col]
     #                  = ref_value * Mmat[toa, col]
     #                  = ref_value * d(delay)/d(param)  (units: seconds)
     # The norm factor undoes the column normalization applied by makegp_timing;
     # without it the reference contribution is too large by 1 / ||Mmat[:, col]||,
     # which scales as 1 / sqrt(n_toas) and so varies with the dataset.
-    # This works for all categories:
-    #   - red_noise (F0, F1, F2): delay = dfreq * d(delay)/d(freq)
-    #   - dm_gp (DM, DM1, DM2): delay = DM * d(delay)/d(DM)
+    #   - dm_gp (DM, DM1, DM2): see below, built from d(DM)/d(param)
     #   - chrom (CM, CM1, CM2): delay = CM * d(delay)/d(CM)
     #   (SW handled separately in plot_gp_sw_ne, not here)
-    if include_reference_values and model is not None and gp_category != 'sw':
+    if (include_reference_values and model is not None
+            and gp_category not in ('sw', 'red_noise')):
         norms = payload.get('tm_column_norms')
         if norms is None:
             log.warning(
@@ -5538,14 +5541,27 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
             )
         else:
             norms = np.asarray(norms)
+            F_raw = F_tm * norms[np.newaxis, :]   # raw design matrix Mmat
             ref_vals = _extract_tm_reference_values(model, gp_category)
+            freqs = np.asarray(payload['freqs_mhz'])
+            dm_col = fitpars.index('DM') if 'DM' in fitpars[:n_cols] else None
             for pname, col_i in zip(used_names, col_idx):
-                if pname in ref_vals:
+                if pname not in ref_vals:
+                    continue
+                if gp_category == 'dm_gp':
+                    if dm_col is not None:
+                        d_dm = F_raw[:, col_i] / F_raw[:, dm_col]
+                    else:
+                        order = 0 if pname == 'DM' else int(pname[2:])
+                        dt_yr = (np.asarray(payload['toas_mjd'])
+                                 - float(model.DMEPOCH.value)) / 365.25
+                        d_dm = dt_yr**order / math.factorial(order)
+                    ref_delay = ref_vals[pname] * d_dm * _DMCONST_MHZ2_S / freqs**2
+                else:
                     # Raw design matrix column: d(delay)/d(param) at each TOA
-                    # Multiply by reference value to get reference delay contribution
-                    ref_delay = ref_vals[pname] * F_tm[:, col_i] * norms[col_i]
-                    # Broadcast to all realizations and add
-                    tm_signal = tm_signal + ref_delay[np.newaxis, :]
+                    ref_delay = ref_vals[pname] * F_raw[:, col_i]
+                # Broadcast to all realizations and add
+                tm_signal = tm_signal + ref_delay[np.newaxis, :]
 
     return tm_signal, used_names
 
@@ -5885,8 +5901,10 @@ def plot_gp_realization(
     # Whether a total quantity is actually being shown.  Asking for reference
     # values is not enough — the TM contribution has to have been found (it is
     # absent from tm_marg=True payloads), and a zero-mean plot is a deviation
-    # regardless of mode.
-    _showing_total = bool(tm_names_used) and include_tm_values and not zero_mean
+    # regardless of mode.  Reference values are never added for SW / red noise.
+    _added_values = (bool(tm_names_used) and include_tm_values
+                     and category not in ('sw', 'red_noise'))
+    _showing_total = _added_values and not zero_mean
 
     # Update ylabel to reflect which mode we are in:
     #   mode 2 (pert only): y-label stays as Δ… (no change)
@@ -5931,10 +5949,10 @@ def plot_gp_realization(
         # Append a mode suffix to clearly communicate what is being shown:
         #   mode 2 (pert only): append " + ΔTM" to indicate TM perturbations included
         #   mode 3 (total):     append " (total)" to indicate reference values included
-        if tm_names_used and not include_tm_values:
-            lbl += r' + $\Delta$TM'
-        elif tm_names_used and include_tm_values:
+        if _added_values:
             lbl += ' (total)'
+        elif tm_names_used:
+            lbl += r' + $\Delta$TM'
         ax.plot(tplot, median, color=color, lw=1.5, label=lbl)
 
     # Individual realizations
@@ -5973,7 +5991,7 @@ def plot_gp_realization(
 
     if title is None:
         pretty_name, _ = _classify_gp(gp_key, psr_name)
-        if tm_names_used and include_tm_values:
+        if _added_values:
             _mode_str = 'GP + TM total'
         elif tm_names_used:
             _mode_str = 'GP + $\\Delta$TM'
