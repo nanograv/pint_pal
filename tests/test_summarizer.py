@@ -30,7 +30,7 @@ def TestSummarizer(request):
     toas = toa.get_TOAs(timfile)
 
     fitter = DownhillGLSFitter(toas, model)
-    s = Summarizer(fitter, parfile, autorun=False)
+    s = Summarizer(fitter, parfile)
     return s
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
