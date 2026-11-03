@@ -1,4 +1,3 @@
-from collections import OrderedDict
 import textwrap
 import subprocess
 
@@ -68,7 +67,7 @@ class MarkdownSection:
 
 
 class MarkdownReport:
-    def __init__(self, title: str = "", sections: OrderedDict | dict | None = None, font_size: int = 10):
+    def __init__(self, title: str = "", sections: dict | None = None, font_size: int = 10):
         """
         Initialization for the MarkdownReport
 
@@ -76,13 +75,13 @@ class MarkdownReport:
         ----------
         title : str
             Name of the report.
-        sections : OrderedDict | dict | None, default=None
-            Sections provided to the MarkdownReport. Does not take MarkdownSection values. If None, an empty OrderedDict is created.
+        sections : dict | None, default=None
+            Sections provided to the MarkdownReport. Does not take MarkdownSection values. If None, an empty dictionary is created.
         font_size : int
             Size to render text at.
         """
         self.title = title
-        self.sections = OrderedDict() if sections is None else sections
+        self.sections = dict() if sections is None else sections
         self.current_section = None if sections is None else next(reversed(sections)).title
 
         self.header = textwrap.dedent(
