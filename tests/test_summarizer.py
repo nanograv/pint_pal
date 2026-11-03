@@ -20,7 +20,7 @@ logger.remove()
 logger.add(sys.stderr, level="ERROR") # do not show PINT warnings here to avoid clutter
 
 @pytest.fixture(params=['B1855+09', 'J1024-0719'])
-def TestSummarizer(request):
+def summarizer(request):
     psr = request.param
     parent = Path(__file__).parent
     parfile = str(parent / f"par/{psr}_NANOGrav_12yv4.gls.par")
@@ -34,19 +34,16 @@ def TestSummarizer(request):
     return s
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_init(TestSummarizer):
-    summarizer = TestSummarizer
+def test_init(summarizer):
     assert summarizer.fitter.model.PSR.value == summarizer.psr # by construction
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_check_error(TestSummarizer):
-    summarizer = TestSummarizer
+def test_check_error(summarizer):
     pass
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_check_error_formatting(TestSummarizer):
-    summarizer = TestSummarizer
+def test_check_error_formatting(summarizer):
     # no error: text unchanged
     assert summarizer.check_error("1.0", True, "Bad value", "anchor_ok") == "1.0"
     # error with a new anchor: bold red text inside an anchor, no background
@@ -63,30 +60,26 @@ def test_check_error_formatting(TestSummarizer):
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_generate_timing_model_comparison(TestSummarizer):
-    summarizer = TestSummarizer
+def test_generate_timing_model_comparison(summarizer):
     pass
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_generate_residual_stats(TestSummarizer):
-    summarizer = TestSummarizer
+def test_generate_residual_stats(summarizer):
     summarizer.generate_residual_stats()
     text = summarizer.report.generate()
     assert "Statistic" in text
     assert "Reduced" in text
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_generate_fit_convergence_check(TestSummarizer):
-    summarizer = TestSummarizer
+def test_generate_fit_convergence_check(summarizer):
     summarizer.generate_fit_convergence_check()
     text = summarizer.report.generate()
     assert "χ2" in text
     assert "Largest parameter change" in text
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_generate_error_parameters_check(TestSummarizer):
-    summarizer = TestSummarizer
+def test_generate_error_parameters_check(summarizer):
     summarizer.generate_error_parameters_check()
     text = summarizer.report.generate()
     assert "EFAC" in text
@@ -94,13 +87,7 @@ def test_generate_error_parameters_check(TestSummarizer):
     assert "Chains" in text
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_generate_timing_model_comparison(TestSummarizer):
-    summarizer = TestSummarizer
-    pass
-
-@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_generate_summary_info(TestSummarizer):
-    summarizer = TestSummarizer
+def test_generate_summary_info(summarizer):
     summarizer.generate_summary_info()
     text = summarizer.report.generate()
     assert "GMT" in text
@@ -108,16 +95,14 @@ def test_generate_summary_info(TestSummarizer):
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_generate_software_versions(TestSummarizer):
-    summarizer = TestSummarizer
+def test_generate_software_versions(summarizer):
     summarizer.generate_software_versions()
     text = summarizer.report.generate()
     assert "astropy" in text
     assert "enterprise" in text
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_add_summary_plots(TestSummarizer):
-    summarizer = TestSummarizer
+def test_add_summary_plots(summarizer):
     summarizer.add_summary_plots()
     text = summarizer.report.generate()
     for i in range(1, 5):
@@ -125,8 +110,7 @@ def test_add_summary_plots(TestSummarizer):
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
-def test_output_pdf(TestSummarizer):
-    summarizer = TestSummarizer
+def test_output_pdf(summarizer):
     pass
         
 
