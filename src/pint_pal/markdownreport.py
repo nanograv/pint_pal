@@ -64,7 +64,7 @@ class MarkdownReport:
         """
         self.title = title
         self.sections = dict() if sections is None else sections
-        self.current_section_title = None if sections is None else next(reversed(sections)) #keys
+        self.current_section_title = next(reversed(self.sections)) if self.sections else None #keys
 
         self.header = textwrap.dedent(
             """

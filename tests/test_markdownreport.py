@@ -5,7 +5,6 @@ Starting with generation using Claude, significant modification thereafter
 """
 
 import pytest
-from collections import OrderedDict
 from unittest.mock import patch
 from pint_pal.markdownreport import MarkdownSection, MarkdownReport, color_text
 
@@ -95,12 +94,12 @@ class TestMarkdownReport:
         """Test initialization"""
         report = MarkdownReport(title="Test Report", font_size=12)
         assert report.title == "Test Report"
-        assert isinstance(report.sections, OrderedDict)
+        assert isinstance(report.sections, dict)
         assert len(report.sections) == 0
         assert report.current_section_title is None
         assert "font-size: 12pt" in report.header
 
-        sections = OrderedDict()
+        sections = dict()
         sections["Test Section"] = MarkdownSection(title="Test Section")
         report = MarkdownReport(sections=sections)
         assert len(report.sections) == 1
@@ -181,6 +180,119 @@ class TestMarkdownReport:
         # Should not raise an error
         report.delete_section_by_title("Nonexistent")
 
+    def test_init_with_sections(self):
+        """Test that the current section is the last of the provided sections"""
+        sections = {
+            "Intro": MarkdownSection(title="Intro"),
+            "software versions used": MarkdownSection(title="software versions used"),
+        }
+        report = MarkdownReport(sections=sections)
+
+        assert isinstance(report.current_section_title, str)
+        assert report.current_section_title == "software versions used"  # not title-cased
+
+    def test_init_with_sections_then_write(self):
+        """Test that writing after constructing with sections goes to the last section"""
+        report = MarkdownReport(sections={"Intro": MarkdownSection(title="Intro")})
+        report.write("Hello")
+
+        assert report.get_section("Intro").content == ["Hello"]
+
+    def test_init_with_empty_sections(self):
+        """Test that an empty dict of sections gives no current section"""
+        report = MarkdownReport(sections={})
+
+        assert report.current_section_title is None
+
+    def test_delete_current_section_keeps_title_unchanged(self):
+        """Test that the new current title is exactly the existing key, even if not title-cased"""
+        report = MarkdownReport()
+        report.add_section_by_title("Errors")
+        report.add_section_by_title("Software versions used in timing analysis")
+        report.add_section_by_title("Plots")
+
+        report.delete_section_by_title("Plots")
+
+        assert isinstance(report.current_section_title, str)
+        assert report.current_section_title == "Software versions used in timing analysis"
+
+    def test_write_after_deleting_current_section(self):
+        """Test that writing after deleting the current section goes to the new current section"""
+        report = MarkdownReport()
+        report.add_section_by_title("Errors")
+        report.add_section_by_title("Software versions used in timing analysis")
+        report.add_section_by_title("Plots")
+        report.delete_section_by_title("Plots")
+
+        report.write("Hello")
+
+        assert report.get_section("Software versions used in timing analysis").content == ["Hello"]
+        assert "Hello" in report.generate()
+
+    def test_delete_other_section_keeps_current(self):
+        """Test that deleting a section that is not current leaves the current section alone"""
+        report = MarkdownReport()
+        report.add_section_by_title("Errors")
+        report.add_section_by_title("Plots")
+
+        report.delete_section_by_title("Errors")
+
+        assert report.current_section_title == "Plots"
+
+    def test_add_section(self):
+        """Test that the section is stored as given, with its content and spacing"""
+        report = MarkdownReport()
+        section = MarkdownSection(title="Intro", content=["Item 1", "Item 2"], remove_spacing=True)
+
+        report.add_section(section)
+
+        assert report.get_section("Intro") is section
+        assert report.get_section("Intro").content == ["Item 1", "Item 2"]
+        assert report.get_section("Intro").remove_spacing is True
+        assert report.current_section_title == "Intro"
+
+    def test_add_section_set_current_false(self):
+        """Test that set_current=False leaves the current section alone"""
+        report = MarkdownReport()
+        report.add_section_by_title("Section 1")
+
+        report.add_section(MarkdownSection(title="Section 2"), set_current=False)
+
+        assert "Section 2" in report.sections
+        assert report.current_section_title == "Section 1"
+
+    def test_add_section_duplicate(self):
+        """Test that adding a section with an existing title raises an error and changes nothing"""
+        report = MarkdownReport()
+        original = MarkdownSection(title="Intro", content=["Original"])
+        report.add_section(original)
+
+        with pytest.raises(KeyError):
+            report.add_section(MarkdownSection(title="Intro", content=["Other"]))
+
+        assert report.get_section("Intro") is original
+        assert report.get_section("Intro").content == ["Original"]
+
+    def test_add_section_then_write(self):
+        """Test that writing after add_section appends to the added section"""
+        report = MarkdownReport()
+        report.add_section(MarkdownSection(title="Intro", content=["Item 1"]))
+
+        report.write("Item 2")
+
+        assert report.get_section("Intro").content == ["Item 1", "Item 2"]
+
+    def test_add_section_generate_order(self):
+        """Test that sections added either way appear in the order added, with content"""
+        report = MarkdownReport()
+        report.add_section_by_title("First")
+        report.write("one")
+        report.add_section(MarkdownSection(title="Second", content=["two"]))
+
+        output = report.generate()
+
+        assert output.index("## First") < output.index("one") < output.index("## Second") < output.index("two")
+        
     def test_write_to_current_section(self):
         """Test writing to the current section"""
         report = MarkdownReport()
