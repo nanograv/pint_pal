@@ -97,7 +97,7 @@ class TestMarkdownReport:
         assert report.title == "Test Report"
         assert isinstance(report.sections, OrderedDict)
         assert len(report.sections) == 0
-        assert report.current_section is None
+        assert report.current_section_title is None
         assert "font-size: 12pt" in report.header
 
         sections = OrderedDict()
@@ -128,11 +128,11 @@ class TestMarkdownReport:
         report.add_section_by_title("Section 1")
 
         assert "Section 1" in report.sections
-        assert report.current_section == "Section 1"
+        assert report.current_section_title == "Section 1"
         assert isinstance(report.sections["Section 1"], MarkdownSection)
 
         report.add_section_by_title("Section 2", set_current=False, remove_spacing=True)
-        assert report.current_section == "Section 1"
+        assert report.current_section_title == "Section 1"
         assert "Section 2" in report.sections
 
 
@@ -163,7 +163,7 @@ class TestMarkdownReport:
 
         report.delete_section_by_title("Section 2")
 
-        assert report.current_section == "Section 1"
+        assert report.current_section_title == "Section 1"
 
     def test_delete_last_section_sets_current_to_none(self):
         """Test that deleting the last section sets current_section to None"""
@@ -172,7 +172,7 @@ class TestMarkdownReport:
 
         report.delete_section_by_title("Section 1")
 
-        assert report.current_section is None
+        assert report.current_section_title is None
         assert len(report.sections) == 0
 
     def test_delete_nonexistent_section(self):

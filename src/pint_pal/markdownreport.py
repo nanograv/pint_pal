@@ -82,7 +82,7 @@ class MarkdownReport:
         """
         self.title = title
         self.sections = dict() if sections is None else sections
-        self.current_section = None if sections is None else next(reversed(sections)).title
+        self.current_section_title = None if sections is None else next(reversed(sections)).title
 
         self.header = textwrap.dedent(
             """
@@ -165,7 +165,7 @@ class MarkdownReport:
 
         self.sections[section_title] = MarkdownSection(title=section_title, remove_spacing=remove_spacing)
         if set_current:
-            self.current_section = section_title
+            self.current_section_title = section_title
 
         return
 
@@ -182,11 +182,11 @@ class MarkdownReport:
             # Do not raise an error, just continue
             return
         del self.sections[section_title]
-        if self.current_section == section_title:
+        if self.current_section_title == section_title:
             if len(self.sections) > 0:
-                self.current_section = next(reversed(self.sections)).title()
+                self.current_section_title = next(reversed(self.sections)).title()
             else:
-                self.current_section = None
+                self.current_section_title = None
 
     def write(self, content: str, section_title: str | None = None) -> None:
         """
@@ -200,7 +200,7 @@ class MarkdownReport:
             If provided, write to a given section. If None is provided, write to the current section.
         """
         if section_title is None:
-            section_title = self.current_section
+            section_title = self.current_section_title
         section = self.get_section(section_title) #ensure section exists
         section.add_content(content)
 
