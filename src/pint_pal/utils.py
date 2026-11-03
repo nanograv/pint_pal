@@ -32,7 +32,7 @@ def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
     restype ['string']: Type of residuals, pre or post fit, to plot from fitter object. Options are:
         'prefit' - plot the prefit residuals.
         'postfit' - plot the postfit residuals (default)
-    zero_mean [bool]: default - False. whether or not to subtract off the mean after whitening.
+    zero_mean [bool]: default - True. whether or not to subtract off the mean after whitening.
 
     Returns:
     ---------
