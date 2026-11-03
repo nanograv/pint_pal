@@ -43,7 +43,7 @@ class Summarizer:
                  font_size: int = 10,
                  suppress_errors: bool = False,
                  verbose: bool = False
-                 ) -> None:
+    ) -> None:
         
         self.fitter = fitter
         if fitter_post_noise is None: #is this the right behavior?
@@ -68,14 +68,11 @@ class Summarizer:
 
         self.report = MarkdownReport(title=self.title, font_size=font_size)
         
-
         self.report.add_section_by_title("Errors")
 
-
-
-
         self.user = user
-
+        return
+        
     def autorun(self):
         """
         Automatically runs all items
@@ -90,7 +87,7 @@ class Summarizer:
         self.output_pdf(filename=filename, verbose=verbose)
 
 
-    def check_error(self, text: str, condition: bool, error: str, anchor: str, new_anchor: bool = True ) -> str:
+    def check_error(self, text: str, condition: bool, error: str, anchor: str, new_anchor: bool = True) -> str:
         """
         Wrap a text string in an appropriate color and link if it is an error to be reported
 
