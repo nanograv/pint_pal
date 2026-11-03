@@ -126,7 +126,7 @@ class MarkdownReport:
         set_current : bool, default=True
             If true, this section is now the current one at the bottom of the report.
         """
-        self.add_section_by_title(section_title = section.title(), set_current=set_current, remove_spacing=section.remove_spacing)
+        self.add_section_by_title(section_title = section.title, set_current=set_current, remove_spacing=section.remove_spacing)
         return
 
     def add_section_by_title(self, section_title: str, set_current: bool = True, remove_spacing: bool = False) -> None:
@@ -166,7 +166,7 @@ class MarkdownReport:
         del self.sections[section_title]
         if self.current_section_title == section_title:
             if len(self.sections) > 0:
-                self.current_section_title = next(reversed(self.sections)).title()
+                self.current_section_title = next(reversed(self.sections)).title
             else:
                 self.current_section_title = None
 
