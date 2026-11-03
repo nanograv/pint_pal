@@ -39,7 +39,6 @@ class Summarizer:
                  fitter_post_noise: pint.fitter.Fitter | None = None,
                  rs_dict: dict | None = None,
                  user: str = "anonymous user",
-                 autorun: bool = True,
                  filename: str = "summary.pdf",
                  font_size: int = 10,
                  suppress_errors: bool = False,
@@ -77,15 +76,18 @@ class Summarizer:
 
         self.user = user
 
-        if autorun:
-            self.generate_timing_model_comparison()
-            self.generate_residual_stats(threshold=3) #hard coding for now
-            self.generate_fit_convergence_check()
-            self.generate_error_parameters_check()
-            self.add_summary_plots()
-            self.generate_summary_info()
-            self.generate_software_versions()
-            self.output_pdf(filename=filename, verbose=verbose)
+    def autorun(self):
+        """
+        Automatically runs all items
+        """
+        self.generate_timing_model_comparison()
+        self.generate_residual_stats(threshold=3) #hard coding for now
+        self.generate_fit_convergence_check()
+        self.generate_error_parameters_check()
+        self.add_summary_plots()
+        self.generate_summary_info()
+        self.generate_software_versions()
+        self.output_pdf(filename=filename, verbose=verbose)
 
 
     def check_error(self, text: str, condition: bool, error: str, anchor: str, new_anchor: bool = True ) -> str:
