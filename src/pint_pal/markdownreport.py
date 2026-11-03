@@ -39,7 +39,7 @@ class MarkdownSection:
         """
         output = ""
         if self.title and include_title:
-            output += f"\n\n## {self._title}\n\n"
+            output += f"\n\n## {self.title}\n\n"
         for element in self.content:
             if self.remove_spacing:
                 output += f"{element}    \n"
@@ -64,7 +64,7 @@ class MarkdownReport:
         """
         self.title = title
         self.sections = dict() if sections is None else sections
-        self.current_section_title = None if sections is None else next(reversed(sections)).title
+        self.current_section_title = None if sections is None else next(reversed(sections)) #keys
 
         self.header = textwrap.dedent(
             """
@@ -126,9 +126,14 @@ class MarkdownReport:
         set_current : bool, default=True
             If true, this section is now the current one at the bottom of the report.
         """
-        self.add_section_by_title(section_title = section.title, set_current=set_current, remove_spacing=section.remove_spacing)
-        return
+        if section.title in self.sections:
+            raise KeyError(f"Section title already exists: {section.title}")
 
+        self.sections[section.title] = section
+        if set_current:
+            self.current_section_title = section.title
+        return
+    
     def add_section_by_title(self, section_title: str, set_current: bool = True, remove_spacing: bool = False) -> None:
         """
         Adds a section to the report given a title string.
@@ -148,7 +153,6 @@ class MarkdownReport:
         self.sections[section_title] = MarkdownSection(title=section_title, remove_spacing=remove_spacing)
         if set_current:
             self.current_section_title = section_title
-
         return
 
     def delete_section_by_title(self, section_title: str):
@@ -166,7 +170,7 @@ class MarkdownReport:
         del self.sections[section_title]
         if self.current_section_title == section_title:
             if len(self.sections) > 0:
-                self.current_section_title = next(reversed(self.sections)).title
+                self.current_section_title = next(reversed(self.sections)) #keys
             else:
                 self.current_section_title = None
 
