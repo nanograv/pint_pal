@@ -15,30 +15,12 @@ class MarkdownSection:
         remove_spacing : bool, default=False
             If true, remove excess line spacing in the generated markdown.
         """
-        self._title = title
-        self._content = [] if content is None else content
+        self.title = title
+        self.content = [] if content is None else content
         self.remove_spacing = remove_spacing
 
-    @property
-    def title(self) -> str:
-        return self._title
-
-    @title.setter
-    def title(self, value: str) -> None:
-        self._title = value
-        return
-
-    @property
-    def content(self) -> list:
-        return self._content
-
-    @content.setter
-    def content(self, value: list) -> None:
-        self._content = value
-        return
-
     def add_content(self, content: str) -> None:
-        self._content.append(content)
+        self.content.append(content)
         return
 
     def generate(self, *, include_title=True) -> str:
@@ -56,9 +38,9 @@ class MarkdownSection:
             Combined markdown string.
         """
         output = ""
-        if self._title and include_title:
+        if self.title and include_title:
             output += f"\n\n## {self._title}\n\n"
-        for element in self._content:
+        for element in self.content:
             if self.remove_spacing:
                 output += f"{element}    \n"
             else:
