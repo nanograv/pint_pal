@@ -20,6 +20,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import astropy.units as u
+from pint import DMconst
+
 import pint_pal.plot_utils as pu
 
 
@@ -223,11 +226,12 @@ class TestGetTmComponentSignal:
         # Mode 3 adds a non-zero offset; the arrays should differ
         assert not np.allclose(sig_no_ref, sig_ref)
 
-    def test_reference_delay_uses_unnormalized_column(self):
-        """The reference delay must be DM * Mmat[:, DM], not DM * F[:, DM].
+    def test_reference_delay_is_dm_dispersion_delay(self):
+        """The DM reference delay is DM * DMconst / f^2, not DM * Mmat[:, DM].
 
-        The payload stores the column-normalized basis, so forgetting the norm
-        factor inflates the reference contribution by 1 / ||Mmat[:, DM]||.
+        PINT's DM design-matrix column carries the binary Doppler factor, so the
+        reference delay is built from d(DM)/d(param) (exactly 1 for DM itself)
+        and the cold-plasma dispersion law, which converts back to DM exactly.
         """
         payload = _make_payload()
         model = _dummy_model(dm=15.0)
@@ -240,7 +244,8 @@ class TestGetTmComponentSignal:
         # DM1/DM2 are 0.0 in the dummy model and absent from fitpars anyway,
         # so the only reference contribution is DM (column 2).
         assert names == ["DM"]
-        expected = np.broadcast_to(15.0 * _tm_Mmat[:, 2], (N_REAL, N_TOAS))
+        dmconst = DMconst.to_value(u.MHz**2 * u.s * u.cm**3 / u.pc)
+        expected = np.broadcast_to(15.0 * dmconst / _freqs**2, (N_REAL, N_TOAS))
         np.testing.assert_allclose(sig_ref - sig_no_ref, expected)
 
     def test_reference_skipped_without_column_norms(self):
@@ -369,12 +374,12 @@ class TestPlotGpRealization:
 
     # --- Mode 3: GP + ΔTM + ref ---
 
-    def test_mode3_rn_ylabel_strips_delta(self):
+    def test_mode3_dm_ylabel_strips_delta(self):
         payload = _make_payload()
-        rn_key = [k for k in payload["gp_keys"] if "red" in k][0]
+        dm_key = [k for k in payload["gp_keys"] if "dm_gp" in k][0]
         model = _dummy_model()
         ylabel, _, _ = self._get_ax_labels(
-            payload, rn_key,
+            payload, dm_key,
             include_tm_perturbations=True,
             include_tm_values=True,
             model=model,
@@ -382,6 +387,21 @@ class TestPlotGpRealization:
         # Δ should be stripped in mode 3
         assert r"\Delta" not in ylabel and "Delta" not in ylabel, \
             f"Δ should be stripped in mode 3 ylabel, got: {ylabel}"
+
+    def test_mode3_rn_stays_perturbation(self):
+        """Red noise never gets reference values (F0 * dt/dF0 is not a delay),
+        so asking for mode 3 still gives a Δ label and a non-total title."""
+        payload = _make_payload()
+        rn_key = [k for k in payload["gp_keys"] if "red" in k][0]
+        model = _dummy_model()
+        ylabel, title, _ = self._get_ax_labels(
+            payload, rn_key,
+            include_tm_perturbations=True,
+            include_tm_values=True,
+            model=model,
+        )
+        assert r"\Delta" in ylabel, f"Expected Δ in red-noise ylabel, got: {ylabel}"
+        assert "total" not in title.lower(), f"Red noise should not be 'total', got: {title}"
 
     def test_mode3_rn_ylabel_still_mus(self):
         payload = _make_payload()
@@ -398,10 +418,10 @@ class TestPlotGpRealization:
 
     def test_mode3_title_contains_total(self):
         payload = _make_payload()
-        rn_key = [k for k in payload["gp_keys"] if "red" in k][0]
+        dm_key = [k for k in payload["gp_keys"] if "dm_gp" in k][0]
         model = _dummy_model()
         _, title, _ = self._get_ax_labels(
-            payload, rn_key,
+            payload, dm_key,
             include_tm_perturbations=True,
             include_tm_values=True,
             model=model,
