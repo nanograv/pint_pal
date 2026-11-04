@@ -156,6 +156,24 @@ class TestConvertUnits:
         _, lbl = pu._convert_units(self._sig, self._freqs, "chrom", "us@1400")
         assert "1400" in lbl
 
+    def test_us_at_ref_defaults_to_800(self):
+        freqs = np.array([400.0, 800.0, 1600.0])
+        sig = np.array([1e-6, 1e-6, 1e-6])
+        out, lbl = pu._convert_units(sig, freqs, "chrom", "us@ref", chromatic_idx=4.0)
+        assert "800" in lbl
+        np.testing.assert_allclose(out, [1.0 / 16, 1.0, 16.0])
+
+    def test_us_at_ref_uses_ref_freq(self):
+        freqs = np.array([700.0])
+        out, lbl = pu._convert_units(np.array([1e-6]), freqs, "chrom", "us@ref",
+                                     chromatic_idx=2.0, ref_freq_mhz=1400.0)
+        assert "1400" in lbl
+        np.testing.assert_allclose(out, [0.25])
+
+    def test_us_at_bad_freq_raises(self):
+        with pytest.raises(ValueError, match="Unknown target_units"):
+            pu._convert_units(self._sig, self._freqs, "chrom", "us@foo")
+
     def test_ne_label_falls_back_for_non_interp(self):
         """'ne' units without sw_shape fall back to DM-like label."""
         _, lbl = pu._convert_units(self._sig, self._freqs, "sw", "ne")

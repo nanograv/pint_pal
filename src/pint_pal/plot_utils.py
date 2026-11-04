@@ -5470,7 +5470,10 @@ def _chrom_quad_decomposition(payload, quad_key):
         return projected, None
 
     block = (payload.get('model_kwargs') or {}).get('chromatic_noise')
-    fref = block.get('quad_fref', 1400.0) if isinstance(block, dict) else 1400.0
+    # Mirrors chromatic_noise_block: quad_fref, else the GP's fref, else 800 MHz.
+    # (The basis columns are normalized, so fref only sets the reference, not the fit.)
+    block = block if isinstance(block, dict) else {}
+    fref = block.get('quad_fref') or block.get('fref') or 800.0
     t = np.asarray(payload['toas_mjd']) * 86400.0
     t0 = (t.max() + t.min()) / 2
     f_scale = (fref / np.asarray(payload['freqs_mhz'])) ** alpha
@@ -5817,7 +5820,7 @@ def _convert_units(
     gp_category,
     target_units='us',
     chromatic_idx=None,
-    ref_freq_mhz=1400.0,
+    ref_freq_mhz=800.0,
 ):
     """
     Convert a time-domain GP signal to the requested units.
@@ -5840,11 +5843,12 @@ def _convert_units(
         ``'us'`` for microseconds, ``'s'`` for seconds,
         ``'dm'`` for DM in 10^-3 pc cm^-3, ``'dm_full'`` for DM in pc cm^-3,
         ``'ne'`` for solar wind electron density n_E [cm^-3] (SW only),
-        ``'us@1400'`` for chromatic GP normalised to 800 MHz.
+        ``'us@ref'`` for a chromatic GP quoted at *ref_freq_mhz*, or
+        ``'us@<freq>'`` (e.g. ``'us@1400'``) for one quoted at ``<freq>`` MHz.
     chromatic_idx : float or None
-        Chromatic index (needed for ``'us@1400'`` or ``'dm'`` for chrom GP).
+        Chromatic index (needed for ``'us@...'`` or ``'dm'`` for chrom GP).
     ref_freq_mhz : float
-        Reference frequency for chromatic GP. Default 1400 MHz.
+        Reference frequency (MHz) for ``'us@ref'``. Default 800 MHz.
 
     Returns
     -------
@@ -5857,16 +5861,25 @@ def _convert_units(
         return signal * 1e6, r'$\Delta t$ ($\mu$s)'
     elif target_units == 's':
         return signal, r'$\Delta t$ (s)'
-    elif target_units == 'us@1400':
-        # Normalise chromatic GP delay to 800 MHz reference.
+    elif isinstance(target_units, str) and target_units.startswith('us@'):
+        # Quote the chromatic GP delay at a reference frequency f_q.
         # The design matrix encodes timing delay *at the TOA frequencies*:
-        #   dt(f) = dt_ref * (f / f_ref)^{-idx}
-        # We want dt(800), so multiply by (f_toa / 800)^idx to "undo" the
-        # per-TOA chromatic scaling and re-evaluate at 800 MHz.
+        #   dt(f) = dt_q * (f / f_q)^{-idx}
+        # so multiplying by (f_toa / f_q)^idx undoes the per-TOA chromatic
+        # scaling and re-evaluates the delay at f_q, whatever reference
+        # frequency the basis itself was built with.
+        spec = target_units[3:]
+        if spec == 'ref':
+            fq = float(ref_freq_mhz)
+        else:
+            try:
+                fq = float(spec)
+            except ValueError:
+                raise ValueError(f"Unknown target_units: {target_units!r}") from None
         if chromatic_idx is None:
             chromatic_idx = 4.0  # default chromatic index
-        ratio = (freqs_mhz / 1400.0) ** chromatic_idx  # (n_toas,)
-        return signal * ratio * 1e6, r'$\Delta t$ ($\mu$s @1400MHz)'
+        ratio = (freqs_mhz / fq) ** chromatic_idx  # (n_toas,)
+        return signal * ratio * 1e6, rf'$\Delta t$ ($\mu$s @{fq:g} MHz)'
     elif target_units == 'dm':
         # dt = DM * DMconst / freq^2  =>  DM = dt * freq^2 / DMconst
         if gp_category in ('dm_gp', 'dm', 'sw', 'solar_wind'):
@@ -5958,7 +5971,7 @@ def plot_gp_realization(
     alpha_ci=0.15,
     alpha_real=0.08,
     chromatic_idx=None,
-    ref_freq_mhz=1400.0,
+    ref_freq_mhz=800.0,
     label=None,
     toa_units='mjd',
 ):
@@ -5973,9 +5986,10 @@ def plot_gp_realization(
         The GP key to plot (must be in ``payload['gp_keys']``).
     units : str, optional
         ``'us'`` (µs), ``'s'`` (s), ``'dm'`` (pc cm^-3), ``'ne'``
-        (n_E for SW), ``'us@1400'`` (µs normalised to 800 MHz for
-        chromatic GP), or ``'auto'`` (DM GPs use 'dm', chromatic GPs
-        use 'us@1400', others use 'us'). Default ``'auto'``.
+        (n_E for SW), ``'us@ref'`` (µs quoted at *ref_freq_mhz*, for
+        chromatic GP), ``'us@<freq>'`` (µs quoted at ``<freq>`` MHz), or
+        ``'auto'`` (DM GPs use 'dm', chromatic GPs use 'us@ref', others
+        use 'us'). Default ``'auto'``.
     ci_levels : tuple of float, optional
         Credible interval levels. Default ``(0.68, 0.95)``.
     show_median : bool, optional
@@ -6020,10 +6034,11 @@ def plot_gp_realization(
         Alpha for individual realizations. Default 0.08.
     chromatic_idx : float, optional
         Chromatic index for unit conversion (used for chrom GP with
-        ``'dm'`` or ``'us@1400'`` units).  If None, taken from the payload
+        ``'dm'`` or ``'us@...'`` units).  If None, taken from the payload
         (the fitted ``{psr}_{name}_alpha`` or the configured fixed index).
     ref_freq_mhz : float, optional
-        Reference frequency. Default 1400 MHz.
+        Frequency (MHz) at which a chromatic GP is quoted for ``'us@ref'``
+        units. Default 800 MHz.
     label : str, optional
         Legend label override.
     toa_units : str, optional
@@ -6042,7 +6057,7 @@ def plot_gp_realization(
         if category == 'dm_gp':
             units = 'dm_full' if include_tm_values else 'dm'
         elif category in ('chrom', 'chrom_gp', 'chrom_quad'):
-            units = 'us@1400'
+            units = 'us@ref'
         else:
             units = 'us'
 
@@ -6202,6 +6217,7 @@ def plot_gp_realizations_combined(
     toa_units='mjd',
     exclude=None,
     chromatic_idx=None,
+    ref_freq_mhz=800.0,
     compact=False,
 ):
     """
@@ -6216,7 +6232,8 @@ def plot_gp_realizations_combined(
         or category names like ``'dm_gp'``, ``'red_noise'``, ``'chrom'``, ``'sw'``,
         ``'timing_model'``, ``'ecorr'``. If None, plots all GP components.
     units : str, optional
-        ``'us'``, ``'s'``, ``'dm'``, ``'us@1400'``, or ``'auto'``.
+        ``'us'``, ``'s'``, ``'dm'``, ``'us@ref'``, ``'us@<freq>'``, or
+        ``'auto'``.
         Default ``'auto'``.
     ci_levels : tuple, optional
         CI levels. Default ``(0.68, 0.95)``.
@@ -6247,8 +6264,10 @@ def plot_gp_realizations_combined(
     exclude : list of str, optional
         GP categories to exclude, e.g. ``['timing_model', 'ecorr']``.
     chromatic_idx : float, optional
-        Chromatic index (passed through for ``'us@1400'`` unit conversion).
+        Chromatic index (passed through for ``'us@...'`` unit conversion).
         If None, each chromatic panel takes it from the payload.
+    ref_freq_mhz : float, optional
+        Frequency (MHz) at which chromatic GP panels are quoted. Default 800.
     compact : bool, optional
         If True, remove vertical space between subplots and hide per-panel
         titles. If False (default), each subplot has its own title with
@@ -6326,6 +6345,7 @@ def plot_gp_realizations_combined(
                 zero_mean=zero_mean,
                 model=model,
                 ax=axes[i], toa_units=toa_units, chromatic_idx=chromatic_idx,
+                ref_freq_mhz=ref_freq_mhz,
             )
 
         if compact:
