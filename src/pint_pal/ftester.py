@@ -1,29 +1,53 @@
-""" This is a set of utilities which performs F-test calculations for parameter inclusion/exclusion
+""" This is a set of utilities which performs F-test calculations for parameter inclusion/exclusion.
 
-fitter.ftest('list of PINT parameter objects', 'list of corresponding timing model components', remove=True/False, full_output = True) and this will output a dictionary with keys: ft, resid_rms_test, resid_wrms_test, chi2_test, dof_test, where the test values are of the nested modeled that was tested.
+The F-tests are run with `pint_pal.parallel_fit.TestFitter`, which fits a set of nested timing models: one for
+each parameter (or linked group of parameters) to be added to or removed from the timing model, plus a
+baseline fit with no parameters added or removed. Each test fit is compared with the baseline fit using
+`pint.utils.FTest()`.
+
+`runFtest_parallel()` runs the fits in parallel on several CPUs, and `run_Ftests()` runs exactly the same fits
+one at a time, for computers that aren't set up for parallel processing. Both process the results in the
+same way and return the same output: a nested dictionary of the F-test results (`Ftest_dict`), in the same
+layout as earlier versions of this module, for example:
+
+    {'initial': {...},
+     'Add':    {'Binary': {'PBDOT': {...}, 'M2, SINI': {...}}, 'FD': {'FD4': {...}, 'FD4, FD5': {...}}},
+     'Remove': {'PX': {...}, 'Binary': {...}, 'FD': {'FD3': {...}, 'FD3, FD2': {...}}},
+     'F':      {'F2': {...}},
+     'FB':     {'FB2+': {...}, 'FB3': {...}},
+     'FTest':  {'Add': [...], 'Remove': [...]},
+     'fits':   {...}}
+
+where each test entry ({...}) has the keys 'ft', 'resid_rms_test', 'resid_wrms_test', 'chi2_test' and 'dof_test'
+(and 'dm_resid_rms_test' and 'dm_resid_wrms_test' for wideband data), or is None if the fit failed. 'FTest' holds
+the recommendations to copy into the config .yaml file, and 'fits' the raw output of the `TestFitter` fits.
 """
 
-
-
-import warnings
-from loguru import logger as log
-#from pint.models import (
-#    parameter as p,
-#)
-import pint.fitter
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from pint_pal.timingconfiguration import TimingConfiguration
-import pint_pal.PINT_parameters as pparams
-from pint.models.timing_model import Component
+import concurrent.futures
 import copy
+import json
+import os
+import re
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
 import astropy.units as u
 import numpy as np
-import re
+from astropy.time import Time
+from loguru import logger as log
+import pint.fitter
+import pint.gridutils
+import pint.models
+from pint.utils import FTest
 
-ALPHA = 0.0027 # 3-sigma
-ALPHA_ADD = 0.0027 # 3-sigma
-ALPHA_REMOVE = 0.1336 # 1.5-sigma
+import pint_pal.parallel_fit as par_fit
+
+if TYPE_CHECKING:
+    from pint_pal.timingconfiguration import TimingConfiguration
+
+ALPHA_ADD = 0.0027  # 3-sigma; parameters are recommended to be added if the F-statistic is <= ALPHA_ADD
+ALPHA_REMOVE = 0.1336  # 1.5-sigma; parameters are recommended to be removed if the F-statistic is > ALPHA_REMOVE
+
 
 def param_check(
     name: str,
@@ -32,30 +56,30 @@ def param_check(
 ) -> bool:
     """
     Checks if a timing model parameter is in the timing model.
-    
+
     Parameters
     ----------
-    name: str
+    name : str
         Name of the timing model parameter to be checked.
     fitter : pint.fitter.Fitter
         The PINT Fitter object.
-    check_enabled: bool
+    check_enabled : bool
         If True, check if the model parameter is fit for as well [default: True].
-    
+
     Returns
     -------
     bool
-        Returns either True or False depending on if the parameters is in the model and/or enabled.
+        Returns either True or False depending on if the parameter is in the model and/or enabled.
     """
-    
-    if not name in fitter.model.params:
+    if name not in fitter.model.params:
         return False
     # If frozen is False, then it's fit for, if frozen is True, parameter not fit for
-    if check_enabled and getattr(fitter.model, "{:}".format(name)).frozen:
+    if check_enabled and getattr(fitter.model, name).frozen:
         return False
     return True
 
-def get_fblist(fitter: pint.fitter.Fitter) -> dict:
+
+def get_fblist(fitter: pint.fitter.Fitter) -> dict[int, str]:
     """
     Returns the list of FB parameters for the ELL1 model.
 
@@ -67,352 +91,1113 @@ def get_fblist(fitter: pint.fitter.Fitter) -> dict:
     Returns
     -------
     dict
-        Dictionary of FB parameters currently in the timing model.
+        Dictionary of FB parameters currently in the timing model, keyed by FB index.
     """
     fblist = {}
     for p in fitter.model.params:
-        if p.startswith("FB") and not p.startswith("FBJ") and getattr(fitter.model, p).value != None:
-            if len(p)==2:
-                fblist[0] = p
-            else:
-                fblist[int(p[2:])] = p
-    fbbad = False
-    k = sorted(fblist.keys())
-    for i, ifb in zip(range(len(fblist)),sorted(fblist.keys())):
-        if i!=ifb:
-            fbbad = True
-    if fbbad:
-        log.warning("FB parameters not a series of integers: "+
-                    " ".join([fblist[i] for i in k]) )
+        # Skip FB jumps (FBJ*) and parameters that have no value set
+        if p.startswith("FB") and not p.startswith("FBJ") and getattr(fitter.model, p).value is not None:
+            fblist[int(p[2:]) if len(p) > 2 else 0] = p
+    # FB parameters should be a contiguous series FB0, FB1, ..., FBn
+    if sorted(fblist) != list(range(len(fblist))):
+        log.warning("FB parameters not a series of integers: " +
+                    " ".join(fblist[i] for i in sorted(fblist)))
     return fblist
 
-def binary_params_ftest(
-    bparams: list,
-    fitter: pint.fitter.Fitter,
-    remove: bool
-) -> tuple[list, list]:
+
+def _valid_ft(ft: float | bool | None) -> bool:
     """
-    Returns the list of parameters and components to put in the check for binary models.
+    Checks if an F-statistic is a usable number (not None, False, or NaN). E.g. PINT's FTest returns NaN when
+    the two models have the same degrees of freedom. An F-statistic of exactly 0 is valid: it means the
+    difference is so significant that the probability underflows.
 
     Parameters
     ----------
-    bparams : list
-        List of timing model binary parameters to check for.
-    fitter : pint.fitter.Fitter
-        The PINT Fitter object.
-    remove: bool
-        If True, check to see if parameters need to be removed, if False check to see what parameters need to be added.
-
-    Returns
-    --------
-    plist, clist: list, list
-        List of PINT parameters and components, respectivel, to iterate through for the F-tests.
-    """
-    # list of parameters as strings to remove or add in the F-test
-    p_test = []
-    # list of PINT parameters to test
-    pint_params = []
-    # And their associated timing model components
-    pint_comps = []
-    # get binary model to add to component
-    b_ext = fitter.model.binary_model_name
-    # If we want to test removing parameters from the binary model
-    if remove:
-        # Figure out what is in the model and needs to be removed
-        for bp in bparams:
-            if param_check(bp, fitter):
-                p_test.append(bp)
-    else:
-        # Figure out what is in the model and needs to be removed
-        for bp in bparams:
-            if not param_check(bp, fitter):
-                p_test.append(bp)
-    # Check M2 SINI specifically
-    if 'M2' in p_test and 'SINI' in p_test:
-        pint_params.append([pparams.M2, pparams.SINI])
-        pint_comps.append([pparams.M2_Component+b_ext, pparams.SINI_Component+b_ext])
-    # Get the rest of the parameters and components
-    for pr in p_test:
-        if pr == 'M2' or pr == 'SINI' or pr == 'EPS1DOT' or pr == 'EPS2DOT':
-            pass
-        else:
-            # Check for H3/H4 -> This may not be quite right, may need to change later
-            if pr == 'H3':
-                pass
-            else:
-                pint_params.append([getattr(pparams, pr)])
-                pint_comps.append([getattr(pparams, pr+'_Component')+b_ext])
-    # Check EPS1/2DOT specifically
-    if 'EPS1DOT' in p_test and 'EPS2DOT' in p_test:
-        pint_params.append([pparams.EPS1DOT, pparams.EPS2DOT])
-        pint_comps.append([pparams.EPS1DOT_Component+b_ext, pparams.EPS2DOT_Component+b_ext])
-    # Check H3 and H4 specifically
-    if 'H3' in p_test and 'H4' in p_test:
-        pint_params.append([pparams.H3, pparams.H4])
-        pint_comps.append([pparams.H3_Component+b_ext, pparams.H4_Component+b_ext])
-    # return the values
-    return pint_params, pint_comps
-
-def report_ptest(
-    label: str,
-    ftest_dict: dict | None = None,
-    alpha: float = ALPHA
-) -> str:
-    """
-    Nicely prints the results of F-tests in a human-readable format.
-    
-    Parameters
-    ----------
-    label: str
-        Name of the parameter(s) that were added/removed for the F-test.
-    ftest_dict: dict
-        Dictionary of output values from the PINT `ftest()` function. If `None`, will print a line of NaNs for each reported value.
-    alpha: float
-        Value to compare for F-statistic significance. If the F-statistic is lower than alpha,
-        the timing model parameters are deemed statistically significant to the timing model.
-    """
-    # If F-test fails, print line of NaNs
-    if ftest_dict == None:
-        line = "%42s %7.3f %9.2f %5f %.3f" % (label, np.nan, np.nan, np.nan, np.nan)
-    # Else print the computed values
-    else:
-        # Get values from input dictionary
-        rms = ftest_dict['resid_wrms_test'].value # weighted root mean square of timing residuals
-        chi2 = ftest_dict['chi2_test'] # chi-squared value of the fit of the F-tested model
-        ndof = ftest_dict['dof_test'] # number of degrees of freedom in the F-tested model
-        if "dm_resid_wrms_test" in ftest_dict.keys():
-            dmrms = ftest_dict['dm_resid_wrms_test'].value # weighted root mean square of DM residuals
-        else:
-            dmrms = None
-        Fstatistic = ftest_dict['ft'] # F-statistic from the F-test comparison
-        if Fstatistic is None:
-            if dmrms is not None:
-                line = "%42s %7.3f %16.6f %9.2f %5d --" % (label, rms, dmrms, chi2, ndof)
-            else:
-                line = "%42s %7.3f %9.2f %5d --" % (label, rms, chi2, ndof)
-        elif Fstatistic:
-            if dmrms is not None:
-                line = "%42s %7.3f %16.6f %9.2f %5d %.3g" % (label, rms, dmrms, chi2, ndof, Fstatistic)
-            else:
-                line = "%42s %7.3f %9.2f %5d %.3g" % (label, rms, chi2, ndof, Fstatistic)
-            if Fstatistic < alpha:
-                line += " ***"
-        else:
-            if dmrms is not None:
-                line = "%42s %7.3f %16.6f %9.2f %5d xxx" % (label, rms, dmrms, chi2, ndof)
-            else:
-                line = "%42s %7.3f %9.2f %5d xxx" % (label, rms, chi2, ndof)
-    print(line)
-    return line
-   
-def checkFLogs(
-    add_params: list,
-    remove_params: list,
-    tc: "TimingConfiguration"
-) -> tuple[list, list]:
-    """
-    Checks config file for previous F-test recommendations to avoid looping.
-
-    Parameters
-    ----------
-    add_params : list
-        List of parameters recommended to be added.
-    remove_params : list
-        List of parameters recommended to be removed.
-    tc : pint_pal.timingconfiguration.TimingConfiguration
-        The pint_pal TimingConfiguration object.
+    ft : float, bool or None
+        The F-statistic.
 
     Returns
     -------
-    (list, list)
-        Sets of added, removed parameter recommendations
+    bool
+        True if the F-statistic can be used.
     """
-    if add_params:
-        add_params = [item.strip() for item in add_params[0].split(',')]
-    else:
-        add_params = []
+    if ft is None or isinstance(ft, (bool, np.bool_)):
+        return False
+    return bool(np.isfinite(ft))
 
-    if remove_params:
-        remove_params = [item.strip() for item in remove_params[0].split(',')]
-    else:
-        remove_params = []
-    
-    if 'FTest' in tc.config:
-        oldFtests = tc.config['FTest']
-        
-        # - Compare old results with new to see if duplicates or loop occur
-        for item in sorted(add_params):
-            if item in oldFtests['Remove']:
-                log.warning(f'Parameter {item} has already been recommended to be removed.')
-                add_params.remove(item)
-        for item in sorted(remove_params):
-            if item in oldFtests['Add']:
-                log.warning(f'Parameter {item} has already been recommended to be added.')
-                remove_params.remove(item)
 
-    else:
-        print("No FTest in config.  Continuing...")
-
-    return sorted(set(add_params)), sorted(set(remove_params))
-
-def summarize_Ftest(
-    Ftest_dict: dict,
-    fitter: pint.fitter.Fitter,
-    tc: "TimingConfiguration",
-    alpha_add: float = ALPHA_ADD,
-    alpha_remove: float = ALPHA_REMOVE
+def _recommendation_statements(
+    add_params: list[str],
+    remove_params: list[str]
 ) -> tuple[str, str]:
     """
-    Function to determine and print what parameters are recommended to be added from F-test dictionary.
+    Returns the human-readable statements of which parameters are recommended to be added/removed.
 
     Parameters
     ----------
-    Ftest_dict : dict
-        Dictionary of F-test results output by the `run_Ftests()` function.
-    fitter : pint.fitter.Fitter
-        The PINT Fitter object.
-    tc : pint_pal.timingconfiguration.TimingConfiguration
-        The pint_pal TimingConfiguration object.
-    alpha_add : float
-        Value to compare for F-statistic significance when adding a parameter. If the F-statistic is lower than alpha_add, the timing model parameters are deemed statistically significant to (add to) the timing model.
-    alpha_remove : float
-        Value to compare for F-statistic significance when removing a parameter. If the F-statistic is lower than alpha_remove, the timing model parameters are deemed statistically significant to remove from timing model.
+    add_params : list of str
+        Parameters recommended to be added.
+    remove_params : list of str
+        Parameters recommended to be removed.
 
     Returns
     -------
     (str, str)
-        Add, Remove text statements
+        Add, Remove text statements.
     """
-    
-    add_params = []
-    remove_params = []
-    fd_add = []
-    fd_add_ft = []
-    fd_remove = []
-    fd_remove_ft = []
-    for fk in Ftest_dict.keys():
-        if 'FB' in fk:
-            fbmax = max([int(re.match(r"FB(\d+)\+?", k).group(1)) for k in Ftest_dict[fk]])
-            fblist = get_fblist(fitter)
-            fbused = (len(fblist)>0)
-            fbp = [fblist[ifb] for ifb in sorted(fblist.keys())]  # sorted list of fb parameters
-            # Removing FB parameters
-            for i in range(1,len(fblist)):
-                p = [fbp[j] for j in range(i,len(fbp))]
-                ffk = 'FB%s+'%i
-                if Ftest_dict[fk][ffk] is not None:
-                    if Ftest_dict[fk][ffk]['ft'] is not None:
-                        if Ftest_dict[fk][ffk]['ft'] > alpha_remove and Ftest_dict[fk][ffk]['ft']:
-                            remove_params.append(ffk)
-            # Adding FB parameters
-            for i in range(len(fblist),fbmax+1):
-                p = ["FB%d" % (j) for j in range(len(fblist),i+1)]
-                ffk = 'FB%s'%i
-                if Ftest_dict[fk][ffk] is not None:
-                    if Ftest_dict[fk][ffk]['ft'] is not None:
-                        if Ftest_dict[fk][ffk]['ft'] <= alpha_add and Ftest_dict[fk][ffk]['ft']:
-                            add_params.append(ffk)
-        # Check which parameters should be removed
-        elif "Remove" in fk:
-            for ffk in Ftest_dict[fk].keys():
-                if ffk == 'Binary':
-                    for fffk in Ftest_dict[fk][ffk].keys():
-                        if Ftest_dict[fk][ffk][fffk] is not None:
-                            if Ftest_dict[fk][ffk][fffk]['ft'] > alpha_remove and Ftest_dict[fk][ffk][fffk]['ft']:
-                                remove_params.append(fffk)
-                elif ffk == 'FD':
-                    for fffk in Ftest_dict[fk][ffk].keys():
-                        if Ftest_dict[fk][ffk][fffk] is not None:
-                            if Ftest_dict[fk][ffk][fffk]['ft'] > alpha_remove and Ftest_dict[fk][ffk][fffk]['ft']:
-                                fd_remove.append(fffk)
-                                fd_remove_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
-                else:
-                    if Ftest_dict[fk][ffk] is not None: # This is added because some parameters fail ftest due to max convergence limit and hence are defaulted to None
-                        if Ftest_dict[fk][ffk]['ft'] is not None:
-                            if Ftest_dict[fk][ffk]['ft'] > alpha_remove and Ftest_dict[fk][ffk]['ft']:
-                                # Policy is never to remove parallax
-                                if ffk != 'PX':
-                                    remove_params.append(ffk)
-                    elif Ftest_dict[fk][ffk] is None:
-                        print(f"Due to max iter limit, {ffk} hasn't converged and hence removing it can't be justified") 
-        # Check which parameters should be added
-        elif "Add" in fk:
-            for ffk in Ftest_dict[fk].keys():
-                if ffk == 'Binary':
-                    for fffk in Ftest_dict[fk][ffk].keys():
-                        if Ftest_dict[fk][ffk][fffk] is not None:
-                            if Ftest_dict[fk][ffk][fffk]['ft'] <= alpha_add and Ftest_dict[fk][ffk][fffk]['ft']:
-                                add_params.append(fffk)
-                elif ffk == 'FD':
-                    for fffk in Ftest_dict[fk][ffk].keys():
-                        if Ftest_dict[fk][ffk][fffk] is not None:
-                            if Ftest_dict[fk][ffk][fffk]['ft'] <= alpha_add and Ftest_dict[fk][ffk][fffk]['ft']:
-                                fd_add.append(fffk)
-                                fd_add_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
-                else:
-                    if Ftest_dict[fk][ffk] is not None:
-                        if Ftest_dict[fk][ffk]['ft'] is not None:
-                            if Ftest_dict[fk][ffk]['ft'] <= alpha_add and Ftest_dict[fk][ffk]['ft']:
-                                add_params.append(ffk)
-        # Policy is to never add additional spin derivatives in general
-        elif fk == 'F':
-            pass
-    
-    # Determine which FD parameters to add/remove
-    if fd_remove:
-        remove_params.append(fd_remove[np.argmin(fd_remove_ft)])
-    if fd_add:
-        add_params.append(fd_add[np.argmin(fd_add_ft)])
-    
-    # Check the config for previous FTest results
-    add_params,remove_params = checkFLogs(add_params,remove_params,tc)
-
-    # Now return which parameters to add/remove
-    if remove_params:
-        remove_statement = "F-tests recommend removing the following parameters: " + " ".join(remove_params)
-    else:
-        remove_statement = "F-tests do not recommend removing any parameters."
     if add_params:
         add_statement = "F-tests recommend adding the following parameters: " + " ".join(add_params)
     else:
         add_statement = "F-tests do not recommend adding any parameters."
-   
-    if 'FTest' in tc.config:
-        oldFtests = tc.config['FTest']
-        add_params = add_params + oldFtests["Add"]
-        remove_params = remove_params + oldFtests["Remove"]    
- 
-    configAdd="[" + ",".join(sorted(set(add_params))) + "]"
-    configRemove="[" + ",".join(sorted(set(remove_params))) + "]" 
-    
+    if remove_params:
+        remove_statement = "F-tests recommend removing the following parameters: " + " ".join(remove_params)
+    else:
+        remove_statement = "F-tests do not recommend removing any parameters."
+    return add_statement, remove_statement
+
+
+# ---------------------------------------------------------------------------------------------------------
+# Running the F-test fits
+# ---------------------------------------------------------------------------------------------------------
+
+class _SerialExecutor(concurrent.futures.Executor):
+    """
+    Executor that runs each task immediately in the current process. Passing this to `TestFitter.run()` makes
+    PINT run the F-test fits one at a time through exactly the same code as the parallel workers (a fresh copy
+    of the fitter for each test, and the same handling of failed fits), so the serial and parallel F-tests
+    give identical results.
+    """
+
+    def submit(self, fn: Callable, /, *args, **kwargs) -> concurrent.futures.Future:
+        """
+        Runs a task immediately and returns its (already completed) result.
+
+        Parameters
+        ----------
+        fn : callable
+            The task to run, called as ``fn(*args, **kwargs)``.
+
+        Returns
+        -------
+        concurrent.futures.Future
+            A completed future holding the result, or the exception the task raised.
+        """
+        future = concurrent.futures.Future()
+        try:
+            future.set_result(fn(*args, **kwargs))
+        except BaseException as e:
+            future.set_exception(e)
+        return future
+
+    def map(self, fn: Callable, *iterables, timeout: float | None = None, chunksize: int = 1):
+        """
+        Runs the tasks one at a time as their results are requested, so a progress bar follows the fits.
+
+        Parameters
+        ----------
+        fn : callable
+            The task to run for each set of arguments.
+        *iterables
+            The arguments, as for the built-in `map()`.
+        timeout : float or None
+            Ignored; accepted for compatibility with `concurrent.futures.Executor.map()`.
+        chunksize : int
+            Ignored; accepted for compatibility with `concurrent.futures.Executor.map()`.
+
+        Returns
+        -------
+        iterator
+            The results, in order.
+        """
+        return map(fn, *iterables)
+
+
+def _has_value(model: pint.models.TimingModel, name: str) -> bool:
+    """
+    Checks if a parameter is in the timing model with a nonzero value (as `TestFitter` decides).
+
+    Parameters
+    ----------
+    model : pint.models.TimingModel
+        The PINT timing model.
+    name : str
+        Name of the timing model parameter.
+
+    Returns
+    -------
+    bool
+        True if the parameter is in the model with a value that is set and nonzero.
+    """
+    return name in model.params and model[name].value is not None and model[name].value != 0
+
+
+def _residual_stats(fitter: pint.fitter.Fitter) -> dict:
+    """
+    Returns the residual statistics reported for each F-test, as PINT's `Fitter.ftest()` reports them.
+
+    Parameters
+    ----------
+    fitter : pint.fitter.Fitter
+        A PINT Fitter object that has been fit.
+
+    Returns
+    -------
+    dict
+        'resid_rms_test' and 'resid_wrms_test' (the RMS and weighted RMS of the TOA residuals, in us), and for
+        wideband data 'dm_resid_rms_test' and 'dm_resid_wrms_test' (the same for the DM residuals).
+    """
+    # Wideband residuals are split into TOA and DM residuals
+    toa_resids = fitter.resids.residual_objs['toa'] if fitter.is_wideband else fitter.resids
+    stats = {'resid_rms_test': toa_resids.time_resids.std().to(u.us),
+             'resid_wrms_test': toa_resids.rms_weighted()}
+    if fitter.is_wideband:
+        stats['dm_resid_rms_test'] = fitter.resids.residual_objs['dm'].resids.std()
+        stats['dm_resid_wrms_test'] = fitter.resids.residual_objs['dm'].rms_weighted()
+    return stats
+
+
+class _FitWorker:
+    """
+    Runs one F-test fit, with each tested parameter either fixed at a given value or fit for.
+
+    This follows the same steps as PINT's `pint.gridutils.WrappedFitter.doonefit()`, which `TestFitter` normally
+    uses (a fresh copy of the fitter, the same fit, and the same handling of failed fits), but it also returns
+    the residual statistics of the fit. Those need all of the fitted parameter values, which `doonefit()` can't
+    return for MJD parameters such as T0.
+    """
+
+    def __init__(self, fitter: pint.fitter.Fitter, parnames: list[str], fitargs: dict):
+        """
+        Parameters
+        ----------
+        fitter : pint.fitter.Fitter
+            The PINT Fitter object for the maximal model (`TestFitter.f0`).
+        parnames : list of str
+            Names of the tested parameters, in the order of each test's values.
+        fitargs : dict
+            Additional arguments passed to `fit_toas()`, e.g. maxiter.
+        """
+        self.fitter = fitter
+        self.parnames = parnames
+        self.fitargs = fitargs
+
+    def __call__(self, parvalues: list) -> dict:
+        """
+        Runs the fit for one test.
+
+        Parameters
+        ----------
+        parvalues : list
+            Value of each tested parameter: None to fit for it, otherwise the value to fix it at.
+
+        Returns
+        -------
+        dict
+            'chi2' (NaN if the fit failed), 'dof', 'results' (fitted values of the tested parameters) and
+            'resid_stats' (see `_residual_stats()`, or None if the fit failed).
+        """
+        fitter = copy.deepcopy(self.fitter)
+        parstrings = []
+        for name, value in zip(self.parnames, parvalues):
+            # Freeze the parameters with a value at that value, and fit for the others
+            param = getattr(fitter.model, name)
+            if value is not None:
+                param.frozen = True
+                param.quantity = value
+            else:
+                param.frozen = False
+            parstrings.append(f"{name} = {value}")
+        failed = False
+        try:
+            fitter.fit_toas(**self.fitargs)
+        except (pint.fitter.InvalidModelParameters, pint.fitter.StepProblem):
+            log.warning(f"Fit may not be converged for {','.join(parstrings)}, but returning anyway")
+        except pint.fitter.MaxiterReached:
+            log.warning(f"Max iterations reached for {','.join(parstrings)}: returning NaN")
+            failed = True
+        except Exception as e:
+            log.warning(f"Unexpected exception {e} for {','.join(parstrings)}: returning NaN")
+            failed = True
+        return {'chi2': np.nan if failed else fitter.resids.chi2,
+                'dof': fitter.resids.dof,
+                'results': {name: getattr(fitter.model, name).quantity for name in self.parnames},
+                'resid_stats': None if failed else _residual_stats(fitter)}
+
+
+# Binary parameters F-tested for the BT model, which `parallel_fit.TestFitter` doesn't cover. These are the DD
+# parameters without M2 and SINI, since PINT's BT model has no Shapiro delay
+_BT_EXTRAPARNAMES = ["PBDOT", "A1DOT", "OMDOT", "EDOT"]
+
+
+class _TestFitter(par_fit.TestFitter):
+    """
+    `parallel_fit.TestFitter`, with the fits run by `_FitWorker` (so that the residual statistics of each fit are
+    also returned), and with these changes to which binary parameters are F-tested:
+
+    - BT: `TestFitter` doesn't test any binary parameters for BT, so PBDOT, A1DOT, OMDOT and EDOT are tested
+      (the DD parameters without M2 and SINI, which PINT's BT model doesn't have).
+    - ELL1H: only H3 is tested, not H4. H4 is left out of the tests unless it is already in the timing model.
+      If it is, it is kept so that removing H3 also removes H4 (H4 can't be used without H3), and the test of
+      removing H4 on its own is ignored when the results are processed. Leaving H4 out also avoids adding H4 to
+      models that use STIGMA, which PINT doesn't allow ("ELL1H can use H4 or STIGMA but not both").
+    """
+
+    def setextrapars(self, maxFB: int = 5, maxFD: int = 5) -> None:
+        """
+        Defines the extra parameters to test, as `TestFitter.setextrapars()` does, with the BT and ELL1H
+        changes above.
+
+        Parameters
+        ----------
+        maxFB : int
+            Maximum FB number to include [default: 5].
+        maxFD : int
+            Maximum FD number to include [default: 5].
+        """
+        super().setextrapars(maxFB=maxFB, maxFD=maxFD)
+        binary = self.m_base["BINARY"].value if "BINARY" in self.m_base.params else None
+        if binary == "BT":
+            # Insert before the FD parameters so the binary tests are listed with the other parameters
+            fd_index = next((i for i, p in enumerate(self.extraparnames) if re.fullmatch(r"FD\d+", p)),
+                            len(self.extraparnames))
+            new_pars = [p for p in _BT_EXTRAPARNAMES if p not in self.extraparnames]
+            self.extraparnames[fd_index:fd_index] = new_pars
+        elif binary == "ELL1H" and "H4" in self.extraparnames and not _has_value(self.m_base, "H4"):
+            self.extraparnames.remove("H4")
+
+    def run(
+        self,
+        executor: concurrent.futures.Executor | None = None,
+        ncpu: int | None = None,
+        chunksize: int = 1,
+        printprogress: bool = True,
+        **fitargs
+    ) -> dict:
+        """
+        Runs the fits, as `TestFitter.run()` does, but with `_FitWorker` so that the residual statistics of each
+        fit are also returned.
+
+        Parameters
+        ----------
+        executor : concurrent.futures.Executor or None
+            Executor to run the fits with. If None, a process pool with ncpu workers is created, or the fits are
+            run one at a time if ncpu is 1 [default: None].
+        ncpu : int or None
+            Number of CPUs to run the fits on, if executor is None. If None, all CPUs are used [default: None].
+        chunksize : int
+            Number of fits sent to each worker at a time [default: 1].
+        printprogress : bool
+            Show a progress bar, if `tqdm` is installed [default: True].
+        **fitargs
+            Additional arguments passed to `fit_toas()`, e.g. maxiter.
+
+        Returns
+        -------
+        dict
+            `TestFitter`'s test information, with 'chi2', 'dof', 'results' and 'resid_stats' added for each test.
+        """
+        worker = _FitWorker(self.f0, self.parnames, fitargs)
+        if executor is None:
+            if ncpu == 1:
+                executor = _SerialExecutor()
+            else:
+                executor = concurrent.futures.ProcessPoolExecutor(
+                    max_workers=ncpu or os.cpu_count(),
+                    initializer=pint.gridutils.set_log, initargs=(log,))
+        with executor as e:
+            outputs = e.map(worker, self.parvalues, chunksize=chunksize)
+            if printprogress and pint.gridutils.tqdm is not None:
+                outputs = pint.gridutils.tqdm(outputs, total=len(self.parvalues), ascii=True)
+            outputs = list(outputs)
+        for key, info in self.testinfo.items():
+            if key != "meta":
+                info.update(outputs[info["number"]])
+        self.testinfo["meta"]["stoptime"] = Time.now().iso
+        return self.testinfo
+
+
+def _run_test_fits(
+    fitter: pint.fitter.Fitter,
+    executor: concurrent.futures.Executor | None = None,
+    ncpu: int | None = None,
+    maxiter: int = 20,
+    FDnparams: int = 5,
+    FBnparams: int = 5
+) -> dict:
+    """
+    Runs the baseline fit and all of the F-test fits with `parallel_fit.TestFitter`.
+
+    Parameters
+    ----------
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object. Its current model and TOAs are what is tested.
+    executor : concurrent.futures.Executor or None
+        Executor to run the fits with. If None, one is created with ncpu workers [default: None].
+    ncpu : int or None
+        Number of CPUs to run the fits on, if executor is None [default: None].
+    maxiter : int
+        Maximum number of fit iterations for each test [default: 20].
+    FDnparams : int
+        Maximum number of FD parameters to test [default: 5].
+    FBnparams : int
+        Maximum number of FB parameters to test, for ELL1 models using FB [default: 5].
+
+    Returns
+    -------
+    dict
+        Output of the `TestFitter` run, including the 'baseline' fit, with each fit's residual statistics.
+    """
+    # Pass the fitter's current model and TOAs (rather than the original .par/.tim files) to test exactly what
+    # has been fit, including any TOA excision. TestFitter includes the baseline fit in its tests
+    try:
+        tf = _TestFitter(model=fitter.model, toas=fitter.toas, maxFB=FBnparams, maxFD=FDnparams)
+    except TypeError as e:
+        # Older versions of parallel_fit only take parfile/timfile (and lack the baseline fit and nested FD/FB tests)
+        if "model" in str(e) or "toas" in str(e):
+            raise ImportError(
+                f"The pint_pal.parallel_fit being imported ({par_fit.__file__}) is an older version whose "
+                "TestFitter doesn't accept model=/toas=. Check that the updated file is named parallel_fit.py, "
+                "that pint_pal is installed from the folder you updated (e.g. pip install -e), and restart the "
+                "Python kernel.") from e
+        raise
+    return tf.run(executor=executor, ncpu=ncpu, maxiter=maxiter)
+
+
+# ---------------------------------------------------------------------------------------------------------
+# Processing the F-test results
+# ---------------------------------------------------------------------------------------------------------
+
+def _chi2_problem(chi2_simple: float, chi2_complex: float) -> str | None:
+    """
+    Checks that the more complex of two nested fits doesn't have a noticeably higher chi2 than the simpler one,
+    which can't happen when both fits are converged. PINT's FTest() returns 1.0 in that case, which would
+    wrongly recommend removing a parameter.
+
+    Parameters
+    ----------
+    chi2_simple : float
+        Chi-squared of the fit with fewer parameters.
+    chi2_complex : float
+        Chi-squared of the fit with more parameters.
+
+    Returns
+    -------
+    str or None
+        A description of the problem, or None if there is no problem.
+    """
+    tolerance = max(1e-3, 1e-6 * abs(chi2_simple))
+    if chi2_complex > chi2_simple + tolerance:
+        return "the fit with more parameters has a higher chi2, so a fit (often the baseline) is not converged"
+    return None
+
+
+def _evaluate_tests(results: dict) -> tuple[dict, list[dict]]:
+    """
+    Computes the F-statistic of each test against the baseline fit.
+
+    Parameters
+    ----------
+    results : dict
+        Output of `run_Ftests()` or `runFtest_parallel()`.
+
+    Returns
+    -------
+    baseline : dict
+        The baseline fit, with keys 'chi2' and 'dof'.
+    tests : list of dict
+        One dictionary per test, with keys 'key' (the test's key in results), 'action' ('add' or 'remove'),
+        'params' (list of parameter names), 'chi2', 'dof', 'ft' (the F-statistic, or None if it can't be used)
+        and 'problem' (why it can't be used, or None).
+    """
+    if 'baseline' not in results or not np.isfinite(results['baseline']['chi2']):
+        raise ValueError("F-test results have no valid 'baseline' fit to compare against.")
+    baseline = results['baseline']
+
+    tests = []
+    for key, test in results.items():
+        # Skip the run metadata and the baseline fit, everything else is a test
+        if key in ('meta', 'baseline'):
+            continue
+        # The test string is of the form "Combination <n>: <add/remove> <PAR1> and <PAR2> ..."
+        action, parList = test['string'].split(':', 1)[1].strip().split(" ", 1)
+        chi2 = test['chi2']
+        dof = test['dof']
+        # The simpler and more complex of the two models being compared
+        simple, complex_ = ((chi2, dof), (baseline['chi2'], baseline['dof'])) if action == 'remove' else \
+            ((baseline['chi2'], baseline['dof']), (chi2, dof))
+        # A failed fit returns a NaN chi2; FTest() would then return 1.0, which would wrongly recommend removal
+        if not np.isfinite(chi2):
+            problem = "the fit failed"
+        else:
+            problem = _chi2_problem(simple[0], complex_[0])
+        # FTest(chi2_1, dof_1, chi2_2, dof_2) compares the simpler model (1) with the more complex model (2)
+        ft = None if problem else FTest(simple[0], simple[1], complex_[0], complex_[1])
+        tests.append({'key': key, 'action': action, 'params': parList.split(" and "), 'chi2': chi2, 'dof': dof,
+                      'ft': ft, 'problem': problem})
+    return baseline, tests
+
+
+def _raw_results(Ftest_dict: dict) -> dict:
+    """
+    Returns the raw output of the `TestFitter` fits from an F-test results dictionary.
+
+    Parameters
+    ----------
+    Ftest_dict : dict
+        Output of `run_Ftests()` or `runFtest_parallel()` (which holds the raw output under 'fits'), or the raw
+        output itself.
+
+    Returns
+    -------
+    dict
+        The raw output of the `TestFitter` fits, including the 'baseline' fit.
+    """
+    return Ftest_dict['fits'] if 'fits' in Ftest_dict else Ftest_dict
+
+
+def _test_entry(chi2: float, dof: int, ft: float | None, stats: dict | None) -> dict:
+    """
+    Returns one test's entry in the nested F-test results dictionary, in the format of PINT's `Fitter.ftest()`.
+
+    Parameters
+    ----------
+    chi2 : float
+        Chi-squared of the tested model.
+    dof : int
+        Degrees of freedom of the tested model.
+    ft : float or None
+        The F-statistic (None for the initial model).
+    stats : dict or None
+        Residual statistics (see `_residual_stats()`). If None, the RMS values are NaN.
+
+    Returns
+    -------
+    dict
+        Keys 'ft', 'resid_rms_test', 'resid_wrms_test', 'chi2_test', 'dof_test', and for wideband data
+        'dm_resid_rms_test' and 'dm_resid_wrms_test'.
+    """
+    stats = stats or {'resid_rms_test': np.nan * u.us, 'resid_wrms_test': np.nan * u.us}
+    entry = {'ft': ft,
+             'resid_rms_test': stats['resid_rms_test'],
+             'resid_wrms_test': stats['resid_wrms_test'],
+             'chi2_test': chi2,
+             'dof_test': dof}
+    for key in ('dm_resid_rms_test', 'dm_resid_wrms_test'):
+        if key in stats:
+            entry[key] = stats[key]
+    return entry
+
+
+def _build_Ftest_dict(results: dict) -> dict:
+    """
+    Arranges the F-test results in the nested dictionary used by earlier versions of this module (and read by
+    `pint_pal.utils.pdf_writer()`):
+
+    - 'initial': the baseline fit.
+    - 'Add' and 'Remove': 'Binary' (binary parameters) and 'FD' (FD parameters) dictionaries, and other
+      parameters (e.g. 'PX') directly.
+    - 'F': spin frequency derivatives that are tested for addition (e.g. 'F2').
+    - 'FB': FB parameters, keyed 'FB<i>+' for removing FB<i> and above, and 'FB<i>' for adding up to FB<i>.
+
+    Each test is keyed by the names of its parameters (e.g. 'M2, SINI', 'FD4, FD5', or 'FD3, FD2' for removals),
+    and its entry is in the format of PINT's `Fitter.ftest()` (see `_test_entry()`), or None if the fit failed.
+    'ft' is NaN for a test that can't be F-tested (e.g. its chi2 moved the wrong way).
+
+    Parameters
+    ----------
+    results : dict
+        Raw output of the `TestFitter` fits, including the 'baseline' fit.
+
+    Returns
+    -------
+    dict
+        The nested F-test results dictionary.
+    """
+    baseline, tests = _evaluate_tests(results)
+    Ftest_dict = {'initial': _test_entry(baseline['chi2'], baseline['dof'], None, baseline.get('resid_stats')),
+                  'Add': {}, 'Remove': {}}
+    for test in tests:
+        action, pars = test['action'], test['params']
+        raw = results[test['key']]
+        if test['problem'] == "the fit failed":
+            entry = None
+        else:
+            ft = test['ft'] if test['ft'] is not None else np.nan
+            entry = _test_entry(test['chi2'], test['dof'], ft, raw.get('resid_stats'))
+        section = Ftest_dict['Add' if action == 'add' else 'Remove']
+        indices = sorted(int(p[2:]) for p in pars) if all(re.fullmatch(r"F[DB]\d+", p) for p in pars) else None
+        if indices and pars[0].startswith("FD"):
+            # FD tests are labelled with the FD parameters in the order they are added or removed
+            order = indices if action == 'add' else indices[::-1]
+            section.setdefault('FD', {})[", ".join(f"FD{i}" for i in order)] = entry
+        elif indices and pars[0].startswith("FB"):
+            # 'FB<i>+' removes FB<i> and above, 'FB<i>' adds up to FB<i>
+            key = f"FB{indices[0]}+" if action == 'remove' else f"FB{indices[-1]}"
+            Ftest_dict.setdefault('FB', {})[key] = entry
+        elif action == 'add' and all(re.fullmatch(r"F\d+", p) for p in pars):
+            Ftest_dict.setdefault('F', {})[", ".join(pars)] = entry
+        elif pars == ['PX'] or all(re.fullmatch(r"F\d+", p) for p in pars):
+            section[", ".join(pars)] = entry
+        else:
+            section.setdefault('Binary', {})[", ".join(pars)] = entry
+    # List the FD tests from fewest to most parameters (e.g. 'FD3', then 'FD3, FD2'), as earlier versions did
+    for section in (Ftest_dict['Add'], Ftest_dict['Remove']):
+        if 'FD' in section:
+            section['FD'] = dict(sorted(section['FD'].items(), key=lambda item: len(item[0].split(","))))
+    return Ftest_dict
+
+
+def report_ptest(
+    label: str,
+    ftest_dict: dict | None = None,
+    action: str = 'add',
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE
+) -> str:
+    """
+    Formats the results of an F-test as a line of a human-readable table.
+
+    Parameters
+    ----------
+    label : str
+        Name of the parameter(s) that were added/removed for the F-test.
+    ftest_dict : dict or None
+        The test's entry in the nested F-test results dictionary (see `_test_entry()`). If None (the fit
+        failed), a line of NaNs is returned.
+    action : str
+        'add' if the test adds the parameter(s), 'remove' if it removes them. This sets which threshold is used
+        to mark the test significant ('***') [default: 'add'].
+    alpha_add : float
+        An 'add' test is marked significant ('***'), i.e. the parameter(s) are worth adding, if the F-statistic
+        is lower than or equal to alpha_add [default: 0.0027].
+    alpha_remove : float
+        A 'remove' test is marked significant ('***'), i.e. the parameter(s) are worth keeping, if the
+        F-statistic is lower than or equal to alpha_remove [default: 0.1336].
+
+    Returns
+    -------
+    str
+        The formatted line: the label, the weighted RMS of the residuals (and of the DM residuals, for wideband
+        data), chi2, degrees of freedom, and the F-statistic ('--' for the initial model, 'xxx' if the test
+        can't be used).
+    """
+    if action not in ('add', 'remove'):
+        raise ValueError(f"action must be 'add' or 'remove', not {action!r}.")
+    # The same thresholds as the recommendations: added if F <= alpha_add, kept if F <= alpha_remove
+    threshold = alpha_add if action == 'add' else alpha_remove
+    # If the fit failed, give a line of NaNs
+    if ftest_dict is None:
+        return "%42s %7.3f %9.2f %5f %.3f" % (label, np.nan, np.nan, np.nan, np.nan)
+    line = "%42s %7.3f" % (label, ftest_dict['resid_wrms_test'].to_value(u.us))
+    # weighted root mean square of DM residuals (wideband only)
+    if 'dm_resid_wrms_test' in ftest_dict:
+        line += " %16.6f" % ftest_dict['dm_resid_wrms_test'].value
+    line += " %9.2f %5d" % (ftest_dict['chi2_test'], ftest_dict['dof_test'])
+    Fstatistic = ftest_dict['ft']
+    if Fstatistic is None:
+        line += " --"
+    elif _valid_ft(Fstatistic):
+        line += " %.3g%s" % (Fstatistic, " ***" if Fstatistic <= threshold else "")
+    else:
+        line += " xxx"
+    return line
+
+
+def get_Ftest_lines(
+    Ftest_dict: dict,
+    fitter: pint.fitter.Fitter | None = None,
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE
+) -> list[str]:
+    """
+    Returns the F-test results as lines of a human-readable table, in the same layout as earlier versions of
+    this module, e.g. to print or to write to a summary pdf.
+
+    Parameters
+    ----------
+    Ftest_dict : dict
+        Output of `run_Ftests()` or `runFtest_parallel()`.
+    fitter : pint.fitter.Fitter or None
+        The PINT Fitter object. If given, the enabled FD parameters, the number of spin frequency derivatives and
+        the FB parameters in the model are listed in the section headings [default: None].
+    alpha_add : float
+        Add tests are marked significant ('***'), i.e. worth adding, if the F-statistic is lower than or equal
+        to alpha_add [default: 0.0027].
+    alpha_remove : float
+        Removal tests are marked significant ('***'), i.e. worth keeping, if the F-statistic is lower than or
+        equal to alpha_remove [default: 0.1336].
+
+    Returns
+    -------
+    list of str
+        Lines of the table, starting with the column headings and ending with two lines explaining the markers.
+    """
+    if 'initial' not in Ftest_dict:
+        Ftest_dict = _build_Ftest_dict(Ftest_dict)
+    wideband = 'dm_resid_wrms_test' in Ftest_dict['initial']
+    if wideband:
+        lines = ["%42s %7s %9s %9s %5s %s" % ("", "RMS(us)", "DM RMS(pc cm^-3)", "Chi2", "NDOF", "Ftest")]
+    else:
+        lines = ["%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")]
+    lines.append(report_ptest("initial", Ftest_dict['initial']))
+
+    cur_fd = ([p for p in fitter.model.free_params if re.fullmatch(r"FD\d+", p)] if fitter is not None else None)
+    thresholds = {'alpha_add': alpha_add, 'alpha_remove': alpha_remove}
+    for section, heading in (('Add', "Testing additional parameters:"), ('Remove', "Testing removal of parameters:")):
+        action = section.lower()
+        lines.append(heading)
+        for key, entry in Ftest_dict.get(section, {}).items():
+            if key == 'Binary':
+                lines += [report_ptest(k, v, action, **thresholds) for k, v in entry.items()]
+            elif key == 'FD':
+                verb = "adding" if action == 'add' else "removing"
+                lines.append(f"Testing {verb} FD terms" + (f" ( {cur_fd} enabled):" if cur_fd is not None else ":"))
+                lines += [report_ptest(k, v, action, **thresholds) for k, v in entry.items()]
+            else:
+                lines.append(report_ptest(key, entry, action, **thresholds))
+
+    if 'F' in Ftest_dict:
+        n_deriv = max([int(p[1:]) for p in fitter.model.params if re.fullmatch(r"F\d+", p)] or [1]) \
+            if fitter is not None else None
+        lines.append("Testing spin freq derivs" + (f" ({n_deriv} enabled):" if n_deriv is not None else ":"))
+        lines += [report_ptest(k, v, 'add', **thresholds) for k, v in Ftest_dict['F'].items()]
+
+    if 'FB' in Ftest_dict:
+        fbp = [p for _, p in sorted(get_fblist(fitter).items())] if fitter is not None else None
+        def fb_label(key):
+            # Label FB tests by their parameters, e.g. 'FB1+' -> 'FB1 FB2', 'FB4' -> 'FB3 FB4' (needs the fitter)
+            if fbp is None:
+                return key
+            i = int(key.rstrip('+')[2:])
+            return " ".join(fbp[i:]) if key.endswith('+') else " ".join(f"FB{j}" for j in range(len(fbp), i + 1))
+        if fbp is not None:
+            lines.append("Testing FB parameters, present list: " + " ".join(fbp))
+        lines.append("Testing removal of FB parameters:")
+        lines += [report_ptest(fb_label(k), v, 'remove', **thresholds) for k, v in Ftest_dict['FB'].items()
+                  if k.endswith('+')]
+        lines.append("Testing addition of FB parameters:")
+        lines += [report_ptest(fb_label(k), v, 'add', **thresholds) for k, v in Ftest_dict['FB'].items()
+                  if not k.endswith('+')]
+
+    # Explain the markers, since '***' means the opposite outcome for 'add' and 'remove' tests
+    lines.append(f"*** = significant: worth adding (F <= alpha_add = {alpha_add:g}) "
+                 f"or worth keeping (F <= alpha_remove = {alpha_remove:g})")
+    lines.append("xxx = fit failed or not converged, or F-test not possible")
+    return lines
+
+
+def _step_through_nested(
+    chain: list[dict],
+    action: str,
+    baseline: dict,
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE
+) -> tuple[list[str], list[tuple]]:
+    """
+    Steps through a nested series of FD or FB tests one term at a time, as repeated runs of the F-tests would.
+
+    Each step compares a test with the previous (smaller) test in the series, or with the baseline for the
+    first step, so each term is tested on its own given the terms before it. For removals, e.g. with FD1 and
+    FD2 in the model: FD2 is tested against the baseline ("remove FD2"), then FD1 is tested by comparing
+    "remove FD1 and FD2" with "remove FD2" (the FD1-only model), which is the test a second run would make.
+    Stepping stops at the first term that fails, so a term that is needed on its own is never added or
+    removed just because it was tested together with others.
+
+    Parameters
+    ----------
+    chain : list of dict
+        The nested tests (as returned by `_evaluate_tests()`), sorted by number of parameters.
+    action : str
+        'add' or 'remove'.
+    baseline : dict
+        The baseline fit, with keys 'chi2' and 'dof'.
+    alpha_add : float
+        F-statistic threshold for adding parameters [default: 0.0027].
+    alpha_remove : float
+        F-statistic threshold for removing parameters [default: 0.1336].
+
+    Returns
+    -------
+    chosen : list of str
+        Parameters to add or remove (empty if the first step fails or the tests aren't nested).
+    steps : list of tuple
+        (new parameters, F-statistic, passed) for each step taken.
+    """
+    chosen = []
+    previous = baseline
+    steps = []
+    for test in chain:
+        # The tests should be nested, each one containing all of the parameters of the previous one
+        # (if they aren't, any recommendation could break the series, so none is made)
+        if not set(chosen) <= set(test['params']):
+            log.warning(f"The {action} tests for {', '.join(test['params'])} are not nested, so no change is "
+                        "recommended for them. Check that parallel_fit.py uses the instance's linked parameters.")
+            return [], steps
+        new_pars = [p for p in test['params'] if p not in chosen]
+        # A fit that failed or isn't converged can't be compared, so stop there
+        simple, complex_ = (test, previous) if action == 'remove' else (previous, test)
+        if test['problem'] or _chi2_problem(simple['chi2'], complex_['chi2']):
+            steps.append((new_pars, None, False))
+            break
+        # FTest(chi2_1, dof_1, chi2_2, dof_2) compares the simpler model (1) with the more complex model (2)
+        ft = FTest(simple['chi2'], simple['dof'], complex_['chi2'], complex_['dof'])
+        if action == 'remove':
+            passed = _valid_ft(ft) and ft > alpha_remove
+        else:
+            passed = _valid_ft(ft) and ft <= alpha_add
+        steps.append((new_pars, ft, passed))
+        if not passed:
+            break
+        chosen = test['params']
+        previous = test
+    return chosen, steps
+
+
+def _describe_steps(prefix: str, action: str, steps: list[tuple]) -> str:
+    """
+    Returns a one-line description of the steps taken through a nested FD or FB series.
+
+    Parameters
+    ----------
+    prefix : str
+        'FD' or 'FB'.
+    action : str
+        'add' or 'remove'.
+    steps : list of tuple
+        The steps, as returned by `_step_through_nested()`.
+
+    Returns
+    -------
+    str
+        The description.
+    """
+    verb = 'remove' if action == 'remove' else 'add'
+    parts = []
+    for new_pars, ft, passed in steps:
+        result = ("fit failed or not converged" if ft is None else f"F={ft:.3g}") + (f", {verb}" if passed else ", stop")
+        parts.append(f"{', '.join(new_pars)} ({result})")
+    return f"{prefix} {'removal' if action == 'remove' else 'addition'}, one term at a time: " + "; ".join(parts)
+
+
+def parseParallelResults(
+    results: dict,
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE,
+    verbose: bool = True
+) -> tuple[list[str], list[str]]:
+    """
+    Checks the results of the F-tests and exports the parameters to be added/removed.
+
+    The following policies are applied: spin frequency derivatives are never recommended to be added,
+    parallax is never recommended to be removed, and for the ELL1H binary model only H3 is tested (a test
+    of H4 on its own is ignored).
+
+    FD and FB parameters each form a series (FD1, FD2, ...), and their tests are nested (e.g. "add FD4" and
+    "add FD4 and FD5"; "remove FD2" and "remove FD1 and FD2"). Each series is stepped through one term at a
+    time (see `_step_through_nested()`), so the result is the same as re-running the F-tests until nothing
+    changes. One consistent decision is made for each series:
+
+    - If adding the next term is significant, the terms that pass are recommended to be added and nothing
+      in that series is removed: a significant higher-order term means the lower-order terms are kept.
+      Adding takes precedence because it requires much stronger evidence (alpha_add) than removing.
+    - Otherwise, terms are recommended to be removed from the top down, until one is significant.
+
+    Parameters
+    ----------
+    results : dict
+        Output of `run_Ftests()` or `runFtest_parallel()`, or the raw output of the `TestFitter` fits.
+    alpha_add : float
+        F-statistic threshold for adding parameters; added if F <= alpha_add [default: 0.0027].
+    alpha_remove : float
+        F-statistic threshold for removing parameters; removed if F > alpha_remove [default: 0.1336].
+    verbose : bool
+        If True, print how the FD/FB series were decided [default: True].
+
+    Returns
+    -------
+    (list of str, list of str)
+        Parameters recommended to be added, and parameters recommended to be removed.
+    """
+    baseline, tests = _evaluate_tests(_raw_results(results))
+
+    n_wrong_way = sum(1 for test in tests if test['problem'] and test['problem'] != "the fit failed")
+    if n_wrong_way:
+        log.warning(f"{n_wrong_way} of {len(tests)} tests have chi2 moving the wrong way (worse with more "
+                    "parameters). The baseline fit is probably not converged: refit the model, or increase "
+                    "maxiter, before relying on these F-tests.")
+
+    add_params = []
+    remove_params = []
+    # Nested FD and FB tests, keyed by (prefix, action); these are decided separately below
+    nested = {}
+
+    for test in tests:
+        action, pars, ft = test['action'], test['params'], test['ft']
+        if test['problem']:
+            log.warning(f"'{action} {', '.join(pars)}' can't be F-tested: {test['problem']}.")
+        # Keep nested FD and FB tests aside, including the ones that fail, since they are stepped through below
+        prefix = next((pre for pre in ('FD', 'FB') if all(re.fullmatch(pre + r"\d+", p) for p in pars)), None)
+        if prefix is not None:
+            nested.setdefault((prefix, action), []).append(test)
+            continue
+        if ft is None:
+            continue
+        if action == 'remove':
+            recommend = _valid_ft(ft) and ft > alpha_remove
+        else:
+            recommend = _valid_ft(ft) and ft <= alpha_add
+        if not recommend:
+            continue
+
+        # Policy is to never add additional spin derivatives in general
+        if action == 'add' and any(re.fullmatch(r"F\d+", p) for p in pars):
+            continue
+        # Policy is never to remove parallax
+        if action == 'remove' and 'PX' in pars:
+            continue
+        # For ELL1H only H3 is tested; H4 on its own is ignored (see `_TestFitter`)
+        if pars == ['H4']:
+            continue
+        if action == 'remove':
+            remove_params.extend(pars)
+        else:
+            add_params.extend(pars)
+
+    # Decide each FD and FB series one term at a time. Adding and removing within the same series would give
+    # an invalid model (e.g. FD1 and FD3 without FD2), so if a term is added, nothing in that series is removed
+    for prefix in ('FD', 'FB'):
+        steps_by_action = {}
+        chosen_by_action = {}
+        for action in ('add', 'remove'):
+            chain = sorted(nested.get((prefix, action), []), key=lambda t: len(t['params']))
+            chosen_by_action[action], steps_by_action[action] = _step_through_nested(
+                chain, action, baseline, alpha_add=alpha_add, alpha_remove=alpha_remove)
+        to_add, to_remove = chosen_by_action['add'], chosen_by_action['remove']
+        if verbose:
+            for action in ('add', 'remove'):
+                # Only describe series that go beyond a single step, or that lead to a change
+                if len(steps_by_action[action]) > 1 or chosen_by_action[action]:
+                    print(_describe_steps(prefix, action, steps_by_action[action]))
+        if to_add:
+            add_params.extend(to_add)
+            if to_remove and verbose:
+                print(f"Not recommending removing {', '.join(to_remove)}: adding {', '.join(to_add)} is "
+                      f"significant, so the existing {prefix} terms are kept.")
+        else:
+            remove_params.extend(to_remove)
+
+    return sorted(set(add_params)), sorted(set(remove_params))
+
+
+def summarize_Ftest(
+    Ftest_dict: dict,
+    fitter: pint.fitter.Fitter | None = None,
+    tc: "TimingConfiguration | None" = None,
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE
+) -> tuple[str, str]:
+    """
+    Function to determine what parameters are recommended to be added/removed from the F-test results.
+
+    Parameters
+    ----------
+    Ftest_dict : dict
+        Output of `run_Ftests()` or `runFtest_parallel()`.
+    fitter : pint.fitter.Fitter or None
+        The PINT Fitter object. [currently unused]
+    tc : pint_pal.timingconfiguration.TimingConfiguration or None
+        The pint_pal TimingConfiguration object. If given, new recommendations that would undo previous ones in
+        the config are left out, as in `run_Ftests()`, so the statements match the ones it printed
+        [default: None].
+    alpha_add : float
+        Parameters are recommended to be added if the F-statistic is lower than or equal to alpha_add, i.e.
+        they are statistically significant to the timing model [default: 0.0027].
+    alpha_remove : float
+        Parameters are recommended to be removed if the F-statistic is greater than alpha_remove, i.e. they
+        are not statistically significant to the timing model [default: 0.1336].
+
+    Returns
+    -------
+    (str, str)
+        Add, Remove text statements.
+    """
+    add_params, remove_params = parseParallelResults(_raw_results(Ftest_dict), alpha_add=alpha_add,
+                                                     alpha_remove=alpha_remove, verbose=False)
+    if tc is not None:
+        add_params, remove_params = _drop_reversals(add_params, remove_params, _get_old_ftests(tc))
+    return _recommendation_statements(add_params, remove_params)
+
+
+def _get_old_ftests(tc: "TimingConfiguration") -> tuple[list[str], list[str]] | None:
+    """
+    Returns the lists of previously recommended parameters to add and remove from the config 'FTest' entry.
+
+    Parameters
+    ----------
+    tc : pint_pal.timingconfiguration.TimingConfiguration
+        The pint_pal TimingConfiguration object.
+
+    Returns
+    -------
+    (list of str, list of str) or None
+        Previous Add, Remove recommendations, or None if there is no 'FTest' entry in the config.
+    """
+    if 'FTest' not in tc.config:
+        return None
+    old_ftests = tc.config['FTest'] or {}
+    # An empty YAML entry (e.g. "Add:") is read as None
+    return list(old_ftests.get('Add') or []), list(old_ftests.get('Remove') or [])
+
+
+def _drop_reversals(
+    add_params: list[str],
+    remove_params: list[str],
+    old_ftests: tuple[list[str], list[str]] | None
+) -> tuple[list[str], list[str]]:
+    """
+    Leaves out new recommendations that would undo previous ones in the config, i.e. adding a parameter that
+    was previously recommended to be removed, or removing one that was previously recommended to be added.
+
+    Parameters
+    ----------
+    add_params : list of str
+        Parameters recommended to be added.
+    remove_params : list of str
+        Parameters recommended to be removed.
+    old_ftests : (list of str, list of str) or None
+        Previous Add, Remove recommendations (see `_get_old_ftests()`), or None if there are none.
+
+    Returns
+    -------
+    (list of str, list of str)
+        Sorted, unique lists of parameters to add and to remove.
+    """
+    add_params = sorted(set(add_params))
+    remove_params = sorted(set(remove_params))
+    if old_ftests is None:
+        return add_params, remove_params
+    old_add, old_remove = old_ftests
+    return ([item for item in add_params if item not in old_remove],
+            [item for item in remove_params if item not in old_add])
+
+
+def checkFLogs(
+    add_params: list[str],
+    remove_params: list[str],
+    tc: "TimingConfiguration"
+) -> tuple[list[str], list[str]]:
+    """
+    Compares the F-test recommendations with previous ones stored in the config to avoid duplicates and
+    add/remove loops.
+
+    Parameters
+    ----------
+    add_params : list of str
+        Parameters recommended to be added.
+    remove_params : list of str
+        Parameters recommended to be removed.
+    tc : pint_pal.timingconfiguration.TimingConfiguration
+        The pint_pal TimingConfiguration object.
+
+    Returns
+    -------
+    (list of str, list of str)
+        Sorted, unique lists of parameters to add and to remove.
+    """
+    add_params = sorted(set(add_params))
+    remove_params = sorted(set(remove_params))
+
+    old_ftests = _get_old_ftests(tc)
+    if old_ftests is None:
+        print("\nNo FTest in config.  Continuing...")
+        return add_params, remove_params
+    old_add, old_remove = old_ftests
+
+    # - Compare old results with new to see if duplicates or loop occur
+    for item in add_params:
+        if item in old_remove:
+            log.warning(f'Parameter {item} has already been recommended to be removed.')
+    for item in remove_params:
+        if item in old_add:
+            log.warning(f'Parameter {item} has already been recommended to be added.')
+    return _drop_reversals(add_params, remove_params, old_ftests)
+
+
+def _process_test_results(
+    results: dict,
+    fitter: pint.fitter.Fitter,
+    tc: "TimingConfiguration",
+    results_log: bool | str | os.PathLike = False,
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE
+) -> dict:
+    """
+    Post-processing shared by `run_Ftests()` and `runFtest_parallel()`: arranges the results in the nested F-test
+    results dictionary, prints the table of results and the recommendations, and prints the combined (new and
+    previous) recommendations in a format to copy into the config .yaml file.
+
+    New recommendations that would undo a previous one in the config (e.g. removing a parameter that was
+    previously recommended to be added) are dropped with a warning by `checkFLogs()` before they are reported,
+    so the printed statements and the .yaml block agree.
+
+    Parameters
+    ----------
+    results : dict
+        Raw output of the `TestFitter` fits, including the 'baseline' fit.
+    fitter : pint.fitter.Fitter
+        The PINT Fitter object, used for the section headings of the table.
+    tc : pint_pal.timingconfiguration.TimingConfiguration
+        The pint_pal TimingConfiguration object.
+    results_log : bool, str or os.PathLike
+        If True, write the raw results to results.json in the current directory; if a path, write them there
+        instead [default: False].
+    alpha_add : float
+        F-statistic threshold for adding parameters [default: 0.0027].
+    alpha_remove : float
+        F-statistic threshold for removing parameters [default: 0.1336].
+
+    Returns
+    -------
+    dict
+        The nested F-test results dictionary (see `_build_Ftest_dict()`), with 'FTest' (the recommendations
+        to add and remove, combined with those already in the config, as in the .yaml block) and 'fits' (the
+        raw results).
+    """
+    if results_log:
+        log_file = results_log if isinstance(results_log, (str, os.PathLike)) else "results.json"
+        with open(log_file, "w") as fo:
+            json.dump(results, fo, indent=4, default=par_fit.astropy_numpy_json_serializer)
+
+    Ftest_dict = _build_Ftest_dict(results)
+    print("Testing additional parameters (*** = significant):")
+    print("\n".join(get_Ftest_lines(Ftest_dict, fitter, alpha_add=alpha_add, alpha_remove=alpha_remove)))
+
+    new_ap, new_rp = parseParallelResults(results, alpha_add=alpha_add, alpha_remove=alpha_remove)
+    # Drop new recommendations that would undo previous ones in the config
+    new_ap, new_rp = checkFLogs(new_ap, new_rp, tc)
+
+    # Combine with previous FTest results from the config
+    old_ftests = _get_old_ftests(tc) or ([], [])
+    ap = sorted(set(new_ap + old_ftests[0]))
+    rp = sorted(set(new_rp + old_ftests[1]))
+
     print('\n')
     print('Copy and paste below into .yaml file:')
-    print('FTest:\n' \
-        '  Add:',configAdd,'\n'\
-        '  Remove:',configRemove)
+    print('FTest:\n  Add:', "[" + ",".join(ap) + "]", '\n  Remove:', "[" + ",".join(rp) + "]")
     print('\n')
-    
-    return add_statement, remove_statement
-    
-def reset_params(params: list) -> None:
-    """
-    Resets parameter values to defaults as assigned in pint_parameters.py. Most are reset to zero.
-    
-    Inputs:
-    --------
-    params [list]: List of pint parameters to reset the values of within the model.
-    """
-    for p in params:
-        if p.name == 'M2':
-            p.value = 0.25
-            p.uncertainty = 0.0
-        elif p.name == 'SINI':
-            p.value = 0.8
-            p.uncertainty = 0.0
-        else:
-            p.value = 0.0
-            p.uncertainty = 0.0
-    return
+
+    add_statement, remove_statement = _recommendation_statements(new_ap, new_rp)
+    print(add_statement)
+    print(remove_statement)
+
+    Ftest_dict['FTest'] = {'Add': ap, 'Remove': rp}
+    Ftest_dict['fits'] = results
+    return Ftest_dict
+
+
+# ---------------------------------------------------------------------------------------------------------
+# Main functions
+# ---------------------------------------------------------------------------------------------------------
 
 def run_Ftests(
     fitter: pint.fitter.Fitter,
@@ -420,671 +1205,117 @@ def run_Ftests(
     alpha_add: float = ALPHA_ADD,
     alpha_remove: float = ALPHA_REMOVE,
     FDnparams: int = 5,
-    NITS: int = 1
+    NITS: int | None = None,
+    maxiter: int = 20,
+    FBnparams: int = 5,
+    results_log: bool | str | os.PathLike = False
 ) -> dict:
     """
-    This is the main convenience function to run the various F-tests below. This includes F-tests for F2, PX, 
-    binary parameters, FD parameters, etc. As part of the function, the tests, parameters, RMS of residuals, chi2,
-    degrees of freedom, F-statistic values are all printed in a nice human readable format.
+    Runs the F-tests one at a time (serially), for computers that are not set up for parallel processing.
+    This runs exactly the same fits as `runFtest_parallel()`, processes the results in the same way, and
+    returns the same outputs.
 
     Parameters
     ----------
     fitter : pint.fitter.Fitter
-        The PINT Fitter object.
+        The PINT Fitter object. Its current model and TOAs are what is tested.
     tc : pint_pal.timingconfiguration.TimingConfiguration
         The pint_pal TimingConfiguration object.
     alpha_add : float
-        Value to compare for F-statistic significance when adding a parameter. If the F-statistic is lower than alpha_add, the timing model parameters are deemed statistically significant to (add to) the timing model.
+        Parameters are recommended to be added if the F-statistic is lower than or equal to alpha_add, i.e.
+        they are statistically significant to the timing model [default: 0.0027].
     alpha_remove : float
-        Value to compare for F-statistic significance when removing a parameter. If the F-statistic is lower than alpha_remove, the timing model parameters are deemed statistically significant to remove from timing model.
+        Parameters are recommended to be removed if the F-statistic is greater than alpha_remove, i.e. they
+        are not statistically significant to the timing model [default: 0.1336].
     FDnparams : int
-        Maximum number of FD parameters to test.
-    NITS : int
-        Number of fit iterations to run during FD parameter F-tests when adding FD parameters to the
-        timing model after each F-test is run. Should only need to be increased if FD parameter F-tests do
-        not appear to be converged [default: 1].
-        
+        Maximum number of FD parameters to test [default: 5].
+    NITS : int or None
+        Older name for maxiter, as used by the notebook templates (e.g. ``NITS=tc.get_niter()``). If given,
+        overrides maxiter [default: None].
+    maxiter : int
+        Maximum number of fit iterations for each test [default: 20].
+    FBnparams : int
+        Maximum number of FB parameters to test, for ELL1 models using FB [default: 5].
+    results_log : bool, str or os.PathLike
+        If True, write the raw results to results.json in the current directory; if a path, write them there
+        instead [default: False].
+
     Returns
     -------
     dict
-        A nested dictionary of all of the different F-tests done and subsequent reported values for each
-        F-test. These include keys for added ['Add'] or removed ['Remove'] parameters, the initial values ['initial']
-        and within each of those, further nested dictionaries of parameters [e.g. 'PX'], and the reported values.
+        The nested F-test results dictionary (`Ftest_dict`), in the same layout as earlier versions of this
+        module: 'initial', 'Add', 'Remove', 'F' and 'FB' (see `_build_Ftest_dict()`), plus 'FTest' (the
+        recommendations to add and remove, combined with those already in the config, as in the .yaml block)
+        and 'fits' (the raw output of the `TestFitter` fits).
     """
-    # Check if fitter is wideband or not
-    if fitter.is_wideband:
-        NB = False
-    #    resids = fitter.resids.residual_objs['toa']
-    #    dm_resids = fitter.resids.residual_objs['dm']
-    else:
-        NB = True
-    #    resids = fitter.resids
-    resids = fitter.resids
-
-    # Define return dictionary, format tbd
-    retdict = {}
-    # Start with initial printing from Finalize Timing:
-    print("Testing additional parameters (*** = significant):")
-    if NB:
-        hdrline = "%42s %7s %9s %5s %s" % ("", "RMS(us)", "Chi2", "NDOF", "Ftest")
-    else:
-        hdrline = "%42s %7s %9s %9s %5s %s" % ("", "RMS(us)", "DM RMS(pc cm^-3)", "Chi2", "NDOF", "Ftest")
-    print(hdrline)
-    if NB:
-        base_rms = resids.time_resids.std().to(u.us)
-        base_wrms = resids.rms_weighted() # assumes the input fitter has been fit already
-    else:
-        base_rms = resids.residual_objs['toa'].time_resids.std().to(u.us)
-        base_wrms = resids.residual_objs['toa'].rms_weighted() # assumes the input fitter has been fit already
-    base_chi2 = resids.chi2
-    base_ndof = resids.dof
-    if NB:
-        # Add initial values to F-test dictionary
-        retdict['initial'] = {'ft':None, 'resid_rms_test':base_rms, 'resid_wrms_test':base_wrms, 'chi2_test':base_chi2, 'dof_test':base_ndof}
-    else:
-        dm_resid_rms_test = fitter.resids.residual_objs['dm'].resids.std()
-        dm_resid_wrms_test = fitter.resids.residual_objs['dm'].rms_weighted()
-        # Add initial values to F-test dictionary
-        retdict['initial'] = {'ft':None, 'resid_rms_test':base_rms, 'resid_wrms_test':base_wrms, 'chi2_test':base_chi2, 'dof_test':base_ndof, "dm_resid_rms_test": dm_resid_rms_test, "dm_resid_wrms_test": dm_resid_wrms_test}
-    # Now report the values
-    report_ptest("initial", retdict['initial'])
-    # Check adding binary parameters
-    print("Testing additional parameters:")
-    retdict['Add'] = {}
-    if hasattr(fitter.model, "binary_model_name"):
-        if fitter.model.binary_model_name == 'DD' or fitter.model.binary_model_name == 'BT':
-            binarydict = check_binary_DD(fitter, alpha=alpha_add, remove = False, NITS=NITS)
-        elif fitter.model.binary_model_name == 'DDK':
-            binarydict = check_binary_DDK(fitter, alpha=alpha_add, remove = False, NITS=NITS)
-        elif fitter.model.binary_model_name == 'ELL1':
-            binarydict = check_binary_ELL1(fitter, alpha=alpha_add, remove = False, NITS=NITS)
-        elif fitter.model.binary_model_name == 'ELL1H':
-            binarydict = check_binary_ELL1H(fitter, alpha=alpha_add, remove = False, NITS=NITS)
-        retdict['Add']['Binary'] = binarydict
-    # Test adding FD parameters
-    FDdict = check_FD(fitter, alpha=alpha_add, remove = False, maxcomponent=FDnparams, NITS = NITS)
-    retdict['Add']['FD'] = FDdict
-    print("Testing removal of parameters:")
-
-    retdict['Remove'] = {}
-    # Check parallax, NOTE - cannot remove PX if binary model is DDK, so check for that.
-    if hasattr(fitter.model, "binary_model_name"):
-        if fitter.model.binary_model_name == 'DDK':
-            print(" PX, KOM and KIN cannot be removed in DDK.")
-        else:
-            PXdict = check_PX(fitter, alpha=alpha_remove, NITS=NITS)
-            retdict['Remove']['PX'] = PXdict['PX']
-    else:
-        PXdict = check_PX(fitter, alpha=alpha_remove, NITS=NITS)
-        retdict['Remove']['PX'] = PXdict['PX']
-    # Check removing binary parameters
-    if hasattr(fitter.model, "binary_model_name"):
-        if fitter.model.binary_model_name == 'DD' or fitter.model.binary_model_name == 'BT':
-            binarydict = check_binary_DD(fitter, alpha=alpha_remove, remove = True, NITS=NITS)
-        elif fitter.model.binary_model_name == 'DDK':
-            binarydict = check_binary_DDK(fitter, alpha=alpha_remove, remove = True, NITS=NITS)
-        elif fitter.model.binary_model_name == 'ELL1':
-            binarydict = check_binary_ELL1(fitter, alpha=alpha_remove, remove = True, NITS=NITS)
-        elif fitter.model.binary_model_name == 'ELL1H':
-            binarydict = check_binary_ELL1H(fitter, alpha=alpha_remove, remove = True, NITS=NITS)
-        retdict['Remove']['Binary'] = binarydict
-    
-    # Test removing FD parameters
-    FDdict = check_FD(fitter, alpha=alpha_remove, remove = True, maxcomponent=FDnparams, NITS = NITS)
-    retdict['Remove']['FD'] = FDdict
-    # Get current number of spin frequency derivatives
-    current_freq_deriv = 1
-    for i in range(2,21):
-        p = "F%d" % i
-        if p in fitter.model.params:
-            current_freq_deriv = i
-    print("Testing spin freq derivs (%s enabled):" % (current_freq_deriv))
-    # NOTE - CURRENTLY ONLY TESTS F2
-    F2dict = check_F2(fitter, alpha=alpha_remove, NITS=NITS)
-    retdict['F'] = F2dict
-    # Now check FB parameters
-    if hasattr(fitter.model, "binary_model_name"):
-        if fitter.model.binary_model_name == 'ELL1':
-            fblist = get_fblist(fitter)
-            if fblist:
-                FBdict = check_FB(fitter, alpha=alpha_remove, fbmax = 5, NITS=NITS)
-                retdict['FB'] = FBdict
-    
-    # Print a summary of the F-tests results and suggestions
-    add_statement, remove_statement = summarize_Ftest(retdict, fitter, tc, alpha_add=alpha_add, alpha_remove=alpha_remove)
-    print(add_statement)
-    print(remove_statement)
-
-    return retdict
+    if NITS is not None:
+        maxiter = NITS
+    results = _run_test_fits(fitter, executor=_SerialExecutor(), maxiter=maxiter,
+                             FDnparams=FDnparams, FBnparams=FBnparams)
+    return _process_test_results(results, fitter, tc, results_log=results_log,
+                                 alpha_add=alpha_add, alpha_remove=alpha_remove)
 
 
-def check_F2(
+def runFtest_parallel(
     fitter: pint.fitter.Fitter,
-    alpha: float = ALPHA,
-    NITS: int = 1
+    tc: "TimingConfiguration",
+    ncpu: int | None = 4,
+    results_log: bool | str | os.PathLike = False,
+    maxiter: int = 20,
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE,
+    FDnparams: int = 5,
+    FBnparams: int = 5,
+    NITS: int | None = None
 ) -> dict:
     """
-    Check the significance of F2 with an F-test.
-    In general, we do not allow F2 to be added but we will still check as in the past.
+    Runs the F-tests in parallel with `pint_pal.parallel_fit`, prints the recommendations, and prints
+    the combined (new and previous) recommendations in a format to copy into the config .yaml file.
+    `run_Ftests()` runs exactly the same fits one at a time and returns the same outputs.
 
     Parameters
     ----------
     fitter : pint.fitter.Fitter
-        The PINT Fitter object.
-    alpha : float
-        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
-    NITS : int
-        Number of fit iterations
-    
+        The PINT Fitter object. Its current model and TOAs are what is tested.
+    tc : pint_pal.timingconfiguration.TimingConfiguration
+        The pint_pal TimingConfiguration object.
+    ncpu : int or None
+        Number of CPUs to run the fits on. If 1, the fits are run one at a time exactly as in `run_Ftests()`.
+        If None, all available CPUs are used [default: 4].
+    results_log : bool, str or os.PathLike
+        If True, write the raw results to results.json in the current directory; if a path, write them there
+        instead [default: False].
+    maxiter : int
+        Maximum number of fit iterations for each test [default: 20].
+    alpha_add : float
+        Parameters are recommended to be added if the F-statistic is lower than or equal to alpha_add, i.e.
+        they are statistically significant to the timing model [default: 0.0027].
+    alpha_remove : float
+        Parameters are recommended to be removed if the F-statistic is greater than alpha_remove, i.e. they
+        are not statistically significant to the timing model [default: 0.1336].
+    FDnparams : int
+        Maximum number of FD parameters to test [default: 5].
+    FBnparams : int
+        Maximum number of FB parameters to test, for ELL1 models using FB [default: 5].
+    NITS : int or None
+        Older name for maxiter, as used by the notebook templates. If given, overrides maxiter [default: None].
+
     Returns
     -------
     dict
-        Returns the dictionary output from the F-tests.
+        The nested F-test results dictionary (`Ftest_dict`), in the same layout as earlier versions of this
+        module: 'initial', 'Add', 'Remove', 'F' and 'FB' (see `_build_Ftest_dict()`), plus 'FTest' (the
+        recommendations to add and remove, combined with those already in the config, as in the .yaml block)
+        and 'fits' (the raw output of the `TestFitter` fits).
     """
-    # Add dictionary for return values
-    retdict = {}
-    # Run the F2 F-test
-    try:
-        ftest_dict = fitter.ftest(pparams.F2, pparams.F2_Component, remove=False, full_output=True, maxiter=NITS)
-    # If there's an error running the F-test in the fit for some reason, we catch it
-    except ValueError as e:
-        warnings.warn(f"Error when running F-test for F2: {e}")
-        ftest_dict = None
-    # Add to dictionary
-    retdict['F2'] = ftest_dict
-    # Report the values
-    report_ptest('F2', ftest_dict, alpha = alpha)
-    # This edits the values in the file for some reason, want to reset them to zeros
-    reset_params([pparams.F2])
-    # Return the dictionary
-    return retdict
-
-
-def check_PX(
-    fitter: pint.fitter.Fitter,
-    alpha: float = ALPHA,
-    NITS: int = 1
-) -> dict:
-    """
-    Check the significance of PX with an F-test.
-    In general, we fit PX but we still wish to test for this as in the past.
-
-    Parameters
-    ----------
-    fitter : pint.fitter.Fitter
-        The PINT Fitter object.
-    alpha : float
-        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
-    NITS : int
-        Number of fit iterations
-    
-    Returns
-    -------
-    dict
-        Returns the dictionary output from the F-tests.
-    """
-    # Add dictionary for return values
-    retdict = {}
-    # Run the parallax F-test
-    try:
-        ftest_dict = fitter.ftest(pparams.PX, pparams.PX_Component, remove=True, full_output=True, maxiter=NITS)
-    # If there's an error running the F-test in the fit for some reason, we catch it
-    except ValueError as e:
-        warnings.warn(f"Error when running F-test for PX: {e}")
-        ftest_dict = None
-    # Add to dictionary
-    retdict['PX'] = ftest_dict
-    # Report the values
-    report_ptest('PX', ftest_dict, alpha = alpha)
-    # This edits the values in the file for some reason, want to reset them to zeros
-    reset_params([pparams.PX])
-    # Return the dictionary
-    return retdict
-
-def check_FD(
-    fitter: pint.fitter.Fitter,
-    alpha: float = ALPHA,
-    remove: bool = False,
-    maxcomponent: int = 5,
-    NITS: int = 1
-) -> dict:
-    """
-    Check adding FD parameters with an F-test.
-
-    Parameters
-    ----------
-    fitter : pint.fitter.Fitter
-        The PINT Fitter object.
-    alpha : float
-        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
-    remove : bool:
-        If True, will do and report F-test values for removing parameters.
-        If False, will look for and report F-test values for adding parameters [default: False].
-    maxcomponent : int
-        Maximum number of FD parameters to add to the model [default: 5]. If remove=True,
-        This parameter is ignored.
-    NITS : int
-        Number of fit iterations
-    
-    Returns
-    -------
-    dict
-        Returns the dictionary output from the F-tests.
-    """
-    # Print how many FD currently enabled, must be of the format FDi to avoid FDJUMP parameters
-    cur_fd = [param for param in fitter.model.free_params
-              if param.startswith("FD") and param[2:].isdigit()]
-    if remove:
-        print("Testing removing FD terms (", cur_fd, "enabled):")
-    else:
-        print("Testing adding FD terms (", cur_fd, "enabled):")
-    
-    fitter_fd = copy.deepcopy(fitter)
-    
-    # Check if timing model has FD component in it (includes wideband models)
-    if "FD" not in fitter.model.components.keys():
-        try:
-            all_components = Component.component_types
-            fd_class = all_components["FD"]
-            fd = fd_class()
-            fitter_fd.model.add_component(fd, validate=False)
-        except ValueError:
-            warnings.warn("FD Component already in timing model.")
-    # Add dictionary for return values
-    retdict = {}
-    
-    # Get list of FD parameters to add or remove
-    param_list = []
-    component_list = []
-    if remove:
-        for i in range(len(cur_fd), 0, -1):
-            param_list.append([getattr(pparams, f'FD{q}') for q in range(len(cur_fd),i-1,-1)])
-            component_list.append([getattr(pparams, f"FD{q}_Component") for q in range(len(cur_fd),i-1,-1)])
-    else:
-        for i in range(len(cur_fd)+1, maxcomponent+1):
-            param_list.append([getattr(pparams, f'FD{q}') for q in range(len(cur_fd)+1,i+1)])
-            component_list.append([getattr(pparams, f"FD{q}_Component") for q in range(len(cur_fd)+1,i+1)])
-    for i in range(len(param_list)):
-        d_label = ""
-        for fd in param_list[i]:
-            d_label += f"{fd.name}, "
-        d_label = d_label[:-2]
-        # Run F-test
-        try:
-            ftest_dict = fitter_fd.ftest(param_list[i], component_list[i], maxiter=NITS, remove=remove, full_output=True)
-        # If there's an error running the F-test in the fit for some reason, we catch it
-        except ValueError as e:
-            warnings.warn(f"Error when running F-test for {d_label}: {e}")
-            ftest_dict = None
-        # Add to dictionary to return
-        retdict[d_label] = ftest_dict
-        # Report the values
-        #report_ptest('FD1 through FD%s'%i, ftest_dict, alpha = alpha)
-        report_ptest(d_label, ftest_dict, alpha = alpha)
-        # This edits the values in the file for some reason, want to reset them to zeros
-        reset_params(param_list[i])
-
-    # Return the dictionary
-    return retdict
-
-def check_binary_DD(
-    fitter: pint.fitter.Fitter,
-    alpha: float = ALPHA,
-    remove: bool = False,
-    NITS: int = 1
-) -> dict:
-    """
-    Check the binary parameter F-tests for the DD binary model, either removing or adding parameters.
-
-    Parameters to check:
-    1. M2, SINI
-    2. PBDOT
-    3. XDOT -> A1DOT
-    4. OMDOT
-    5. EDOT
-    
-    Parameters
-    ----------
-    fitter : pint.fitter.Fitter
-        The PINT Fitter object.
-    alpha : float
-        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
-    remove : bool:
-        If True, will do and report F-test values for removing parameters.
-        If False, will look for and report F-test values for adding parameters [default: False].
-    NITS : int
-        Number of fit iterations
-    
-    Returns
-    -------
-    dict
-        Returns the dictionary output from the F-tests.
-    """
-    # Add dictionary for return values
-    retdict = {}
-    # Params to check
-    DDparams = ['M2', 'SINI', 'PBDOT', 'A1DOT', 'OMDOT' ,'EDOT']
-    # Get the components and run the F-test
-    # get list of parameters for F-tests
-    pint_params, pint_comps = binary_params_ftest(DDparams, fitter, remove)
-    # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
-    for ii in range(len(pint_params)):
-        try:
-            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True, maxiter=NITS)
-        except ValueError as e:
-            warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
-            ftest_dict = None
-        # Get dictionary label
-        if len(pint_params[ii]) > 1:
-            d_label = "M2, SINI"
-        else:
-            d_label = pint_params[ii][0].name
-        # Add the dictionary
-        retdict[d_label] = ftest_dict
-        # Report the values
-        report_ptest(d_label, ftest_dict, alpha = alpha)
-        # Reset the parameters
-        reset_params(pint_params[ii])
-    # Return the dictionary
-    return retdict
-
-def check_binary_DDK(
-    fitter: pint.fitter.Fitter,
-    alpha: float = ALPHA,
-    remove: bool = False,
-    NITS: int = 1
-) -> dict:
-    """
-    Check the binary parameter F-tests for the DDK binary model, either removing or adding parameters.
-
-    Parameters to check:
-    1. M2, SINI
-    2. PBDOT
-    3. XDOT -> A1DOT
-    4. OMDOT
-    5. EDOT
-
-    Parameters
-    ----------
-    fitter : pint.fitter.Fitter
-        The PINT Fitter object.
-    alpha : float
-        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
-    remove : bool:
-        If True, will do and report F-test values for removing parameters.
-        If False, will look for and report F-test values for adding parameters [default: False].
-    NITS : int
-        Number of fit iterations
-    
-    Returns
-    -------
-    dict
-        Returns the dictionary output from the F-tests.
-    """
-    # Add dictionary for return values
-    retdict = {}
-    # Params to check
-    DDKparams = ['M2', 'SINI', 'PBDOT', 'A1DOT', 'OMDOT' ,'EDOT']
-    # Get the components and run the F-test
-    # get list of parameters for F-tests
-    pint_params, pint_comps = binary_params_ftest(DDKparams, fitter, remove)
-    # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
-    for ii in range(len(pint_params)):
-        try:
-            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True, maxiter=NITS)
-        except ValueError as e:
-            warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
-            ftest_dict = None
-        # Get dictionary label
-        if len(pint_params[ii]) > 1:
-            d_label = "M2, SINI"
-        else:
-            d_label = pint_params[ii][0].name
-        # Add the dictionary
-        retdict[d_label] = ftest_dict
-        # Report the values
-        report_ptest(d_label, ftest_dict, alpha = alpha)
-        # Reset the parameters
-        reset_params(pint_params[ii])
-    # Return the dictionary
-    return retdict
-
-
-def check_binary_ELL1(
-    fitter: pint.fitter.Fitter,
-    alpha: float = ALPHA,
-    remove: bool = False,
-    NITS: int = 1
-) -> dict:
-    """
-    Check the binary parameter F-tests for the ELL1 binary model, either removing or adding parameters.
-
-    Parameters to check:
-    1. PB
-        a. M2, SINI
-        b. PBDOT
-        c. XDOT -> A1DOT
-        d. EPS1DOT, EPS2DOT
-    2. FB0, FB1
-        a. FB2-FB6+ ( These are checked by running `check_FB()` )
-        b. XDOT -> A1DOT
-        c. EPS1DOT, EPS2DOT
-
-    Parameters
-    ----------
-    fitter : pint.fitter.Fitter
-        The PINT Fitter object.
-    alpha : float
-        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
-    remove : bool:
-        If True, will do and report F-test values for removing parameters.
-        If False, will look for and report F-test values for adding parameters [default: False].
-    NITS : int
-        Number of fit iterations
-    
-    Returns
-    -------
-    dict
-        Returns the dictionary output from the F-tests.
-    """
-    # Define dictionary for returned value
-    retdict = {}
-    # Check if FB is used (Use the same function as in previous finalize time, but PINT-ified
-    fblist = get_fblist(fitter)
-    fbused = (len(fblist)>0)
-    # Get the parameters that are used (not including FB values)
-    if not fbused:
-        ELL1params = ['M2', 'SINI', 'PBDOT', 'A1DOT', 'EPS1DOT' ,'EPS2DOT']
-    else:
-        ELL1params = ['A1DOT', 'EPS1DOT' ,'EPS2DOT']
-    # Check not using FB first
-    if not fbused:
-        # get list of parameters for F-tests
-        pint_params, pint_comps = binary_params_ftest(ELL1params, fitter, remove)
-        # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
-        for ii in range(len(pint_params)):
-            try:
-                ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True, maxiter=NITS)
-            except ValueError as e:
-                warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
-                ftest_dict = None
-            # Get dictionary label
-            if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'M2' or pint_params[ii][0].name == 'SINI'):
-                d_label = "M2, SINI"
-            elif len(pint_params[ii])>1 and (pint_params[ii][0].name == 'EPS1DOT' or pint_params[ii][0].name == 'EPS2DOT'):
-                d_label = "EPS1DOT, EPS2DOT"
-            else:
-                d_label = pint_params[ii][0].name
-            # Add the dictionary
-            retdict[d_label] = ftest_dict
-            # Report the values
-            report_ptest(d_label, ftest_dict, alpha = alpha)
-            # Reset the parameters
-            reset_params(pint_params[ii])
-        # Return the dictionary
-        return retdict
-    # If we use FB parameters, check that, this will be more like the FD parameters
-    else:
-        # Now check other parameters, not FB
-        pint_params, pint_comps = binary_params_ftest(ELL1params, fitter, remove)
-        # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
-        for ii in range(len(pint_params)):
-            try:
-                ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True, maxiter=NITS)
-            except ValueError as e:
-                warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
-                ftest_dict = None
-            # Get dictionary label
-            if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'M2' or pint_params[ii][0].name == 'SINI'):
-                d_label = "M2, SINI"
-            elif len(pint_params[ii])>1 and (pint_params[ii][0].name == 'EPS1DOT' or pint_params[ii][0].name == 'EPS2DOT'):
-                d_label = "EPS1DOT, EPS2DOT"
-            else:
-                d_label = pint_params[ii][0].name
-            # Add the dictionary
-            retdict[d_label] = ftest_dict
-            # Report the values
-            report_ptest(d_label, ftest_dict, alpha = alpha)
-            # Reset the parameters
-            reset_params(pint_params[ii])
-        # Return the dictionary
-        return retdict
-
-def check_binary_ELL1H(
-    fitter: pint.fitter.Fitter,
-    alpha: float = ALPHA,
-    remove: bool = False,
-    NITS: int = 1
-) -> dict:
-    """
-    Check the binary parameter F-tests for the ELL1H binary model, either removing or adding parameters.
-
-    Parameters to check:
-    1. PBDOT
-    2. XDOT -> A1DOT
-    3. EPS1DOT, EPS2DOT
-    4. H3
-        a. H4
-    
-    Parameters
-    ----------
-    fitter : pint.fitter.Fitter
-        The PINT Fitter object.
-    alpha : float
-        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
-    remove : bool:
-        If True, will do and report F-test values for removing parameters.
-        If False, will look for and report F-test values for adding parameters [default: False].
-    NITS : int
-        Number of fit iterations
-    
-    Returns
-    -------
-    dict
-        Returns the dictionary output from the F-tests.
-    """
-    # Define dictionary for returned value
-    retdict = {}
-    # Get the parameters that are used
-    ELL1Hparams = ['PBDOT', 'A1DOT', 'EPS1DOT' ,'EPS2DOT', 'H3', 'H4']
-    # get list of parameters for F-tests
-    pint_params, pint_comps = binary_params_ftest(ELL1Hparams, fitter, remove)
-    # Now get the list of components and parameters to run the F-test; Check M2 SINI specifically
-    for ii in range(len(pint_params)):
-        try:
-            ftest_dict = fitter.ftest(pint_params[ii], pint_comps[ii], remove=remove, full_output=True, maxiter=NITS)
-        except ValueError as e:
-            warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
-            ftest_dict = None
-        # Get dictionary label
-        if len(pint_params[ii]) > 1 and (pint_params[ii][0].name == 'H3' or pint_params[ii][0].name == 'H4'):
-            d_label = "H3, H4"
-        elif len(pint_params[ii])>1 and (pint_params[ii][0].name == 'EPS1DOT' or pint_params[ii][0].name == 'EPS2DOT'):
-            d_label = "EPS1DOT, EPS2DOT"
-        else:
-            d_label = pint_params[ii][0].name
-        # Add the dictionary
-        retdict[d_label] = ftest_dict
-        # Report the values
-        report_ptest(d_label, ftest_dict, alpha = alpha)
-        # Reset the parameters
-        reset_params(pint_params[ii])
-    # Return the dictionary
-    return retdict
-
-def check_FB(fitter: pint.fitter.Fitter,
-             alpha: float = ALPHA,
-             fbmax: int = 5,
-             NITS: int = 1
-) -> dict:
-    """
-    Check the FB parameter F-tests for the ELL1 binary model doing both removing and addtion.
-
-    Parameters
-    ----------
-    fitter : pint.fitter.Fitter
-        The PINT Fitter object.
-    alpha : float
-        The F-test significance value. If the F-statistic is lower than alpha, the timing model parameters are deemed statistically significant to the timing model.
-    fbmax : int
-        Number of FB parameters to check in the F-tests [default: 5].
-    NITS : int
-        Number of fit iterations
-    
-    Returns
-    -------
-    dict
-        Returns the dictionary output from the F-tests.
-    """
-    # Define dictionary for returned value
-    retdict = {}
-    # Check if FB is used (Use the same function as in previous finalize time, but PINT-ified
-    fblist = get_fblist(fitter)
-    fbused = (len(fblist)>0)
-    if fbused:
-        # First check FB parameters - print the corrent number of FB parameters used
-        fbp = [fblist[ifb] for ifb in sorted(fblist.keys())]  # sorted list of fb parameters
-        print("Testing FB parameters, present list: "+" ".join(fbp))
-        # Now run the F-tests, first try removing FB parmaters
-        print("Testing removal of FB parameters:")
-        for i in range(1,len(fblist)):
-            p = [fbp[j] for j in range(i,len(fbp))]
-            param_list = [(getattr(pparams, fp)) for fp in p]
-            component_list = [(getattr(pparams, "%s_Component"%(fp))+"ELL1") for fp in p]
-            # Run F-test
-            try:
-                ftest_dict = fitter.ftest(param_list, component_list, remove=True, full_output=True, maxiter=NITS)
-            except ValueError as e:
-                warnings.warn(f"Error when running F-test for {[p.name for p in param_list]}: {e}")
-                ftest_dict = None
-            # Add to dictionary to return
-            retdict['FB%s+'%i] = ftest_dict
-            # Report the values
-            report_ptest(" ".join(p), ftest_dict, alpha = alpha)
-            # This edits the values in the file for some reason, want to reset them to zeros
-            reset_params(param_list)
-    # Now try adding FB parameters
-        print("Testing addition of FB parameters:")
-        for i in range(len(fblist),fbmax+1):
-            p = ["FB%d" % (j) for j in range(len(fblist),i+1)]
-            param_list = [(getattr(pparams, fp)) for fp in p]
-            component_list = [(getattr(pparams, "%s_Component"%(fp))+"ELL1") for fp in p]
-            # Run F-test
-            try:
-                ftest_dict = fitter.ftest(param_list, component_list, remove=False, full_output=True, maxiter=NITS)
-            except ValueError as e:
-                warnings.warn(f"Error when running F-test for {[p.name for p in pint_params[ii]]}: {e}")
-                ftest_dict = None
-            # Add to dictionary to return
-            retdict['FB%s'%i] = ftest_dict
-            # Report the values
-            report_ptest(" ".join(p), ftest_dict, alpha = alpha)
-            # This edits the values in the file for some reason, want to reset them to zeros
-            reset_params(param_list)
-        # Now return the dictionary
-        return retdict
-    else:
-        warnings.warn("No FB parameters in the initial timing model...")
-        return False
-
-    
+    if NITS is not None:
+        maxiter = NITS
+    if ncpu is not None and ncpu < 1:
+        raise ValueError(f"ncpu must be 1 or more (or None to use all CPUs), not {ncpu}.")
+    # With one CPU, use the serial executor (as in run_Ftests()) rather than PINT's own single-CPU mode, which
+    # reuses one fitter for every test and stops at the first failed fit, so it can give different results
+    executor = _SerialExecutor() if ncpu == 1 else None
+    results = _run_test_fits(fitter, executor=executor, ncpu=ncpu, maxiter=maxiter,
+                             FDnparams=FDnparams, FBnparams=FBnparams)
+    return _process_test_results(results, fitter, tc, results_log=results_log,
+                                 alpha_add=alpha_add, alpha_remove=alpha_remove)
