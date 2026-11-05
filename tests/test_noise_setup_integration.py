@@ -910,17 +910,13 @@ def test_discovery_likelihood_chromatic_quadratic_filter(
     expected_alpha = [f"{e_psr.name}_chrom_gp_alpha"] if chromatic_idx == "vary" else []
     assert F_params == expected_alpha
 
+    # varying or fixed, the filter is a variable GP with 3 extra design columns
     quad_keys = set(index_quad) - set(index_plain)
-    if chromatic_idx == "vary":
-        # a varying index makes the filter a variable GP: 3 extra design columns
-        quad_key = quad_keys.pop()
-        assert not quad_keys and "chrom_gp" in quad_key
-        start, stop = index_quad[quad_key]
-        assert stop - start == 3
-        assert np.asarray(F_quad[quad_key]).shape == (len(e_psr.toas), 3)
-    else:
-        # a fixed index gives a constant GP, marginalized like the timing model
-        assert not quad_keys
+    quad_key = quad_keys.pop()
+    assert not quad_keys and "chrom_gp" in quad_key
+    start, stop = index_quad[quad_key]
+    assert stop - start == 3
+    assert np.asarray(F_quad[quad_key]).shape == (len(e_psr.toas), 3)
 
     # the Fourier part of the model is untouched by adding the filter
     for gp_key, F in F_plain.items():

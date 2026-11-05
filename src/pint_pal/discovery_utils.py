@@ -480,7 +480,6 @@ def chromatic_quad_block(
         name: str = 'chrom_gp',
         chromatic_idx: Union[str, float] = 'vary',
         fref: float = 800.0,
-        constant: float = 1.0e40,
         ) -> Any:
     """
     Build a chromatic quadratic filter (the chromatic analogue of the DM, DM1,
@@ -490,14 +489,22 @@ def chromatic_quad_block(
     same ``{psr.name}_{name}_alpha`` chromatic-index parameter, so a varying
     index is fit jointly by the quadratic filter and the chromatic Fourier GP.
 
+    This matches ``enterprise_extensions.chromatic.chromatic_quad_basis`` and
+    ``chromatic_quad_prior``: a column-normalized basis that is not projected
+    against the timing model, with a flat prior of variance 1e80 on each
+    coefficient. Unlike ``ds.makegp_improper_varF``, which removes the
+    timing-model span and orthonormalizes, the coefficients are the amplitudes
+    of the three normalized quadratic columns.
+
     Parameters
     ----------
     psr : Any
         Pulsar object.
     noise_dict : dict, optional
-        Dictionary of fixed noise parameters. If it contains
-        ``{psr.name}_{name}_alpha`` the basis is evaluated once and a constant
-        GP is returned. Default is empty dict.
+        Dictionary of fixed noise parameters. If it is non-empty and the index
+        is fixed (numeric *chromatic_idx*, or ``{psr.name}_{name}_alpha`` in the
+        dict), the basis is evaluated once and a constant GP is returned.
+        Default is empty dict.
     name : str, optional
         Name of the noise component. Default is ``"chrom_gp"``.
     chromatic_idx : str or float, optional
@@ -507,30 +514,38 @@ def chromatic_quad_block(
         Reference frequency in MHz for the chromatic scaling. Default is 800.0.
         Discovery normalizes each basis column, so this does not change the fit,
         only the reference at which the quadratic is defined.
-    constant : float, optional
-        Diagonal value of the improper (flat) prior on the basis coefficients.
-        Default is 1.0e40.
 
     Returns
     -------
     Any
-        Discovery improper GP from ``ds.makegp_improper_varF`` (varying index)
-        or ``ds.makegp_improper`` (fixed index).
+        Discovery GP from ``ds.makegp_fourier``: a ``VariableGP`` whose ``F``
+        depends on ``{psr.name}_{name}_alpha`` when the index varies, or a
+        ``ConstantGP`` when every parameter is fixed by *noise_dict*.
     """
     if chromatic_idx == 'vary':
-        return ds.makegp_improper_varF(
-            psr,
-            ds.chromatic_quad_basis(psr, fref=fref),
-            constant=constant,
-            name=name,
-            param_names=['alpha'],
-            noisedict=noise_dict,
-        )
-    return ds.makegp_improper(
+        quad_fmat = ds.chromatic_quad_basis(psr, fref=fref)
+
+        def fmat(alpha):
+            return quad_fmat(alpha)
+    else:
+        fmat = ds.chromatic_quad_basis(psr, fref=fref, chrom_idx=chromatic_idx)
+
+    # makegp_fourier names the arguments of a callable basis {psr.name}_{name}_<arg>,
+    # which is what shares alpha with the chromatic Fourier GP. f and df are
+    # placeholders: the quadratic has no frequencies.
+    def quad_basis(psr, components, T=None):
+        return np.zeros(3), np.ones(3), fmat
+
+    def flat_prior(f, df):
+        return 1.0e80 * np.ones(3)
+
+    return ds.makegp_fourier(
         psr,
-        ds.chromatic_quad_basis(psr, fref=fref, chrom_idx=chromatic_idx),
-        constant=constant,
+        flat_prior,
+        3,
+        fourierbasis=quad_basis,
         name=name,
+        noisedict=noise_dict,
     )
 
 def chromatic_noise_block(

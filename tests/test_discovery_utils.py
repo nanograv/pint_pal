@@ -1031,43 +1031,30 @@ class TestChromaticQuadBlock:
         monkeypatch.setattr(du.ds, 'powerlaw', object())
         monkeypatch.setattr(du.ds, 'makegp_fourier', lambda *a, **k: 'GP')
 
-    def test_quad_block_vary_uses_varF_with_alpha(self, monkeypatch):
-        """chromatic_idx='vary' → callable basis + makegp_improper_varF(param_names=['alpha'])."""
-        captured = {}
-        def fake_basis(psr, fref=1400.0, chrom_idx=None):
-            captured['basis'] = {'fref': fref, 'chrom_idx': chrom_idx}
-            return 'CALLABLE_BASIS'
-        def fake_varF(psr, fmat, constant=None, name=None, param_names=None, noisedict=None):
-            captured['varF'] = {'fmat': fmat, 'constant': constant, 'name': name,
-                                'param_names': param_names, 'noisedict': noisedict}
-            return 'QUAD'
-        monkeypatch.setattr(du.ds, 'chromatic_quad_basis', fake_basis)
-        monkeypatch.setattr(du.ds, 'makegp_improper_varF', fake_varF)
+    def test_quad_block_vary_is_unprojected_with_shared_alpha(self):
+        """A varying index gives the enterprise basis, not projected against the timing model."""
+        psr = _chrom_psr()
+        alpha_key = f"{psr.name}_chrom_gp_alpha"
+        quad = du.chromatic_quad_block(psr)
+        assert quad.F.params == [alpha_key]
+        assert quad.index == {f"{psr.name}_chrom_gp_coefficients(3)": slice(0, 3)}
+        expected = np.asarray(du.ds.chromatic_quad_basis(psr, fref=800.0)(4.0))
+        np.testing.assert_array_equal(np.asarray(quad.F({alpha_key: 4.0})), expected)
 
-        noise_dict = {'B1937+21_efac': 1.0}
-        assert du.chromatic_quad_block(object(), noise_dict=noise_dict) == 'QUAD'
-        assert captured['basis'] == {'fref': 800.0, 'chrom_idx': None}
-        assert captured['varF']['fmat'] == 'CALLABLE_BASIS'
-        assert captured['varF']['param_names'] == ['alpha']
-        assert captured['varF']['name'] == 'chrom_gp'
-        assert captured['varF']['noisedict'] is noise_dict
+    def test_quad_block_fixed_index_has_coefficients(self):
+        """A numeric chromatic_idx gives a fixed basis that still has coefficients to draw."""
+        psr = _chrom_psr()
+        quad = du.chromatic_quad_block(psr, chromatic_idx=4.0, name='chrom2_gp')
+        assert not callable(quad.F)
+        assert quad.index == {f"{psr.name}_chrom2_gp_coefficients(3)": slice(0, 3)}
+        np.testing.assert_array_equal(
+            np.asarray(quad.F),
+            np.asarray(du.ds.chromatic_quad_basis(psr, fref=800.0, chrom_idx=4.0)))
 
-    def test_quad_block_fixed_uses_improper_with_matrix(self, monkeypatch):
-        """A numeric chromatic_idx → fixed basis matrix + makegp_improper."""
-        captured = {}
-        def fake_basis(psr, fref=1400.0, chrom_idx=None):
-            captured['basis'] = {'fref': fref, 'chrom_idx': chrom_idx}
-            return 'FIXED_BASIS'
-        def fake_improper(psr, fmat, constant=None, name=None):
-            captured['improper'] = {'fmat': fmat, 'constant': constant, 'name': name}
-            return 'QUAD'
-        monkeypatch.setattr(du.ds, 'chromatic_quad_basis', fake_basis)
-        monkeypatch.setattr(du.ds, 'makegp_improper', fake_improper)
-
-        result = du.chromatic_quad_block(object(), chromatic_idx=4.0, fref=800.0, name='chrom2_gp')
-        assert result == 'QUAD'
-        assert captured['basis'] == {'fref': 800.0, 'chrom_idx': 4.0}
-        assert captured['improper'] == {'fmat': 'FIXED_BASIS', 'constant': 1.0e40, 'name': 'chrom2_gp'}
+    def test_quad_block_prior_matches_enterprise(self):
+        psr = _chrom_psr()
+        quad = du.chromatic_quad_block(psr, noise_dict={f"{psr.name}_chrom_gp_alpha": 4.0})
+        np.testing.assert_array_equal(np.asarray(quad.Phi.N), 1.0e80 * np.ones(3))
 
     def test_noise_block_without_quadratic_returns_single_gp(self, monkeypatch):
         """include_quadratic=False (default) keeps the historical single-signal return."""

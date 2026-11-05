@@ -287,6 +287,52 @@ class TestGetTmComponentSignal:
             np.testing.assert_array_equal(sig_no_ref, sig_ref)
 
 
+def _make_chrom_quad_payload():
+    """Payload with a chromatic Fourier GP and its chromatic quadratic."""
+    payload = _make_payload()
+    chrom_key = f"{PSR}_chrom_gp_coefficients(4)"
+    quad_key = f"{PSR}_chrom_gp_coefficients(3)"
+    payload["gp_keys"] += [chrom_key, quad_key]
+    payload["realizations"][chrom_key] = _rn_coeffs.copy()
+    payload["F_columns"][chrom_key] = _rn_F.copy()
+    payload["realizations"][quad_key] = _rng.standard_normal((N_REAL, 3))
+    payload["F_columns"][quad_key] = _rng.standard_normal((N_TOAS, 3)) * 1e-7
+    return payload, chrom_key, quad_key
+
+
+class TestChromaticQuadratic:
+    def test_quad_is_its_saved_basis_times_coefficients(self):
+        payload, _, quad_key = _make_chrom_quad_payload()
+        expected = payload["realizations"][quad_key] @ payload["F_columns"][quad_key].T
+        np.testing.assert_array_equal(pu._gp_time_domain(payload, quad_key), expected)
+
+    def test_timing_model_is_unchanged_by_quad(self):
+        payload, _, _ = _make_chrom_quad_payload()
+        tm_key = payload["gp_keys"][0]
+        np.testing.assert_array_equal(pu._gp_time_domain(payload, tm_key),
+                                      _tm_coeffs @ _tm_F.T)
+
+    def test_chrom_tm_component_is_the_quad(self):
+        payload, _, quad_key = _make_chrom_quad_payload()
+        sig, names = pu._get_tm_component_signal(payload, "chrom", PSR)
+        assert names == ["chrom_quad"]
+        np.testing.assert_allclose(sig, pu._gp_time_domain(payload, quad_key))
+
+    def test_combined_folds_quad_into_chrom_panel_with_tm(self):
+        payload, _, _ = _make_chrom_quad_payload()
+        _, axes = pu.plot_gp_realizations_combined(
+            payload, include_tm_perturbations=True, include_tm_values=False,
+            model=_dummy_model(), chromatic_idx=4.0)
+        assert len(axes) == len(payload["gp_keys"]) - 1
+
+    def test_combined_shows_quad_panel_without_tm(self):
+        payload, _, _ = _make_chrom_quad_payload()
+        _, axes = pu.plot_gp_realizations_combined(
+            payload, include_tm_perturbations=False, include_tm_values=False,
+            chromatic_idx=4.0)
+        assert len(axes) == len(payload["gp_keys"])
+
+
 # ---------------------------------------------------------------------------
 # Tests: plot_gp_realization — auto-units, ylabel, title
 # ---------------------------------------------------------------------------
