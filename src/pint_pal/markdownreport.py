@@ -83,6 +83,7 @@ class MarkdownReport:
         self.header += f"""      font-size: {font_size}pt;"""
         self.header += textwrap.dedent(
             """
+                  padding: 0;
                 }
               }
               @page {
@@ -91,6 +92,9 @@ class MarkdownReport:
               }
               strong {
                 color: #ff0000;
+              }
+              table {
+                font-size: 8.5pt;
               }
               </style>
             ---

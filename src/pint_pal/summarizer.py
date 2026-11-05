@@ -39,10 +39,8 @@ class Summarizer:
                  fitter_post_noise: pint.fitter.Fitter | None = None,
                  rs_dict: dict | None = None,
                  user: str = "anonymous user",
-                 filename: str = "summary.pdf",
                  font_size: int = 10,
-                 suppress_errors: bool = False,
-                 verbose: bool = False
+                 suppress_errors: bool = False
     ) -> None:
         
         self.fitter = fitter
@@ -73,7 +71,7 @@ class Summarizer:
         self.user = user
         return
         
-    def autorun(self):
+    def autorun(self, filename: str = "summary.pdf", verbose: bool = False):
         """
         Automatically runs all items
         """
