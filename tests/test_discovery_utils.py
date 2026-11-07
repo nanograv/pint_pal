@@ -157,12 +157,15 @@ def test_basic_noise_blocks_delegate(monkeypatch):
 def test_select_fourier_basis_nlog_zero_returns_expected_objects(monkeypatch):
     monkeypatch.setattr(du.ds, "fourierbasis", object())
     monkeypatch.setattr(du.ds, "fourierbasis_dm", object())
-    monkeypatch.setattr(du.ds, "fourierbasis_chrom", object())
+    chrom_calls = []
+    monkeypatch.setattr(du.ds, "fourierbasis_chrom",
+                        lambda psr, comp, T=None, fref=None: chrom_calls.append((psr, comp, T, fref)))
     monkeypatch.setattr(du.ds_solar, "fourierbasis_solar_dm", object(), raising=False)
 
     assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "red_noise") is du.ds.fourierbasis
     assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "dm_noise") is du.ds.fourierbasis_dm
-    assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "chromatic") is du.ds.fourierbasis_chrom
+    du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "chromatic")("P", 3, T=2.0)
+    assert chrom_calls == [("P", 3, 2.0, 800.0)]
     assert du._select_fourier_basis(None, 1, 1.0, 0, 0.1, 0, "solar_wind") is du.ds_solar.fourierbasis_solar_dm
 
 
@@ -847,6 +850,25 @@ def test_stack_plot_tree_and_svi_early_stopping(monkeypatch):
     assert diag is None
 
 
+@pytest.mark.parametrize("chromatic_idx", [None, 3.0])
+def test_select_fourier_basis_chrom_fref_real_discovery(chromatic_idx):
+    """Un-mocked: the linear and log chromatic bases both use the requested fref,
+    so a TOA at fref gets the achromatic basis regardless of alpha."""
+    psr = _log_basis_psr()
+    psr.freqs[:5] = 800.0
+    tspan = du.ds.getspan(psr)
+    for nlog in (0, 3):
+        basis = du._select_fourier_basis(psr, 10, tspan, 0, 0.2 / tspan, nlog, "chromatic",
+                                         chromatic_idx=chromatic_idx)
+        achrom = du._select_fourier_basis(psr, 10, tspan, 0, 0.2 / tspan, nlog, "red_noise")
+        fmat = basis(psr, 10, T=tspan)[2]
+        fmat = np.asarray(fmat(3.0) if callable(fmat) else fmat)
+        fmat0 = np.asarray(achrom(psr, 10, T=tspan)[2])
+        np.testing.assert_allclose(fmat[:5], fmat0[:5], rtol=1e-12)
+        ratio = (800.0 / psr.freqs[5:]) ** 3.0
+        np.testing.assert_allclose(fmat[5:], fmat0[5:] * ratio[:, None], rtol=1e-12)
+
+
 # ---------------------------------------------------------------------------
 # Chromatic basis: fixed vs. varying chromatic_idx
 # ---------------------------------------------------------------------------
@@ -856,21 +878,30 @@ class TestChromaticBasisSelection:
 
     # --- _select_fourier_basis, nlog==0 ---
 
-    def test_nlog0_vary_returns_fourierbasis_chrom(self):
-        """chromatic_idx=None → bare ds.fourierbasis_chrom (callable fmat)."""
+    def test_nlog0_vary_wraps_fourierbasis_chrom(self, monkeypatch):
+        """chromatic_idx=None → ds.fourierbasis_chrom (callable fmat) at the given fref."""
+        calls = {}
+        def fake_chrom(psr, components, T=None, fref=None):
+            calls.update(components=components, T=T, fref=fref)
+            return 'f', 'df', lambda alpha: 'FMAT'
+        monkeypatch.setattr(du.ds, 'fourierbasis_chrom', fake_chrom)
         result = du._select_fourier_basis(
             psr=object(), Nfreqs=10, tspan=100.0,
             logmode=2, f_min=1e-3, nlog=0,
-            noise_type='chromatic', chromatic_idx=None,
+            noise_type='chromatic', chromatic_idx=None, fref=1000.0,
         )
-        assert result is du.ds.fourierbasis_chrom
+        result(object(), 10, T=100.0)
+        assert calls == {'components': 10, 'T': 100.0, 'fref': 1000.0}
 
     def test_nlog0_fixed_calls_make_fourierbasis_chrom(self, monkeypatch):
         """chromatic_idx=4.0 → ds.make_fourierbasis_chrom(alpha=4.0) (fixed-index matrix)."""
         captured = {}
         def fake_make(alpha):
             captured['alpha'] = alpha
-            return 'FIXED_BASIS'
+            def basis(psr, components, T=None, fref=1400.0):
+                captured.update(components=components, T=T, fref=fref)
+                return 'FIXED_BASIS'
+            return basis
         monkeypatch.setattr(du.ds, 'make_fourierbasis_chrom', fake_make)
 
         result = du._select_fourier_basis(
@@ -879,15 +910,17 @@ class TestChromaticBasisSelection:
             noise_type='chromatic', chromatic_idx=4.0,
         )
         assert captured['alpha'] == 4.0
-        assert result == 'FIXED_BASIS'
+        assert result(object(), 10, T=100.0) == 'FIXED_BASIS'
+        assert captured['fref'] == 800.0
 
     # --- _select_fourier_basis, nlog>0 ---
 
     def test_nlog_positive_vary_calls_log_free(self, monkeypatch):
         """nlog>0 + chromatic_idx=None → lambda calling log_fourierbasis_chrom."""
         calls = {}
-        def fake_log_free(psr, components, T, logmode, f_min, nlog):
+        def fake_log_free(psr, components, T, logmode, f_min, nlog, fref):
             calls['log_free'] = (components, T, nlog)
+            calls['fref'] = fref
             return 'f', 'df', lambda alpha: 'FMAT'
         monkeypatch.setattr(du.ds, 'log_fourierbasis_chrom', fake_log_free)
 
@@ -901,12 +934,14 @@ class TestChromaticBasisSelection:
         assert callable(result)
         result(psr, 10, T=100.0)
         assert calls['log_free'] == (10, 100.0, 5)
+        assert calls['fref'] == 800.0
 
     def test_nlog_positive_fixed_calls_log_fixed(self, monkeypatch):
         """nlog>0 + chromatic_idx=4.0 → lambda calling log_fourierbasis_chrom_fixed."""
         calls = {}
-        def fake_log_fixed(psr, components, T, alpha, logmode, f_min, nlog):
+        def fake_log_fixed(psr, components, T, alpha, logmode, f_min, nlog, fref):
             calls['alpha'] = alpha
+            calls['fref'] = fref
             calls['components'] = components
             return 'f', 'df', 'FMAT'
         monkeypatch.setattr(du.ds, 'log_fourierbasis_chrom_fixed', fake_log_fixed)
@@ -921,13 +956,14 @@ class TestChromaticBasisSelection:
         result(psr, 10, T=100.0)
         assert calls['alpha'] == 4.0
         assert calls['components'] == 10
+        assert calls['fref'] == 800.0
 
     # --- chromatic_noise_block wiring ---
 
     def test_chromatic_block_vary_passes_none(self, monkeypatch):
         """chromatic_idx='vary' → _select_fourier_basis gets chromatic_idx=None."""
         captured = {}
-        def fake_select(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, chromatic_idx=None):
+        def fake_select(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, chromatic_idx=None, fref=None):
             captured['chromatic_idx'] = chromatic_idx
             return 'BASIS'
         monkeypatch.setattr(du, '_select_fourier_basis', fake_select)
@@ -941,7 +977,7 @@ class TestChromaticBasisSelection:
     def test_chromatic_block_fixed_passes_value(self, monkeypatch):
         """chromatic_idx=4.0 → _select_fourier_basis gets chromatic_idx=4.0."""
         captured = {}
-        def fake_select(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, chromatic_idx=None):
+        def fake_select(psr, Nfreqs, tspan, logmode, f_min, nlog, noise_type, chromatic_idx=None, fref=None):
             captured['chromatic_idx'] = chromatic_idx
             return 'BASIS'
         monkeypatch.setattr(du, '_select_fourier_basis', fake_select)
@@ -995,43 +1031,30 @@ class TestChromaticQuadBlock:
         monkeypatch.setattr(du.ds, 'powerlaw', object())
         monkeypatch.setattr(du.ds, 'makegp_fourier', lambda *a, **k: 'GP')
 
-    def test_quad_block_vary_uses_varF_with_alpha(self, monkeypatch):
-        """chromatic_idx='vary' → callable basis + makegp_improper_varF(param_names=['alpha'])."""
-        captured = {}
-        def fake_basis(psr, fref=1400.0, chrom_idx=None):
-            captured['basis'] = {'fref': fref, 'chrom_idx': chrom_idx}
-            return 'CALLABLE_BASIS'
-        def fake_varF(psr, fmat, constant=None, name=None, param_names=None, noisedict=None):
-            captured['varF'] = {'fmat': fmat, 'constant': constant, 'name': name,
-                                'param_names': param_names, 'noisedict': noisedict}
-            return 'QUAD'
-        monkeypatch.setattr(du.ds, 'chromatic_quad_basis', fake_basis)
-        monkeypatch.setattr(du.ds, 'makegp_improper_varF', fake_varF)
+    def test_quad_block_vary_is_unprojected_with_shared_alpha(self):
+        """A varying index gives the enterprise basis, not projected against the timing model."""
+        psr = _chrom_psr()
+        alpha_key = f"{psr.name}_chrom_gp_alpha"
+        quad = du.chromatic_quad_block(psr)
+        assert quad.F.params == [alpha_key]
+        assert quad.index == {f"{psr.name}_chrom_gp_coefficients(3)": slice(0, 3)}
+        expected = np.asarray(du.ds.chromatic_quad_basis(psr, fref=800.0)(4.0))
+        np.testing.assert_array_equal(np.asarray(quad.F({alpha_key: 4.0})), expected)
 
-        noise_dict = {'B1937+21_efac': 1.0}
-        assert du.chromatic_quad_block(object(), noise_dict=noise_dict) == 'QUAD'
-        assert captured['basis'] == {'fref': 1400.0, 'chrom_idx': None}
-        assert captured['varF']['fmat'] == 'CALLABLE_BASIS'
-        assert captured['varF']['param_names'] == ['alpha']
-        assert captured['varF']['name'] == 'chrom_gp'
-        assert captured['varF']['noisedict'] is noise_dict
+    def test_quad_block_fixed_index_has_coefficients(self):
+        """A numeric chromatic_idx gives a fixed basis that still has coefficients to draw."""
+        psr = _chrom_psr()
+        quad = du.chromatic_quad_block(psr, chromatic_idx=4.0, name='chrom2_gp')
+        assert not callable(quad.F)
+        assert quad.index == {f"{psr.name}_chrom2_gp_coefficients(3)": slice(0, 3)}
+        np.testing.assert_array_equal(
+            np.asarray(quad.F),
+            np.asarray(du.ds.chromatic_quad_basis(psr, fref=800.0, chrom_idx=4.0)))
 
-    def test_quad_block_fixed_uses_improper_with_matrix(self, monkeypatch):
-        """A numeric chromatic_idx → fixed basis matrix + makegp_improper."""
-        captured = {}
-        def fake_basis(psr, fref=1400.0, chrom_idx=None):
-            captured['basis'] = {'fref': fref, 'chrom_idx': chrom_idx}
-            return 'FIXED_BASIS'
-        def fake_improper(psr, fmat, constant=None, name=None):
-            captured['improper'] = {'fmat': fmat, 'constant': constant, 'name': name}
-            return 'QUAD'
-        monkeypatch.setattr(du.ds, 'chromatic_quad_basis', fake_basis)
-        monkeypatch.setattr(du.ds, 'makegp_improper', fake_improper)
-
-        result = du.chromatic_quad_block(object(), chromatic_idx=4.0, fref=800.0, name='chrom2_gp')
-        assert result == 'QUAD'
-        assert captured['basis'] == {'fref': 800.0, 'chrom_idx': 4.0}
-        assert captured['improper'] == {'fmat': 'FIXED_BASIS', 'constant': 1.0e40, 'name': 'chrom2_gp'}
+    def test_quad_block_prior_matches_enterprise(self):
+        psr = _chrom_psr()
+        quad = du.chromatic_quad_block(psr, noise_dict={f"{psr.name}_chrom_gp_alpha": 4.0})
+        np.testing.assert_array_equal(np.asarray(quad.Phi.N), 1.0e80 * np.ones(3))
 
     def test_noise_block_without_quadratic_returns_single_gp(self, monkeypatch):
         """include_quadratic=False (default) keeps the historical single-signal return."""
@@ -1066,6 +1089,32 @@ class TestChromaticQuadBlock:
 
         du.chromatic_noise_block(object(), tspan=100.0, chromatic_idx=4.0, include_quadratic=True)
         assert captured['chromatic_idx'] == 4.0
+
+    def test_noise_block_passes_fref_to_basis(self, monkeypatch):
+        """chromatic_noise_block forwards fref (default 800 MHz) to _select_fourier_basis."""
+        captured = []
+        monkeypatch.setattr(du, '_select_fourier_basis',
+                            lambda *a, **k: (captured.append(k['fref']), 'BASIS')[1])
+        monkeypatch.setattr(du.ds, 'getspan', lambda _: 100.0)
+        monkeypatch.setattr(du.ds, 'powerlaw', object())
+        monkeypatch.setattr(du.ds, 'makegp_fourier', lambda *a, **k: 'GP')
+
+        du.chromatic_noise_block(object(), tspan=100.0)
+        du.chromatic_noise_block(object(), tspan=100.0, fref=1400.0)
+        assert captured == [800.0, 1400.0]
+
+    def test_noise_block_quadratic_inherits_fref(self, monkeypatch):
+        """quad_fref=None → the quadratic uses the GP's fref; an explicit quad_fref wins."""
+        self._patch_fourier(monkeypatch)
+        captured = []
+        monkeypatch.setattr(du, 'chromatic_quad_block',
+                            lambda psr, **k: (captured.append(k['fref']), 'QUAD')[1])
+
+        du.chromatic_noise_block(object(), tspan=100.0, include_quadratic=True)
+        du.chromatic_noise_block(object(), tspan=100.0, include_quadratic=True, fref=1000.0)
+        du.chromatic_noise_block(object(), tspan=100.0, include_quadratic=True,
+                                 fref=1000.0, quad_fref=1400.0)
+        assert captured == [800.0, 1000.0, 1400.0]
 
     def test_flatten_args_expands_multi_signal_blocks(self):
         """flatten_args keeps single signals and expands sequences."""
