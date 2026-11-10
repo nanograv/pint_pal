@@ -1,10 +1,9 @@
-'''
+"""
 Unit testing for data_checker.py
 
 These tests are performed on modified versions of the
 NANOGrav 12.5-year data set (version 3) parameter files
-'''
-
+"""
 
 import pytest
 import sys
@@ -17,36 +16,45 @@ import pint_pal.data_checker as dc
 from loguru import logger
 
 logger.remove(0)
-logger.add(sys.stderr, level="ERROR") # do not show PINT warnings here to avoid clutter
+logger.add(sys.stderr, level="ERROR")  # do not show PINT warnings here to avoid clutter
+
 
 @pytest.fixture
 def modelB1855():
     parent = Path(__file__).parent
     parfile = parent / "par/B1855+09_NANOGrav_12yv4.gls.par"
     return models.get_model(parfile)
+
+
 @pytest.fixture
 def modelJ1024():
     parent = Path(__file__).parent
     parfile = parent / "par/J1024-0719_NANOGrav_12yv4.gls.par"
     return models.get_model(parfile)
-@pytest.fixture(params=['modelB1855', 'modelJ1024'])
+
+
+@pytest.fixture(params=["modelB1855", "modelJ1024"])
 def model(request):
     return request.getfixturevalue(request.param)
+
 
 @pytest.fixture
 def toasB1855():
     parent = Path(__file__).parent
     timfile = parent / "tim/B1855+09_NANOGrav_12yv4.tim"
     return toa.get_TOAs(timfile)
+
+
 @pytest.fixture
 def toasJ1024():
     parent = Path(__file__).parent
     timfile = parent / "tim/J1024-0719_NANOGrav_12yv4.tim"
     return toa.get_TOAs(timfile)
-@pytest.fixture(params=['toasB1855', 'toasJ1024'])
+
+
+@pytest.fixture(params=["toasB1855", "toasJ1024"])
 def toas(request):
     return request.getfixturevalue(request.param)
-
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
@@ -61,6 +69,7 @@ def test_check_name(model):
     # this is circular, but we know the names of the par files above
     filename = f"{model.PSR.value}_NANOGrav_12yv4.gls.par"
     assert namechecker.check_against_filename(filename)
+
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_check_parameters(model):
@@ -83,15 +92,17 @@ def test_check_parameters(model):
         "PLANET_SHAPIRO": False,
         "EPHEM": "DE436",
         "CLOCK": "TT(BIPM2017)",
-        "CORRECT_TROPOSPHERE": False
+        "CORRECT_TROPOSPHERE": False,
     }
-    assert parchecker.check(required=required, excluded=excluded, required_value=required_value)
+    assert parchecker.check(
+        required=required, excluded=excluded, required_value=required_value
+    )
 
     assert parchecker.check_frozen()
     # Make a bad model with a wrong frozen value
-    model['NE_SW'].value = 1.0    
+    model["NE_SW"].value = 1.0
     parchecker = dc.ParChecker(model)
-    assert (not parchecker.check_frozen(raiseexcept=False))
+    assert not parchecker.check_frozen(raiseexcept=False)
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
@@ -103,6 +114,7 @@ def test_check_epoch_centering(model, toas):
         epochchecker = dc.EpochChecker(model, toas)
         assert epochchecker.check()
 
+
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_check_jumps(model, toas):
     """
@@ -110,11 +122,14 @@ def test_check_jumps(model, toas):
     """
     if model.PSR.value in str(toas.filename):
         jumpchecker = dc.JumpChecker(model, toas)
-        assert jumpchecker.check()
-        
+        assert jumpchecker.check(keys=[("fe",)])
+
+
 def test_check_version(toasJ1024):
     """
     Check -ver flag for TOAs, if it exists
     """
     toachecker = dc.TOAChecker(toas=toasJ1024)
-    assert toachecker.check(version="20170425", ignorebe=["GASP"]) #GASP TOAs have no -ver flag
+    assert toachecker.check(
+        version="20170425", ignorebe=["GASP"]
+    )  # GASP TOAs have no -ver flag
