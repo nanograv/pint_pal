@@ -654,7 +654,9 @@ class JumpChecker(DataChecker):
 
     def check(
         self,
-        keys: Optional[List[Tuple]] = [("f"), ("fe", "be")],
+        keys: Optional[List[Tuple]] = [
+            ("fe",),
+        ],
         includeoffsets: Optional[bool] = False,
         raiseexcept: Optional[bool] = True,
     ) -> bool:
