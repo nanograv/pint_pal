@@ -8,6 +8,7 @@ Code since butchered by many timers.
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
+import math
 from loguru import logger as log
 import astropy.units as u
 import yaml
@@ -16,6 +17,7 @@ import pint.toa as toa
 import pint.models as model
 import pint.fitter as fitter
 import pint.utils as pu
+from pint import DMconst
 import subprocess
 
 from pint_pal.utils import *
@@ -5171,11 +5173,9 @@ def rn_sub(testing, rn_subtract, fo_nb, fo_wb):
 # GP realization plotting helpers
 # ---------------------------------------------------------------------------
 
-# DM constant: 1 / (2.41e-16) in the conventional DMconst = 4.148808e3
 # to convert DM (pc cm^-3) to time delay (s) at freq MHz:
 #   dt = DM * DMconst / freq_MHz^2   [seconds]
-_DMCONST_MHZ2_S = 4.148808e3  # MHz^2 s pc^-1 cm^3
-_DM_K = 2.41e-16  # s MHz^2 pc^-1 cm^3  (Discovery convention)
+_DMCONST_MHZ2_S = DMconst.to_value(u.MHz**2 * u.s * u.cm**3 / u.pc)
 
 # Pretty-print labels for known GP components
 _GP_LABELS = {
@@ -5185,6 +5185,7 @@ _GP_LABELS = {
     'dm': 'DM GP',
     'chrom': 'Free Chromatic GP',
     'chrom_gp': 'Free Chromatic GP',
+    'chrom_quad': 'Chromatic Quadratic',
     'sw': 'Solar Wind GP',
     'solar_wind': 'Solar Wind GP',
     'timing_model': 'Timing Model Perturbations',
@@ -5201,6 +5202,7 @@ _GP_COLORS = {
     'dm': '#FF7F0E',
     'chrom': '#2CA02C',
     'chrom_gp': '#2CA02C',
+    'chrom_quad': '#17BECF',
     'sw': '#9467BD',
     'solar_wind': '#9467BD',
     'timing_model': '#7F7F7F',
@@ -5290,7 +5292,16 @@ def load_gp_realizations(filepath):
     # Convert lists back to numpy arrays for convenience
     payload['toas_mjd'] = np.array(payload['toas_mjd'])
     payload['freqs_mhz'] = np.array(payload['freqs_mhz'])
-    
+
+    chrom_block = (payload.get('model_kwargs') or {}).get('chromatic_noise')
+    if (isinstance(chrom_block, dict) and chrom_block.get('include_quadratic')
+            and not _chrom_quad_keys(payload)):
+        log.warning(
+            "The noise model includes a chromatic quadratic but the payload has "
+            "no realizations of it; plots will be missing that signal. "
+            "Regenerate the realizations with current pint_pal."
+        )
+
     return payload
 
 
@@ -5299,7 +5310,10 @@ def _classify_gp(gp_key, psr_name=None):
 
     ``gp_key`` typically looks like ``'{psr}_{gpname}_coefficients({N})'``.
     ``category`` is one of ``'red_noise'``, ``'dm_gp'``, ``'chrom'``,
-    ``'sw'``, ``'timing_model'``, ``'ecorr'``, or ``'unknown'``.
+    ``'chrom_quad'``, ``'sw'``, ``'timing_model'``, ``'ecorr'``, or
+    ``'unknown'``.  The chromatic quadratic shares its name with the chromatic
+    Fourier GP and is told apart by its 3 coefficients (a Fourier basis always
+    has an even number of columns).
     """
     key = gp_key.lower()
     if psr_name:
@@ -5311,6 +5325,8 @@ def _classify_gp(gp_key, psr_name=None):
         return 'ECORR (GP)', 'ecorr'
     elif 'solar' in key or key.startswith('sw') or 'n_earth' in key:
         return 'Solar Wind GP', 'sw'
+    elif 'chrom' in key and key.endswith('_coefficients(3)'):
+        return 'Chromatic Quadratic', 'chrom_quad'
     elif 'chrom' in key:
         return 'Chromatic GP', 'chrom'
     elif key.startswith('dm') or 'dm_gp' in key:
@@ -5354,13 +5370,47 @@ def _gp_time_domain(payload, gp_key, realization_idx=None):
         return coeffs @ F.T
 
 
+def _chrom_gp_name(gp_key, psr_name):
+    """Return the GP name in ``'{psr}_{name}_coefficients({N})'``."""
+    name = gp_key.split('_coefficients(')[0]
+    if psr_name and name.startswith(psr_name + '_'):
+        name = name[len(psr_name) + 1:]
+    return name
+
+
+def _chrom_idx_from_payload(payload, gp_key):
+    """Chromatic index used for a chromatic GP / quadratic, or None.
+
+    Taken from the ``{psr}_{name}_alpha`` noise parameter when the index was
+    varied, otherwise from a numeric ``chromatic_idx`` in the
+    ``chromatic_noise`` model kwargs.
+    """
+    psr_name = payload.get('pulsar_name', '')
+    name = _chrom_gp_name(gp_key, psr_name)
+    alpha = (payload.get('noise_params') or {}).get(f'{psr_name}_{name}_alpha')
+    if alpha is None:
+        block = (payload.get('model_kwargs') or {}).get('chromatic_noise')
+        if isinstance(block, dict):
+            idx = block.get('chromatic_idx', 'vary')
+            if isinstance(idx, (int, float)):
+                alpha = idx
+    return None if alpha is None else float(alpha)
+
+
+def _chrom_quad_keys(payload):
+    """GP keys of the chromatic quadratic(s) in the payload."""
+    psr_name = payload.get('pulsar_name', '')
+    return [gk for gk in payload.get('gp_keys', [])
+            if _classify_gp(gk, psr_name)[1] == 'chrom_quad']
+
+
 # Timing model parameter names that are relevant for specific GP categories.
 # These are used by _get_tm_component_signal() to know which TM columns to
 # fold into a GP realization (e.g. add NE_SW to the SW GP).
 _TM_PARAMS_FOR_CATEGORY = {
     'red_noise': ['F0', 'F1', 'F2'],
     'dm_gp':     ['DM', 'DM1', 'DM2', 'DM3'],
-    'sw':        ['NE_SW', 'NE1', 'SWPRBETA1', 'SWPRBETA0'],
+    'sw':        ['NE_SW', 'NE_SW1', 'NE_SW2', 'NE1', 'SWPRBETA0', 'SWPRBETA1'],
     'chrom':     ['CM', 'CM1', 'CM2'],        # we don't often use these but they could be included in principle
 }
 
@@ -5415,6 +5465,9 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
     For each realization, the timing-model coefficient draw is multiplied by
     the corresponding TM design-matrix column.  Only the columns relevant to
     ``gp_category`` (according to ``_TM_PARAMS_FOR_CATEGORY``) are included.
+    For ``'chrom'``, any chromatic quadratic in the payload is added too (it
+    stands in for CM, CM1, CM2), and is reported as ``'chrom_quad'`` in the
+    returned names.
 
     If ``model`` is provided and ``include_reference_values=True``, the
     reference values for each parameter are converted to time delays and added
@@ -5423,7 +5476,10 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
         ref_delay = ref_value * Mmat[toa, column]
                   = ref_value * d(delay)/d(param)
     This gives the time-delay contribution of the reference value at each TOA,
-    which is then broadcasted across all realizations.
+    which is then broadcasted across all realizations.  For ``'dm_gp'`` the
+    delay is instead built as ``ref_value * d(DM)/d(param) * DMconst / f^2``,
+    so that it converts back to DM exactly (``Mmat`` DM columns carry the
+    binary Doppler factor from PINT's chain rule).
 
     Note that the saved ``F_columns`` are *not* ``Mmat``: Discovery's
     ``makegp_timing`` stores a column-normalized basis,
@@ -5446,7 +5502,8 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
         If True and model is provided, add reference parameter values
         (converted to time delays) to the fitted perturbations. Default False.
         Reference values are never added for the 'sw' category (handled
-        separately in plot_gp_sw_ne).
+        separately in plot_gp_sw_ne) or the 'red_noise' category
+        (F0 * d(delay)/d(F0) is not a meaningful delay).
 
     Returns
     -------
@@ -5497,7 +5554,10 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
             col_idx.append(i)
             used_names.append(fitpars[i])
 
-    if not col_idx:
+    # The chromatic quadratic plays the role of CM, CM1, CM2 for the chromatic GP.
+    quad_keys = _chrom_quad_keys(payload) if gp_category == 'chrom' else []
+
+    if not col_idx and not quad_keys:
         return None, []
 
     # sum_k F[:, k] * c[:, k]  for every realization
@@ -5506,21 +5566,20 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
     c_sub = coeffs_tm[:, col_idx]       # (n_real, n_sel)
     tm_signal = c_sub @ F_sub.T         # (n_real, n_toas)
 
-    # Add reference contributions if requested, model provided, and category is not 'sw'.
-    # Each parameter's reference value is converted to a time delay by multiplying
-    # by the corresponding *raw* design matrix column:
+    # Add reference contributions if requested, model provided, and category is
+    # not 'sw' or 'red_noise'.  Each parameter's reference value is converted to
+    # a time delay by multiplying by the corresponding *raw* design matrix column:
     #   ref_delay[toa] = ref_value * F_tm[toa, col] * norm[col]
     #                  = ref_value * Mmat[toa, col]
     #                  = ref_value * d(delay)/d(param)  (units: seconds)
     # The norm factor undoes the column normalization applied by makegp_timing;
     # without it the reference contribution is too large by 1 / ||Mmat[:, col]||,
     # which scales as 1 / sqrt(n_toas) and so varies with the dataset.
-    # This works for all categories:
-    #   - red_noise (F0, F1, F2): delay = dfreq * d(delay)/d(freq)
-    #   - dm_gp (DM, DM1, DM2): delay = DM * d(delay)/d(DM)
+    #   - dm_gp (DM, DM1, DM2): see below, built from d(DM)/d(param)
     #   - chrom (CM, CM1, CM2): delay = CM * d(delay)/d(CM)
     #   (SW handled separately in plot_gp_sw_ne, not here)
-    if include_reference_values and model is not None and gp_category != 'sw':
+    if (include_reference_values and model is not None
+            and gp_category not in ('sw', 'red_noise')):
         norms = payload.get('tm_column_norms')
         if norms is None:
             log.warning(
@@ -5538,14 +5597,31 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
             )
         else:
             norms = np.asarray(norms)
+            F_raw = F_tm * norms[np.newaxis, :]   # raw design matrix Mmat
             ref_vals = _extract_tm_reference_values(model, gp_category)
+            freqs = np.asarray(payload['freqs_mhz'])
+            dm_col = fitpars.index('DM') if 'DM' in fitpars[:n_cols] else None
             for pname, col_i in zip(used_names, col_idx):
-                if pname in ref_vals:
+                if pname not in ref_vals:
+                    continue
+                if gp_category == 'dm_gp':
+                    if dm_col is not None:
+                        d_dm = F_raw[:, col_i] / F_raw[:, dm_col]
+                    else:
+                        order = 0 if pname == 'DM' else int(pname[2:])
+                        dt_yr = (np.asarray(payload['toas_mjd'])
+                                 - float(model.DMEPOCH.value)) / 365.25
+                        d_dm = dt_yr**order / math.factorial(order)
+                    ref_delay = ref_vals[pname] * d_dm * _DMCONST_MHZ2_S / freqs**2
+                else:
                     # Raw design matrix column: d(delay)/d(param) at each TOA
-                    # Multiply by reference value to get reference delay contribution
-                    ref_delay = ref_vals[pname] * F_tm[:, col_i] * norms[col_i]
-                    # Broadcast to all realizations and add
-                    tm_signal = tm_signal + ref_delay[np.newaxis, :]
+                    ref_delay = ref_vals[pname] * F_raw[:, col_i]
+                # Broadcast to all realizations and add
+                tm_signal = tm_signal + ref_delay[np.newaxis, :]
+
+    for quad_key in quad_keys:
+        tm_signal = tm_signal + _gp_time_domain(payload, quad_key)
+        used_names.append('chrom_quad')
 
     return tm_signal, used_names
 
@@ -5628,7 +5704,7 @@ def _convert_units(
     gp_category,
     target_units='us',
     chromatic_idx=None,
-    ref_freq_mhz=1400.0,
+    ref_freq_mhz=800.0,
 ):
     """
     Convert a time-domain GP signal to the requested units.
@@ -5651,11 +5727,12 @@ def _convert_units(
         ``'us'`` for microseconds, ``'s'`` for seconds,
         ``'dm'`` for DM in 10^-3 pc cm^-3, ``'dm_full'`` for DM in pc cm^-3,
         ``'ne'`` for solar wind electron density n_E [cm^-3] (SW only),
-        ``'us@1400'`` for chromatic GP normalised to 800 MHz.
+        ``'us@ref'`` for a chromatic GP quoted at *ref_freq_mhz*, or
+        ``'us@<freq>'`` (e.g. ``'us@1400'``) for one quoted at ``<freq>`` MHz.
     chromatic_idx : float or None
-        Chromatic index (needed for ``'us@1400'`` or ``'dm'`` for chrom GP).
+        Chromatic index (needed for ``'us@...'`` or ``'dm'`` for chrom GP).
     ref_freq_mhz : float
-        Reference frequency for chromatic GP. Default 1400 MHz.
+        Reference frequency (MHz) for ``'us@ref'``. Default 800 MHz.
 
     Returns
     -------
@@ -5668,22 +5745,31 @@ def _convert_units(
         return signal * 1e6, r'$\Delta t$ ($\mu$s)'
     elif target_units == 's':
         return signal, r'$\Delta t$ (s)'
-    elif target_units == 'us@1400':
-        # Normalise chromatic GP delay to 800 MHz reference.
+    elif isinstance(target_units, str) and target_units.startswith('us@'):
+        # Quote the chromatic GP delay at a reference frequency f_q.
         # The design matrix encodes timing delay *at the TOA frequencies*:
-        #   dt(f) = dt_ref * (f / f_ref)^{-idx}
-        # We want dt(800), so multiply by (f_toa / 800)^idx to "undo" the
-        # per-TOA chromatic scaling and re-evaluate at 800 MHz.
+        #   dt(f) = dt_q * (f / f_q)^{-idx}
+        # so multiplying by (f_toa / f_q)^idx undoes the per-TOA chromatic
+        # scaling and re-evaluates the delay at f_q, whatever reference
+        # frequency the basis itself was built with.
+        spec = target_units[3:]
+        if spec == 'ref':
+            fq = float(ref_freq_mhz)
+        else:
+            try:
+                fq = float(spec)
+            except ValueError:
+                raise ValueError(f"Unknown target_units: {target_units!r}") from None
         if chromatic_idx is None:
             chromatic_idx = 4.0  # default chromatic index
-        ratio = (freqs_mhz / 1400.0) ** chromatic_idx  # (n_toas,)
-        return signal * ratio * 1e6, r'$\Delta t$ ($\mu$s @1400MHz)'
+        ratio = (freqs_mhz / fq) ** chromatic_idx  # (n_toas,)
+        return signal * ratio * 1e6, rf'$\Delta t$ ($\mu$s @{fq:g} MHz)'
     elif target_units == 'dm':
         # dt = DM * DMconst / freq^2  =>  DM = dt * freq^2 / DMconst
         if gp_category in ('dm_gp', 'dm', 'sw', 'solar_wind'):
             dm_signal = signal * freqs_mhz**2 / _DMCONST_MHZ2_S * 1e3
             return dm_signal, r'$\Delta$DM ($10^{-3}$ pc cm$^{-3}$)'
-        elif gp_category in ('chrom', 'chrom_gp') and chromatic_idx is not None:
+        elif gp_category in ('chrom', 'chrom_gp', 'chrom_quad') and chromatic_idx is not None:
             log.warning(
                 "DM units not well-defined for chromatic GP (idx != 2). "
                 "Returning microseconds."
@@ -5696,7 +5782,7 @@ def _convert_units(
         if gp_category in ('dm_gp', 'dm', 'sw', 'solar_wind'):
             dm_signal = signal * freqs_mhz**2 / _DMCONST_MHZ2_S
             return dm_signal, r'$\Delta$DM (pc cm$^{-3}$)'
-        elif gp_category in ('chrom', 'chrom_gp') and chromatic_idx is not None:
+        elif gp_category in ('chrom', 'chrom_gp', 'chrom_quad') and chromatic_idx is not None:
             log.warning(
                 "DM units not well-defined for chromatic GP (idx != 2). "
                 "Returning microseconds."
@@ -5769,7 +5855,7 @@ def plot_gp_realization(
     alpha_ci=0.15,
     alpha_real=0.08,
     chromatic_idx=None,
-    ref_freq_mhz=1400.0,
+    ref_freq_mhz=800.0,
     label=None,
     toa_units='mjd',
 ):
@@ -5784,9 +5870,10 @@ def plot_gp_realization(
         The GP key to plot (must be in ``payload['gp_keys']``).
     units : str, optional
         ``'us'`` (µs), ``'s'`` (s), ``'dm'`` (pc cm^-3), ``'ne'``
-        (n_E for SW), ``'us@1400'`` (µs normalised to 800 MHz for
-        chromatic GP), or ``'auto'`` (DM GPs use 'dm', chromatic GPs
-        use 'us@1400', others use 'us'). Default ``'auto'``.
+        (n_E for SW), ``'us@ref'`` (µs quoted at *ref_freq_mhz*, for
+        chromatic GP), ``'us@<freq>'`` (µs quoted at ``<freq>`` MHz), or
+        ``'auto'`` (DM GPs use 'dm', chromatic GPs use 'us@ref', others
+        use 'us'). Default ``'auto'``.
     ci_levels : tuple of float, optional
         Credible interval levels. Default ``(0.68, 0.95)``.
     show_median : bool, optional
@@ -5831,9 +5918,11 @@ def plot_gp_realization(
         Alpha for individual realizations. Default 0.08.
     chromatic_idx : float, optional
         Chromatic index for unit conversion (used for chrom GP with
-        ``'dm'`` or ``'us@1400'`` units).
+        ``'dm'`` or ``'us@...'`` units).  If None, taken from the payload
+        (the fitted ``{psr}_{name}_alpha`` or the configured fixed index).
     ref_freq_mhz : float, optional
-        Reference frequency. Default 1400 MHz.
+        Frequency (MHz) at which a chromatic GP is quoted for ``'us@ref'``
+        units. Default 800 MHz.
     label : str, optional
         Legend label override.
     toa_units : str, optional
@@ -5851,8 +5940,8 @@ def plot_gp_realization(
     if units == 'auto':
         if category == 'dm_gp':
             units = 'dm_full' if include_tm_values else 'dm'
-        elif category in ('chrom', 'chrom_gp'):
-            units = 'us@1400'
+        elif category in ('chrom', 'chrom_gp', 'chrom_quad'):
+            units = 'us@ref'
         else:
             units = 'us'
 
@@ -5872,6 +5961,9 @@ def plot_gp_realization(
     toas = np.asarray(payload['toas_mjd'])
     freqs = np.asarray(payload['freqs_mhz'])
 
+    if chromatic_idx is None and category in ('chrom', 'chrom_gp', 'chrom_quad'):
+        chromatic_idx = _chrom_idx_from_payload(payload, gp_key)
+
     # Convert units
     all_signals, ylabel = _convert_units(
         all_signals, freqs, category, target_units=units,
@@ -5885,8 +5977,12 @@ def plot_gp_realization(
     # Whether a total quantity is actually being shown.  Asking for reference
     # values is not enough — the TM contribution has to have been found (it is
     # absent from tm_marg=True payloads), and a zero-mean plot is a deviation
-    # regardless of mode.
-    _showing_total = bool(tm_names_used) and include_tm_values and not zero_mean
+    # regardless of mode.  Reference values are never added for SW / red noise,
+    # and the chromatic quadratic has none.
+    _added_values = (any(n != 'chrom_quad' for n in tm_names_used)
+                     and include_tm_values
+                     and category not in ('sw', 'red_noise'))
+    _showing_total = _added_values and not zero_mean
 
     # Update ylabel to reflect which mode we are in:
     #   mode 2 (pert only): y-label stays as Δ… (no change)
@@ -5931,10 +6027,10 @@ def plot_gp_realization(
         # Append a mode suffix to clearly communicate what is being shown:
         #   mode 2 (pert only): append " + ΔTM" to indicate TM perturbations included
         #   mode 3 (total):     append " (total)" to indicate reference values included
-        if tm_names_used and not include_tm_values:
-            lbl += r' + $\Delta$TM'
-        elif tm_names_used and include_tm_values:
+        if _added_values:
             lbl += ' (total)'
+        elif tm_names_used:
+            lbl += r' + $\Delta$TM'
         ax.plot(tplot, median, color=color, lw=1.5, label=lbl)
 
     # Individual realizations
@@ -5973,7 +6069,7 @@ def plot_gp_realization(
 
     if title is None:
         pretty_name, _ = _classify_gp(gp_key, psr_name)
-        if tm_names_used and include_tm_values:
+        if _added_values:
             _mode_str = 'GP + TM total'
         elif tm_names_used:
             _mode_str = 'GP + $\\Delta$TM'
@@ -6005,6 +6101,7 @@ def plot_gp_realizations_combined(
     toa_units='mjd',
     exclude=None,
     chromatic_idx=None,
+    ref_freq_mhz=800.0,
     compact=False,
 ):
     """
@@ -6019,7 +6116,8 @@ def plot_gp_realizations_combined(
         or category names like ``'dm_gp'``, ``'red_noise'``, ``'chrom'``, ``'sw'``,
         ``'timing_model'``, ``'ecorr'``. If None, plots all GP components.
     units : str, optional
-        ``'us'``, ``'s'``, ``'dm'``, ``'us@1400'``, or ``'auto'``.
+        ``'us'``, ``'s'``, ``'dm'``, ``'us@ref'``, ``'us@<freq>'``, or
+        ``'auto'``.
         Default ``'auto'``.
     ci_levels : tuple, optional
         CI levels. Default ``(0.68, 0.95)``.
@@ -6050,7 +6148,10 @@ def plot_gp_realizations_combined(
     exclude : list of str, optional
         GP categories to exclude, e.g. ``['timing_model', 'ecorr']``.
     chromatic_idx : float, optional
-        Chromatic index (passed through for ``'us@1400'`` unit conversion).
+        Chromatic index (passed through for ``'us@...'`` unit conversion).
+        If None, each chromatic panel takes it from the payload.
+    ref_freq_mhz : float, optional
+        Frequency (MHz) at which chromatic GP panels are quoted. Default 800.
     compact : bool, optional
         If True, remove vertical space between subplots and hide per-panel
         titles. If False (default), each subplot has its own title with
@@ -6066,7 +6167,7 @@ def plot_gp_realizations_combined(
     if gp_keys is None:
         gp_keys = payload['gp_keys']
     else:
-        categories = {'red_noise', 'dm_gp', 'chrom', 'sw', 'timing_model', 'ecorr', 'unknown'}
+        categories = {'red_noise', 'dm_gp', 'chrom', 'chrom_quad', 'sw', 'timing_model', 'ecorr', 'unknown'}
         expanded_keys = []
         all_payload_keys = payload['gp_keys']
         for key in gp_keys:
@@ -6089,6 +6190,12 @@ def plot_gp_realizations_combined(
             if cat not in exclude:
                 filtered.append(gk)
         gp_keys = filtered
+
+    # With TM perturbations on, the chromatic GP panel already carries the quadratic.
+    if include_tm_perturbations and any(
+            _classify_gp(gk, psr_name)[1] == 'chrom' for gk in gp_keys):
+        gp_keys = [gk for gk in gp_keys
+                   if _classify_gp(gk, psr_name)[1] != 'chrom_quad']
 
     n = len(gp_keys)
     if n == 0:
@@ -6128,6 +6235,7 @@ def plot_gp_realizations_combined(
                 zero_mean=zero_mean,
                 model=model,
                 ax=axes[i], toa_units=toa_units, chromatic_idx=chromatic_idx,
+                ref_freq_mhz=ref_freq_mhz,
             )
 
         if compact:
@@ -6212,7 +6320,7 @@ def plot_gp_total_signal(
     if gp_keys is None:
         gp_keys = list(payload['gp_keys'])
     else:
-        categories = {'red_noise', 'dm_gp', 'chrom', 'sw', 'timing_model', 'ecorr', 'unknown'}
+        categories = {'red_noise', 'dm_gp', 'chrom', 'chrom_quad', 'sw', 'timing_model', 'ecorr', 'unknown'}
         expanded_keys = []
         all_payload_keys = payload['gp_keys']
         for key in gp_keys:
@@ -6235,6 +6343,12 @@ def plot_gp_total_signal(
             if cat not in exclude:
                 filtered.append(gk)
         gp_keys = filtered
+
+    # With TM components on, the chromatic GP already carries the quadratic.
+    if include_tm_components and any(
+            _classify_gp(gk, psr_name)[1] == 'chrom' for gk in gp_keys):
+        gp_keys = [gk for gk in gp_keys
+                   if _classify_gp(gk, psr_name)[1] != 'chrom_quad']
 
     if not gp_keys:
         log.warning("No GP components to plot after filtering.")

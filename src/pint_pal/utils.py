@@ -32,7 +32,7 @@ def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
     restype ['string']: Type of residuals, pre or post fit, to plot from fitter object. Options are:
         'prefit' - plot the prefit residuals.
         'postfit' - plot the postfit residuals (default)
-    zero_mean [bool]: default - False. whether or not to subtract off the mean after whitening.
+    zero_mean [bool]: default - True. whether or not to subtract off the mean after whitening.
 
     Returns:
     ---------
@@ -82,7 +82,7 @@ def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
     return wres
 
 
-# def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
+# def whiten_resids(fitter, restype = 'postfit', remove_only=[]):
 #     """
 #     Function to whiten residuals. If no reddened residuals, input will be returned.
 #     Wrapper around the pint.residuals utility which preserved the dummy kwargs for backwards compatibility.
@@ -101,7 +101,7 @@ def whiten_resids(fitter, restype = 'postfit', zero_mean=True):
 #     """
 #     # Check if input is the epoch averaged dictionary, should only be used if epoch averaged NB TOAs
 
-#     return fitter.resids.calc_whitened_resids()*1e-6*u.s
+#     return fitter.resids.calc_whitened_resids(normalize=False)
 
 
 def rms_by_backend(resids, errors, rcvr_backends, dm = False):
