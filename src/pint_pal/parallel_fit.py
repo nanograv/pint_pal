@@ -547,6 +547,11 @@ class TestFitter:
         .. [2] https://github.com/sampsyo/clusterfutures
 
         """
+        if executor is None and ncpu == 1:
+            # PINT's own single-processor mode reuses one fitter, so each test would start from the previous test's
+            # fit, and it stops at the first failed fit. A single worker runs each test on a fresh copy instead,
+            # exactly as the parallel workers do.
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         chi2, dof, extra = pint.gridutils.tuple_chisq(
             self.f0,
             self.parnames,
