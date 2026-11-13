@@ -143,15 +143,9 @@ def checkFLogs(
     (list, list)
         Sets of added, removed parameter recommendations
     """
-    if add_params:
-        add_params = [item.strip() for item in add_params[0].split(',')]
-    else:
-        add_params = []
-
-    if remove_params:
-        remove_params = [item.strip() for item in remove_params[0].split(',')]
-    else:
-        remove_params = []
+    # Split every recommendation into single parameters (e.g. "M2, SINI" into M2 and SINI)
+    add_params = [item.strip() for params in add_params for item in params.split(',')]
+    remove_params = [item.strip() for params in remove_params for item in params.split(',')]
     
     if 'FTest' in tc.config:
         oldFtests = tc.config['FTest']
