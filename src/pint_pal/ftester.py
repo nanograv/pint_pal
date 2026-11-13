@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 from pint_pal.parallel_fit import TestFitter
 import numpy as np
 
-ALPHA = 0.0027 # 3-sigma
 ALPHA_ADD = 0.0027 # 3-sigma
 ALPHA_REMOVE = 0.1336 # 1.5-sigma
 
@@ -84,7 +83,9 @@ def get_fblist(fitter: pint.fitter.Fitter) -> dict:
 def report_ptest(
     label: str,
     ftest_dict: dict | None = None,
-    alpha: float = ALPHA
+    adding: bool = True,
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE
 ) -> str:
     """
     Nicely prints the results of F-tests in a human-readable format.
@@ -95,9 +96,14 @@ def report_ptest(
         Name of the parameter(s) that were added/removed for the F-test.
     ftest_dict: dict
         Dictionary of output values from the F-test. If `None`, will print a line of NaNs for each reported value.
-    alpha: float
-        Value to compare for F-statistic significance. If the F-statistic is lower than alpha,
-        the timing model parameters are deemed statistically significant to the timing model.
+    adding: bool
+        True if the F-test adds the parameter(s), False if it removes them [default: True].
+    alpha_add: float
+        An added parameter is marked significant ('***'), i.e. worth adding, if the F-statistic is lower than or
+        equal to alpha_add.
+    alpha_remove: float
+        A removed parameter is marked significant ('***'), i.e. worth keeping, if the F-statistic is lower than or
+        equal to alpha_remove.
     """
     # If F-test fails, print line of NaNs
     if ftest_dict == None:
@@ -113,7 +119,7 @@ def report_ptest(
             line += " --"
         elif not np.isnan(Fstatistic):
             line += " %.3g" % Fstatistic
-            if Fstatistic < alpha:
+            if Fstatistic <= (alpha_add if adding else alpha_remove):
                 line += " ***"
         else:
             line += " xxx"
@@ -470,21 +476,22 @@ def print_Ftest_table(
     # FD terms currently in the model, must be of the format FDi to avoid FDJUMP parameters
     cur_fd = [param for param in fitter.model.free_params
               if param.startswith("FD") and param[2:].isdigit()]
-    for action, alpha in (('Add', alpha_add), ('Remove', alpha_remove)):
-        if action == 'Add':
+    for action in ('Add', 'Remove'):
+        adding = action == 'Add'
+        if adding:
             print("Testing additional parameters:")
         else:
             print("Testing removal of parameters:")
         for key, value in Ftest_dict[action].items():
             if key == 'Binary':
                 for label, ftest_dict in value.items():
-                    report_ptest(label, ftest_dict, alpha = alpha)
+                    report_ptest(label, ftest_dict, adding, alpha_add, alpha_remove)
             elif key == 'FD':
-                print(f"Testing {'adding' if action == 'Add' else 'removing'} FD terms (", cur_fd, "enabled):")
+                print(f"Testing {'adding' if adding else 'removing'} FD terms (", cur_fd, "enabled):")
                 for label, ftest_dict in value.items():
-                    report_ptest(label, ftest_dict, alpha = alpha)
+                    report_ptest(label, ftest_dict, adding, alpha_add, alpha_remove)
             else:
-                report_ptest(key, value, alpha = alpha)
+                report_ptest(key, value, adding, alpha_add, alpha_remove)
     # Get current number of spin frequency derivatives
     current_freq_deriv = 1
     for i in range(2,21):
@@ -493,7 +500,7 @@ def print_Ftest_table(
             current_freq_deriv = i
     if 'F' in Ftest_dict:
         print("Testing spin freq derivs (%s enabled):" % (current_freq_deriv))
-        report_ptest('F2', Ftest_dict['F']['F2'], alpha = alpha_add)
+        report_ptest('F2', Ftest_dict['F']['F2'], True, alpha_add, alpha_remove)
     if 'FB' in Ftest_dict:
         fblist = get_fblist(fitter)
         fbp = [fblist[ifb] for ifb in sorted(fblist.keys())]  # sorted list of fb parameters
@@ -502,9 +509,9 @@ def print_Ftest_table(
         for key, ftest_dict in Ftest_dict['FB'].items():
             if key.endswith('+'):
                 i = int(key[2:-1])
-                report_ptest(" ".join(fbp[i:]), ftest_dict, alpha = alpha_remove)
+                report_ptest(" ".join(fbp[i:]), ftest_dict, False, alpha_add, alpha_remove)
         print("Testing addition of FB parameters:")
         for key, ftest_dict in Ftest_dict['FB'].items():
             if not key.endswith('+'):
                 i = int(key[2:])
-                report_ptest(" ".join(f"FB{j}" for j in range(len(fbp), i+1)), ftest_dict, alpha = alpha_add)
+                report_ptest(" ".join(f"FB{j}" for j in range(len(fbp), i+1)), ftest_dict, True, alpha_add, alpha_remove)
