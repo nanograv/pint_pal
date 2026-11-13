@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from pint_pal.timingconfiguration import TimingConfiguration
 from pint_pal.parallel_fit import TestFitter
 import numpy as np
-import re
 
 ALPHA = 0.0027 # 3-sigma
 ALPHA_ADD = 0.0027 # 3-sigma
@@ -165,6 +164,59 @@ def checkFLogs(
 
     return sorted(set(add_params)), sorted(set(remove_params))
 
+def step_through_nested(
+    steps: list,
+    initial: dict,
+    adding: bool,
+    alpha_add: float = ALPHA_ADD,
+    alpha_remove: float = ALPHA_REMOVE
+) -> list:
+    """
+    Decides how many terms of a nested series of F-tests (FD or FB) to add or remove, one term at a time.
+
+    Each test in the series is compared with the previous one (the first with the initial model), so each term is
+    judged on what it adds once the terms before it are in (or out). The series stops at the first term that isn't
+    significant enough to add, or is significant enough to keep, or whose fit failed.
+
+    Parameters
+    ----------
+    steps : list
+        The tests in the series as (parameters, ftest_dict) pairs, from the fewest to the most terms, e.g.
+        [(['FD3'], ...), (['FD3', 'FD4'], ...)]. ftest_dict is the test's entry in the F-test dictionary (None if
+        the fit failed).
+    initial : dict
+        The entry for the initial model in the F-test dictionary.
+    adding : bool
+        True if the tests add terms, False if they remove them.
+    alpha_add : float
+        A term is added if the F-statistic is lower than or equal to alpha_add.
+    alpha_remove : float
+        A term is removed if the F-statistic is higher than alpha_remove.
+
+    Returns
+    -------
+    list
+        The terms to add or remove (empty if none).
+    """
+    chosen = []
+    previous = initial
+    for params, ftest_dict in steps:
+        # Stop at a failed fit
+        if ftest_dict is None:
+            break
+        # Compare the simpler model with the more complex one; a NaN F-statistic fails both checks
+        if adding:
+            ft = FTest(previous['chi2_test'], previous['dof_test'], ftest_dict['chi2_test'], ftest_dict['dof_test'])
+            if not ft <= alpha_add:
+                break
+        else:
+            ft = FTest(ftest_dict['chi2_test'], ftest_dict['dof_test'], previous['chi2_test'], previous['dof_test'])
+            if not ft > alpha_remove:
+                break
+        chosen = params
+        previous = ftest_dict
+    return chosen
+
 def summarize_Ftest(
     Ftest_dict: dict,
     fitter: pint.fitter.Fitter,
@@ -196,32 +248,10 @@ def summarize_Ftest(
     
     add_params = []
     remove_params = []
-    fd_add = []
-    fd_add_ft = []
-    fd_remove = []
-    fd_remove_ft = []
     for fk in Ftest_dict.keys():
-        if 'FB' in fk:
-            fbmax = max([int(re.match(r"FB(\d+)\+?", k).group(1)) for k in Ftest_dict[fk]])
-            fblist = get_fblist(fitter)
-            fbused = (len(fblist)>0)
-            fbp = [fblist[ifb] for ifb in sorted(fblist.keys())]  # sorted list of fb parameters
-            # Removing FB parameters
-            for i in range(1,len(fblist)):
-                p = [fbp[j] for j in range(i,len(fbp))]
-                ffk = 'FB%s+'%i
-                if Ftest_dict[fk][ffk] is not None:
-                    if Ftest_dict[fk][ffk]['ft'] is not None:
-                        if Ftest_dict[fk][ffk]['ft'] > alpha_remove:
-                            remove_params.append(ffk)
-            # Adding FB parameters
-            for i in range(len(fblist),fbmax+1):
-                p = ["FB%d" % (j) for j in range(len(fblist),i+1)]
-                ffk = 'FB%s'%i
-                if Ftest_dict[fk][ffk] is not None:
-                    if Ftest_dict[fk][ffk]['ft'] is not None:
-                        if Ftest_dict[fk][ffk]['ft'] <= alpha_add:
-                            add_params.append(ffk)
+        # FD and FB terms are decided below, one term at a time
+        if fk == 'FB':
+            continue
         # Check which parameters should be removed
         elif "Remove" in fk:
             for ffk in Ftest_dict[fk].keys():
@@ -231,11 +261,7 @@ def summarize_Ftest(
                             if Ftest_dict[fk][ffk][fffk]['ft'] > alpha_remove:
                                 remove_params.append(fffk)
                 elif ffk == 'FD':
-                    for fffk in Ftest_dict[fk][ffk].keys():
-                        if Ftest_dict[fk][ffk][fffk] is not None:
-                            if Ftest_dict[fk][ffk][fffk]['ft'] > alpha_remove:
-                                fd_remove.append(fffk)
-                                fd_remove_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
+                    continue
                 else:
                     if Ftest_dict[fk][ffk] is not None: # This is added because some parameters fail ftest due to max convergence limit and hence are defaulted to None
                         if Ftest_dict[fk][ffk]['ft'] is not None:
@@ -254,11 +280,7 @@ def summarize_Ftest(
                             if Ftest_dict[fk][ffk][fffk]['ft'] <= alpha_add:
                                 add_params.append(fffk)
                 elif ffk == 'FD':
-                    for fffk in Ftest_dict[fk][ffk].keys():
-                        if Ftest_dict[fk][ffk][fffk] is not None:
-                            if Ftest_dict[fk][ffk][fffk]['ft'] <= alpha_add:
-                                fd_add.append(fffk)
-                                fd_add_ft.append(Ftest_dict[fk][ffk][fffk]['ft'])
+                    continue
                 else:
                     if Ftest_dict[fk][ffk] is not None:
                         if Ftest_dict[fk][ffk]['ft'] is not None:
@@ -268,11 +290,33 @@ def summarize_Ftest(
         elif fk == 'F':
             pass
     
-    # Determine which FD parameters to add/remove
-    if fd_remove:
-        remove_params.append(fd_remove[np.argmin(fd_remove_ft)])
-    if fd_add:
-        add_params.append(fd_add[np.argmin(fd_add_ft)])
+    # Determine which FD and FB parameters to add/remove. Each series is stepped through one term at a time, from
+    # the tests with the fewest terms to the most; if any term is added, nothing in that series is removed.
+    # FD tests are labelled with the terms they add or remove, e.g. 'FD3, FD4' or 'FD2, FD1'
+    fd_add = [(label.split(', '), ftest_dict) for label, ftest_dict in Ftest_dict['Add'].get('FD', {}).items()]
+    fd_remove = [(label.split(', '), ftest_dict) for label, ftest_dict in Ftest_dict['Remove'].get('FD', {}).items()]
+    series = [(fd_add, fd_remove)]
+    if 'FB' in Ftest_dict:
+        fblist = get_fblist(fitter)
+        fbp = [fblist[ifb] for ifb in sorted(fblist.keys())]  # sorted list of fb parameters
+        fb_add = []
+        fb_remove = []
+        for key, ftest_dict in Ftest_dict['FB'].items():
+            if key.endswith('+'):
+                # 'FB<i>+' removes FB<i> and above
+                fb_remove.append((fbp[int(key[2:-1]):], ftest_dict))
+            else:
+                # 'FB<i>' adds the terms after the current ones, up to FB<i>
+                fb_add.append((["FB%d" % j for j in range(len(fbp), int(key[2:]) + 1)], ftest_dict))
+        fb_add.sort(key=lambda step: len(step[0]))
+        fb_remove.sort(key=lambda step: len(step[0]))
+        series.append((fb_add, fb_remove))
+    for add_steps, remove_steps in series:
+        to_add = step_through_nested(add_steps, Ftest_dict['initial'], True, alpha_add, alpha_remove)
+        if to_add:
+            add_params += to_add
+        else:
+            remove_params += step_through_nested(remove_steps, Ftest_dict['initial'], False, alpha_add, alpha_remove)
     
     # Check the config for previous FTest results
     add_params,remove_params = checkFLogs(add_params,remove_params,tc)
