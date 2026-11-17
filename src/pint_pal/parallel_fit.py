@@ -34,6 +34,8 @@ _ell1hextraparnames = ["PBDOT", "A1DOT", "EPS1DOT", "EPS2DOT", "H3", "H4"]
 _ddextraparnames = ["M2", "SINI", "PBDOT", "A1DOT", "OMDOT", "EDOT"]
 # only for DDK
 _ddkextraparnames = ["PBDOT", "A1DOT", "OMDOT", "EDOT"]
+# only for BT
+_btkextraparnames = ["PBDOT", "A1DOT", "OMDOT", "EDOT"]
 # if one of these gets added, make sure to add the others too
 _linked_pars_to_add = {
     "M2": ["SINI"],
@@ -292,6 +294,8 @@ class TestFitter:
                 self.extraparnames += self.defaults["ddextraparnames"]
             elif self.m_base["BINARY"].value == "DDK":
                 self.extraparnames += self.defaults["ddkextraparnames"]
+            elif self.m_base["BINARY"].value == "BT":
+                self.extraparnames += self.defaults["btkextraparnames"]
         for j in range(1, maxFD + 1):
             self.extraparnames.append(f"FD{j}")
 
@@ -463,6 +467,7 @@ class TestFitter:
         self.defaults["ell1hextraparnames"] = _ell1hextraparnames
         self.defaults["ddextraparnames"] = _ddextraparnames
         self.defaults["ddkextraparnames"] = _ddkextraparnames
+        self.defaults["btkextraparnames"] = _btkextraparnames
         self.defaults["linked_pars_to_add"] = _linked_pars_to_add
         self.defaults["linked_pars_to_remove"] = _linked_pars_to_remove
         self.defaults["default_values"] = _default_values
