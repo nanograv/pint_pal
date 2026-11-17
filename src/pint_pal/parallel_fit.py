@@ -1,4 +1,5 @@
 import concurrent.futures
+import multiprocessing
 from astropy import units as u, constants as c
 from astropy.time import Time
 import numpy as np
@@ -9,6 +10,7 @@ from loguru import logger as log
 import pint.fitter
 from pint.models import get_model_and_toas, get_model
 import pint.gridutils
+import pint.logging
 from pint.types import file_like
 import pint.models
 import pint.toa
@@ -557,6 +559,13 @@ class TestFitter:
             # fit, and it stops at the first failed fit. A single worker runs each test on a fresh copy instead,
             # exactly as the parallel workers do.
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        elif executor is None and (ncpu is None or ncpu > 1) and multiprocessing.get_start_method() != "fork":
+            # PINT's own process pool hands the logger to each worker process. Once pint_pal's logging is set up, that
+            # fails with the 'spawn' (default on macOS) and 'forkserver' (default on Linux from Python 3.14) start
+            # methods. Instead, each worker sets up PINT's logging itself, showing warnings only.
+            executor = concurrent.futures.ProcessPoolExecutor(
+                max_workers=ncpu or multiprocessing.cpu_count(),
+                initializer=pint.logging.setup, initargs=("WARNING",))
         chi2, dof, extra = pint.gridutils.tuple_chisq(
             self.f0,
             self.parnames,
