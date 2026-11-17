@@ -166,7 +166,7 @@ def checkFLogs(
                 remove_params.remove(item)
 
     else:
-        print("No FTest in config.  Continuing...")
+        log.info("No FTest in config.  Continuing...")
 
     return sorted(set(add_params)), sorted(set(remove_params))
 
@@ -276,7 +276,7 @@ def summarize_Ftest(
                                 if ffk != 'PX':
                                     remove_params.append(ffk)
                     elif Ftest_dict[fk][ffk] is None:
-                        print(f"Due to max iter limit, {ffk} hasn't converged and hence removing it can't be justified") 
+                        log.warning(f"The fit removing {ffk} failed, so removing it can't be justified.") 
         # Check which parameters should be added
         elif "Add" in fk:
             for ffk in Ftest_dict[fk].keys():
