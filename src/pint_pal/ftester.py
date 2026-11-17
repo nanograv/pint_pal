@@ -457,7 +457,8 @@ def print_Ftest_table(
     alpha_remove: float = ALPHA_REMOVE
 ) -> None:
     """
-    Prints the F-test results from `run_Ftests()` as a table.
+    Prints the F-test results from `run_Ftests()` as a table: the initial model, then every test that adds parameters,
+    then every test that removes them (each section only if it has tests).
 
     Parameters
     ----------
@@ -470,48 +471,41 @@ def print_Ftest_table(
     alpha_remove : float
         Removed parameters are marked significant ('***') if the F-statistic is lower than alpha_remove.
     """
-    print("Testing additional parameters (*** = significant):")
-    print("%42s %9s %5s %s" % ("", "Chi2", "NDOF", "Ftest"))
-    report_ptest("initial", Ftest_dict['initial'])
-    # FD terms currently in the model, must be of the format FDi to avoid FDJUMP parameters
-    cur_fd = [param for param in fitter.model.free_params
-              if param.startswith("FD") and param[2:].isdigit()]
-    for action in ('Add', 'Remove'):
-        adding = action == 'Add'
-        if adding:
-            print("Testing additional parameters:")
-        else:
-            print("Testing removal of parameters:")
+    # Collect every test as (label, ftest_dict): first the additions, then the removals
+    adding_rows = []
+    removing_rows = []
+    for action, rows in (('Add', adding_rows), ('Remove', removing_rows)):
         for key, value in Ftest_dict[action].items():
-            if key == 'Binary':
-                for label, ftest_dict in value.items():
-                    report_ptest(label, ftest_dict, adding, alpha_add, alpha_remove)
-            elif key == 'FD':
-                print(f"Testing {'adding' if adding else 'removing'} FD terms (", cur_fd, "enabled):")
-                for label, ftest_dict in value.items():
-                    report_ptest(label, ftest_dict, adding, alpha_add, alpha_remove)
+            if key in ('Binary', 'FD'):
+                rows.extend(value.items())
             else:
-                report_ptest(key, value, adding, alpha_add, alpha_remove)
-    # Get current number of spin frequency derivatives
-    current_freq_deriv = 1
-    for i in range(2,21):
-        p = "F%d" % i
-        if p in fitter.model.params:
-            current_freq_deriv = i
+                rows.append((key, value))
+    # The F2 test adds F2, unless the model already has it
     if 'F' in Ftest_dict:
-        print("Testing spin freq derivs (%s enabled):" % (current_freq_deriv))
-        report_ptest('F2', Ftest_dict['F']['F2'], True, alpha_add, alpha_remove)
+        f2_in_model = 'F2' in fitter.model.params and bool(fitter.model.F2.value)
+        (removing_rows if f2_in_model else adding_rows).append(('F2', Ftest_dict['F']['F2']))
     if 'FB' in Ftest_dict:
         fblist = get_fblist(fitter)
         fbp = [fblist[ifb] for ifb in sorted(fblist.keys())]  # sorted list of fb parameters
-        print("Testing FB parameters, present list: "+" ".join(fbp))
-        print("Testing removal of FB parameters:")
+        fb_add = []
+        fb_remove = []
         for key, ftest_dict in Ftest_dict['FB'].items():
             if key.endswith('+'):
-                i = int(key[2:-1])
-                report_ptest(" ".join(fbp[i:]), ftest_dict, False, alpha_add, alpha_remove)
-        print("Testing addition of FB parameters:")
-        for key, ftest_dict in Ftest_dict['FB'].items():
-            if not key.endswith('+'):
-                i = int(key[2:])
-                report_ptest(" ".join(f"FB{j}" for j in range(len(fbp), i+1)), ftest_dict, True, alpha_add, alpha_remove)
+                # 'FB<i>+' removes FB<i> and above; listed from the highest term down, like FD
+                fb_remove.append((", ".join(reversed(fbp[int(key[2:-1]):])), ftest_dict))
+            else:
+                # 'FB<i>' adds the terms after the current ones, up to FB<i>
+                fb_add.append((", ".join("FB%d" % j for j in range(len(fbp), int(key[2:]) + 1)), ftest_dict))
+        # From the fewest terms to the most, like FD
+        adding_rows += sorted(fb_add, key=lambda row: row[0].count(','))
+        removing_rows += sorted(fb_remove, key=lambda row: row[0].count(','))
+
+    print("F-test results")
+    print("%42s %9s %5s %s" % ("", "Chi2", "NDOF", "Ftest"))
+    report_ptest("initial", Ftest_dict['initial'])
+    for heading, rows, adding in (("Adding parameters (*** = worth adding):", adding_rows, True),
+                                  ("Removing parameters (*** = worth keeping):", removing_rows, False)):
+        if rows:
+            print(heading)
+        for label, ftest_dict in rows:
+            report_ptest(label, ftest_dict, adding, alpha_add, alpha_remove)
