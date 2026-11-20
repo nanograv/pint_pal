@@ -1284,6 +1284,8 @@ def add_noise_to_model(
             dm_comp.TNDMAMP.quantity = noise_dict[psr_name + "_dm_gp_log10_A"]
             dm_comp.TNDMGAM.quantity = noise_dict[psr_name + "_dm_gp_gamma"]
             dm_comp.TNDMC.quantity = dm_kwargs.get("Nfreqs", 100)
+            # discovery's DM bases are referenced to 1400 MHz
+            dm_comp.DMNOISE_FREF.value = 1400.0
             _apply_pl_component_logfreq_settings(
                 dm_comp,
                 dm_kwargs,
@@ -1308,6 +1310,9 @@ def add_noise_to_model(
             f"{psr_name}_chrom_gp_alpha",
             fixed_idx if fixed_idx != "vary" else noise_dict.get(f"{psr_name}_chrom_idx", 4.0),
         )
+        # reference frequencies match the chromatic_noise_block defaults
+        chrom_fref = chrom_kwargs.get("fref", 800.0)
+        quad_fref = chrom_kwargs.get("quad_fref") or chrom_fref
         if "ChromaticCM" not in model.components:
             log.info(
                 "Adding ChromaticCM component to model since chromatic noise parameters detected."
@@ -1322,6 +1327,7 @@ def add_noise_to_model(
             )
         else:
             model.TNCHROMIDX.value = chrom_idx
+        model.CM_FREF.value = quad_fref
         ###### POWERLAW CHROMATIC NOISE ######
         if f"{psr_name}_chrom_gp_log10_A" in chrom_pars:
             log.info("Adding Powerlaw CHROM GP noise as PLChromNoise to par file")
@@ -1331,6 +1337,7 @@ def add_noise_to_model(
             chrom_comp.TNCHROMAMP.quantity = noise_dict[psr_name + "_chrom_gp_log10_A"]
             chrom_comp.TNCHROMGAM.quantity = noise_dict[psr_name + "_chrom_gp_gamma"]
             chrom_comp.TNCHROMC.quantity = chrom_kwargs.get("Nfreqs", 100)
+            chrom_comp.CHROMNOISE_FREF.value = chrom_fref
             _apply_pl_component_logfreq_settings(
                 chrom_comp,
                 chrom_kwargs,
