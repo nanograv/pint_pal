@@ -5,6 +5,7 @@ that setup paths work end-to-end for common `noise_run` model/inference
 configurations while keeping runtime lightweight.
 """
 
+import io
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -712,6 +713,7 @@ def test_add_noise_to_model_adds_dm_gp_powerlaw(real_pint_model):
     )
     assert out is model
     assert "PLDMNoise" in model.components
+    assert model.DMNOISE_FREF.value == pytest.approx(1400.0)
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
@@ -726,6 +728,26 @@ def test_add_noise_to_model_adds_chromatic_gp_powerlaw(real_pint_model):
     )
     assert out is model
     assert "PLChromNoise" in model.components
+    assert model.CHROMNOISE_FREF.value == pytest.approx(800.0)
+    assert model.CM_FREF.value == pytest.approx(800.0)
+
+
+@pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
+def test_add_noise_to_model_chromatic_frefs_follow_model_kwargs(real_pint_model):
+    model = deepcopy(real_pint_model)
+    psr = model.PSR.value
+    noise_dict = _base_noise_dict(psr)
+    noise_dict.update({f"{psr}_chrom_gp_log10_A": -13.9, f"{psr}_chrom_gp_gamma": 3.0})
+
+    nu.add_noise_to_model(
+        model,
+        noise_dict,
+        model_kwargs={"chromatic_noise": {"Nfreqs": 15, "fref": 1000.0, "quad_fref": 1400.0}},
+    )
+    reloaded = models.get_model(io.StringIO(model.as_parfile()))
+    for m in (model, reloaded):
+        assert m.CHROMNOISE_FREF.value == pytest.approx(1000.0)
+        assert m.CM_FREF.value == pytest.approx(1400.0)
 
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
