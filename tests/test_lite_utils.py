@@ -1,3 +1,4 @@
+import io
 import pytest
 from pathlib import Path
 import numpy as np
@@ -11,6 +12,7 @@ from pint_pal.lite_utils import (
     add_feJumps,
     add_dips_to_model,
     add_chromatic_gaussians_to_model,
+    add_solar_wind_proxy_regression_to_model,
     convert_equad_convention,
 )
 
@@ -185,6 +187,28 @@ def test_add_dips_to_model_produces_delay(model, toas):
 def test_add_dips_to_model_rejects_mismatched_lengths(model):
     with pytest.raises(ValueError):
         add_dips_to_model(model, [55000.0, 56000.0], [1e-6], [-1.0], [30.0])
+
+
+# ---------------------------------------------------------------------------
+# Solar wind proxy regression
+# ---------------------------------------------------------------------------
+
+def test_add_sw_proxy_regression_sets_params(model):
+    add_solar_wind_proxy_regression_to_model(model, SWPRBETA0=1.0, SWPRBETA1=0.05, smooth=False)
+    assert 'SolarWindProxyRegression' in model.components
+    assert model.SWPRBETA0.value == pytest.approx(1.0)
+    assert model.SWPRBETA1.value == pytest.approx(0.05)
+    assert model.SWPRSMOOTH.value == 0.0
+    assert {'SWPRBETA0', 'SWPRBETA1'} <= set(model.free_params)
+
+
+def test_add_sw_proxy_regression_replaces_constant_sw(model):
+    assert 'SolarWindDispersion' in model.components
+    add_solar_wind_proxy_regression_to_model(model, SWPRBETA0=1.0, SWPRBETA1=0.05)
+    assert 'SolarWindDispersion' not in model.components
+    reloaded = models.get_model(io.StringIO(model.as_parfile()))
+    assert 'SolarWindProxyRegression' in reloaded.components
+    assert 'SolarWindDispersion' not in reloaded.components
 
 
 # ---------------------------------------------------------------------------
