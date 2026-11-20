@@ -1397,7 +1397,7 @@ def test_run_nuts_with_checkpoints_does_not_recompute_log_probs(tmp_path, monkey
 class TestGetMapNoiseValuesN:
     """Unit tests for get_map_noise_values with N parameter."""
 
-    def _make_outdir(self, tmp_path, has_json=False, has_lnpost=True):
+    def _make_outdir(self, tmp_path, has_json=False, has_lnlike=True):
         import pint.models
         from types import SimpleNamespace
 
@@ -1416,8 +1416,10 @@ class TestGetMapNoiseValuesN:
                 "par1": [1.0, 2.0, 3.0, 4.0, 5.0],
                 "par2": [5.0, 4.0, 3.0, 2.0, 1.0],
             })
-            if has_lnpost:
-                df["lnpost"] = [-5.0, -4.0, -3.0, -2.0, -1.0]  # sample 4 is best
+            if has_lnlike:
+                df["lnlike"] = [-5.0, -4.0, -3.0, -2.0, -1.0]  # sample 4 is best
+                # lnpost ranks in the opposite order; selection must use lnlike
+                df["lnpost"] = [-1.0, -2.0, -3.0, -4.0, -5.0]
             df.to_feather(outdir / "J0000+0000_nuts_samples.feather")
 
         return outdir.parent.parent, FakeModel()
@@ -1430,28 +1432,28 @@ class TestGetMapNoiseValuesN:
         result = get_map_noise_values(outdir_root, fake_model, N=1)
         assert result == {"par1": 1.0, "par2": 2.0}
 
-    def test_N1_selects_top_row_by_lnpost(self, tmp_path, monkeypatch):
-        outdir_root, fake_model = self._make_outdir(tmp_path, has_json=False, has_lnpost=True)
+    def test_N1_selects_top_row_by_lnlike(self, tmp_path, monkeypatch):
+        outdir_root, fake_model = self._make_outdir(tmp_path, has_json=False, has_lnlike=True)
         monkeypatch.setattr("pint_pal.noise_utils.format_chain_dir",
                             lambda d, model=None: str(tmp_path / "chains" / "J0000+0000"))
         from pint_pal.noise_utils import get_map_noise_values
         result = get_map_noise_values(outdir_root, fake_model, N=1)
-        # best row (lnpost=-1) is the last row: par1=5, par2=1
+        # best row (lnlike=-1) is the last row: par1=5, par2=1
         assert result["par1"] == pytest.approx(5.0)
         assert result["par2"] == pytest.approx(1.0)
 
-    def test_N3_averages_top3_by_lnpost(self, tmp_path, monkeypatch):
-        outdir_root, fake_model = self._make_outdir(tmp_path, has_json=False, has_lnpost=True)
+    def test_N3_averages_top3_by_lnlike(self, tmp_path, monkeypatch):
+        outdir_root, fake_model = self._make_outdir(tmp_path, has_json=False, has_lnlike=True)
         monkeypatch.setattr("pint_pal.noise_utils.format_chain_dir",
                             lambda d, model=None: str(tmp_path / "chains" / "J0000+0000"))
         from pint_pal.noise_utils import get_map_noise_values
         result = get_map_noise_values(outdir_root, fake_model, N=3)
-        # top-3 by lnpost: rows with lnpost -1,-2,-3 → par1=[5,4,3], par2=[1,2,3]
+        # top-3 by lnlike: rows with lnlike -1,-2,-3 → par1=[5,4,3], par2=[1,2,3]
         assert result["par1"] == pytest.approx(4.0)
         assert result["par2"] == pytest.approx(2.0)
 
-    def test_no_lnpost_falls_back_to_mean(self, tmp_path, monkeypatch):
-        outdir_root, fake_model = self._make_outdir(tmp_path, has_json=False, has_lnpost=False)
+    def test_no_lnlike_falls_back_to_mean(self, tmp_path, monkeypatch):
+        outdir_root, fake_model = self._make_outdir(tmp_path, has_json=False, has_lnlike=False)
         monkeypatch.setattr("pint_pal.noise_utils.format_chain_dir",
                             lambda d, model=None: str(tmp_path / "chains" / "J0000+0000"))
         from pint_pal.noise_utils import get_map_noise_values
