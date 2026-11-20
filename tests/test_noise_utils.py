@@ -6,7 +6,8 @@ flow, config wiring, and error handling branches.
 
 import json
 import re
-import sys
+import os, sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -38,9 +39,15 @@ def model():
 
 @pytest.mark.filterwarnings("ignore:PINT only supports 'T2CMETHOD IAU2000B'")
 def test_format_chain_dir(model):
-    assert nu.format_chain_dir("/path/to/chains/B1855+09_nb/", model) == "/path/to/chains/B1855+09_nb/"
-    assert nu.format_chain_dir("/path/to/chains/", model) == "/path/to/chains/B1855+09_nb/"
-    assert nu.format_chain_dir("/path/to/chains/", model, using_wideband=True) == "/path/to/chains/B1855+09_wb/"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        nb_subdir = os.path.join(tmpdir, "B1855+09_nb")
+        wb_subdir = os.path.join(tmpdir, "B1855+09_wb")
+        assert nu.format_chain_dir(tmpdir, model) == tmpdir
+        assert nu.format_chain_dir(nb_subdir, model) == nb_subdir
+        os.mkdir(nb_subdir)
+        assert nu.format_chain_dir(tmpdir, model) == nb_subdir
+        os.mkdir(wb_subdir)
+        assert nu.format_chain_dir(tmpdir, model, using_wideband=True) == wb_subdir
 
 
 def _formatted_dir(root: str) -> str:

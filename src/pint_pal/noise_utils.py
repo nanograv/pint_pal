@@ -1022,22 +1022,20 @@ def format_chain_dir(
     root_dir: str, model: pm.timing_model.TimingModel, using_wideband: bool = False
 ) -> str:
     """
-    Appropriately formats a chain directory. This must end in PSR_[nw]b/
+    Appropriately formats a chain directory.
+    Usually this will just return the `root_dir` specified in the YAML file,
+    but for backwards compatibility with older behavior, we allow leaving out
+    the final `<psr>_<nb/wb>` component of the path (if present).
     """
     mode = "nb"
     if using_wideband:
         mode = "wb"
 
-    sub_dir = f"{model.PSR.value}_{mode}"
-    # Check if the root_dir contains sub_dir or not, otherwise add it
-    p = pathlib.Path(root_dir)
-    last_dir = p.parent.name if p.is_dir() else p.name
-    if last_dir == sub_dir:
-        chain_dir = root_dir
+    sub_dir = os.path.join(root_dir, f"{model.PSR.value}_{mode}")
+    if os.path.isdir(sub_dir):
+        return sub_dir
     else:
-        chain_dir = os.path.join(root_dir, sub_dir, "")
-
-    return chain_dir
+        return root_dir
 
 
 def add_noise_to_model(
