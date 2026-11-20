@@ -1619,9 +1619,9 @@ def get_map_noise_values(outdir, model, N=1):
         Number of top-posterior samples to average over.
 
         * ``N=1`` (default) — return the single MAP sample (highest
-          ``lnpost`` in the chain), or the MAP JSON written by the SVI
+          ``lnlike`` in the chain), or the MAP JSON written by the SVI
           optimizer if no feather chain is present.
-        * ``N>1`` — sort the chain by ``lnpost`` (descending) and return
+        * ``N>1`` — sort the chain by ``lnlike`` (descending) and return
           the column-wise mean of the top-*N* rows.  A JSON map file is
           ignored when ``N>1`` since it contains only a single point.
 
@@ -1674,14 +1674,13 @@ def get_map_noise_values(outdir, model, N=1):
     if numeric_df.shape[1] == 0:
         raise ValueError(f"No numeric columns found in feather chain: {feather_file}")
 
-    if 'lnpost' in df.columns:
-        sorted_df = numeric_df.iloc[df['lnpost'].values.argsort()[::-1]]
+    if 'lnlike' in df.columns:
+        sorted_df = numeric_df.iloc[df['lnlike'].values.argsort()[::-1]]
         top_N = sorted_df.head(N)
         return {k: float(v) for k, v in top_N.mean(axis=0).to_dict().items()}
     else:
         log.warning(
-            "Chain feather file does not contain a 'lnpost' column — this chain "
-            "was saved before log-probability logging was added.  "
+            "Chain feather file does not contain a 'lnlike' column."
             "Returning the column-wise mean over the full chain instead of the top-N MAP."
         )
         return {k: float(v) for k, v in numeric_df.mean(axis=0).to_dict().items()}
