@@ -436,7 +436,7 @@ def model_noise(
     mo,
     to,
     using_wideband=False,
-    resume=False,
+    resume=True,
     run_noise_analysis=True,
     wb_efac_sigma=0.25,
     base_op_dir="./",
@@ -453,7 +453,9 @@ def model_noise(
     mo: PINT (or tempo2) timing model
     to: PINT (or tempo2) TOAs
     using_wideband: Flag to toggle between narrowband and wideband datasets; Default: False
-    resume: Flag to resume overwrite previous run or not.
+    resume: With enterprise/PTMCMCSampler, resume could potentially overwrite chains.
+        So logic stops that from happening below. With discovery, resume is only implemented
+        for the MCMC sampler -- not for the optimizer currently.
     run_noise_analysis: Flag to toggle execution of noise modeling; Default: True
     noise_kwargs: dictionary of noise model parameters; Default: {}
     sampler_kwargs: dictionary of sampler parameters; Default: {}
@@ -1625,9 +1627,8 @@ def get_map_noise_values(outdir, model, N=1):
           the column-wise mean of the top-*N* rows.  A JSON map file is
           ignored when ``N>1`` since it contains only a single point.
 
-        If the feather chain does not contain a ``lnpost`` column (chains
-        produced before log-probability logging was added), a warning is
-        emitted and the column-wise mean of the entire chain is returned
+        If the feather chain does not contain a ``lnpost`` column, a
+        warning is emitted and the column-wise mean of the entire chain is returned
         instead.
 
     Returns
@@ -1911,9 +1912,8 @@ def generate_gp_realizations(
     # gp.index in the variable branch — a marginalized (ConstantGP) timing model
     # has no index entry, so _extract_gp_design_matrix never sees it and the
     # payload comes out with no timing-model coefficients or design matrix at
-    # all.  Downstream plotting then silently drops every TM contribution
-    # (reference DM, F0/F1, NE_SW), which is never what you want from a
-    # realization payload.  The marginal posterior of the other GPs is
+    # all.  Downstream plotting would then drop every TM contribution
+    # (reference DM, F0/F1, NE_SW).  The marginal posterior of the other GPs is
     # unchanged by sampling the TM instead of marginalizing it analytically.
     if mk["timing_model"].get("tm_marg", True):
         log.info(
@@ -1935,10 +1935,10 @@ def generate_gp_realizations(
     # make_kernelsolve_simple and therefore sample_conditional.
     # All VariableGPs — including ecorr — are concatenated into one
     # compound design matrix, so sample_conditional draws coefficients
-    # for every GP simultaneously (TM, ecorr, RN, DM, SW, ...).
+    # for every GP simultaneously (TM, ecorr, RN, DM, SW, CHROM).
     # The actual noise parameter values are passed to the conditional
     # at draw time via noise_params.
-    log.info("Building likelihood with all WN params variable (varNP mode).")
+    log.info("Building likelihood with all WN params variable (varNP).")
 
     # Build likelihood
     log.info(f"Building Discovery likelihood for {e_psr.name}...")
@@ -2021,7 +2021,7 @@ def generate_gp_realizations(
     # realizations (seconds) back to n_E (cm^-3).  The conversion is
     #   n_E(t) = delay(t) / shape(t)
     # where delay(t) comes from _get_tm_component_signal for the 'sw'
-    # category (NE_SW, NE1, …).
+    # category (NE_SW, NE1, ...).
     sw_shape_at_toas = None
     if sw_block and isinstance(sw_block, dict):
         try:
@@ -2119,7 +2119,7 @@ def generate_gp_realizations(
         "tm_column_norms": tm_column_norms,
     }
 
-    # --- Efficient feather serialization ---
+    # Efficient feather serialization
     # Build one row per (gp_key, data_type) with the flattened array stored
     # as a list-column.  This avoids O(n_toas * n_coeff * n_real) rows.
     data_rows = []
@@ -2167,7 +2167,7 @@ def generate_gp_realizations(
     log.info(f"Saving GP realizations to {outfile}")
     df.to_feather(outfile, compression='zstd')
 
-    # Return payload in original format for backward compatibility
+    # Return payload
     payload = {
         **metadata,
         "realizations": {k: np.asarray(v) for k, v in realizations.items()},

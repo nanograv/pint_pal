@@ -5249,8 +5249,7 @@ def load_gp_realizations(filepath):
     F_columns = {}
     
     # Detect which serialization format was used:
-    # New format: rows have 'shape0', 'shape1', 'values' columns
-    # Old format: rows have 'index1', 'index2', 'value' columns
+    # format: rows have 'shape0', 'shape1', 'values' columns
     new_format = 'shape0' in df.columns
 
     if new_format:
@@ -5299,7 +5298,6 @@ def load_gp_realizations(filepath):
         log.warning(
             "The noise model includes a chromatic quadratic but the payload has "
             "no realizations of it; plots will be missing that signal. "
-            "Regenerate the realizations with current pint_pal."
         )
 
     return payload
@@ -5312,7 +5310,7 @@ def _classify_gp(gp_key, psr_name=None):
     ``category`` is one of ``'red_noise'``, ``'dm_gp'``, ``'chrom'``,
     ``'chrom_quad'``, ``'sw'``, ``'timing_model'``, ``'ecorr'``, or
     ``'unknown'``.  The chromatic quadratic shares its name with the chromatic
-    Fourier GP and is told apart by its 3 coefficients (a Fourier basis always
+    Fourier GP but it always has 3 columns (a Fourier basis always
     has an even number of columns).
     """
     key = gp_key.lower()
@@ -5481,12 +5479,10 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
     so that it converts back to DM exactly (``Mmat`` DM columns carry the
     binary Doppler factor from PINT's chain rule).
 
-    Note that the saved ``F_columns`` are *not* ``Mmat``: Discovery's
+    Note that the saved ``F_columns`` are not ``Mmat``: Discovery's
     ``makegp_timing`` stores a column-normalized basis,
     ``F[:, k] = Mmat[:, k] / ||Mmat[:, k]||``, so the raw column is recovered as
-    ``F[:, k] * tm_column_norms[k]``.  Payloads generated before
-    ``tm_column_norms`` was recorded cannot do this conversion, and reference
-    values are skipped (with a warning) for those.
+    ``F[:, k] * tm_column_norms[k]``. 
 
     Parameters
     ----------
@@ -5503,7 +5499,7 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
         (converted to time delays) to the fitted perturbations. Default False.
         Reference values are never added for the 'sw' category (handled
         separately in plot_gp_sw_ne) or the 'red_noise' category
-        (F0 * d(delay)/d(F0) is not a meaningful delay).
+        (since F0 * d(delay)/d(F0) is not a physically pertinent delay).
 
     Returns
     -------
@@ -5524,7 +5520,7 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
             f"the realizations were generated with timing_model.tm_marg=True: "
             f"the marginalized timing model is a ConstantGP with no index "
             f"entry, so its coefficients are never drawn. Re-run "
-            f"generate_gp_realizations with current pint_pal, which forces "
+            f"generate_gp_realizations and set "
             f"tm_marg=False."
         )
         return None, []
@@ -5586,8 +5582,7 @@ def _get_tm_component_signal(payload, gp_category, psr_name=None, model=None, in
                 "No tm_column_norms in payload; the saved timing-model design "
                 "matrix is column-normalized, so reference parameter values "
                 "cannot be converted to time delays. Skipping them (showing "
-                "fitted perturbations only). Re-run generate_gp_realizations "
-                "with current pint_pal to enable this."
+                "fitted perturbations only)."
             )
         elif len(norms) != F_tm.shape[1]:
             log.warning(
@@ -5809,7 +5804,7 @@ def _zero_mean_realizations(signals):
 
     Removes the constant offset of every realization independently, so the
     plotted band shows only the *shape* of the process.  This is useful when
-    the absolute level is covariant with other timing-model parameters — e.g.
+    the absolute level is covariant with other timing-model parameters - e.g.
     the total DM is partly degenerate with the FD parameters, so the offset of
     a DM GP realization carries little information while inflating the
     credible band.
