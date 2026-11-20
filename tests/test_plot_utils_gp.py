@@ -20,6 +20,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import astropy.units as u
+from pint import DMconst
+
 import pint_pal.plot_utils as pu
 
 
@@ -156,6 +159,24 @@ class TestConvertUnits:
         _, lbl = pu._convert_units(self._sig, self._freqs, "chrom", "us@1400")
         assert "1400" in lbl
 
+    def test_us_at_ref_defaults_to_800(self):
+        freqs = np.array([400.0, 800.0, 1600.0])
+        sig = np.array([1e-6, 1e-6, 1e-6])
+        out, lbl = pu._convert_units(sig, freqs, "chrom", "us@ref", chromatic_idx=4.0)
+        assert "800" in lbl
+        np.testing.assert_allclose(out, [1.0 / 16, 1.0, 16.0])
+
+    def test_us_at_ref_uses_ref_freq(self):
+        freqs = np.array([700.0])
+        out, lbl = pu._convert_units(np.array([1e-6]), freqs, "chrom", "us@ref",
+                                     chromatic_idx=2.0, ref_freq_mhz=1400.0)
+        assert "1400" in lbl
+        np.testing.assert_allclose(out, [0.25])
+
+    def test_us_at_bad_freq_raises(self):
+        with pytest.raises(ValueError, match="Unknown target_units"):
+            pu._convert_units(self._sig, self._freqs, "chrom", "us@foo")
+
     def test_ne_label_falls_back_for_non_interp(self):
         """'ne' units without sw_shape fall back to DM-like label."""
         _, lbl = pu._convert_units(self._sig, self._freqs, "sw", "ne")
@@ -205,11 +226,12 @@ class TestGetTmComponentSignal:
         # Mode 3 adds a non-zero offset; the arrays should differ
         assert not np.allclose(sig_no_ref, sig_ref)
 
-    def test_reference_delay_uses_unnormalized_column(self):
-        """The reference delay must be DM * Mmat[:, DM], not DM * F[:, DM].
+    def test_reference_delay_is_dm_dispersion_delay(self):
+        """The DM reference delay is DM * DMconst / f^2, not DM * Mmat[:, DM].
 
-        The payload stores the column-normalized basis, so forgetting the norm
-        factor inflates the reference contribution by 1 / ||Mmat[:, DM]||.
+        PINT's DM design-matrix column carries the binary Doppler factor, so the
+        reference delay is built from d(DM)/d(param) (exactly 1 for DM itself)
+        and the cold-plasma dispersion law, which converts back to DM exactly.
         """
         payload = _make_payload()
         model = _dummy_model(dm=15.0)
@@ -222,7 +244,8 @@ class TestGetTmComponentSignal:
         # DM1/DM2 are 0.0 in the dummy model and absent from fitpars anyway,
         # so the only reference contribution is DM (column 2).
         assert names == ["DM"]
-        expected = np.broadcast_to(15.0 * _tm_Mmat[:, 2], (N_REAL, N_TOAS))
+        dmconst = DMconst.to_value(u.MHz**2 * u.s * u.cm**3 / u.pc)
+        expected = np.broadcast_to(15.0 * dmconst / _freqs**2, (N_REAL, N_TOAS))
         np.testing.assert_allclose(sig_ref - sig_no_ref, expected)
 
     def test_reference_skipped_without_column_norms(self):
@@ -262,6 +285,52 @@ class TestGetTmComponentSignal:
         # SW is skipped — both calls return the same result
         if sig_no_ref is not None and sig_ref is not None:
             np.testing.assert_array_equal(sig_no_ref, sig_ref)
+
+
+def _make_chrom_quad_payload():
+    """Payload with a chromatic Fourier GP and its chromatic quadratic."""
+    payload = _make_payload()
+    chrom_key = f"{PSR}_chrom_gp_coefficients(4)"
+    quad_key = f"{PSR}_chrom_gp_coefficients(3)"
+    payload["gp_keys"] += [chrom_key, quad_key]
+    payload["realizations"][chrom_key] = _rn_coeffs.copy()
+    payload["F_columns"][chrom_key] = _rn_F.copy()
+    payload["realizations"][quad_key] = _rng.standard_normal((N_REAL, 3))
+    payload["F_columns"][quad_key] = _rng.standard_normal((N_TOAS, 3)) * 1e-7
+    return payload, chrom_key, quad_key
+
+
+class TestChromaticQuadratic:
+    def test_quad_is_its_saved_basis_times_coefficients(self):
+        payload, _, quad_key = _make_chrom_quad_payload()
+        expected = payload["realizations"][quad_key] @ payload["F_columns"][quad_key].T
+        np.testing.assert_array_equal(pu._gp_time_domain(payload, quad_key), expected)
+
+    def test_timing_model_is_unchanged_by_quad(self):
+        payload, _, _ = _make_chrom_quad_payload()
+        tm_key = payload["gp_keys"][0]
+        np.testing.assert_array_equal(pu._gp_time_domain(payload, tm_key),
+                                      _tm_coeffs @ _tm_F.T)
+
+    def test_chrom_tm_component_is_the_quad(self):
+        payload, _, quad_key = _make_chrom_quad_payload()
+        sig, names = pu._get_tm_component_signal(payload, "chrom", PSR)
+        assert names == ["chrom_quad"]
+        np.testing.assert_allclose(sig, pu._gp_time_domain(payload, quad_key))
+
+    def test_combined_folds_quad_into_chrom_panel_with_tm(self):
+        payload, _, _ = _make_chrom_quad_payload()
+        _, axes = pu.plot_gp_realizations_combined(
+            payload, include_tm_perturbations=True, include_tm_values=False,
+            model=_dummy_model(), chromatic_idx=4.0)
+        assert len(axes) == len(payload["gp_keys"]) - 1
+
+    def test_combined_shows_quad_panel_without_tm(self):
+        payload, _, _ = _make_chrom_quad_payload()
+        _, axes = pu.plot_gp_realizations_combined(
+            payload, include_tm_perturbations=False, include_tm_values=False,
+            chromatic_idx=4.0)
+        assert len(axes) == len(payload["gp_keys"])
 
 
 # ---------------------------------------------------------------------------
@@ -351,12 +420,12 @@ class TestPlotGpRealization:
 
     # --- Mode 3: GP + ΔTM + ref ---
 
-    def test_mode3_rn_ylabel_strips_delta(self):
+    def test_mode3_dm_ylabel_strips_delta(self):
         payload = _make_payload()
-        rn_key = [k for k in payload["gp_keys"] if "red" in k][0]
+        dm_key = [k for k in payload["gp_keys"] if "dm_gp" in k][0]
         model = _dummy_model()
         ylabel, _, _ = self._get_ax_labels(
-            payload, rn_key,
+            payload, dm_key,
             include_tm_perturbations=True,
             include_tm_values=True,
             model=model,
@@ -364,6 +433,21 @@ class TestPlotGpRealization:
         # Δ should be stripped in mode 3
         assert r"\Delta" not in ylabel and "Delta" not in ylabel, \
             f"Δ should be stripped in mode 3 ylabel, got: {ylabel}"
+
+    def test_mode3_rn_stays_perturbation(self):
+        """Red noise never gets reference values (F0 * dt/dF0 is not a delay),
+        so asking for mode 3 still gives a Δ label and a non-total title."""
+        payload = _make_payload()
+        rn_key = [k for k in payload["gp_keys"] if "red" in k][0]
+        model = _dummy_model()
+        ylabel, title, _ = self._get_ax_labels(
+            payload, rn_key,
+            include_tm_perturbations=True,
+            include_tm_values=True,
+            model=model,
+        )
+        assert r"\Delta" in ylabel, f"Expected Δ in red-noise ylabel, got: {ylabel}"
+        assert "total" not in title.lower(), f"Red noise should not be 'total', got: {title}"
 
     def test_mode3_rn_ylabel_still_mus(self):
         payload = _make_payload()
@@ -380,10 +464,10 @@ class TestPlotGpRealization:
 
     def test_mode3_title_contains_total(self):
         payload = _make_payload()
-        rn_key = [k for k in payload["gp_keys"] if "red" in k][0]
+        dm_key = [k for k in payload["gp_keys"] if "dm_gp" in k][0]
         model = _dummy_model()
         _, title, _ = self._get_ax_labels(
-            payload, rn_key,
+            payload, dm_key,
             include_tm_perturbations=True,
             include_tm_values=True,
             model=model,

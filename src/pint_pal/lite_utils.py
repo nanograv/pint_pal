@@ -959,6 +959,164 @@ def add_deteriministic_solar_wind_to_model(
             log.warning("DMEPOCH is not set; SWEPOCH will not be set to DMEPOCH.")
     return
 
+def add_dips_to_model(
+        model: models.TimingModel,
+        epochs,
+        ampls,
+        gammas,
+        taus,
+        frozen: bool = False,
+        fit_epochs: bool = False,
+    ) -> None:
+    """
+    Add chromatic exponential dips (PINT's SimpleExponentialDip) to the timing model,
+    e.g. for the J1713+0747 profile-change events.
+
+    Any existing SimpleExponentialDip component is replaced.
+
+    Parameters
+    ==========
+    model : pint.models.TimingModel
+        Timing model to modify in-place.
+    epochs : sequence of float
+        Dip epochs (MJD), one per dip.
+    ampls : sequence of float
+        Dip amplitudes (s) at the reference frequency (EXPDIPFREF, default 1400 MHz).
+    gammas : sequence of float
+        Chromatic indices of each dip.
+    taus : sequence of float
+        Exponential decay timescales (days).
+    frozen : bool, optional
+        If True, amplitude, index and timescale are frozen; if False (default) they
+        are free in the fit.
+    fit_epochs : bool, optional
+        If True, also unfreeze the dip epochs. Default is False.
+
+    Returns
+    =======
+    None
+        Updates the model in-place.
+    """
+    epochs, ampls, gammas, taus = (np.atleast_1d(x) for x in (epochs, ampls, gammas, taus))
+    ndips = len(epochs)
+    if ndips == 0 or not all(len(x) == ndips for x in (ampls, gammas, taus)):
+        raise ValueError(
+            "epochs, ampls, gammas and taus must be non-empty and of equal length."
+        )
+
+    if 'SimpleExponentialDip' in model.components:
+        log.info("Removing existing SimpleExponentialDip from model.")
+        model.remove_component('SimpleExponentialDip')
+
+    log.info(f"Adding {ndips} exponential dip(s) to model.")
+    dip = Component.component_types['SimpleExponentialDip']()
+    # The component is created with an empty dip at index 1; fill it, then add the rest.
+    dip.EXPDIPEP_1.value = float(epochs[0])
+    dip.EXPDIPAMP_1.value = float(ampls[0])
+    dip.EXPDIPIDX_1.value = float(gammas[0])
+    dip.EXPDIPTAU_1.value = float(taus[0])
+    for i in range(1, ndips):
+        dip.add_exp_dip(
+            epoch=float(epochs[i]),
+            ampl=float(ampls[i]),
+            gamma=float(gammas[i]),
+            tau=float(taus[i]),
+            index=i + 1,
+        )
+    for i in range(1, ndips + 1):
+        for prefix in ('EXPDIPAMP_', 'EXPDIPIDX_', 'EXPDIPTAU_'):
+            getattr(dip, f'{prefix}{i}').frozen = frozen
+        getattr(dip, f'EXPDIPEP_{i}').frozen = not fit_epochs
+
+    model.add_component(dip, validate=False, force=True)
+    model.setup()
+    model.validate()
+    return
+
+def add_chromatic_gaussians_to_model(
+        model: models.TimingModel,
+        epochs,
+        log10_amps,
+        log10_sigmas,
+        signs,
+        chrom_idxs,
+        frozen: bool = False,
+        fit_epochs: bool = False,
+    ) -> None:
+    """
+    Add chromatic Gaussian events (PINT's ChromaticGaussianEvent) to the timing model,
+    e.g. for extreme scattering events.
+
+    Each event is the same as discovery's ``deterministic.chromatic_gaussian`` delay:
+
+        delay(t) = sign * 10**log10_amp * exp(-(t - epoch)**2 / (2 * (10**log10_sigma)**2))
+                   * (fref / f)**chrom_idx
+
+    with fref = CHROMGAUSS_FREF (default 1400 MHz). Discovery's ``t0``, ``log10_Amp``,
+    ``log10_sigma``, ``sign_param`` and ``alpha`` map directly onto the arguments here.
+    Any existing ChromaticGaussianEvent component is replaced.
+
+    Parameters
+    ==========
+    model : pint.models.TimingModel
+        Timing model to modify in-place.
+    epochs : sequence of float
+        Event epochs (MJD), one per event.
+    log10_amps : sequence of float
+        log10 of the event amplitude in seconds at the reference frequency.
+    log10_sigmas : sequence of float
+        log10 of the Gaussian width in days.
+    signs : sequence of float
+        Sign of each event; only the sign is kept (+1 or -1).
+    chrom_idxs : sequence of float
+        Chromatic index of each event.
+    frozen : bool, optional
+        If True, LOGAMP, LOGSIG and CHROMIDX are frozen; if False (default) they are
+        free in the fit. SIGN is always frozen, since it isn't a continuous parameter.
+    fit_epochs : bool, optional
+        If True, also unfreeze the event epochs. Default is False.
+
+    Returns
+    =======
+    None
+        Updates the model in-place.
+    """
+    args = [np.atleast_1d(x) for x in (epochs, log10_amps, log10_sigmas, signs, chrom_idxs)]
+    nevents = len(args[0])
+    if nevents == 0 or not all(len(x) == nevents for x in args):
+        raise ValueError(
+            "epochs, log10_amps, log10_sigmas, signs and chrom_idxs must be "
+            "non-empty and of equal length."
+        )
+    if np.any(args[3] == 0):
+        raise ValueError("signs must be nonzero.")
+
+    if 'ChromaticGaussianEvent' in model.components:
+        log.info("Removing existing ChromaticGaussianEvent from model.")
+        model.remove_component('ChromaticGaussianEvent')
+
+    log.info(f"Adding {nevents} chromatic Gaussian event(s) to model.")
+    gauss = Component.component_types['ChromaticGaussianEvent']()
+    for i, (ep, amp, sig, sgn, idx) in enumerate(zip(*args), start=1):
+        # force=True overwrites the placeholder event the component is created with.
+        gauss.add_chromatic_gaussian_event(
+            epoch=float(ep),
+            log10amp=float(amp),
+            chromidx=float(idx),
+            log10sigma=float(sig),
+            sign=float(sgn),
+            index=i,
+            force=True,
+        )
+        for prefix in ('CHROMGAUSS_LOGAMP_', 'CHROMGAUSS_LOGSIG_', 'CHROMGAUSS_CHROMIDX_'):
+            getattr(gauss, f'{prefix}{i}').frozen = frozen
+        getattr(gauss, f'CHROMGAUSS_EPOCH_{i}').frozen = not fit_epochs
+
+    model.add_component(gauss, validate=False, force=True)
+    model.setup()
+    model.validate()
+    return
+
 def get_receivers(toas):
     """Returns a list of receivers present in the tim file(s)
 
