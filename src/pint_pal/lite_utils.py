@@ -959,6 +959,76 @@ def add_deteriministic_solar_wind_to_model(
             log.warning("DMEPOCH is not set; SWEPOCH will not be set to DMEPOCH.")
     return
 
+def add_solar_wind_proxy_regression_to_model(
+        model: models.TimingModel,
+        SWPRBETA0: float = 0.0,
+        SWPRBETA1: float = 0.0,
+        SWPRLAG: float = 0.0,
+        SWPRSOURCE: str = "F107",
+        SWM: int = 0,
+        smooth: bool = True,
+        SWPRSMOOTH: float = 81.0,
+        SWPRSMOOTHKERNEL: str = "BOX",
+        frozen: bool = False,
+    ) -> None:
+    """
+    Add a solar wind proxy regression (PINT's SolarWindProxyRegression) to the timing
+    model, with n_E(t) = SWPRBETA0 + SWPRBETA1 * P(t - SWPRLAG).
+
+    Any existing SolarWindDispersion or SolarWindProxyRegression component is replaced,
+    since only one solar wind model of this category can be in a model.
+
+    Parameters
+    ==========
+    model : pint.models.TimingModel
+        Timing model to modify in-place.
+    SWPRBETA0 : float, optional
+        Regression intercept (cm^-3). Default is 0.
+    SWPRBETA1 : float, optional
+        Regression slope (cm^-3 per proxy unit). Default is 0.
+    SWPRLAG : float, optional
+        Lag applied to the proxy series (days). Default is 0.
+    SWPRSOURCE : str, optional
+        Proxy series, e.g. "F107" or "SSN". Default is "F107".
+    SWM : int, optional
+        Solar wind geometry model (0 or 1). Default is 0.
+    smooth : bool, optional
+        If False, the proxy is not smoothed (SWPRSMOOTH = 0). Default is True.
+    SWPRSMOOTH : float, optional
+        Smoothing width (days), used when smooth is True. Default is 81.
+    SWPRSMOOTHKERNEL : str, optional
+        Smoothing kernel, e.g. "BOX" or "GAUSSIAN". Default is "BOX".
+    frozen : bool, optional
+        If True, SWPRBETA0 and SWPRBETA1 are frozen; if False (default) they are free
+        in the fit.
+
+    Returns
+    =======
+    None
+        Updates the model in-place.
+    """
+    for name in ('SolarWindDispersion', 'SolarWindProxyRegression'):
+        if name in model.components:
+            log.info(f"Removing existing {name} from model.")
+            model.remove_component(name)
+
+    log.info('Adding SolarWindProxyRegression to model.')
+    sw = Component.component_types['SolarWindProxyRegression']()
+    sw.SWPRBETA0.value = SWPRBETA0
+    sw.SWPRBETA1.value = SWPRBETA1
+    sw.SWPRLAG.value = SWPRLAG
+    sw.SWPRSOURCE.value = SWPRSOURCE
+    sw.SWM.value = SWM
+    sw.SWPRSMOOTH.value = SWPRSMOOTH if smooth else 0.0
+    sw.SWPRSMOOTHKERNEL.value = SWPRSMOOTHKERNEL
+    sw.SWPRBETA0.frozen = frozen
+    sw.SWPRBETA1.frozen = frozen
+
+    model.add_component(sw, validate=False, force=True)
+    model.setup()
+    model.validate()
+    return
+
 def add_dips_to_model(
         model: models.TimingModel,
         epochs,
