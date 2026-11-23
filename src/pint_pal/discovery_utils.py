@@ -1104,7 +1104,8 @@ def run_nuts_with_checkpoints(
     num_samples_per_checkpoint : int
         The number of samples to save in each checkpoint.
     rng_key : jax.random.PRNGKey
-        The random number generator key for JAX.
+        The random number generator key for the first chunk. Each later chunk,
+        and a resumed run, continues from the key carried in the sampler state.
     outdir : str | Path
         The directory for output files.
     resume : bool
@@ -1133,16 +1134,16 @@ def run_nuts_with_checkpoints(
     """
     # convert to pathlib object
     # make directory if it doesn't exist
-    if not isinstance(outdir, Path):
-        outdir = Path(outdir)
-        outdir.mkdir(exist_ok=True, parents=True)
+    outdir = Path(outdir)
+    outdir.mkdir(exist_ok=True, parents=True)
 
     samples_file = outdir / f"{file_name}.feather"
     checkpoint_file = outdir / f"{file_name}-checkpoint.pickle"
 
     if checkpoint_file.is_file() and samples_file.is_file() and resume:
         df = pd.read_feather(samples_file)
-        num_samples_saved = df.shape[0]
+        # to_df flattens chains, so count saved samples per chain
+        num_samples_saved = df.shape[0] // getattr(sampler, "num_chains", 1)
 
         with checkpoint_file.open("rb") as f:
             checkpoint = pickle.load(f)
@@ -1150,6 +1151,7 @@ def run_nuts_with_checkpoints(
         total_sample_num = sampler.num_samples - num_samples_saved
 
         sampler.post_warmup_state = checkpoint
+        rng_key = checkpoint.rng_key
 
     else:
         df = None
@@ -1180,8 +1182,9 @@ def run_nuts_with_checkpoints(
             pickle.dump(sampler.last_state, f)
 
         sampler.post_warmup_state = sampler.last_state
-
-        rng_key, _ = jax.random.split(rng_key)
+        # Continue from the key carried in the sampler state. Splitting rng_key
+        # here instead replays the previous chunk's random numbers (jax >= 0.5).
+        rng_key = sampler.last_state.rng_key
 
         # checkpoint plot
         if diagnostics:

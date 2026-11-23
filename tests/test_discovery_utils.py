@@ -693,7 +693,7 @@ def test_run_nuts_with_checkpoints_saves_chain_and_checkpoint(tmp_path, monkeypa
     class FakeSampler:
         def __init__(self):
             self.num_samples = 5
-            self.last_state = {"s": 0}
+            self.last_state = SimpleNamespace(rng_key=0, s=0)
             self.post_warmup_state = None
             self.calls = 0
 
@@ -702,14 +702,13 @@ def test_run_nuts_with_checkpoints_saves_chain_and_checkpoint(tmp_path, monkeypa
 
         def run(self, _rng):
             self.calls += 1
-            self.last_state = {"s": self.calls}
+            self.last_state = SimpleNamespace(rng_key=self.calls, s=self.calls)
 
         def to_df(self):
             return pd.DataFrame({"x": np.arange(self.num_samples)})
 
     saved = {}
     monkeypatch.setattr(du, "save_chain", lambda df, path: saved.update({"rows": len(df), "path": path}))
-    monkeypatch.setattr(du.jax.random, "split", lambda key: (key, key))
 
     sampler = FakeSampler()
     du.run_nuts_with_checkpoints(
@@ -1321,7 +1320,7 @@ def _fake_checkpoint_sampler(n_samples, columns):
     """Sampler stub whose to_df returns the given columns."""
     class FakeSampler:
         num_samples = n_samples
-        last_state = {}
+        last_state = SimpleNamespace(rng_key=0)
         post_warmup_state = None
         calls = 0
 
@@ -1330,7 +1329,7 @@ def _fake_checkpoint_sampler(n_samples, columns):
 
         def run(self, _rng):
             self.calls += 1
-            self.last_state = {"s": self.calls}
+            self.last_state = SimpleNamespace(rng_key=self.calls, s=self.calls)
 
         def to_df(self):
             return pd.DataFrame({k: np.asarray(v) for k, v in columns.items()})
@@ -1343,7 +1342,6 @@ def test_run_nuts_with_checkpoints_saves_sampler_columns(tmp_path, monkeypatch):
     N = 4
     saved_dfs = []
     monkeypatch.setattr(du, "save_chain", lambda df, path: saved_dfs.append(df.copy()))
-    monkeypatch.setattr(du.jax.random, "split", lambda key: (key, key))
 
     du.run_nuts_with_checkpoints(
         sampler=_fake_checkpoint_sampler(
@@ -1368,7 +1366,6 @@ def test_run_nuts_with_checkpoints_does_not_recompute_log_probs(tmp_path, monkey
     N = 4
     saved_dfs = []
     monkeypatch.setattr(du, "save_chain", lambda df, path: saved_dfs.append(df.copy()))
-    monkeypatch.setattr(du.jax.random, "split", lambda key: (key, key))
 
     class FakeModel:
         def compute_log_probs(self, chain, batch_size=None):
