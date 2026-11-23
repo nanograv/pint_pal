@@ -1,11 +1,14 @@
-"""Unit tests for GP realization plotting helpers in plot_utils.
+"""Unit tests for plot_utils.
 
-Focuses on:
+GP realization plotting helpers (synthetic payloads, no PINT fitter):
   - _convert_units: correct unit labels and scaling
   - _get_tm_component_signal: column extraction and reference value injection
   - plot_gp_realization: mode 1/2/3 auto-units, ylabel stripping, title content
   - plot_gp_sw_ne: mode 1/2/3 ylabel, legend label, title, ref_ne gating
   - plot_gp_realizations_combined: suptitle mode label, include_tm_values forwarded to SW
+
+Residual plots (real B1855+09 12.5-yr par/tim and fitter):
+  - plot_residuals_elongation: smoke tests that a plot is produced
 """
 
 import sys
@@ -914,3 +917,49 @@ class TestMissingTimingModelGp:
         assert "tm_marg" in text
         assert "dm_gp" in text   # category interpolated, not a literal %s
         assert "%s" not in text
+
+
+# ---------------------------------------------------------------------------
+# Tests: plot_residuals_elongation
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def b1855_fitter():
+    """Real B1855+09 fitter (has ECORR, so epoch averaging works)."""
+    import pint.models as models
+    import pint.toa as toa
+    from pint.fitter import DownhillGLSFitter
+
+    data = Path(__file__).parent
+    model = models.get_model(str(data / "par/B1855+09_NANOGrav_12yv4.gls.par"))
+    toas = toa.get_TOAs(str(data / "tim/B1855+09_NANOGrav_12yv4.tim"))
+    fitter = DownhillGLSFitter(toas, model)
+    fitter.fit_toas(maxiter=1)
+    return fitter
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {},
+        {"xaxis": "impact"},
+        {"whitened": True},
+        {"avg": True},
+        {"avg": True, "whitened": True},
+    ],
+)
+def test_plot_residuals_elongation_makes_plot(b1855_fitter, kwargs):
+    pu.plot_residuals_elongation(b1855_fitter, **kwargs)
+    ax = plt.gcf().axes[0]
+    assert len(ax.containers) > 0  # one errorbar container per backend
+
+
+def test_plot_residuals_elongation_save(b1855_fitter, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    pu.plot_residuals_elongation(b1855_fitter, save=True)
+    assert len(list(tmp_path.glob("*_resid_v_elongation*.png"))) == 1
+
+
+def test_plot_residuals_elongation_bad_xaxis(b1855_fitter):
+    with pytest.raises(ValueError):
+        pu.plot_residuals_elongation(b1855_fitter, xaxis="bogus")

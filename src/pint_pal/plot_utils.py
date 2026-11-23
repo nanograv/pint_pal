@@ -558,6 +558,425 @@ def plot_residuals_time(
     return
 
 
+def plot_residuals_elongation(
+    fitter,
+    restype="postfit",
+    colorby="f",
+    plotsig=False,
+    avg=False,
+    whitened=False,
+    save=False,
+    legend=True,
+    title=None,
+    axs=None,
+    mixed_ecorr=False,
+    xaxis="elongation",
+    **kwargs,
+):
+    """
+    Make a plot of the residuals vs. solar elongation (or solar impact parameter).
+
+    The solar elongation is the pulsar-observatory-Sun angle for each TOA, computed
+    with PINT's ``model.sun_angle``. The impact parameter is b = r * sin(elongation),
+    where r is the observatory-Sun distance: the closest distance between the Sun and
+    the line of sight. Note b is symmetric about elongation = 90 deg, so a TOA
+    at elongation e and one at 180 deg - e (at the same r) have the same b.
+
+
+    Arguments
+    ---------
+    fitter [object] : The PINT fitter object.
+    restype ['string'] : Type of residuals, pre or post fit, to plot from fitter object. Options are:
+        'prefit' - plot the prefit residuals.
+        'postfit' - plot the postfit residuals (default)
+        'both' - overplot both the pre and post-fit residuals.
+    colorby ['string']: What to use to determine color/markers
+        'pta' - color residuals by PTA (default)
+        'obs' - color residuals by telescope
+        'f'   - color residuals by frontend/backend pair (flag not used by all PTAs).
+    plotsig [boolean] : If True plot number of measurements v. residuals/uncertainty, else v. residuals
+        [default: False].
+    avg [boolean] : If True and not wideband fitter, will compute and plot epoch-average residuals [default: False].
+    whitened [boolean] : If True will compute and plot whitened residuals [default: False].
+    save [boolean] : If True will save plot with the name "<PSR>_resid_v_<xaxis>.png" Will add averaged/whitened
+         as necessary [default: False].
+    legend [boolean] : If False, will not print legend with plot [default: True].
+    title [boolean] : If False, will not print plot title.
+         If None (default), will print title only if axs is not supplied.
+    axs [string] : If not None, should be defined subplot value and the figure will be used as part of a
+         larger figure [default: None].
+    mixed_ecorr [boolean]: If True, allows avging with mixed ecorr/no ecorr TOAs.
+    xaxis ['string'] : Quantity to plot on the x-axis. Options are:
+        'elongation' - solar elongation in deg, the pulsar-observatory-Sun angle (default).
+        'impact' - solar impact parameter b = r * sin(elongation) in AU.
+
+
+    Optional Arguments:
+    --------------------
+    res [list/array] : List or array of residual values to plot. Will override values from fitter object.
+    errs [list/array] : List or array of residual error values to plot. Will override values from fitter object.
+    xvals [list/array] : List or array of per-TOA x-axis values (deg for 'elongation', AU for 'impact').
+         Will override values computed from the model.
+    figsize [tuple] : Size of the figure passed to matplotlib [default: (10,5)].
+    fmt ['string'] : matplotlib format option for markers [default: ('x')]
+    color ['string'] : matplotlib color option for plot [default: color dictionary in plot_utils.py file]
+    alpha [float] : matplotlib alpha options for plot points [default: 0.5]
+    """
+    if xaxis not in ("elongation", "impact"):
+        raise ValueError(
+            "Unrecognized xaxis: %s. Please choose from 'elongation' or 'impact'." % (xaxis)
+        )
+
+    # Check if wideband
+    if fitter.is_wideband:
+        NB = False
+        if avg == True:
+            raise ValueError(
+                "Cannot epoch average wideband residuals, please change 'avg' to False."
+            )
+    else:
+        NB = True
+
+    if restype not in ("prefit", "postfit", "both"):
+        raise ValueError(
+            "Unrecognized residual type: %s. Please choose from 'prefit', 'postfit', or 'both'."
+            % (restype)
+        )
+
+    # Check if want epoch averaged residuals
+    if avg == True:
+        if restype in ("postfit", "both"):
+            avg_dict = fitter.resids.ecorr_average(use_noise_model=True)
+            if mixed_ecorr == True:
+                no_avg_dict = no_ecorr_average(
+                    fitter.toas, fitter.resids, use_noise_model=True
+                )
+        if restype in ("prefit", "both"):
+            pre_dict = fitter.resids_init.ecorr_average(use_noise_model=True)
+            if mixed_ecorr == True:
+                no_pre_dict = no_ecorr_average(
+                    fitter.toas, fitter.resids_init, use_noise_model=True
+                )
+            if restype == "prefit":
+                avg_dict = pre_dict
+                if mixed_ecorr == True:
+                    no_avg_dict = no_pre_dict
+            else:
+                avg_dict_pre = pre_dict
+                if mixed_ecorr == True:
+                    no_avg_dict_pre = no_pre_dict
+
+    # Get residuals
+    if "res" in kwargs.keys():
+        res = kwargs["res"]
+    else:
+        if avg == True:
+            res = avg_dict["time_resids"].to(u.us)
+            if mixed_ecorr == True:
+                res_no_avg = no_avg_dict["time_resids"].to(u.us)
+            if restype == "both":
+                res_pre = avg_dict_pre["time_resids"].to(u.us)
+                if mixed_ecorr == True:
+                    res_pre_no_avg = no_avg_dict_pre["time_resids"].to(u.us)
+        elif NB == True:
+            if restype == "prefit":
+                res = fitter.resids_init.time_resids.to(u.us)
+            else:
+                res = fitter.resids.time_resids.to(u.us)
+                if restype == "both":
+                    res_pre = fitter.resids_init.time_resids.to(u.us)
+        else:
+            if restype == "prefit":
+                res = fitter.resids_init.residual_objs["toa"].time_resids.to(u.us)
+            else:
+                res = fitter.resids.residual_objs["toa"].time_resids.to(u.us)
+                if restype == "both":
+                    res_pre = fitter.resids_init.residual_objs["toa"].time_resids.to(u.us)
+
+    # Check if we want whitened residuals
+    if whitened == True and ("res" not in kwargs.keys()):
+        if avg == True:
+            if restype != "both":
+                res = whiten_resids(avg_dict, restype=restype).to(u.us)
+                if mixed_ecorr == True:
+                    res_no_avg = whiten_resids(no_avg_dict, restype=restype).to(u.us)
+            else:
+                res = whiten_resids(avg_dict, restype="postfit").to(u.us)
+                res_pre = whiten_resids(avg_dict_pre, restype="prefit").to(u.us)
+                if mixed_ecorr == True:
+                    res_no_avg = whiten_resids(no_avg_dict, restype="postfit").to(u.us)
+                    res_pre_no_avg = whiten_resids(
+                        no_avg_dict_pre, restype="prefit"
+                    ).to(u.us)
+        else:
+            if restype != "both":
+                res = whiten_resids(fitter, restype=restype).to(u.us)
+            else:
+                res = whiten_resids(fitter, restype="postfit").to(u.us)
+                res_pre = whiten_resids(fitter, restype="prefit").to(u.us)
+
+    # Get errors
+    if "errs" in kwargs.keys():
+        errs = kwargs["errs"]
+    else:
+        if avg == True:
+            errs = avg_dict["errors"].to(u.us)
+            if mixed_ecorr == True:
+                errs_no_avg = no_avg_dict["errors"].to(u.us)
+            if restype == "both":
+                errs_pre = avg_dict_pre["errors"].to(u.us)
+                if mixed_ecorr == True:
+                    errs_pre_no_avg = no_avg_dict_pre["errors"].to(u.us)
+        elif restype == "prefit":
+            errs = fitter.toas.get_errors().to(u.us)
+        else:
+            if NB == True:
+                errs = fitter.resids.get_data_error().to(u.us)
+            else:
+                errs = fitter.resids.residual_objs["toa"].get_data_error().to(u.us)
+            if restype == "both":
+                errs_pre = fitter.toas.get_errors().to(u.us)
+
+    # Get per-TOA x values: solar elongation (deg) or impact parameter (AU)
+    if "xvals" in kwargs.keys():
+        ang = np.asarray(kwargs["xvals"], dtype=float)
+    else:
+        elong, r_sun = fitter.model.sun_angle(
+            fitter.toas, heliocenter=True, also_distance=True
+        )
+        if xaxis == "impact":
+            ang = (r_sun * np.sin(elong)).to(u.AU).value
+        else:
+            ang = np.degrees(elong.value)
+    # Keep MJDs too, for the click-to-inspect popup
+    mjds = fitter.toas.get_mjds().value
+    if avg == True:
+        ang_toa = ang
+        ang = np.array([np.mean(ang_toa[iis]) for iis in avg_dict["indices"]])
+        mjds = avg_dict["mjds"].value
+        if mixed_ecorr == True:
+            ang_no_avg = ang_toa[no_avg_dict["indices"]]
+            mjds_no_avg = no_avg_dict["mjds"].value
+
+    # In the end, we'll want to plot both ecorr avg & not ecorr avg at the same time if we have mixed ecorr.
+    # Create combined arrays
+    if avg == True and mixed_ecorr == True:
+        res = np.hstack((res, res_no_avg))
+        errs = np.hstack((errs, errs_no_avg))
+        ang = np.hstack((ang, ang_no_avg))
+        mjds = np.hstack((mjds, mjds_no_avg))
+        if restype == "both":
+            res_pre = np.hstack((res_pre, res_pre_no_avg))
+            errs_pre = np.hstack((errs_pre, errs_pre_no_avg))
+
+    # Get colorby flag values (obs, PTA, febe, etc.)
+    if "colorby" in kwargs.keys():
+        cb = kwargs["colorby"]
+    else:
+        cb = np.array(fitter.toas[colorby])
+        if avg == True:
+            avg_cb = [cb[iis[0]] for iis in avg_dict["indices"]]
+            if mixed_ecorr == True:
+                avg_cb += list(cb[no_avg_dict["indices"]])
+            cb = np.array(avg_cb)
+
+    # Get the set of unique flag values
+    CB = set(cb)
+
+    colorscheme, markerscheme = set_color_and_marker(colorby)
+
+    if "figsize" in kwargs.keys():
+        figsize = kwargs["figsize"]
+    else:
+        figsize = (10, 5)
+    if axs is None:
+        fig = plt.figure(figsize=figsize, constrained_layout=True)
+        ax1 = fig.add_subplot(111)
+        if title is None:
+            title = True
+    else:
+        ax1 = axs
+        fig = ax1.figure
+        if title is None:
+            title = False
+
+    for i, c in enumerate(CB):
+        inds = np.where(cb == c)[0]
+        if not inds.tolist():
+            cb_label = ""
+        else:
+            cb_label = cb[inds][0]
+        # Get plot preferences
+        if "fmt" in kwargs.keys():
+            mkr = kwargs["fmt"]
+        else:
+            try:
+                mkr = markerscheme[cb_label]
+            except Exception:
+                mkr = "x"
+                log.warning("Color by Flag doesn't have a marker label!!")
+        mkr_pre = "."
+        if "color" in kwargs.keys():
+            clr = kwargs["color"]
+        else:
+            try:
+                clr = colorscheme[cb_label]
+            except Exception:
+                clr = "k"
+                log.warning("Color by Flag doesn't have a color!!")
+        if "alpha" in kwargs.keys():
+            alpha = kwargs["alpha"]
+        else:
+            alpha = 0.5
+        if plotsig:
+            ax1.errorbar(
+                ang[inds],
+                res[inds] / errs[inds],
+                yerr=len(errs[inds]) * [1],
+                fmt=mkr,
+                color=clr,
+                label=cb_label,
+                alpha=alpha,
+                picker=True,
+            )
+            if restype == "both":
+                ax1.errorbar(
+                    ang[inds],
+                    res_pre[inds] / errs_pre[inds],
+                    yerr=len(errs_pre[inds]) * [1],
+                    fmt=mkr_pre,
+                    color=clr,
+                    label=cb_label + " Prefit",
+                    alpha=alpha,
+                    picker=True,
+                )
+        else:
+            ax1.errorbar(
+                ang[inds],
+                res[inds],
+                yerr=errs[inds],
+                fmt=mkr,
+                color=clr,
+                label=cb_label,
+                alpha=alpha,
+                picker=True,
+            )
+            if restype == "both":
+                ax1.errorbar(
+                    ang[inds],
+                    res_pre[inds],
+                    yerr=errs_pre[inds],
+                    fmt=mkr_pre,
+                    color=clr,
+                    label=cb_label + " Prefit",
+                    alpha=alpha,
+                    picker=True,
+                )
+
+    if xaxis == "impact":
+        ax1.set_xlabel(r"Solar impact parameter $b$ (AU)")
+    else:
+        ax1.set_xlabel(r"Solar elongation (deg)")
+    ax1.grid(True)
+    if plotsig:
+        if avg and whitened:
+            ax1.set_ylabel(
+                "Average Residual/Uncertainty \n (Whitened)", multialignment="center"
+            )
+        elif avg and not whitened:
+            ax1.set_ylabel("Average Residual/Uncertainty")
+        elif whitened and not avg:
+            ax1.set_ylabel(
+                "Residual/Uncertainty \n (Whitened)", multialignment="center"
+            )
+        else:
+            ax1.set_ylabel("Residual/Uncertainty")
+    else:
+        if avg and whitened:
+            ax1.set_ylabel(
+                "Average Residual ($\\mu$s) \n (Whitened)", multialignment="center"
+            )
+        elif avg and not whitened:
+            ax1.set_ylabel(r"Average Residual ($\mu$s)")
+        elif whitened and not avg:
+            ax1.set_ylabel("Residual ($\\mu$s) \n (Whitened)", multialignment="center")
+        else:
+            ax1.set_ylabel(r"Residual ($\mu$s)")
+    if legend:
+        ax1.legend(
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.0),
+            ncol=5,
+        )
+    if title:
+        fig.suptitle(
+            "%s %s timing residuals vs. %s"
+            % (
+                fitter.model.PSR.value,
+                restype,
+                "solar impact parameter" if xaxis == "impact" else "solar elongation",
+            ),
+        )
+    if save:
+        ext = ""
+        if whitened:
+            ext += "_whitened"
+        if avg:
+            ext += "_averaged"
+        if NB:
+            ext += "_NB"
+        else:
+            ext += "_WB"
+        if restype == "prefit":
+            ext += "_prefit"
+        elif restype == "postfit":
+            ext += "_postfit"
+        elif restype == "both":
+            ext += "_pre_post_fit"
+        plt.savefig("%s_resid_v_%s%s.png" % (fitter.model.PSR.value, xaxis, ext))
+
+    if axs == None:
+        # Define clickable points
+        text = ax1.text(0, 0, "")
+
+        # Define point highlight color
+        stamp_color = "#FD9927"
+
+        def onclick(event):
+            if event.inaxes is not ax1:
+                return
+            # Get X and Y axis data
+            xdata = ang
+            if plotsig:
+                ydata = np.asarray((res / errs).decompose().value)
+            else:
+                ydata = np.asarray(u.Quantity(res).value)
+            # Get x and y data from click
+            xclick = event.xdata
+            yclick = event.ydata
+            # Calculate scaled distance, find closest point index
+            d = np.sqrt(((xdata - xclick) / 10.0) ** 2 + (ydata - yclick) ** 2)
+            ind_close = np.where(np.min(d) == d)[0]
+            # highlight clicked point
+            ax1.scatter(xdata[ind_close], ydata[ind_close], marker="x", c=stamp_color)
+            # Print point info
+            text.set_position((xdata[ind_close][0], ydata[ind_close][0]))
+            if plotsig:
+                text.set_text(
+                    "TOA Params:\n MJD: %s \n X: %.3f \n Res/Err: %.2f \n Index: %s"
+                    % (mjds[ind_close][0], xdata[ind_close][0], ydata[ind_close][0], ind_close[0])
+                )
+            else:
+                text.set_text(
+                    "TOA Params:\n MJD: %s \n X: %.3f \n Res: %.2f \n Index: %s"
+                    % (mjds[ind_close][0], xdata[ind_close][0], ydata[ind_close][0], ind_close[0])
+                )
+
+        fig.canvas.mpl_connect("button_press_event", onclick)
+
+    return
+
+
 def plot_FD_delay(
     fitter=None,
     model_object=None,
