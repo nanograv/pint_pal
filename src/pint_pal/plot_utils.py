@@ -579,7 +579,7 @@ def plot_residuals_elongation(
     The solar elongation is the pulsar-observatory-Sun angle for each TOA, computed
     with PINT's ``model.sun_angle``. The impact parameter is b = r * sin(elongation),
     where r is the observatory-Sun distance: the closest distance between the Sun and
-    the (infinite) line of sight. Note b is symmetric about elongation = 90 deg, so a TOA
+    the line of sight. Note b is symmetric about elongation = 90 deg, so a TOA
     at elongation e and one at 180 deg - e (at the same r) have the same b.
 
 
