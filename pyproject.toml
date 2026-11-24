@@ -73,10 +73,10 @@ channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64"]
 
 [tool.pixi.environments]
-#py311 = { dependencies = { python = "3.11.*" } }
-#py312 = { dependencies = { python = "3.12.*" } }
-#py313 = { dependencies = { python = "3.13.*" } }
-#py314 = { dependencies = { python = "3.14.*" } }
+py311 = { dependencies = { python = "3.11.*" } }
+py312 = { dependencies = { python = "3.12.*" } }
+py313 = { dependencies = { python = "3.13.*" } }
+py314 = { dependencies = { python = "3.14.*" } }
 
 [tool.pixi.dependencies]
 gcc = "*"
