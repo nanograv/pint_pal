@@ -162,7 +162,8 @@ def checkFLogs(
     Checks config file for previous F-test recommendations to avoid looping.
 
     A parameter the history says to remove isn't recommended for adding again, and one it says to add isn't
-    recommended for removing.
+    recommended for removing. FD and FB terms are nested, so the terms that build on a blocked term are blocked too:
+    the higher terms when adding, the lower ones when removing.
 
     Parameters
     ----------
@@ -186,16 +187,47 @@ def checkFLogs(
         log.info("No FTest in config.  Continuing...")
     old_add, old_remove = read_Ftest_history(tc)
 
-    # Compare old results with new to see if a loop would occur
-    notes = []
-    for item in sorted(add_params.intersection(old_remove)):
-        notes.append(f"F-tests recommend adding {item}, but the FTest history in the .yaml says to remove it, "
-                     "so it is left out.")
-    for item in sorted(remove_params.intersection(old_add)):
-        notes.append(f"F-tests recommend removing {item}, but the FTest history in the .yaml says to add it, "
-                     "so it is kept.")
+    def term_number(name):
+        """The number of an FD or FB term (3 for FD3), or None for any other parameter."""
+        return int(name[2:]) if name[:2] in ('FD', 'FB') and name[2:].isdigit() else None
 
-    return sorted(add_params.difference(old_remove)), sorted(remove_params.difference(old_add)), notes
+    def built_on(item, params, adding):
+        """
+        The FD or FB terms in params that build on item, so can't be recommended without it: the higher terms when
+        adding (FD3 needs FD2), the lower ones when removing (FD3 is removed before FD2).
+        """
+        n = term_number(item)
+        if n is None:
+            return []
+        return sorted((p for p in params if p[:2] == item[:2] and term_number(p) is not None
+                       and (term_number(p) > n if adding else term_number(p) < n)), key=term_number)
+
+    def also(dependent, action, item):
+        if not dependent:
+            return ""
+        if len(dependent) == 1:
+            return f" {dependent[0]} is {action[0]} too, since it can only be {action[1]} {item}."
+        return f" {', '.join(dependent)} are {action[0]} too, since they can only be {action[1]} {item}."
+
+    # Compare old results with new to see if a loop would occur. Lowest FD/FB terms first when adding and highest
+    # first when removing, so each note covers the terms that build on it.
+    notes = []
+    for item in sorted(add_params.intersection(old_remove), key=lambda p: (p[:2], term_number(p) or 0, p)):
+        if item not in add_params:
+            continue  # already left out with a lower term
+        dependent = built_on(item, add_params, True)
+        add_params.difference_update([item, *dependent])
+        notes.append(f"F-tests recommend adding {item}, but the FTest history in the .yaml says to remove it, "
+                     f"so it is left out." + also(dependent, ("left out", "added on top of"), item))
+    for item in sorted(remove_params.intersection(old_add), key=lambda p: (p[:2], -(term_number(p) or 0), p)):
+        if item not in remove_params:
+            continue  # already kept with a higher term
+        dependent = built_on(item, remove_params, False)
+        remove_params.difference_update([item, *dependent])
+        notes.append(f"F-tests recommend removing {item}, but the FTest history in the .yaml says to add it, "
+                     f"so it is kept." + also(dependent, ("kept", "removed after"), item))
+
+    return sorted(add_params), sorted(remove_params), notes
 
 def step_through_nested(
     steps: list,
