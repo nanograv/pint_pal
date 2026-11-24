@@ -275,7 +275,9 @@ def step_through_nested(
             if not ft <= alpha_add:
                 break
         else:
-            ft = FTest(ftest_dict['chi2_test'], ftest_dict['dof_test'], previous['chi2_test'], previous['dof_test'])
+            # A lower chi2 after removing means a fit didn't converge: F = 0 keeps the terms (PINT's FTest gives 1)
+            ft = 0.0 if ftest_dict['chi2_test'] < previous['chi2_test'] else \
+                FTest(ftest_dict['chi2_test'], ftest_dict['dof_test'], previous['chi2_test'], previous['dof_test'])
             if not ft > alpha_remove:
                 break
         chosen = params
@@ -477,7 +479,9 @@ def run_Ftests(
             ftest_dict = None
         else:
             if remove:
-                ft = FTest(test['chi2'], test['dof'], baseline['chi2'], baseline['dof'])
+                # A lower chi2 after removing means a fit didn't converge: F = 0 keeps them (PINT's FTest gives 1)
+                ft = 0.0 if test['chi2'] < baseline['chi2'] else \
+                    FTest(test['chi2'], test['dof'], baseline['chi2'], baseline['dof'])
             else:
                 ft = FTest(baseline['chi2'], baseline['dof'], test['chi2'], test['dof'])
             ftest_dict = {'ft': ft, 'chi2_test': test['chi2'], 'dof_test': test['dof']}
@@ -548,8 +552,10 @@ def compare_with_row_above(
             compared.append((label, {**ftest_dict, 'ft': FTest(previous['chi2_test'], previous['dof_test'],
                                                                ftest_dict['chi2_test'], ftest_dict['dof_test'])}))
         else:
-            compared.append((label, {**ftest_dict, 'ft': FTest(ftest_dict['chi2_test'], ftest_dict['dof_test'],
-                                                               previous['chi2_test'], previous['dof_test'])}))
+            # A lower chi2 after removing means a fit didn't converge: F = 0 keeps the terms (PINT's FTest gives 1)
+            ft = 0.0 if ftest_dict['chi2_test'] < previous['chi2_test'] else \
+                FTest(ftest_dict['chi2_test'], ftest_dict['dof_test'], previous['chi2_test'], previous['dof_test'])
+            compared.append((label, {**ftest_dict, 'ft': ft}))
         previous = ftest_dict
     return compared
 
