@@ -450,6 +450,47 @@ def run_Ftests(
     return retdict
 
 
+def compare_with_row_above(
+    rows: list,
+    initial: dict,
+    adding: bool
+) -> list:
+    """
+    Gives each test in an FD or FB series the F-statistic comparing it with the test before it (the first test with
+    the initial model), which is the comparison that decides how many terms to add or remove.
+
+    Parameters
+    ----------
+    rows : list
+        (label, ftest_dict) pairs for the series, from the fewest terms to the most; ftest_dict is `None` if the fit
+        failed.
+    initial : dict
+        Results for the initial model, from `run_Ftests()`.
+    adding : bool
+        True if the series adds terms, False if it removes them.
+
+    Returns
+    -------
+    list
+        The same (label, ftest_dict) pairs, with the 'ft' of each ftest_dict replaced
+    """
+    compared = []
+    previous = initial
+    for label, ftest_dict in rows:
+        if ftest_dict is None:
+            compared.append((label, None))
+        elif previous is None:
+            # The test before failed, so there is nothing to compare with
+            compared.append((label, {**ftest_dict, 'ft': np.nan}))
+        elif adding:
+            compared.append((label, {**ftest_dict, 'ft': FTest(previous['chi2_test'], previous['dof_test'],
+                                                               ftest_dict['chi2_test'], ftest_dict['dof_test'])}))
+        else:
+            compared.append((label, {**ftest_dict, 'ft': FTest(ftest_dict['chi2_test'], ftest_dict['dof_test'],
+                                                               previous['chi2_test'], previous['dof_test'])}))
+        previous = ftest_dict
+    return compared
+
 def print_Ftest_table(
     Ftest_dict: dict,
     fitter: pint.fitter.Fitter,
@@ -459,6 +500,9 @@ def print_Ftest_table(
     """
     Prints the F-test results from `run_Ftests()` as a table: the initial model, then every test that adds parameters,
     then every test that removes them (each section only if it has tests).
+
+    Each FD and FB test is compared with the one before it in its series (the first with the initial model), as when
+    deciding how many terms to add or remove; every other test is compared with the initial model.
 
     Parameters
     ----------
@@ -476,7 +520,9 @@ def print_Ftest_table(
     removing_rows = []
     for action, rows in (('Add', adding_rows), ('Remove', removing_rows)):
         for key, value in Ftest_dict[action].items():
-            if key in ('Binary', 'FD'):
+            if key == 'FD':
+                rows.extend(compare_with_row_above(list(value.items()), Ftest_dict['initial'], action == 'Add'))
+            elif key == 'Binary':
                 rows.extend(value.items())
             else:
                 rows.append((key, value))
@@ -497,8 +543,10 @@ def print_Ftest_table(
                 # 'FB<i>' adds the terms after the current ones, up to FB<i>
                 fb_add.append((", ".join("FB%d" % j for j in range(len(fbp), int(key[2:]) + 1)), ftest_dict))
         # From the fewest terms to the most, like FD
-        adding_rows += sorted(fb_add, key=lambda row: row[0].count(','))
-        removing_rows += sorted(fb_remove, key=lambda row: row[0].count(','))
+        adding_rows += compare_with_row_above(sorted(fb_add, key=lambda row: row[0].count(',')),
+                                              Ftest_dict['initial'], True)
+        removing_rows += compare_with_row_above(sorted(fb_remove, key=lambda row: row[0].count(',')),
+                                                Ftest_dict['initial'], False)
 
     print("F-test results")
     print("%42s %9s %5s %s" % ("", "Chi2", "NDOF", "Ftest"))
@@ -509,3 +557,6 @@ def print_Ftest_table(
             print(heading)
         for label, ftest_dict in rows:
             report_ptest(label, ftest_dict, adding, alpha_add, alpha_remove)
+    if Ftest_dict['Add'].get('FD') or Ftest_dict['Remove'].get('FD') or Ftest_dict.get('FB'):
+        print("Note: each FD and FB row is compared with the row above it (the first with the initial model).\n"
+              "All other rows are compared with the initial model.")
