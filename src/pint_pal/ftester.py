@@ -458,9 +458,19 @@ def run_Ftests(
         A nested dictionary of all of the different F-tests done and subsequent reported values for each
         F-test. These include keys for added ['Add'] or removed ['Remove'] parameters, the initial values ['initial']
         and within each of those, further nested dictionaries of parameters [e.g. 'PX'], and the reported values.
+
+    Raises
+    ------
+    ValueError
+        If any parameter to be tested is in the model but frozen. Every one must be fitted before running the F-tests.
     """
     # Fit every test model, and the baseline (the current model, refit with the same settings)
     tf = TestFitter(model=fitter.model, toas=fitter.toas, maxFD=FDnparams, maxFB=FBnparams)
+    # The test fits would free any frozen parameter, so they wouldn't start from the user's fit
+    frozen = [p for p in tf.removepars if p in fitter.model.params and getattr(fitter.model, p).frozen]
+    if frozen:
+        raise ValueError(f"F-tests can't run because these parameters are frozen: {', '.join(frozen)}. "
+                         "Unfreeze them (fit flag 1 in the .par file) and refit before running the F-tests.")
     results = tf.run(ncpu=ncpu, maxiter=NITS)
     baseline = results['baseline']
 
