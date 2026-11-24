@@ -242,9 +242,9 @@ def summarize_Ftest(
     tc : pint_pal.timingconfiguration.TimingConfiguration
         The pint_pal TimingConfiguration object.
     alpha_add : float
-        Value to compare for F-statistic significance when adding a parameter. If the F-statistic is lower than alpha_add, the timing model parameters are deemed statistically significant to (add to) the timing model.
+        A parameter is added if the F-statistic is lower than or equal to alpha_add.
     alpha_remove : float
-        Value to compare for F-statistic significance when removing a parameter. If the F-statistic is lower than alpha_remove, the timing model parameters are deemed statistically significant to remove from timing model.
+        A parameter is removed if the F-statistic is higher than alpha_remove.
 
     Returns
     -------
@@ -376,9 +376,9 @@ def run_Ftests(
     tc : pint_pal.timingconfiguration.TimingConfiguration
         The pint_pal TimingConfiguration object.
     alpha_add : float
-        Value to compare for F-statistic significance when adding a parameter. If the F-statistic is lower than alpha_add, the timing model parameters are deemed statistically significant to (add to) the timing model.
+        A parameter is added if the F-statistic is lower than or equal to alpha_add.
     alpha_remove : float
-        Value to compare for F-statistic significance when removing a parameter. If the F-statistic is lower than alpha_remove, the timing model parameters are deemed statistically significant to remove from timing model.
+        A parameter is removed if the F-statistic is higher than alpha_remove.
     FDnparams : int
         Maximum number of FD parameters to test.
     NITS : int
@@ -386,7 +386,7 @@ def run_Ftests(
     FBnparams : int
         Maximum number of FB parameters to test [default: 5].
     ncpu : int
-        Number of CPUs to run the test fits on. With 1, the fits are run one after the other [default: 1].
+        Number of CPUs to run the test fits on, at least 1. With 1, the fits are run one after the other [default: 1].
 
     Returns
     -------
@@ -467,9 +467,9 @@ def print_Ftest_table(
     fitter : pint.fitter.Fitter
         The PINT Fitter object.
     alpha_add : float
-        Added parameters are marked significant ('***') if the F-statistic is lower than alpha_add.
+        Added parameters are marked significant ('***') if the F-statistic is lower than or equal to alpha_add.
     alpha_remove : float
-        Removed parameters are marked significant ('***') if the F-statistic is lower than alpha_remove.
+        Removed parameters are marked significant ('***') if the F-statistic is lower than or equal to alpha_remove.
     """
     # Collect every test as (label, ftest_dict): first the additions, then the removals
     adding_rows = []
