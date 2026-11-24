@@ -126,13 +126,43 @@ def report_ptest(
     print(line)
     return line
    
+def read_Ftest_history(tc: "TimingConfiguration") -> tuple[list, list]:
+    """
+    Reads the parameters that earlier F-tests recommended adding and removing, from the FTest section of the config.
+
+    Add and Remove can each be a list (e.g. [FD2, FD3]), a single name, or a comma-separated string, or be left out.
+
+    Parameters
+    ----------
+    tc : pint_pal.timingconfiguration.TimingConfiguration
+        The pint_pal TimingConfiguration object.
+
+    Returns
+    -------
+    (list, list)
+        Parameters recommended to be added, and to be removed, one name each
+    """
+    history = tc.config.get('FTest') or {}
+
+    def names(entries):
+        if entries is None:
+            return []
+        if isinstance(entries, str):
+            entries = [entries]
+        return [name.strip() for entry in entries for name in str(entry).split(',') if name.strip()]
+
+    return names(history.get('Add')), names(history.get('Remove'))
+
 def checkFLogs(
     add_params: list,
     remove_params: list,
     tc: "TimingConfiguration"
-) -> tuple[list, list]:
+) -> tuple[list, list, list]:
     """
     Checks config file for previous F-test recommendations to avoid looping.
+
+    A parameter the history says to remove isn't recommended for adding again, and one it says to add isn't
+    recommended for removing.
 
     Parameters
     ----------
@@ -145,30 +175,27 @@ def checkFLogs(
 
     Returns
     -------
-    (list, list)
-        Sets of added, removed parameter recommendations
+    (list, list, list)
+        Sets of added, removed parameter recommendations, and a note for each recommendation the history overrode
     """
     # Split every recommendation into single parameters (e.g. "M2, SINI" into M2 and SINI)
-    add_params = [item.strip() for params in add_params for item in params.split(',')]
-    remove_params = [item.strip() for params in remove_params for item in params.split(',')]
-    
-    if 'FTest' in tc.config:
-        oldFtests = tc.config['FTest']
-        
-        # - Compare old results with new to see if duplicates or loop occur
-        for item in sorted(add_params):
-            if item in oldFtests['Remove']:
-                log.warning(f'Parameter {item} has already been recommended to be removed.')
-                add_params.remove(item)
-        for item in sorted(remove_params):
-            if item in oldFtests['Add']:
-                log.warning(f'Parameter {item} has already been recommended to be added.')
-                remove_params.remove(item)
+    add_params = {item.strip() for params in add_params for item in params.split(',')}
+    remove_params = {item.strip() for params in remove_params for item in params.split(',')}
 
-    else:
+    if 'FTest' not in tc.config:
         log.info("No FTest in config.  Continuing...")
+    old_add, old_remove = read_Ftest_history(tc)
 
-    return sorted(set(add_params)), sorted(set(remove_params))
+    # Compare old results with new to see if a loop would occur
+    notes = []
+    for item in sorted(add_params.intersection(old_remove)):
+        notes.append(f"F-tests recommend adding {item}, but the FTest history in the .yaml says to remove it, "
+                     "so it is left out.")
+    for item in sorted(remove_params.intersection(old_add)):
+        notes.append(f"F-tests recommend removing {item}, but the FTest history in the .yaml says to add it, "
+                     "so it is kept.")
+
+    return sorted(add_params.difference(old_remove)), sorted(remove_params.difference(old_add)), notes
 
 def step_through_nested(
     steps: list,
@@ -325,7 +352,7 @@ def summarize_Ftest(
             remove_params += step_through_nested(remove_steps, Ftest_dict['initial'], False, alpha_add, alpha_remove)
     
     # Check the config for previous FTest results
-    add_params,remove_params = checkFLogs(add_params,remove_params,tc)
+    add_params, remove_params, history_notes = checkFLogs(add_params, remove_params, tc)
 
     # Now return which parameters to add/remove
     if remove_params:
@@ -337,11 +364,11 @@ def summarize_Ftest(
     else:
         add_statement = "F-tests do not recommend adding any parameters."
    
-    if 'FTest' in tc.config:
-        oldFtests = tc.config['FTest']
-        add_params = add_params + oldFtests["Add"]
-        remove_params = remove_params + oldFtests["Remove"]    
- 
+    # The block to copy into the config keeps the history, alongside the new recommendations
+    old_add, old_remove = read_Ftest_history(tc)
+    add_params = add_params + old_add
+    remove_params = remove_params + old_remove
+
     configAdd="[" + ",".join(sorted(set(add_params))) + "]"
     configRemove="[" + ",".join(sorted(set(remove_params))) + "]" 
     
@@ -351,7 +378,10 @@ def summarize_Ftest(
         '  Add:',configAdd,'\n'\
         '  Remove:',configRemove)
     print('\n')
-    
+    # Say where the history overrode the new results, next to the recommendations
+    for note in history_notes:
+        print(note)
+
     return add_statement, remove_statement
     
 def run_Ftests(
